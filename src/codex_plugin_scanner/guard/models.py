@@ -146,6 +146,8 @@ class GuardReceipt:
     user_override: str | None = None
     artifact_name: str | None = None
     source_scope: str | None = None
+    diff_summary: str | None = None
+    approval_source: str | None = None
     action_envelope_json: dict[str, object] | None = None
     scanner_evidence: tuple[dict[str, object], ...] = ()
 

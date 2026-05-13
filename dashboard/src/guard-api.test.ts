@@ -588,3 +588,114 @@ assert(resolution.next_selectable_request_id === "req-next", "L077: resolveReque
 assert(resolution.remaining_pending_summaries[0].request_id === "req-next", "L077: resolveRequestWithQueueResult normalizes remaining summaries");
 assert(resolution.resolved_request?.status === "resolved", "L077: resolveRequestWithQueueResult normalizes resolved request");
 assert(resolution.resolved_duplicate_ids[0] === "req-dupe", "L077: resolveRequestWithQueueResult returns duplicate ids");
+
+installGuardWindow("?guard-token=stale-resolve-token&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const recoveryCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  recoveryCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/initialize") {
+    return new Response(JSON.stringify({ auth_token: "fresh-resolve-token" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  if (path === "/v1/requests/req-stale-token/approve") {
+    const token = headerValue(init, "X-Guard-Token");
+    if (token !== "fresh-resolve-token") {
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }
+    return new Response(JSON.stringify({
+      resolved: true,
+      item: null,
+      resolved_request: null,
+      remaining_pending_count: 0,
+      next_selectable_request_id: null,
+      remaining_pending_summaries: [],
+      resolved_duplicate_ids: [],
+      resolution_summary: "Decision saved.",
+      retry_hint: null,
+      copy: null
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  if (path === "/v1/requests/req-next-after-refresh/approve") {
+    const token = headerValue(init, "X-Guard-Token");
+    return new Response(JSON.stringify({
+      resolved: token === "fresh-resolve-token",
+      item: null,
+      resolved_request: null,
+      remaining_pending_count: 0,
+      next_selectable_request_id: null,
+      remaining_pending_summaries: [],
+      resolved_duplicate_ids: [],
+      resolution_summary: "Decision saved.",
+      retry_hint: null,
+      copy: null
+    }), {
+      status: token === "fresh-resolve-token" ? 200 : 401,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+
+const recoveredResolution = await resolveRequestWithQueueResult({
+  requestId: "req-stale-token",
+  action: "allow",
+  scope: "global",
+  reason: "reviewed"
+});
+assert(recoveredResolution.resolved === true, "L077b: resolve retries after refreshing stale local token");
+assert(recoveryCalls.length === 3, "L077b: resolve retry makes approve, initialize, approve calls");
+assert(
+  headerValue(recoveryCalls[0].init, "X-Guard-Token") === "stale-resolve-token",
+  "L077b: first resolve attempt uses token from current URL"
+);
+assert(new URL(recoveryCalls[1].url).pathname === "/v1/initialize", "L077b: stale token recovery calls initialize");
+assert(
+  headerValue(recoveryCalls[2].init, "X-Guard-Token") === "fresh-resolve-token",
+  "L077b: retry uses refreshed Guard token"
+);
+await resolveRequestWithQueueResult({
+  requestId: "req-next-after-refresh",
+  action: "allow",
+  scope: "global",
+  reason: "reviewed"
+});
+assert(
+  headerValue(recoveryCalls[3].init, "X-Guard-Token") === "fresh-resolve-token",
+  "L077b: later requests keep using refreshed Guard token instead of stale URL token"
+);
+
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const malformedRefreshCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  malformedRefreshCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/initialize") {
+    return new Response("<html>not json</html>", {
+      status: 200,
+      headers: { "Content-Type": "text/html" }
+    });
+  }
+  return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+};
+
+try {
+  await resolveRequestWithQueueResult({
+    requestId: "req-malformed-refresh",
+    action: "allow",
+    scope: "global",
+    reason: "reviewed"
+  });
+  throw new Error("expected malformed token refresh to preserve the 401 failure");
+} catch (error) {
+  assert(error instanceof Error, "L077c: malformed refresh returns an Error");
+  assert(error.message.includes("401"), "L077c: malformed refresh preserves original 401 status");
+}
+assert(malformedRefreshCalls.length === 2, "L077c: malformed refresh does not retry without a parsed token");
