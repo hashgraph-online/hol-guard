@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard.runtime.false_positive_rules import (
 )
 from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
 from codex_plugin_scanner.guard.runtime.prompt_injection import detect_prompt_injection_requests
-from codex_plugin_scanner.guard.runtime.safe_decode import decode_layers
+from codex_plugin_scanner.guard.runtime.safe_decode import SAFE_DECODE_DETECTOR_VERSION, DecodeResult, decode_layers
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
 from codex_plugin_scanner.guard.runtime.signals import (
     RiskConfidenceLabel,
@@ -237,63 +237,73 @@ class SafeDecodeDetector:
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
-        if action.prompt_text is None:
-            return ()
-        result = decode_layers(action.prompt_text)
-        if not result.layers:
-            return ()
-        signals: list[RiskSignalV2] = []
-        if result.eval_signals or result.exec_signals or result.marshal_signals:
-            detail_parts: list[str] = []
-            if result.eval_signals:
-                detail_parts.append(f"eval(): {result.eval_signals[0]!r}")
-            if result.exec_signals:
-                detail_parts.append(f"exec(): {result.exec_signals[0]!r}")
-            if result.marshal_signals:
-                detail_parts.append(f"marshal.loads(): {result.marshal_signals[0]!r}")
-            signals.append(
-                RiskSignalV2(
-                    signal_id="encoded.code-execution",
-                    category="execution",
-                    severity=severity_label_from_score(8),
-                    confidence=confidence_label_from_score(0.80),
-                    detector=self.detector_id,
-                    title="Encoded code-execution payload detected",
-                    plain_reason=(
-                        f"Decoded {len(result.layers)} encoding layer(s) and found "
-                        f"code-execution signals: {'; '.join(detail_parts[:2])}"
-                    ),
-                    technical_detail=f"Layers: {[layer.encoding for layer in result.layers]}; "
-                    f"eval={len(result.eval_signals)} exec={len(result.exec_signals)} "
-                    f"marshal={len(result.marshal_signals)}",
-                    evidence_ref=None,
-                    redaction_level="summary",
-                    false_positive_hint="Some build tools legitimately encode setup scripts.",
-                    advisory_id=None,
-                )
+        content_candidates = tuple(
+            value for value in (getattr(action, "prompt_text", None), getattr(action, "command", None)) if value
+        )
+        for content in content_candidates:
+            result = decode_layers(content)
+            signals = _safe_decode_signals(result, self.detector_id)
+            if signals:
+                return signals
+        return ()
+
+
+def _safe_decode_signals(result: DecodeResult, detector_id: str) -> tuple[RiskSignalV2, ...]:
+    if not result.layers:
+        return ()
+    signals: list[RiskSignalV2] = []
+    if result.eval_signals or result.exec_signals or result.marshal_signals:
+        detail_parts: list[str] = []
+        if result.eval_signals:
+            detail_parts.append(f"eval(): {result.eval_signals[0]!r}")
+        if result.exec_signals:
+            detail_parts.append(f"exec(): {result.exec_signals[0]!r}")
+        if result.marshal_signals:
+            detail_parts.append(f"marshal.loads(): {result.marshal_signals[0]!r}")
+        signals.append(
+            RiskSignalV2(
+                signal_id="encoded.code-execution",
+                category="execution",
+                severity=severity_label_from_score(8),
+                confidence=confidence_label_from_score(0.80),
+                detector=detector_id,
+                title="Encoded code-execution payload detected",
+                plain_reason=(
+                    f"Decoded {len(result.layers)} encoding layer(s) and found "
+                    f"code-execution signals: {'; '.join(detail_parts[:2])}"
+                ),
+                technical_detail=f"Detector: {SAFE_DECODE_DETECTOR_VERSION}; "
+                f"Layers: {[layer.encoding for layer in result.layers]}; "
+                f"eval={len(result.eval_signals)} exec={len(result.exec_signals)} "
+                f"marshal={len(result.marshal_signals)}",
+                evidence_ref=None,
+                redaction_level="summary",
+                false_positive_hint="Some build tools legitimately encode setup scripts.",
+                advisory_id=None,
             )
-        elif result.layers:
-            signals.append(
-                RiskSignalV2(
-                    signal_id="encoded.obfuscated-content",
-                    category="execution",
-                    severity=severity_label_from_score(5),
-                    confidence=confidence_label_from_score(0.60),
-                    detector=self.detector_id,
-                    title="Multi-layer encoded content detected",
-                    plain_reason=(
-                        f"Content decoded through {len(result.layers)} encoding layer(s) "
-                        f"({', '.join(layer.encoding for layer in result.layers)}). "
-                        "Obfuscated content may conceal malicious instructions."
-                    ),
-                    technical_detail=None,
-                    evidence_ref=None,
-                    redaction_level="summary",
-                    false_positive_hint="Encoded documentation or binary assets are common false positives.",
-                    advisory_id=None,
-                )
+        )
+    elif result.layers:
+        signals.append(
+            RiskSignalV2(
+                signal_id="encoded.obfuscated-content",
+                category="execution",
+                severity=severity_label_from_score(5),
+                confidence=confidence_label_from_score(0.60),
+                detector=detector_id,
+                title="Multi-layer encoded content detected",
+                plain_reason=(
+                    f"Content decoded through {len(result.layers)} encoding layer(s) "
+                    f"({', '.join(layer.encoding for layer in result.layers)}). "
+                    "Obfuscated content may conceal malicious instructions."
+                ),
+                technical_detail=f"Detector: {SAFE_DECODE_DETECTOR_VERSION}",
+                evidence_ref=None,
+                redaction_level="summary",
+                false_positive_hint="Encoded documentation or binary assets are common false positives.",
+                advisory_id=None,
             )
-        return tuple(signals)
+        )
+    return tuple(signals)
 
 
 class FalsePositiveSuppressorDetector:

