@@ -1896,9 +1896,9 @@ requests==2.34.0 \
     --hash=sha256:7d62fe92f50eb82c529b0916bb445afa1531a566fc8f35ffdc64446e771b856a \
     --hash=sha256:917520a21b767485ce7c588f4ebb917c436b24a31231b44228715eaeb5a52c60
     # via tiktoken
-rich==14.3.4 \
-    --hash=sha256:07e7adb4690f68864777b1450859253bed81a99a31ac321ac1817b2313558952 \
-    --hash=sha256:817e02727f2b25b40ef56f5aa2217f400c8489f79ca8f46ea2b70dd5e14558a9
+rich==15.0.0 \
+    --hash=sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb \
+    --hash=sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36
     # via
     #   hol-guard (pyproject.toml)
     #   cisco-ai-skill-scanner
@@ -2048,9 +2048,9 @@ tabulate==0.10.0 \
     --hash=sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d \
     --hash=sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3
     # via cisco-ai-skill-scanner
-textual==7.5.0 \
-    --hash=sha256:849dfee9d705eab3b2d07b33152b7bd74fb1f5056e002873cc448bce500c6374 \
-    --hash=sha256:c730cba1e3d704e8f1ca915b6a3af01451e3bca380114baacf6abf87e9dac8b6
+textual==8.2.5 \
+    --hash=sha256:247d2aa2faf222749c321f88a736247f37ee2c023604079c7490bfacddfcd4b2 \
+    --hash=sha256:6c894e65a879dadb4f6cf46ddcfedb0173ff7e0cb1fe605ff7b357a597bdbc90
     # via cisco-ai-skill-scanner
 tiktoken==0.12.0 \
     --hash=sha256:01d99484dc93b129cd0964f9d34eee953f2737301f18b3c7257bf368d7615baa \
