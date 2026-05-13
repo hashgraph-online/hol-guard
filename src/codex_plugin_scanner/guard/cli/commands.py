@@ -5890,13 +5890,24 @@ def _git_config_tree_disables_diff_helpers(config_path: Path, *, seen_paths: set
         return False
     if _git_config_enables_diff_helper(config_text):
         return False
-    for included_path in _git_config_include_paths(config_text, base_dir=normalized_path.parent, repo_dir=repo_dir):
+    for included_path in _git_config_include_paths(
+        config_text,
+        allow_hasconfig=True,
+        base_dir=normalized_path.parent,
+        repo_dir=repo_dir,
+    ):
         if not _git_config_tree_disables_diff_helpers(included_path, seen_paths=seen_paths, repo_dir=repo_dir):
             return False
     return True
 
 
-def _git_config_include_paths(config_text: str, *, base_dir: Path, repo_dir: Path | None) -> tuple[Path, ...]:
+def _git_config_include_paths(
+    config_text: str,
+    *,
+    allow_hasconfig: bool,
+    base_dir: Path,
+    repo_dir: Path | None,
+) -> tuple[Path, ...]:
     paths: list[Path] = []
     section = ""
     section_active = False
@@ -5907,7 +5918,12 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path, repo_dir: Pat
         section_match = re.fullmatch(r"\[([^\]]+)\](?:\s*[#;].*)?", line)
         if section_match:
             section = section_match.group(1).strip()
-            section_active = _git_include_section_is_active(section, base_dir=base_dir, repo_dir=repo_dir)
+            section_active = _git_include_section_is_active(
+                section,
+                allow_hasconfig=allow_hasconfig,
+                base_dir=base_dir,
+                repo_dir=repo_dir,
+            )
             continue
         if not section_active:
             continue
@@ -5921,7 +5937,13 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path, repo_dir: Pat
     return tuple(paths)
 
 
-def _git_include_section_is_active(section: str, *, base_dir: Path, repo_dir: Path | None) -> bool:
+def _git_include_section_is_active(
+    section: str,
+    *,
+    allow_hasconfig: bool,
+    base_dir: Path,
+    repo_dir: Path | None,
+) -> bool:
     section_lower = section.lower()
     if section_lower == "include":
         return True
@@ -5948,7 +5970,7 @@ def _git_include_section_is_active(section: str, *, base_dir: Path, repo_dir: Pa
         )
     if condition_lower.startswith("onbranch:"):
         return _git_onbranch_condition_matches(condition[len("onbranch:") :], repo_dir=repo_dir)
-    if condition_lower.startswith("hasconfig:"):
+    if allow_hasconfig and condition_lower.startswith("hasconfig:"):
         return _git_hasconfig_condition_matches(condition[len("hasconfig:") :], repo_dir=repo_dir)
     return False
 
@@ -6020,16 +6042,36 @@ def _git_hasconfig_condition_matches(condition: str, *, repo_dir: Path) -> bool:
         return False
     if key_pattern.lower() != "remote.*.url":
         return False
+    seen_paths: set[Path] = set()
     for config_path in _git_repo_config_paths(repo_dir):
-        if not config_path.is_file():
-            continue
-        try:
-            config_text = config_path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            return False
-        if any(fnmatch.fnmatchcase(value, value_pattern) for value in _git_remote_urls_from_config(config_text)):
+        if any(
+            fnmatch.fnmatchcase(value, value_pattern)
+            for value in _git_remote_urls_from_config_tree(config_path, seen_paths=seen_paths, repo_dir=repo_dir)
+        ):
             return True
     return False
+
+
+def _git_remote_urls_from_config_tree(config_path: Path, *, seen_paths: set[Path], repo_dir: Path) -> tuple[str, ...]:
+    normalized_path = config_path.expanduser().resolve()
+    if normalized_path in seen_paths:
+        return ()
+    seen_paths.add(normalized_path)
+    if not normalized_path.is_file():
+        return ()
+    try:
+        config_text = normalized_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ()
+    urls = list(_git_remote_urls_from_config(config_text))
+    for included_path in _git_config_include_paths(
+        config_text,
+        allow_hasconfig=False,
+        base_dir=normalized_path.parent,
+        repo_dir=repo_dir,
+    ):
+        urls.extend(_git_remote_urls_from_config_tree(included_path, seen_paths=seen_paths, repo_dir=repo_dir))
+    return tuple(urls)
 
 
 def _git_remote_urls_from_config(config_text: str) -> tuple[str, ...]:

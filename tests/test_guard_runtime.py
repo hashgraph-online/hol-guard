@@ -13768,6 +13768,45 @@ def test_codex_read_only_source_inspection_rejects_git_include_if_hasconfig(
     )
 
 
+def test_codex_read_only_source_inspection_rejects_git_include_if_hasconfig_nested_include(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    helper_config = tmp_path / "helper-gitconfig"
+    _write_text(
+        helper_config,
+        """
+[diff]
+    external = /tmp/guard-diff
+""".strip(),
+    )
+    remote_config = tmp_path / "remote-gitconfig"
+    _write_text(
+        remote_config,
+        """
+[remote "origin"]
+    url = https://github.com/hashgraph-online/ai-plugin-scanner
+""".strip(),
+    )
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
+    _write_text(workspace_dir / ".git" / "config", f"[include]\n    path = {remote_config}\n")
+    global_config = tmp_path / "global-gitconfig"
+    _write_text(
+        global_config,
+        f'[includeIf "hasconfig:remote.*.url:https://github.com/hashgraph-online/*"]\n    path = {helper_config}\n',
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
 def test_codex_read_only_source_inspection_rejects_git_include_if_onbranch_prefix(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
