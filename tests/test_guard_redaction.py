@@ -5,9 +5,18 @@ Verifies that sensitive values are removed before Guard prints or syncs them.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
-from codex_plugin_scanner.guard.redaction import redact_sensitive_text, redact_text
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli import product
+from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.redaction import redact_local_path, redact_sensitive_text, redact_text
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 class TestRedactText:
@@ -121,6 +130,56 @@ class TestRedactText:
         result = redact_text("curl -H 'Accept: application/json' http://localhost:4000/health")
         assert "application/json" in result.text
         assert result.count == 0
+
+
+class TestLocalPathRedaction:
+    def test_redact_local_path_replaces_home_prefix(self) -> None:
+        assert redact_local_path("/Users/alice/.hol-guard/config.toml", home_dir=Path("/Users/alice")) == (
+            "~/.hol-guard/config.toml"
+        )
+
+    def test_status_payload_omits_raw_username_and_home_paths(self, tmp_path: Path, monkeypatch) -> None:
+        user_home = Path("/Users/alice")
+        guard_home = user_home / ".hol-guard"
+        workspace = user_home / "project"
+        context = HarnessContext(home_dir=user_home, workspace_dir=workspace, guard_home=guard_home)
+        store = GuardStore(tmp_path / "guard-home")
+        config = GuardConfig(guard_home=guard_home, workspace=workspace)
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(str(user_home / ".codex" / "config.toml"),),
+            artifacts=(),
+        )
+        monkeypatch.setattr(product, "detect_all", lambda _context: [detection])
+
+        payload = product.build_guard_status_payload(context, store, config)
+        text = json.dumps(payload)
+
+        assert "alice" not in text
+        assert "/Users/" not in text
+        assert payload["guard_home"] == "~/.hol-guard"
+        assert payload["workspace"] == "~/project"
+        assert payload["harnesses"][0]["config_paths"] == ["~/.codex/config.toml"]
+
+    def test_settings_json_output_omits_raw_username_and_home_paths(self, capsys) -> None:
+        emit_guard_payload(
+            "settings",
+            {
+                "generated_at": "2026-01-01T00:00:00Z",
+                "guard_home": "/Users/alice/.hol-guard",
+                "config_path": "/Users/alice/.hol-guard/config.toml",
+                "settings": {"mode": "prompt", "security_level": "balanced"},
+            },
+            True,
+        )
+        output = capsys.readouterr().out
+
+        assert "alice" not in output
+        assert "/Users/" not in output
+        assert '"guard_home": "~/.hol-guard"' in output
+        assert '"config_path": "~/.hol-guard/config.toml"' in output
 
 
 class TestRedactSensitiveText:
