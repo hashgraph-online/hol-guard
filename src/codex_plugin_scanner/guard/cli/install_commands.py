@@ -48,6 +48,12 @@ def apply_managed_install(
 
 def _managed_install_payload(managed_install: dict[str, object]) -> dict[str, object]:
     payload = dict(managed_install)
+    harness = str(payload.get("harness") or "")
+    protection_contract = contract_for(harness)
+    if protection_contract is not None:
+        payload["native_hooks"] = protection_contract.native_approval
+        payload["browser_fallback"] = protection_contract.browser_fallback
+        payload["primary_integration"] = "native_hooks" if protection_contract.native_approval else "browser_fallback"
     manifest = payload.get("manifest")
     if isinstance(manifest, dict):
         for key in ("config_path", "managed_config_path", "shim_path", "mode"):
