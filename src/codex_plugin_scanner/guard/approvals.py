@@ -138,7 +138,7 @@ def apply_approval_resolution(
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
     if scope == "workspace" and not workspace:
         raise ValueError(f"Approval request {request_id} requires --workspace for workspace scope.")
-    if scope == "publisher" and not isinstance(request.get("publisher"), str):
+    if scope == "publisher" and _string_or_none(request.get("publisher")) is None:
         raise ValueError(f"Approval request {request_id} has no publisher scope to approve.")
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     request_artifact_id = _string_or_none(request.get("artifact_id"))

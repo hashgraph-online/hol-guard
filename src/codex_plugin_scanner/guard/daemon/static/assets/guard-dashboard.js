@@ -19923,7 +19923,8 @@ function buildClearPayload(input) {
         harness: input.harness,
         scope: "artifact",
         artifact_id: input.artifact_id ?? void 0,
-        artifact_hash: input.artifact_hash ?? void 0
+        artifact_hash: input.artifact_hash ?? void 0,
+        source: input.source ?? void 0
       };
     case "workspace":
       return {
@@ -19931,13 +19932,15 @@ function buildClearPayload(input) {
         scope: "workspace",
         artifact_id: input.artifact_id ?? void 0,
         artifact_hash: input.artifact_hash ?? void 0,
+        source: input.source ?? void 0,
         workspace: input.workspace ?? void 0
       };
     case "publisher":
       return {
         harness: input.harness,
         scope: "publisher",
-        publisher: input.publisher ?? void 0
+        publisher: input.publisher ?? void 0,
+        source: input.source ?? void 0
       };
     case "harness":
       return {
@@ -19946,7 +19949,8 @@ function buildClearPayload(input) {
         artifact_id: input.artifact_id ?? void 0,
         artifact_hash: input.artifact_hash ?? void 0,
         artifact_id_is_null: fieldIsNull(input.artifact_id) ? true : void 0,
-        artifact_hash_is_null: fieldIsNull(input.artifact_hash) ? true : void 0
+        artifact_hash_is_null: fieldIsNull(input.artifact_hash) ? true : void 0,
+        source: input.source ?? void 0
       };
     case "global":
       return { scope: "global", all: true };
@@ -19962,7 +19966,8 @@ function policyIdentityKey(input) {
     input.publisher ?? null,
     input.action ?? null,
     input.reason ?? null,
-    input.updated_at ?? null
+    input.updated_at ?? null,
+    input.source ?? null
   ]);
 }
 function clearLabelForScope(scope) {

@@ -11,6 +11,7 @@ const artifactInput = {
   harness: "codex",
   artifact_id: "npmjs:lodash",
   artifact_hash: "sha256-lodash",
+  source: "team",
   workspace: "/projects/myapp",
   publisher: "acme",
 };
@@ -19,6 +20,7 @@ const workspaceInput = {
   scope: "workspace" as const,
   harness: "codex",
   artifact_id: "npmjs:lodash",
+  source: "team",
   workspace: "/projects/myapp",
   publisher: null,
 };
@@ -27,6 +29,7 @@ const publisherInput = {
   scope: "publisher" as const,
   harness: "codex",
   artifact_id: null,
+  source: "team",
   workspace: null,
   publisher: "acme-corp",
 };
@@ -35,6 +38,7 @@ const harnessInput = {
   scope: "harness" as const,
   harness: "codex",
   artifact_id: null,
+  source: "team",
   workspace: null,
   publisher: null,
 };
@@ -65,6 +69,10 @@ assert(
   "T-CP-GR119-02a: artifact scope payload must include harness"
 );
 assert(
+  artifactPayload.source === "team",
+  "T-CP-GR119-02b: artifact scope payload must include source"
+);
+assert(
   artifactPayload.all === undefined,
   "T-CP-GR119-03: artifact scope payload must not set all"
 );
@@ -90,6 +98,10 @@ assert(
   workspacePayload.artifact_id === "npmjs:lodash",
   "T-CP-GR119-07: workspace scope payload must include artifact_id when present"
 );
+assert(
+  workspacePayload.source === "team",
+  "T-CP-GR119-07b: workspace scope payload must include source"
+);
 
 const publisherPayload = buildClearPayload(publisherInput);
 assert(
@@ -103,6 +115,10 @@ assert(
 assert(
   publisherPayload.harness === "codex",
   "T-CP-GR119-09: publisher scope payload must include harness"
+);
+assert(
+  publisherPayload.source === "team",
+  "T-CP-GR119-09b: publisher scope payload must include source"
 );
 
 const harnessPayload = buildClearPayload(harnessInput);
@@ -129,6 +145,10 @@ assert(
 assert(
   harnessPayload.artifact_hash_is_null === true,
   "T-CP-GR119-12b: null harness artifact_hash must match null identity"
+);
+assert(
+  harnessPayload.source === "team",
+  "T-CP-GR119-12c: harness scope payload must include source"
 );
 
 const globalPayload = buildClearPayload(globalInput);

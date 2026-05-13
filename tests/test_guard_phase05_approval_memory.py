@@ -5,6 +5,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -527,23 +529,23 @@ def test_gr119_harness_clear_can_target_null_artifact_identity(tmp_path: Path) -
     assert remaining[0]["artifact_id"] == "family:file-read"
 
 
-def test_gr119_publisher_scope_does_not_store_blank_publisher_identity(tmp_path: Path) -> None:
+def test_gr119_publisher_scope_rejects_blank_publisher_identity(tmp_path: Path) -> None:
     store = _store(tmp_path)
     request = _request("req-no-publisher", publisher="")
     store.add_approval_request(request, "2026-05-13T00:00:00+00:00")
 
-    apply_approval_resolution(
-        store=store,
-        request_id="req-no-publisher",
-        action="allow",
-        scope="publisher",
-        workspace=request.workspace,
-        reason="approved without publisher",
-        now="2026-05-13T00:01:00+00:00",
-    )
+    with pytest.raises(ValueError, match="no publisher scope"):
+        apply_approval_resolution(
+            store=store,
+            request_id="req-no-publisher",
+            action="allow",
+            scope="publisher",
+            workspace=request.workspace,
+            reason="approved without publisher",
+            now="2026-05-13T00:01:00+00:00",
+        )
 
-    policies = store.list_policy_decisions("codex")
-    assert policies[0]["publisher"] is None
+    assert store.list_policy_decisions("codex") == []
 
 
 def test_gr124_resolution_events_can_wake_polling_harness_clients(tmp_path: Path) -> None:

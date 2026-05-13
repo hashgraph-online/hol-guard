@@ -8,6 +8,7 @@ export type ClearPolicyPayload = {
   artifact_hash?: string;
   artifact_id_is_null?: boolean;
   artifact_hash_is_null?: boolean;
+  source?: string;
   workspace?: string;
   publisher?: string;
 };
@@ -17,6 +18,7 @@ export type ClearPolicyInput = {
   harness: string;
   artifact_id?: string | null;
   artifact_hash?: string | null;
+  source?: string | null;
   workspace?: string | null;
   publisher?: string | null;
 };
@@ -44,6 +46,7 @@ export function buildClearPayload(input: ClearPolicyInput): ClearPolicyPayload {
         scope: "artifact",
         artifact_id: input.artifact_id ?? undefined,
         artifact_hash: input.artifact_hash ?? undefined,
+        source: input.source ?? undefined,
       };
     case "workspace":
       return {
@@ -51,6 +54,7 @@ export function buildClearPayload(input: ClearPolicyInput): ClearPolicyPayload {
         scope: "workspace",
         artifact_id: input.artifact_id ?? undefined,
         artifact_hash: input.artifact_hash ?? undefined,
+        source: input.source ?? undefined,
         workspace: input.workspace ?? undefined,
       };
     case "publisher":
@@ -58,6 +62,7 @@ export function buildClearPayload(input: ClearPolicyInput): ClearPolicyPayload {
         harness: input.harness,
         scope: "publisher",
         publisher: input.publisher ?? undefined,
+        source: input.source ?? undefined,
       };
     case "harness":
       return {
@@ -67,6 +72,7 @@ export function buildClearPayload(input: ClearPolicyInput): ClearPolicyPayload {
         artifact_hash: input.artifact_hash ?? undefined,
         artifact_id_is_null: fieldIsNull(input.artifact_id) ? true : undefined,
         artifact_hash_is_null: fieldIsNull(input.artifact_hash) ? true : undefined,
+        source: input.source ?? undefined,
       };
     case "global":
       return { scope: "global", all: true };
@@ -84,6 +90,7 @@ export function policyIdentityKey(input: ClearPolicyKeyInput): string {
     input.action ?? null,
     input.reason ?? null,
     input.updated_at ?? null,
+    input.source ?? null,
   ]);
 }
 

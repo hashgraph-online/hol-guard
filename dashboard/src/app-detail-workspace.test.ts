@@ -42,6 +42,7 @@ const grArtifactPolicy: GuardPolicyDecision = {
   publisher: null,
   action: "allow",
   reason: "trusted dependency",
+  source: "team",
   updated_at: "2024-01-01T00:00:00Z",
 };
 
@@ -53,6 +54,7 @@ const grWorkspacePolicy: GuardPolicyDecision = {
   publisher: null,
   action: "allow",
   reason: null,
+  source: "team",
   updated_at: "2024-01-01T00:00:00Z",
 };
 
@@ -64,6 +66,7 @@ const grHarnessPolicy: GuardPolicyDecision = {
   publisher: null,
   action: "block",
   reason: "untrusted",
+  source: "local",
   updated_at: "2024-01-01T00:00:00Z",
 };
 
@@ -75,6 +78,7 @@ const grGlobalPolicy: GuardPolicyDecision = {
   publisher: null,
   action: "allow",
   reason: null,
+  source: "local",
   updated_at: "2024-01-01T00:00:00Z",
 };
 
@@ -93,6 +97,10 @@ assert(
 assert(
   buildClearPayload(grArtifactPolicy).harness === "codex",
   "T-ADW-GR119-02b: artifact policy payload includes harness"
+);
+assert(
+  buildClearPayload(grArtifactPolicy).source === "team",
+  "T-ADW-GR119-02c: artifact policy payload includes source"
 );
 assert(
   buildClearPayload(grWorkspacePolicy).scope === "workspace",

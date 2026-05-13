@@ -316,6 +316,7 @@ export type GuardPolicyDecision = {
   publisher: string | null;
   action: string;
   reason: string | null;
+  source: string;
   updated_at: string;
 };
 
