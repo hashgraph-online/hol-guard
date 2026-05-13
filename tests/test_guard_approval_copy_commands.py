@@ -10,6 +10,7 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import approval_center_hint, first_approval_url
+from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -131,6 +132,58 @@ class TestApprovalsOpenCommand:
 
         assert rc != 0
         assert "error" in output
+
+
+class TestApprovalsAutoOpenCommand:
+    def test_approvals_summary_auto_opens_first_pending_request(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        home_dir = tmp_path / "guard-home"
+        store = GuardStore(home_dir)
+        store.add_approval_request(_make_request(request_id="req-auto-open"), "2026-01-01T00:00:00Z")
+        opened_urls: list[str] = []
+        monkeypatch.setattr(
+            approval_commands_module,
+            "load_guard_daemon_url",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            approval_commands_module.webbrowser,
+            "open",
+            lambda url: opened_urls.append(url) or True,
+        )
+
+        rc = main(["guard", "approvals", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert opened_urls == ["http://127.0.0.1:5474/approvals/req-auto-open"]
+        assert output["auto_open"]["opened"] is True
+        assert output["auto_open"]["request_id"] == "req-auto-open"
+
+    def test_approvals_summary_honors_native_only_auto_open_opt_out(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        home_dir = tmp_path / "guard-home"
+        home_dir.mkdir(parents=True)
+        (home_dir / "config.toml").write_text('approval_surface_policy = "native-only"\n', encoding="utf-8")
+        store = GuardStore(home_dir)
+        store.add_approval_request(_make_request(request_id="req-no-open"), "2026-01-01T00:00:00Z")
+        opened_urls: list[str] = []
+        monkeypatch.setattr(
+            approval_commands_module,
+            "load_guard_daemon_url",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            approval_commands_module.webbrowser,
+            "open",
+            lambda url: opened_urls.append(url) or True,
+        )
+
+        rc = main(["guard", "approvals", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert opened_urls == []
+        assert output["auto_open"]["opened"] is False
+        assert output["auto_open"]["reason"] == "policy-disabled"
 
 
 class TestApprovalsRetryHintCommand:

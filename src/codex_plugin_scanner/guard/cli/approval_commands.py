@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import argparse
 import urllib.parse
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
+from ..config import load_guard_config
 from ..daemon import load_guard_daemon_url
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 
 _HARNESS_RETRY_COPY: dict[str, str] = {
@@ -96,11 +99,13 @@ def run_approval_command(
 ) -> dict[str, object]:
     command = getattr(args, "approvals_command", None)
     if command is None:
-        return build_runtime_snapshot(
+        payload = build_runtime_snapshot(
             store=store,
             approval_center_url=load_guard_daemon_url(store.guard_home),
             now=_now(),
         )
+        payload["auto_open"] = _auto_open_first_pending_request(store=store, workspace=workspace)
+        return payload
     if command == "clear-history":
         harness = getattr(args, "harness", None)
         clear_all = bool(getattr(args, "all", False))
@@ -143,6 +148,30 @@ def run_approval_command(
         now=_now(),
     )
     return {"resolved": True, "item": item}
+
+
+def _auto_open_first_pending_request(*, store: GuardStore, workspace: Path | None) -> dict[str, object]:
+    request = store.get_next_pending_request()
+    if request is None:
+        return {"opened": False, "reason": "no-pending-request"}
+    approval_url = str(request.get("approval_url") or "")
+    approval_center_url = approval_url or load_guard_daemon_url(store.guard_home)
+    if approval_center_url is None:
+        return {"opened": False, "reason": "missing-approval-url"}
+    request_id = str(request.get("request_id") or approval_center_url)
+    config = load_guard_config(store.guard_home, workspace)
+    approval_surface_policy = (
+        "never-auto-open" if config.approval_surface_policy == "native-only" else config.approval_surface_policy
+    )
+    result = GuardSurfaceRuntime(store).ensure_surface(
+        surface="approval-center",
+        approval_center_url=approval_center_url,
+        approval_surface_policy=approval_surface_policy,
+        open_key=f"approval-request:{request_id}",
+        opener=webbrowser.open,
+    )
+    result["request_id"] = request_id
+    return result
 
 
 def run_approval_open_command(
