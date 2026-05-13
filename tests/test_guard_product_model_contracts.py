@@ -125,12 +125,14 @@ def test_redaction_stable_ids_and_settings_contracts_are_shared() -> None:
     )
     assert STABLE_ID_PREFIXES == {
         "action": "act",
-        "request": "req",
-        "receipt": "rcpt",
+        "request": "uuid_hex",
+        "receipt": "guard-receipt",
         "incident": "inc",
         "agent_snapshot": "snap",
     }
     assert is_stable_guard_id("act_01HX8K7G6Y8M9N0P2Q3R4S5T6V")
+    assert is_stable_guard_id("4b2f0a3e8c164a4fb4a1d4b8f2b6c9aa")
+    assert is_stable_guard_id("guard-receipt-123e4567-e89b-12d3-a456-426614174000")
     assert not is_stable_guard_id("act")
     assert SETTINGS_GROUP_VALUES == (
         "preset",
@@ -177,6 +179,8 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     routes = {route.route: route for route in LOCAL_ROUTE_OWNERSHIP}
 
     assert routes["/"].auth_required is False
+    assert routes["/home"].auth_required is False
+    assert routes["/dashboard"].auth_required is False
     assert routes["/inbox"].writes_state is True
     assert routes["/requests"].writes_state is True
     assert routes["/requests/{id}"].writes_state is True

@@ -86,8 +86,8 @@ REDACTION_FORBIDDEN_FIELD_VALUES = (
 )
 STABLE_ID_PREFIXES = {
     "action": "act",
-    "request": "req",
-    "receipt": "rcpt",
+    "request": "uuid_hex",
+    "receipt": "guard-receipt",
     "incident": "inc",
     "agent_snapshot": "snap",
 }
@@ -187,6 +187,13 @@ HERMES_OPENCLAW_RUNTIME_MODELS = {
 
 LOCAL_ROUTE_OWNERSHIP = (
     RouteOwnership(route="/", persona=("vibe_coder", "solo_engineer"), auth_required=False, writes_state=False),
+    RouteOwnership(route="/home", persona=("vibe_coder", "solo_engineer"), auth_required=False, writes_state=False),
+    RouteOwnership(
+        route="/dashboard",
+        persona=("vibe_coder", "solo_engineer"),
+        auth_required=False,
+        writes_state=False,
+    ),
     RouteOwnership(route="/inbox", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
     RouteOwnership(route="/requests", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
     RouteOwnership(
@@ -259,7 +266,10 @@ LOCAL_API_OWNERSHIP = (
     ApiOwnership(path="/v1/settings", method="POST", category="config", auth_required=True, writes_state=True),
 )
 
-_STABLE_ID_PATTERN = re.compile(r"^(act|req|rcpt|inc|snap)_[0-9A-HJKMNP-TV-Z]{26}$")
+_STABLE_ID_PATTERN = re.compile(
+    r"^(?:(act|inc|snap)_[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{32}|guard-receipt-[0-9a-f]{8}-"
+    r"[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+)
 
 
 def is_stable_guard_id(value: str) -> bool:

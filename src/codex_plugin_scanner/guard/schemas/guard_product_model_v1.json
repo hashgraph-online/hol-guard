@@ -118,8 +118,8 @@
   ],
   "stable_id_prefixes": {
     "action": "act",
-    "request": "req",
-    "receipt": "rcpt",
+    "request": "uuid_hex",
+    "receipt": "guard-receipt",
     "incident": "inc",
     "agent_snapshot": "snap"
   },
@@ -230,6 +230,24 @@
   "local_routes": [
     {
       "route": "/",
+      "persona": [
+        "vibe_coder",
+        "solo_engineer"
+      ],
+      "auth_required": false,
+      "writes_state": false
+    },
+    {
+      "route": "/home",
+      "persona": [
+        "vibe_coder",
+        "solo_engineer"
+      ],
+      "auth_required": false,
+      "writes_state": false
+    },
+    {
+      "route": "/dashboard",
       "persona": [
         "vibe_coder",
         "solo_engineer"
