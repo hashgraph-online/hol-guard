@@ -790,6 +790,72 @@ def test_safe_decode_detector_inspects_shell_command_payloads(tmp_path: Path) ->
     assert any("safe-decode.v2" in (s.technical_detail or "") for s in signals)
 
 
+def test_safe_decode_detector_flags_opaque_payload_near_secret_context(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-opaque-secret",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="bash",
+        command=f"SECRET=$(cat .env); openssl enc -d -base64 <<< '{opaque}'",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert any(s.signal_id == "encoded.opaque-sensitive" for s in signals)
+
+
+def test_safe_decode_detector_ignores_benign_binary_payload(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-benign-binary",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="prompt",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt="Decode sample fixture",
+        prompt_text=f"Use this image fixture: {opaque}",
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
 def test_safe_decode_detector_returns_empty_for_plain_text(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
 

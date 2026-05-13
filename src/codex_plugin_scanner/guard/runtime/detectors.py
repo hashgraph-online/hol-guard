@@ -242,13 +242,13 @@ class SafeDecodeDetector:
         )
         for content in content_candidates:
             result = decode_layers(content)
-            signals = _safe_decode_signals(result, self.detector_id)
+            signals = _safe_decode_signals(result, self.detector_id, source_text=content)
             if signals:
                 return signals
         return ()
 
 
-def _safe_decode_signals(result: DecodeResult, detector_id: str) -> tuple[RiskSignalV2, ...]:
+def _safe_decode_signals(result: DecodeResult, detector_id: str, *, source_text: str) -> tuple[RiskSignalV2, ...]:
     if not result.layers:
         return ()
     signals: list[RiskSignalV2] = []
@@ -283,6 +283,31 @@ def _safe_decode_signals(result: DecodeResult, detector_id: str) -> tuple[RiskSi
             )
         )
     elif result.layers:
+        if _looks_like_opaque_decoded_payload(result.final_text):
+            if _has_sensitive_decode_context(source_text):
+                signals.append(
+                    RiskSignalV2(
+                        signal_id="encoded.opaque-sensitive",
+                        category="encoded",
+                        severity=severity_label_from_score(6),
+                        confidence=confidence_label_from_score(0.70),
+                        detector=detector_id,
+                        title="Opaque encoded payload near sensitive context",
+                        plain_reason=(
+                            "Guard decoded an opaque or encrypted-looking payload in a command that also references "
+                            "local secret material."
+                        ),
+                        technical_detail=f"Detector: {SAFE_DECODE_DETECTOR_VERSION}; "
+                        f"Layers: {[layer.encoding for layer in result.layers]}",
+                        evidence_ref=None,
+                        redaction_level="summary",
+                        false_positive_hint=(
+                            "Encrypted test fixtures are usually safe when no secret file or token is in scope."
+                        ),
+                        advisory_id=None,
+                    )
+                )
+            return tuple(signals)
         signals.append(
             RiskSignalV2(
                 signal_id="encoded.obfuscated-content",
@@ -304,6 +329,34 @@ def _safe_decode_signals(result: DecodeResult, detector_id: str) -> tuple[RiskSi
             )
         )
     return tuple(signals)
+
+
+def _looks_like_opaque_decoded_payload(text: str) -> bool:
+    if len(text) < 32:
+        return False
+    replacement_ratio = text.count("\ufffd") / max(len(text), 1)
+    if replacement_ratio >= 0.10:
+        return True
+    printable_count = sum(1 for char in text if char.isprintable() or char.isspace())
+    return printable_count / max(len(text), 1) < 0.75
+
+
+def _has_sensitive_decode_context(text: str) -> bool:
+    lowered = text.lower()
+    sensitive_tokens = (
+        ".env",
+        ".npmrc",
+        "id_rsa",
+        "id_ed25519",
+        "credential",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "private_key",
+        "password",
+    )
+    return any(token in lowered for token in sensitive_tokens)
 
 
 class FalsePositiveSuppressorDetector:
