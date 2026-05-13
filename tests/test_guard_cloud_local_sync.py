@@ -503,6 +503,45 @@ def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(t
     }
 
 
+def test_runtime_snapshot_counts_large_history_without_shipping_every_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    receipt_limits: list[int] = []
+
+    def list_limited_receipts(
+        limit: int = 50,
+        harness: str | None = None,
+    ) -> list[dict[str, object]]:
+        receipt_limits.append(limit)
+        return [
+            {
+                "receipt_id": "receipt-large-history",
+                "harness": "codex",
+                "artifact_id": "codex:demo",
+                "artifact_hash": "hash-demo",
+                "policy_decision": "allow",
+                "capabilities_summary": "command reviewed",
+                "changed_capabilities": [],
+                "provenance_summary": "local",
+                "user_override": None,
+                "artifact_name": "demo command",
+                "source_scope": None,
+                "timestamp": "2026-04-24T00:00:00+00:00",
+            }
+        ]
+
+    monkeypatch.setattr(store, "list_receipts", list_limited_receipts)
+    monkeypatch.setattr(store, "count_receipts", lambda harness=None: 100_000)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["receipt_count"] == 100_000
+    assert len(snapshot["latest_receipts"]) == 1
+    assert receipt_limits == [25]
+
+
 def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

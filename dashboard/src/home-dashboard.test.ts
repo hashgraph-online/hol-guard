@@ -2,10 +2,21 @@ import {
   buildHomePrimaryState,
   type HomePrimaryState,
 } from "./queue-state";
+import {
+  buildDailyStory,
+  buildDaemonErrorCopy,
+  buildEmptyStateCopy,
+  buildRecentProtectionCopy,
+  computeStreak,
+  deriveHomeState,
+  redactHomeArtifactLabel,
+  resolveCloudUpsellVisible,
+  resolveNewAppDiscoveries,
+  STREAK_MILESTONE_MESSAGES,
+} from "./home-dashboard";
 import { harnessDisplayName } from "./approval-center-utils";
-import { resolveNewAppDiscoveries } from "./home-dashboard";
 import { resolveProofStatusCopy } from "./runtime-overview";
-import type { GuardManagedInstall, GuardProofStatus } from "./guard-types";
+import type { GuardManagedInstall, GuardProofStatus, GuardReceipt } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -331,4 +342,123 @@ assert(
 assert(
   localOnlyCopyForHome.label === "Local only",
   `D3: not_connected proof label on home route reads "Local only" — got: "${localOnlyCopyForHome.label}"`
+);
+
+const emptyStateCopy = buildEmptyStateCopy();
+assert(
+  emptyStateCopy.title === "No apps connected",
+  `GR176: empty Home state should be calm and direct — got: "${emptyStateCopy.title}"`
+);
+assert(
+  !containsJargon(`${emptyStateCopy.title} ${emptyStateCopy.body}`),
+  `GR176: empty Home copy should avoid implementation jargon — got: "${emptyStateCopy.body}"`
+);
+
+const daemonErrorCopy = buildDaemonErrorCopy();
+assert(
+  daemonErrorCopy.primaryCta === "Go to Settings" && daemonErrorCopy.secondaryCta === "Open review queue",
+  "GR191: daemon error copy gives recoverable Home actions"
+);
+
+const setupHomeState = deriveHomeState({
+  hasActiveInstalls: false,
+  hasObservedHarnesses: false,
+  queuedCount: 0,
+  watchedAppsCount: 0,
+});
+assert(
+  setupHomeState.heroStatus === "setup_gap" && setupHomeState.ctaTarget === "fleet",
+  "GR177: first Home view routes setup gaps to Apps"
+);
+assert(
+  !containsJargon(`${setupHomeState.headline} ${setupHomeState.subheadline} ${setupHomeState.ctaLabel}`),
+  "GR177: first Home view avoids implementation jargon"
+);
+
+const clearHomeState = deriveHomeState({
+  hasActiveInstalls: true,
+  hasObservedHarnesses: true,
+  queuedCount: 0,
+  watchedAppsCount: 2,
+});
+assert(
+  clearHomeState.heroStatus === "clear" && clearHomeState.ctaTarget === "evidence",
+  "GR178: calm protected Home view avoids duplicate setup content"
+);
+
+assert(
+  resolveCloudUpsellVisible(1, "local_only") === false,
+  "GR184: Home should not upsell cloud while review work is pending"
+);
+assert(
+  resolveCloudUpsellVisible(0, "paired_waiting") === false,
+  "GR184: Home should not upsell cloud while pairing is waiting"
+);
+assert(
+  resolveCloudUpsellVisible(0, "local_only") === true,
+  "GR184: Home may show sync settings only when local and idle"
+);
+
+const receiptBase: GuardReceipt = {
+  receipt_id: "receipt-1",
+  harness: "codex",
+  artifact_id: "artifact-1",
+  artifact_hash: "hash-1",
+  policy_decision: "allow",
+  capabilities_summary: "command reviewed",
+  changed_capabilities: [],
+  provenance_summary: "local",
+  user_override: null,
+  artifact_name: "deploy command",
+  source_scope: null,
+  timestamp: new Date().toISOString(),
+};
+
+const pathReceipt: GuardReceipt = {
+  ...receiptBase,
+  receipt_id: "receipt-2",
+  artifact_name: "/tmp/hol-guard-user/private/key.pem",
+};
+assert(
+  redactHomeArtifactLabel(pathReceipt.artifact_name) === "a local action",
+  "GR195: Home recent activity redacts local paths"
+);
+assert(
+  buildRecentProtectionCopy(pathReceipt) === "Codex allowed a local action",
+  `GR179: recent protection copy should be useful but private — got: "${buildRecentProtectionCopy(pathReceipt)}"`
+);
+
+const dailyStory = buildDailyStory(
+  [
+    receiptBase,
+    {
+      ...receiptBase,
+      receipt_id: "receipt-3",
+      policy_decision: "block",
+    },
+  ],
+  0
+);
+assert(
+  dailyStory?.body === "Guard allowed 1 action and blocked 1.",
+  `GR183: daily story should count real receipt decisions — got: "${dailyStory?.body ?? "none"}"`
+);
+
+const pendingDailyStory = buildDailyStory([], 1);
+assert(
+  pendingDailyStory?.body === "1 action is waiting for review. Guard paused it to keep you safe.",
+  `GR179: singular pending story should read naturally — got: "${pendingDailyStory?.body ?? "none"}"`
+);
+
+const staleReceipt: GuardReceipt = {
+  ...receiptBase,
+  timestamp: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+};
+assert(
+  computeStreak([staleReceipt]) === 0,
+  "GR186: stale activity should not keep a streak alive"
+);
+assert(
+  Object.values(STREAK_MILESTONE_MESSAGES).every((message) => !message.includes("!")),
+  "GR186: streak milestone copy should stay calm, not gamified"
 );

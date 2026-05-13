@@ -3889,8 +3889,14 @@
     border-color: var(--color-white);
   }
 
-  .focus\:bg-brand-blue:focus {
+  .focus\:bg-brand-blue:focus, .focus\:bg-brand-blue\/\[0\.04\]:focus {
     background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus\:bg-brand-blue\/\[0\.04\]:focus {
+      background-color: color-mix(in oklab, var(--brand-blue) 4%, transparent);
+    }
   }
 
   .focus\:bg-slate-50:focus {
