@@ -263,6 +263,7 @@ def _record_override_receipt(
         artifact_name=artifact.artifact_name,
         source_scope=artifact.source_scope,
         user_override=user_override,
+        approval_source="inline",
     )
     store.add_receipt(receipt)
 
