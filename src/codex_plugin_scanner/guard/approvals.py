@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -262,13 +262,25 @@ def approval_center_hint(
     flow = approval_prompt_flow(harness, managed_install=managed_install)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
+    approval_url = first_approval_url(queued)
+    review_url = approval_url or approval_center_url
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
         f"{flow['summary']} "
-        f"Review them in the Guard approval center at {approval_center_url}. "
+        f"Review them in the Guard approval center at {review_url}. "
         f"{risk_summary} "
         f"{flow['fallback_hint']}"
     )
+
+
+def first_approval_url(queued: Sequence[object]) -> str | None:
+    for item in queued:
+        if not isinstance(item, Mapping):
+            continue
+        approval_url = item.get("approval_url")
+        if isinstance(approval_url, str) and approval_url.strip():
+            return approval_url.strip()
+    return None
 
 
 def build_runtime_snapshot(

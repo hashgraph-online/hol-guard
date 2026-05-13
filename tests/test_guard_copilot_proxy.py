@@ -8,6 +8,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.proxy import CopilotMcpGuardProxy
+from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -117,3 +118,54 @@ def test_copilot_guard_proxy_prompts_inline_when_client_supports_elicitation(tmp
     assert responses[2]["id"] == 2
     assert responses[2]["result"]["content"][0]["text"] == "dangerous_delete"
     assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+
+
+def test_copilot_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    proxy = CopilotMcpGuardProxy(
+        server_name="danger_lab",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".vscode" / "mcp.json"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+    error = responses[1]["error"]
+    approval_requests = error["data"]["approvalRequests"]
+
+    assert exit_code == 0
+    assert error["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
+    assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
+    assert approval_requests[0]["approval_url"] in error["message"]
