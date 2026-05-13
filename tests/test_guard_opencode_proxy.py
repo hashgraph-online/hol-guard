@@ -6,7 +6,8 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.proxy import OpenCodeMcpGuardProxy
+from codex_plugin_scanner.guard.proxy import OpenCodeMcpGuardProxy, RuntimeMcpGuardProxy
+from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -96,3 +97,40 @@ def test_opencode_guard_proxy_allows_risky_tool_after_native_permission(tmp_path
     assert store.count_approval_requests() == 0
     assert receipts[0]["policy_decision"] == "allow"
     assert "native-approved" in receipts[0]["changed_capabilities"]
+
+
+def test_runtime_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    proxy = RuntimeMcpGuardProxy(
+        harness="hermes",
+        server_name="danger_lab",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / "hermes.json"),
+        transport="local",
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env.guard-proof"}},
+            },
+        ]
+    )
+    error = result["responses"][1]["error"]
+    approval_requests = error["data"]["approvalRequests"]
+
+    assert error["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
+    assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
+    assert approval_requests[0]["approval_url"] in error["message"]

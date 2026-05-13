@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.approvals import approval_center_hint
+from codex_plugin_scanner.guard.approvals import approval_center_hint, first_approval_url
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -53,9 +53,7 @@ class TestHarnessBlockMessageCopyRule:
     """T732: harness block messages must never tell users to run 'hol-guard dashboard' as primary path."""
 
     @pytest.mark.parametrize("harness", _KNOWN_HARNESSES)
-    def test_approval_center_hint_does_not_require_manual_dashboard_launch(
-        self, tmp_path: Path, harness: str
-    ) -> None:
+    def test_approval_center_hint_does_not_require_manual_dashboard_launch(self, tmp_path: Path, harness: str) -> None:
         """T732: approval_center_hint must not instruct users to run 'hol-guard dashboard'."""
         context = HarnessContext(
             home_dir=tmp_path,
@@ -96,6 +94,16 @@ class TestBlockMessageNoDashboardLaunchRequired:
             assert "hol-guard dashboard" not in hint, (
                 f"CLI block message for '{harness}' must not say 'hol-guard dashboard'. Got: {hint!r}"
             )
+
+
+def test_first_approval_url_ignores_malformed_queue_items() -> None:
+    queued = [
+        "not-a-request",
+        {"approval_url": "  "},
+        {"approval_url": "http://127.0.0.1:5474/approvals/req-ok"},
+    ]
+
+    assert first_approval_url(queued) == "http://127.0.0.1:5474/approvals/req-ok"
 
 
 class TestApprovalsOpenCommand:
