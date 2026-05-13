@@ -158,7 +158,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const filteredRequests = useMemo(() => {
     let items = requests;
     if (semanticFilter !== "all") {
-      const group = SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
+      const group = REVIEW_SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
       if (group && group.matches.length > 0) {
         items = items.filter((item) => group.matches.includes(resolveQueueCategory(item).id));
       }
