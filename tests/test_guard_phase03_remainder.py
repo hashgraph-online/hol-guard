@@ -57,6 +57,27 @@ def test_update_version_check_marks_stale_local_install(monkeypatch: pytest.Monk
     }
 
 
+def test_update_version_check_treats_stable_release_newer_than_prerelease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands.sys, "prefix", "/opt/guard-venv")
+    monkeypatch.setattr(update_commands.sys, "executable", "/opt/guard-venv/bin/python")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0rc1")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.0")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["version_check"] == {
+        "source": "pypi",
+        "status": "stale",
+        "current_version": "2.0.0rc1",
+        "latest_version": "2.0.0",
+        "update_available": True,
+    }
+
+
 def test_update_version_check_handles_latest_lookup_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands.sys, "prefix", "/opt/guard-venv")
     monkeypatch.setattr(update_commands.sys, "executable", "/opt/guard-venv/bin/python")
@@ -113,6 +134,26 @@ def test_doctor_reports_partial_setup_for_found_unprotected_harness(
     assert payload["command_available"] is False
     assert payload["config_paths"] == [str(config_path)]
     assert any("config was found" in warning for warning in payload["warnings"])
+
+
+def test_doctor_does_not_mark_harness_command_presence_as_guard_active(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    config_path = context.home_dir / ".cursor" / "mcp.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: True)
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    payload = get_adapter("cursor").diagnostics(context)
+
+    assert payload["setup_status"] == "partial"
+    assert payload["installed"] is True
+    assert payload["command_available"] is True
+    assert any("Guard is not installed" in warning for warning in payload["warnings"])
 
 
 def test_install_native_contract_output_prefers_native_hooks_for_supported_harnesses(tmp_path: Path) -> None:

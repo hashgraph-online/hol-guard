@@ -227,7 +227,7 @@ class HarnessAdapter:
         runtime_probe: dict[str, object] | None,
     ) -> list[str]:
         warnings = list(detection.warnings)
-        if detection.config_paths and not detection.installed:
+        if detection.config_paths and not _detection_has_guard_management(detection):
             warnings.append(
                 f"{self.harness} config was found, but Guard is not installed for this harness. "
                 f"Run `hol-guard install {self.harness}` to enable protection."
@@ -267,15 +267,34 @@ class HarnessAdapter:
 
 
 def _diagnostic_setup_status(detection: HarnessDetection, warnings: list[str]) -> str:
-    if detection.config_paths and not detection.command_available:
-        return "partial"
-    if detection.installed and warnings:
+    guard_managed = _detection_has_guard_management(detection)
+    if guard_managed and warnings:
         return "broken"
-    if detection.installed:
+    if guard_managed:
         return "active"
-    if detection.config_paths or detection.command_available:
+    if detection.config_paths or detection.command_available or detection.installed:
         return "partial"
     return "not_found"
+
+
+def _detection_has_guard_management(detection: HarnessDetection) -> bool:
+    if any(_guard_managed_path(path) for path in detection.config_paths):
+        return True
+    return any(_artifact_uses_guard(artifact) for artifact in detection.artifacts)
+
+
+def _guard_managed_path(path: str) -> bool:
+    return Path(path).name.lower().startswith("hol-guard")
+
+
+def _artifact_uses_guard(artifact: GuardArtifact) -> bool:
+    values = [artifact.command or "", *artifact.args]
+    return any(_value_mentions_guard(value) for value in values)
+
+
+def _value_mentions_guard(value: str) -> bool:
+    normalized = value.lower()
+    return "codex_plugin_scanner.cli" in normalized or "hol-guard" in normalized
 
 
 __all__ = [

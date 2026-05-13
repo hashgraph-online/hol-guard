@@ -16,6 +16,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from packaging.version import InvalidVersion, Version
+
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from ..redaction import redact_sensitive_text
@@ -248,28 +250,12 @@ def _latest_version_from_pypi() -> str | None:
 
 
 def _is_newer_version(latest_version: str, current_version: str) -> bool:
-    latest_parts = _numeric_version_parts(latest_version)
-    current_parts = _numeric_version_parts(current_version)
-    if latest_parts is None or current_parts is None:
+    try:
+        latest = Version(latest_version)
+        current = Version(current_version)
+    except InvalidVersion:
         return False
-    max_len = max(len(latest_parts), len(current_parts))
-    latest_padded = latest_parts + (0,) * (max_len - len(latest_parts))
-    current_padded = current_parts + (0,) * (max_len - len(current_parts))
-    return latest_padded > current_padded
-
-
-def _numeric_version_parts(version: str) -> tuple[int, ...] | None:
-    parts: list[int] = []
-    for raw_part in version.strip().split("."):
-        digits = ""
-        for character in raw_part:
-            if not character.isdigit():
-                break
-            digits += character
-        if not digits:
-            return None
-        parts.append(int(digits))
-    return tuple(parts) if parts else None
+    return latest > current
 
 
 def _current_version() -> str:
