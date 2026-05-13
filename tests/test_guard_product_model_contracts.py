@@ -124,13 +124,14 @@ def test_redaction_stable_ids_and_settings_contracts_are_shared() -> None:
         REDACTION_FORBIDDEN_FIELD_VALUES
     )
     assert STABLE_ID_PREFIXES == {
-        "action": "act",
+        "action": "sha256_hex",
         "request": "uuid_hex",
         "receipt": "guard-receipt",
         "incident": "inc",
         "agent_snapshot": "snap",
     }
     assert is_stable_guard_id("act_01HX8K7G6Y8M9N0P2Q3R4S5T6V")
+    assert is_stable_guard_id("a" * 64)
     assert is_stable_guard_id("4b2f0a3e8c164a4fb4a1d4b8f2b6c9aa")
     assert is_stable_guard_id("guard-receipt-123e4567-e89b-12d3-a456-426614174000")
     assert not is_stable_guard_id("act")
@@ -200,6 +201,7 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert apis_by_method[("POST", "/v1/requests/{id}/approve")].writes_state is True
     assert apis_by_method[("GET", "/v1/receipts")].writes_state is False
     assert apis_by_method[("GET", "/v1/policy")].category == "config"
+    assert apis_by_method[("POST", "/v1/policy/decisions")].writes_state is True
     assert apis_by_method[("POST", "/v1/policy/clear")].writes_state is True
     assert apis_by_method[("GET", "/v1/artifacts/{id}/diff")].writes_state is False
     assert apis_by_method[("DELETE", "/v1/evidence")].category == "destructive"

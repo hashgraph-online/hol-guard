@@ -117,7 +117,7 @@
     "session"
   ],
   "stable_id_prefixes": {
-    "action": "act",
+    "action": "sha256_hex",
     "request": "uuid_hex",
     "receipt": "guard-receipt",
     "incident": "inc",
@@ -418,6 +418,13 @@
       "category": "config",
       "auth_required": true,
       "writes_state": false
+    },
+    {
+      "path": "/v1/policy/decisions",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
     },
     {
       "path": "/v1/policy/clear",

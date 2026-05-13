@@ -85,7 +85,7 @@ REDACTION_FORBIDDEN_FIELD_VALUES = (
     "session",
 )
 STABLE_ID_PREFIXES = {
-    "action": "act",
+    "action": "sha256_hex",
     "request": "uuid_hex",
     "receipt": "guard-receipt",
     "incident": "inc",
@@ -250,6 +250,7 @@ LOCAL_API_OWNERSHIP = (
     ApiOwnership(path="/v1/receipts/latest", method="GET", category="unknown", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/receipts/{id}", method="GET", category="unknown", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/policy", method="GET", category="config", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/policy/decisions", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/policy/clear", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(
         path="/v1/artifacts/{id}/diff",
@@ -267,7 +268,7 @@ LOCAL_API_OWNERSHIP = (
 )
 
 _STABLE_ID_PATTERN = re.compile(
-    r"^(?:(act|inc|snap)_[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{32}|guard-receipt-[0-9a-f]{8}-"
+    r"^(?:(act|inc|snap)_[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{32}|[0-9a-f]{64}|guard-receipt-[0-9a-f]{8}-"
     r"[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
 )
 
