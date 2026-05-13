@@ -13,7 +13,6 @@ import hashlib
 import io
 import re
 import time
-import zipfile
 import zlib
 from dataclasses import dataclass, field
 from typing import Literal
@@ -22,6 +21,8 @@ _MAX_INPUT_BYTES: int = 256 * 1024
 _MAX_DECODED_BYTES: int = 512 * 1024
 _MAX_RECURSION_DEPTH: int = 3
 _MAX_DECODE_TIME_MS: float = 50.0
+_DECODE_CACHE_LIMIT: int = 128
+SAFE_DECODE_DETECTOR_VERSION: str = "safe-decode.v2"
 
 EncodingType = Literal[
     "base64",
@@ -30,11 +31,10 @@ EncodingType = Literal[
     "hex",
     "url-percent",
     "unicode-escape",
-    "gzip-metadata",
-    "zlib-metadata",
-    "zip-listing",
     "powershell-encoded",
     "shell-heredoc",
+    "python-c",
+    "node-e",
     "js-atob",
 ]
 
@@ -85,6 +85,14 @@ _POWERSHELL_ENCODED = re.compile(
     r"-(?:En(?:c(?:oded(?:Command)?)?)?)\s+([A-Za-z0-9+/=]{8,})",
     re.IGNORECASE,
 )
+_PYTHON_C = re.compile(
+    r"\bpython(?:3)?\b[^\r\n;&|]*\s-c\s+(?P<quote>['\"])(?P<code>(?:\\.|(?!(?P=quote)).)*)(?P=quote)",
+    re.IGNORECASE | re.DOTALL,
+)
+_NODE_E = re.compile(
+    r"\bnode\b[^\r\n;&|]*\s-e\s+(?P<quote>['\"])(?P<code>(?:\\.|(?!(?P=quote)).)*)(?P=quote)",
+    re.IGNORECASE | re.DOTALL,
+)
 _HEREDOC = re.compile(r"<<-?\s*'?(\w+)'?\s*\n(.*?)\n\1\b", re.DOTALL)
 _JS_ATOB = re.compile(r"atob\(\s*['\"]([A-Za-z0-9+/=]{4,})['\"]", re.IGNORECASE)
 
@@ -96,6 +104,50 @@ _REDACT_TOKENS = re.compile(
     r"\b(?:password|token|secret|key|aws_|npm_token|node_auth)\w*\s*=\s*\S+",
     re.IGNORECASE,
 )
+_DECODE_CACHE: dict[str, DecodeResult] = {}
+_DECODE_CACHE_ORDER: list[str] = []
+
+
+def decode_cache_key(
+    content: str,
+    *,
+    max_input_bytes: int = _MAX_INPUT_BYTES,
+    max_decoded_bytes: int = _MAX_DECODED_BYTES,
+    max_depth: int = _MAX_RECURSION_DEPTH,
+    detector_version: str = SAFE_DECODE_DETECTOR_VERSION,
+) -> str:
+    digest = hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()
+    return f"{detector_version}:{max_input_bytes}:{max_decoded_bytes}:{max_depth}:{digest}"
+
+
+def clear_decode_cache() -> None:
+    _DECODE_CACHE.clear()
+    _DECODE_CACHE_ORDER.clear()
+
+
+def _clone_decode_result(result: DecodeResult) -> DecodeResult:
+    return DecodeResult(
+        layers=list(result.layers),
+        final_text=result.final_text,
+        truncated=result.truncated,
+        timed_out=result.timed_out,
+        depth_exceeded=result.depth_exceeded,
+        size_exceeded=result.size_exceeded,
+        eval_signals=list(result.eval_signals),
+        exec_signals=list(result.exec_signals),
+        marshal_signals=list(result.marshal_signals),
+    )
+
+
+def _cache_decode_result(key: str, result: DecodeResult) -> None:
+    if key in _DECODE_CACHE:
+        _DECODE_CACHE[key] = _clone_decode_result(result)
+        return
+    _DECODE_CACHE[key] = _clone_decode_result(result)
+    _DECODE_CACHE_ORDER.append(key)
+    while len(_DECODE_CACHE_ORDER) > _DECODE_CACHE_LIMIT:
+        oldest = _DECODE_CACHE_ORDER.pop(0)
+        _DECODE_CACHE.pop(oldest, None)
 
 
 def _hash_preview(text: str) -> tuple[str, str]:
@@ -182,58 +234,6 @@ def _try_unicode_escape(data: str) -> str | None:
         return None
 
 
-def _decode_gzip_metadata(data: str) -> DecodedLayer | None:
-    raw = data.encode("latin-1", errors="replace")
-    if raw[:2] != b"\x1f\x8b":
-        return None
-    try:
-        decoded = zlib.decompress(raw, wbits=16 + zlib.MAX_WBITS)
-        text = decoded.decode("utf-8", errors="replace")
-        digest, preview = _hash_preview(text)
-        return DecodedLayer(
-            encoding="gzip-metadata",
-            input_length=len(raw),
-            output_length=len(decoded),
-            content_hash=digest,
-            preview_redacted=preview,
-            depth=0,
-        )
-    except zlib.error:
-        return None
-
-
-def _decode_zlib_metadata(data: str) -> DecodedLayer | None:
-    raw = data.encode("latin-1", errors="replace")
-    if raw[:1] not in (b"\x78",):
-        return None
-    try:
-        decoded = zlib.decompress(raw)
-        text = decoded.decode("utf-8", errors="replace")
-        digest, preview = _hash_preview(text)
-        return DecodedLayer(
-            encoding="zlib-metadata",
-            input_length=len(raw),
-            output_length=len(decoded),
-            content_hash=digest,
-            preview_redacted=preview,
-            depth=0,
-        )
-    except zlib.error:
-        return None
-
-
-def _decode_zip_listing(data: str) -> list[str] | None:
-    raw = data.encode("latin-1", errors="replace")
-    if raw[:2] != b"PK":
-        return None
-    try:
-        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-            names = zf.namelist()
-            return [n for n in names if not n.startswith("/") and ".." not in n]
-    except (zipfile.BadZipFile, Exception):
-        return None
-
-
 def _try_base64_utf16le(data: str) -> str | None:
     """Decode base64 bytes as UTF-16LE — the PowerShell -EncodedCommand convention."""
     padded = data + "=" * ((4 - len(data) % 4) % 4)
@@ -249,6 +249,24 @@ def _extract_powershell_encoded(text: str) -> str | None:
     if not m:
         return None
     return _try_base64_utf16le(m.group(1)) or _try_base64(m.group(1))
+
+
+def _unescape_command_argument(value: str) -> str:
+    return value.replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\")
+
+
+def _extract_python_c(text: str) -> str | None:
+    m = _PYTHON_C.search(text)
+    if not m:
+        return None
+    return _unescape_command_argument(m.group("code"))
+
+
+def _extract_node_e(text: str) -> str | None:
+    m = _NODE_E.search(text)
+    if not m:
+        return None
+    return _unescape_command_argument(m.group("code"))
 
 
 def _extract_heredoc(text: str) -> str | None:
@@ -281,6 +299,14 @@ def _find_encoded_candidate(text: str) -> tuple[EncodingType, str] | None:
     m = _POWERSHELL_ENCODED.search(text)
     if m:
         return ("powershell-encoded", m.group(1))
+
+    m = _PYTHON_C.search(text)
+    if m:
+        return ("python-c", m.group("code"))
+
+    m = _NODE_E.search(text)
+    if m:
+        return ("node-e", m.group("code"))
 
     m = _JS_ATOB.search(text)
     if m:
@@ -326,6 +352,35 @@ def decode_layers(
     max_time_ms: float = _MAX_DECODE_TIME_MS,
 ) -> DecodeResult:
     """Decode multi-layer encoded content without executing any payload."""
+    key = decode_cache_key(
+        content,
+        max_input_bytes=max_input_bytes,
+        max_decoded_bytes=max_decoded_bytes,
+        max_depth=max_depth,
+    )
+    cached = _DECODE_CACHE.get(key)
+    if cached is not None:
+        return _clone_decode_result(cached)
+    result = _decode_layers_uncached(
+        content,
+        max_input_bytes=max_input_bytes,
+        max_decoded_bytes=max_decoded_bytes,
+        max_depth=max_depth,
+        max_time_ms=max_time_ms,
+    )
+    if not result.timed_out:
+        _cache_decode_result(key, result)
+    return result
+
+
+def _decode_layers_uncached(
+    content: str,
+    *,
+    max_input_bytes: int,
+    max_decoded_bytes: int,
+    max_depth: int,
+    max_time_ms: float,
+) -> DecodeResult:
     result = DecodeResult()
     start = time.monotonic()
 
@@ -369,6 +424,10 @@ def decode_layers(
             decoded = _try_unicode_escape(candidate_data)
         elif encoding_type == "powershell-encoded":
             decoded = _try_base64_utf16le(candidate_data) or _try_base64(candidate_data)
+        elif encoding_type == "python-c":
+            decoded = _extract_python_c(current)
+        elif encoding_type == "node-e":
+            decoded = _extract_node_e(current)
         elif encoding_type == "shell-heredoc":
             decoded = candidate_data
         elif encoding_type == "js-atob":
