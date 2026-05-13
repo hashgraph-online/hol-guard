@@ -46,8 +46,8 @@ except ImportError:
             redacted_value,
         )
         return re.sub(
-            r"(?P<prefix>^|[\s\"'=({\[])(?P<root>[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s\"'`,;:)}\]]+)"
-            r"(?P<rest>(?:[\\/][^\s\"'`,;:)}\]]*)?)",
+            r"(?P<prefix>^|[\s\"'=({\[])(?P<root>[A-Za-z]:[\\/]+Users[\\/]+[^\\/ \t\r\n\"'`,;:)}\]]+)"
+            r"(?P<rest>(?:[\\/][^\\/ \t\r\n\"'`,;:)}\]]*)?)",
             r"\g<prefix>~\g<rest>",
             redacted_value,
         )
