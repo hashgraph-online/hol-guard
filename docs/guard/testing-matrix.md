@@ -34,6 +34,12 @@ Manual verification should include:
 - `hol-guard install codex`
 - `hol-guard run codex --dry-run --default-action allow --json`
 - `hol-guard receipts`
+- `hol-guard status`
+- `hol-guard connect`
+- `hol-guard connect status`
+- `hol-guard connect repair`
+- `hol-guard sync`
+- `hol-guard explain install-connect`
 - `hol-guard explain codex:project:<artifact-name>`
 - `hol-guard diff codex`
 - `hol-guard events`
