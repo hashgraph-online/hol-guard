@@ -61,7 +61,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
 
   if (appReceipts.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-100 bg-white/60 p-8 text-center">
+      <div className="rounded-xl border border-slate-100 bg-white/60 p-6 text-center">
         <p className="text-sm text-slate-500">No activity yet.</p>
         <p className="mt-1 text-xs text-slate-400">App activity will appear here after Guard makes decisions.</p>
       </div>
@@ -75,7 +75,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
     const color = harnessColor(selectedApp);
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setSelectedApp(null)}
@@ -93,7 +93,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
           </a>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white/60 p-5">
+        <div className="rounded-xl border border-slate-100 bg-white/60 p-4">
           <div className="flex items-center gap-3">
             <span
               className="inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
@@ -112,16 +112,16 @@ function AppTabRaw({ receipts }: AppTabProps) {
 
         <AppSparkline items={items} />
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           {items.map((receipt) => (
             <div
               key={receipt.receipt_id}
-              className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+              className="rounded-xl border border-slate-100 bg-white p-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-brand-dark">{plainEnglishDescription(receipt)}</p>
-                  <p className="mt-1 text-xs text-slate-400">{formatRelativeTime(receipt.timestamp)}</p>
+                  <p className="mt-0.5 text-xs text-slate-400">{formatRelativeTime(receipt.timestamp)}</p>
                 </div>
                 <span className={`shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-brand-green" : "text-brand-attention"}`}>
                   {receipt.policy_decision === "allow" ? "Allowed" : "Stopped"}
@@ -159,7 +159,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
             onClick={() => {
               setSelectedApp(harness);
             }}
-            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md"
+            className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white p-3 text-left transition-all hover:border-slate-200 hover:bg-slate-50/50"
           >
             <div className="flex items-center gap-3">
               <span
@@ -184,7 +184,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
       })}
 
       {filteredApps.length === 0 && (
-        <div className="rounded-2xl border border-slate-100 bg-white/60 p-8 text-center">
+        <div className="rounded-xl border border-slate-100 bg-white/60 p-6 text-center">
           <p className="text-sm text-slate-500">No apps match your search.</p>
         </div>
       )}
@@ -213,7 +213,7 @@ function AppSparkline({ items }: { items: GuardReceipt[] }) {
   const barWidth = width / buckets.length;
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4">
+    <div className="rounded-xl border border-slate-100 bg-white p-3">
       <p className="text-xs font-medium text-slate-500">Last 7 days</p>
       <svg viewBox={`0 0 ${width} ${height}`} className="mt-2 h-10 w-full" preserveAspectRatio="none">
         {buckets.map((count, i) => {
