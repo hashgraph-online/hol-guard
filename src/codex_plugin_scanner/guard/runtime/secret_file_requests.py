@@ -2840,6 +2840,8 @@ def _looks_like_safe_node_generated_file_heredoc(command_text: str, script_text:
         return False
     if _node_script_contains_non_file_generation_risk(script_text):
         return False
+    if _node_script_contains_disallowed_destructive_file_call(script_text):
+        return False
     write_targets = _node_write_file_targets(script_text)
     if not write_targets:
         return False
@@ -2864,6 +2866,27 @@ def _node_script_contains_non_file_generation_risk(script_text: str) -> bool:
         or re.search(r"\b(?:exec|execfile|execfilesync|execsync|spawn|spawnsync|fork)\s*\(", lowered)
         or re.search(r"\b(?:eval|function)\s*\(", lowered)
     )
+
+
+def _node_script_contains_disallowed_destructive_file_call(script_text: str) -> bool:
+    allowed_write_calls = {"writeFile", "writeFileSync"}
+    redacted_script = _redacted_node_inline_string_literals(script_text)
+    member_scan_script = _redacted_node_inline_string_literals(script_text, preserve_bracket_member_strings=True)
+    for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS - allowed_write_calls:
+        escaped_call_name = re.escape(call_name)
+        if re.search(rf"(?<![A-Za-z0-9_$'\"]){escaped_call_name}\s*(?:\?\.\s*)?\(", redacted_script):
+            return True
+        for base_pattern in (
+            rf"\.\s*{escaped_call_name}",
+            rf"\[\s*['\"]{escaped_call_name}['\"]\s*\]",
+        ):
+            if re.search(rf"{base_pattern}\s*(?:\?\.\s*)?(?:\)\s*)?\(", member_scan_script):
+                return True
+            if re.search(rf"{base_pattern}\s*(?:\?\s*)?\.\s*call\s*\(", member_scan_script):
+                return True
+            if re.search(rf"{base_pattern}\s*(?:\?\s*)?\.\s*apply\s*\(", member_scan_script):
+                return True
+    return False
 
 
 def _node_write_file_targets(script_text: str) -> tuple[str, ...]:
