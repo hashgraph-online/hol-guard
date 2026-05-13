@@ -539,6 +539,9 @@ def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
 _INLINE_SOURCES = frozenset({"inline-approved", "inline-denied"})
 _POLICY_SOURCES = frozenset(
     {
+        "heuristic",
+        "policy",
+        "auto",
         "policy-allow",
         "policy-block",
         "policy_allow",

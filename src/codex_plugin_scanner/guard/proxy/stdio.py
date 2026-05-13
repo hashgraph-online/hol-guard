@@ -243,7 +243,7 @@ class StdioGuardProxy:
                             provenance_summary=f"runtime MCP tool request evaluated from {self._policy_path()}",
                             artifact_name=runtime_artifact.name,
                             source_scope=runtime_artifact.source_scope,
-                            approval_source="approval_center",
+                            approval_source="approval_center" if policy_action == "require-reapproval" else "policy",
                         )
                     )
                 if policy_action in {"block", "sandbox-required", "require-reapproval"}:
