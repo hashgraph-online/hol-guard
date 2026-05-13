@@ -97,12 +97,7 @@ def _claude_sensitive_read_event(session_id: str, path: str = "~/.npmrc") -> dic
     }
 
 
-def _answer_claude_guard_question(
-    tmp_path: Path,
-    *,
-    session_id: str,
-    answer: str,
-) -> tuple[int, str]:
+def _answer_claude_guard_question(tmp_path: Path, *, session_id: str, answer: str) -> tuple[int, str]:
     approval_question, question_options = _load_claude_pending_question_contract(tmp_path, session_id)
     return _run_hook(
         tmp_path,
@@ -479,3 +474,24 @@ def test_gr098_hook_failures_fail_safe_in_strict_and_explain_permissive(tmp_path
     assert permissive_exit_code == 0
     assert permissive_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert "daemon" in str(permissive_payload["hookSpecificOutput"]).lower()
+
+
+def test_gr098_permissive_hook_failure_preserves_existing_deny_decision(tmp_path: Path) -> None:
+    exit_code, output = _run_hook(
+        tmp_path,
+        harness="claude-code",
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat ~/.npmrc"},
+            "policy_action": "require-reapproval",
+            "daemon_status": "unreachable",
+            "fail_mode": "permissive",
+        },
+    )
+
+    payload = _json_line(output)
+
+    assert exit_code == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "HOL Guard" in str(payload["hookSpecificOutput"]["permissionDecisionReason"])

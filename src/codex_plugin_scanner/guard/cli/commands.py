@@ -166,6 +166,9 @@ _HOOK_DAEMON_STRICT_REASON = (
 _HOOK_DAEMON_PERMISSIVE_REASON = (
     "HOL Guard daemon was unreachable; permissive mode allowed this action and recorded the degraded state."
 )
+_HOOK_DAEMON_PRESERVED_DENY_REASON = (
+    "HOL Guard daemon was unreachable; preserving the existing deny decision for this action."
+)
 _GUARD_HELP_GROUPS = (
     "Everyday protection:\n"
     "  start        First-run setup and the Guard operating loop\n"
@@ -2349,8 +2352,14 @@ def run_guard_command(
                 policy_action = "block"
                 payload["permission_decision_reason"] = _HOOK_DAEMON_STRICT_REASON
             else:
-                policy_action = "allow"
-                payload["permission_decision_reason"] = _HOOK_DAEMON_PERMISSIVE_REASON
+                if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+                    payload["permission_decision_reason"] = _coalesce_string(
+                        payload.get("permission_decision_reason"),
+                        _HOOK_DAEMON_PRESERVED_DENY_REASON,
+                    )
+                else:
+                    policy_action = "allow"
+                    payload["permission_decision_reason"] = _HOOK_DAEMON_PERMISSIVE_REASON
         hook_event_name = _hook_event_name(payload) or "PreToolUse"
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
