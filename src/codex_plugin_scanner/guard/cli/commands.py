@@ -1,8 +1,11 @@
 """Guard CLI command handlers."""
 
+# fmt: off
+
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import os
@@ -17,7 +20,7 @@ import urllib.parse
 import webbrowser
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TextIO
@@ -5057,7 +5060,7 @@ def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
 
 _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"rg", "grep", "egrep", "fgrep"})
 _CODEX_READ_ONLY_VIEW_COMMANDS = frozenset({"cat", "head", "tail", "sed"})
-_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "tail"})
+_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "tail", "sed"})
 _CODEX_READ_ONLY_SEARCH_WRAPPERS = frozenset({"bash", "sh", "zsh"})
 _CODEX_SEARCH_PATTERN_VALUE_FLAGS = frozenset({"-e", "--regexp", "-f", "--file"})
 _CODEX_SEARCH_OPTION_VALUE_FLAGS = frozenset(
@@ -5151,6 +5154,86 @@ _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
     }
 )
 _CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
+_CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
+    {
+        "--diff-filter",
+        "--inter-hunk-context",
+        "--line-prefix",
+        "--output-indicator-context",
+        "--output-indicator-new",
+        "--output-indicator-old",
+        "--src-prefix",
+        "--dst-prefix",
+        "--stat-width",
+        "--stat-name-width",
+        "--stat-graph-width",
+        "--unified",
+        "-G",
+        "-S",
+        "-U",
+        "--word-diff-regex",
+    }
+)
+_CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS = frozenset(
+    {
+        "--color",
+        "--color-moved",
+        "--find-copies",
+        "--find-renames",
+        "--ignore-submodules",
+        "--submodule",
+        "--word-diff",
+    }
+)
+_CODEX_GIT_DIFF_BOOLEAN_OPTIONS = frozenset(
+    {
+        "--binary",
+        "--cached",
+        "--check",
+        "--compact-summary",
+        "--exit-code",
+        "--find-copies-harder",
+        "--full-index",
+        "--ignore-all-space",
+        "--ignore-blank-lines",
+        "--ignore-cr-at-eol",
+        "--ignore-space-at-eol",
+        "--ignore-space-change",
+        "--minimal",
+        "--name-only",
+        "--name-status",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--numstat",
+        "--patch",
+        "--patch-with-raw",
+        "--pickaxe-all",
+        "--pickaxe-regex",
+        "--raw",
+        "--relative",
+        "--shortstat",
+        "--stat",
+        "--summary",
+    }
+)
+_CODEX_GIT_DIFF_DISALLOWED_OPTIONS = frozenset({"--ext-diff", "--no-index", "--output", "--textconv"})
+_CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS = frozenset(
+    {
+        "--bare",
+        "--glob-pathspecs",
+        "--literal-pathspecs",
+        "--no-literal-pathspecs",
+        "--no-pager",
+        "--noglob-pathspecs",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _CodexSedReadOnlyArgs:
+    scripts: tuple[str, ...]
+    targets: tuple[str, ...]
+    saw_print_suppression: bool
 
 
 def _codex_source_inspection_can_skip_secret_output(
@@ -5400,6 +5483,8 @@ def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
     executable = Path(parts[0]).name
     if executable not in _CODEX_READ_ONLY_PIPE_FILTERS:
         return False
+    if executable == "sed":
+        return _codex_sed_args_are_bounded_filter(parts[1:])
     return _codex_head_tail_args_are_bounded_filter(parts[1:])
 
 
@@ -5419,7 +5504,7 @@ def _codex_command_is_read_only_source_view(command_text: str, *, cwd: Path | No
         return False
     executable = Path(parts[0]).name
     if executable not in _CODEX_READ_ONLY_VIEW_COMMANDS:
-        return False
+        return executable == "git" and _codex_git_diff_targets_are_source_like(parts[1:], cwd=cwd)
     if executable == "sed":
         return _codex_sed_targets_are_read_only_source_like(parts[1:], cwd=cwd)
     if executable in {"head", "tail"}:
@@ -5529,6 +5614,29 @@ def _parse_codex_head_tail_args(args: list[str]) -> tuple[list[str], bool, bool]
 
 
 def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    parsed = _parse_codex_sed_read_only_args(args)
+    if parsed is None:
+        return False
+    return (
+        bool(parsed.targets)
+        and parsed.saw_print_suppression
+        and all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in parsed.scripts)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in parsed.targets)
+    )
+
+
+def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
+    parsed = _parse_codex_sed_read_only_args(args)
+    if parsed is None:
+        return False
+    return (
+        not parsed.targets
+        and parsed.saw_print_suppression
+        and all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in parsed.scripts)
+    )
+
+
+def _parse_codex_sed_read_only_args(args: list[str]) -> _CodexSedReadOnlyArgs | None:
     scripts: list[str] = []
     targets: list[str] = []
     skip_next_script = False
@@ -5546,7 +5654,7 @@ def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path |
             after_option_terminator = True
             continue
         if arg in {"-i", "--in-place"} or arg.startswith(("-i", "--in-place=")):
-            return False
+            return None
         if arg == "-n" or arg == "--quiet" or arg == "--silent":
             saw_print_suppression = True
             continue
@@ -5561,18 +5669,18 @@ def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path |
             scripts.append(script)
             continue
         if arg.startswith("-"):
-            return False
+            return None
         if not scripts:
             scripts.append(arg)
             continue
         targets.append(arg)
-    if skip_next_script or not scripts or not targets:
-        return False
-    if not saw_print_suppression:
-        return False
-    if not all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in scripts):
-        return False
-    return all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+    if skip_next_script or not scripts:
+        return None
+    return _CodexSedReadOnlyArgs(
+        scripts=tuple(scripts),
+        targets=tuple(targets),
+        saw_print_suppression=saw_print_suppression,
+    )
 
 
 def _codex_count_arg_is_bounded(value: str) -> bool:
@@ -5592,18 +5700,478 @@ def _git_grep_search_args(args: list[str]) -> list[str] | None:
         if any(arg.startswith(f"{flag}=") for flag in _CODEX_GIT_GLOBAL_VALUE_FLAGS):
             index += 1
             continue
-        if arg in {
-            "--no-pager",
-            "--bare",
-            "--literal-pathspecs",
-            "--no-literal-pathspecs",
-            "--glob-pathspecs",
-            "--noglob-pathspecs",
-        }:
+        if arg in _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS:
             index += 1
             continue
         return None
     return None
+
+
+def _codex_git_diff_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    diff_args = _git_diff_args(args)
+    if diff_args is None:
+        return False
+    targets = _git_diff_path_args(diff_args)
+    return (
+        bool(targets)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+        and _git_diff_external_helpers_are_disabled_or_unconfigured(diff_args, cwd=cwd)
+    )
+
+
+def _git_diff_args(args: list[str]) -> list[str] | None:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "diff":
+            return args[index + 1 :]
+        if arg in _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS:
+            index += 1
+            continue
+        return None
+    return None
+
+
+def _git_diff_path_args(args: list[str]) -> list[str]:
+    paths: list[str] = []
+    index = 0
+    after_path_separator = False
+    while index < len(args):
+        arg = args[index]
+        if after_path_separator:
+            paths.append(arg)
+            index += 1
+            continue
+        if arg == "--":
+            after_path_separator = True
+            index += 1
+            continue
+        if arg in _CODEX_GIT_DIFF_DISALLOWED_OPTIONS or any(
+            arg.startswith(f"{option}=") for option in _CODEX_GIT_DIFF_DISALLOWED_OPTIONS
+        ):
+            return []
+        if arg in _CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS:
+            index += 1
+            continue
+        if any(arg.startswith(f"{option}=") for option in _CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS):
+            index += 1
+            continue
+        if arg in _CODEX_GIT_DIFF_VALUE_OPTIONS:
+            if index + 1 >= len(args) or args[index + 1].startswith("-"):
+                return []
+            index += 2
+            continue
+        if any(arg.startswith(f"{option}=") for option in _CODEX_GIT_DIFF_VALUE_OPTIONS):
+            index += 1
+            continue
+        if arg in _CODEX_GIT_DIFF_BOOLEAN_OPTIONS:
+            index += 1
+            continue
+        if re.fullmatch(r"-U\d{1,6}", arg):
+            index += 1
+            continue
+        if re.fullmatch(r"(?:-G|-S).+", arg):
+            index += 1
+            continue
+        if arg.startswith("-"):
+            return []
+        return []
+    return paths
+
+
+def _git_diff_external_helpers_are_disabled_or_unconfigured(args: list[str], *, cwd: Path | None) -> bool:
+    has_no_ext_diff = "--no-ext-diff" in args
+    has_no_textconv = "--no-textconv" in args
+    if has_no_ext_diff and has_no_textconv:
+        return True
+    return _git_repo_diff_helpers_are_unconfigured(cwd)
+
+
+def _git_repo_diff_helpers_are_unconfigured(cwd: Path | None) -> bool:
+    if cwd is None:
+        return False
+    if (
+        os.environ.get("GIT_EXTERNAL_DIFF")
+        or os.environ.get("GIT_CONFIG_COUNT")
+        or os.environ.get("GIT_CONFIG_PARAMETERS")
+    ):
+        return False
+    config_paths = _git_repo_config_paths(cwd)
+    if not config_paths:
+        return True
+    repo_dir = _git_repo_root(cwd)
+    seen_paths: set[Path] = set()
+    for config_path in config_paths:
+        if not _git_config_tree_disables_diff_helpers(config_path, seen_paths=seen_paths, repo_dir=repo_dir):
+            return False
+    return True
+
+
+def _git_repo_config_paths(cwd: Path) -> tuple[Path, ...]:
+    current = cwd.resolve()
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        git_path = candidate / ".git"
+        if git_path.is_dir():
+            return (*_git_global_config_paths(), git_path / "config", git_path / "config.worktree")
+        if git_path.is_file():
+            git_dir = _git_dir_from_file(git_path)
+            if git_dir is None:
+                return ()
+            common_dir = _git_common_dir(git_dir)
+            paths = [*_git_global_config_paths(), git_dir / "config", git_dir / "config.worktree"]
+            if common_dir != git_dir:
+                paths.extend([common_dir / "config", common_dir / "config.worktree"])
+            return tuple(paths)
+    return _git_global_config_paths()
+
+
+def _git_repo_root(cwd: Path) -> Path | None:
+    current = cwd.absolute()
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _git_global_config_paths() -> tuple[Path, ...]:
+    paths: list[Path] = []
+    system_config = os.environ.get("GIT_CONFIG_SYSTEM")
+    if system_config:
+        if system_config != os.devnull:
+            paths.append(Path(system_config).expanduser())
+    elif not os.environ.get("GIT_CONFIG_NOSYSTEM"):
+        paths.append(Path("/etc/gitconfig"))
+    global_config = os.environ.get("GIT_CONFIG_GLOBAL")
+    if global_config:
+        if global_config != os.devnull:
+            paths.append(Path(global_config).expanduser())
+    else:
+        home = os.environ.get("HOME")
+        if home:
+            home_path = Path(home).expanduser()
+            paths.append(home_path / ".gitconfig")
+            xdg_config_home = Path(os.environ.get("XDG_CONFIG_HOME", str(home_path / ".config"))).expanduser()
+            paths.append(xdg_config_home / "git" / "config")
+    return tuple(paths)
+
+
+def _git_dir_from_file(git_file: Path) -> Path | None:
+    try:
+        content = git_file.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return None
+    prefix = "gitdir:"
+    if not content.lower().startswith(prefix):
+        return None
+    raw_path = content[len(prefix) :].strip()
+    git_dir = Path(raw_path)
+    if not git_dir.is_absolute():
+        git_dir = (git_file.parent / git_dir).resolve()
+    return git_dir
+
+
+def _git_common_dir(git_dir: Path) -> Path:
+    common_dir_file = git_dir / "commondir"
+    if not common_dir_file.is_file():
+        return git_dir
+    try:
+        raw_path = common_dir_file.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return git_dir
+    common_dir = Path(raw_path)
+    if not common_dir.is_absolute():
+        common_dir = (git_dir / common_dir).resolve()
+    return common_dir
+
+
+def _git_config_tree_disables_diff_helpers(config_path: Path, *, seen_paths: set[Path], repo_dir: Path | None) -> bool:
+    normalized_path = config_path.expanduser().resolve()
+    if normalized_path in seen_paths:
+        return True
+    seen_paths.add(normalized_path)
+    if not normalized_path.is_file():
+        return True
+    try:
+        config_text = normalized_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    if _git_config_enables_diff_helper(config_text):
+        return False
+    for included_path in _git_config_include_paths(
+        config_text,
+        allow_hasconfig=True,
+        base_dir=normalized_path.parent,
+        repo_dir=repo_dir,
+    ):
+        if not _git_config_tree_disables_diff_helpers(included_path, seen_paths=seen_paths, repo_dir=repo_dir):
+            return False
+    return True
+
+
+def _git_config_include_paths(
+    config_text: str,
+    *,
+    allow_hasconfig: bool,
+    base_dir: Path,
+    repo_dir: Path | None,
+) -> tuple[Path, ...]:
+    paths: list[Path] = []
+    section = ""
+    section_active = False
+    for raw_line in _git_config_logical_lines(config_text):
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        section_match = re.fullmatch(r"\[([^\]]+)\](?:\s*[#;].*)?", line)
+        if section_match:
+            section = section_match.group(1).strip()
+            section_active = _git_include_section_is_active(
+                section,
+                allow_hasconfig=allow_hasconfig,
+                base_dir=base_dir,
+                repo_dir=repo_dir,
+            )
+            continue
+        if not section_active:
+            continue
+        key_match = re.match(r"(?i)^path\s*=\s*(.+)$", line)
+        if key_match is None:
+            continue
+        include_path = Path(_git_config_value_without_inline_comment(key_match.group(1))).expanduser()
+        if not include_path.is_absolute():
+            include_path = (base_dir / include_path).resolve()
+        paths.append(include_path)
+    return tuple(paths)
+
+
+def _git_include_section_is_active(
+    section: str,
+    *,
+    allow_hasconfig: bool,
+    base_dir: Path,
+    repo_dir: Path | None,
+) -> bool:
+    section_lower = section.lower()
+    if section_lower == "include":
+        return True
+    if not section_lower.startswith("includeif"):
+        return False
+    if repo_dir is None:
+        return False
+    condition_match = re.search(r'"([^"]+)"', section)
+    condition = condition_match.group(1) if condition_match else section.removeprefix("includeif").strip()
+    condition_lower = condition.lower()
+    if condition_lower.startswith("gitdir/i:"):
+        return _git_gitdir_condition_matches(
+            condition[len("gitdir/i:") :],
+            base_dir=base_dir,
+            repo_dir=repo_dir,
+            case_sensitive=False,
+        )
+    if condition_lower.startswith("gitdir:"):
+        return _git_gitdir_condition_matches(
+            condition[len("gitdir:") :],
+            base_dir=base_dir,
+            repo_dir=repo_dir,
+            case_sensitive=True,
+        )
+    if condition_lower.startswith("onbranch:"):
+        return _git_onbranch_condition_matches(condition[len("onbranch:") :], repo_dir=repo_dir)
+    if allow_hasconfig and condition_lower.startswith("hasconfig:"):
+        return _git_hasconfig_condition_matches(condition[len("hasconfig:") :], repo_dir=repo_dir)
+    return False
+
+
+def _git_gitdir_condition_matches(pattern: str, *, base_dir: Path, repo_dir: Path, case_sensitive: bool) -> bool:
+    pattern_text = _git_gitdir_condition_pattern(pattern, base_dir=base_dir)
+    patterns = _git_gitdir_condition_patterns(pattern_text)
+    candidates = [_git_gitdir_condition_candidate(path) for path in _git_path_aliases(repo_dir)]
+    git_dir = _git_effective_git_dir(repo_dir)
+    if git_dir is not None:
+        candidates.extend(_git_gitdir_condition_candidate(path) for path in _git_path_aliases(git_dir))
+    if case_sensitive:
+        return any(fnmatch.fnmatchcase(candidate, item) for candidate in candidates for item in patterns)
+    return any(fnmatch.fnmatchcase(candidate.lower(), item.lower()) for candidate in candidates for item in patterns)
+
+
+def _git_path_aliases(path: Path) -> tuple[Path, ...]:
+    resolved = path.resolve()
+    if resolved == path:
+        return (path,)
+    return (path, resolved)
+
+
+def _git_gitdir_condition_candidate(path: Path) -> str:
+    return path.as_posix().rstrip("/") + "/"
+
+
+def _git_gitdir_condition_patterns(pattern_text: str) -> tuple[str, ...]:
+    if pattern_text.endswith("/**"):
+        return (pattern_text,)
+    if pattern_text.endswith("/"):
+        return (pattern_text, f"{pattern_text}**")
+    return (pattern_text, f"{pattern_text}/", f"{pattern_text}/**")
+
+
+def _git_gitdir_condition_pattern(pattern: str, *, base_dir: Path) -> str:
+    expanded_pattern = pattern.strip()
+    pattern_path = Path(expanded_pattern).expanduser()
+    if pattern_path.is_absolute():
+        return pattern_path.as_posix()
+    if expanded_pattern.startswith(("./", "../")):
+        return (base_dir / pattern_path).resolve().as_posix()
+    return f"**/{expanded_pattern}"
+
+
+def _git_effective_git_dir(repo_dir: Path) -> Path | None:
+    git_path = repo_dir / ".git"
+    if git_path.is_dir():
+        return git_path
+    if git_path.is_file():
+        return _git_dir_from_file(git_path)
+    return None
+
+
+def _git_onbranch_condition_matches(pattern: str, *, repo_dir: Path) -> bool:
+    git_dir = repo_dir / ".git"
+    head_path: Path | None = None
+    if git_dir.is_dir():
+        head_path = git_dir / "HEAD"
+    elif git_dir.is_file():
+        parsed_git_dir = _git_dir_from_file(git_dir)
+        if parsed_git_dir is not None:
+            head_path = parsed_git_dir / "HEAD"
+    if head_path is None or not head_path.is_file():
+        return False
+    try:
+        head = head_path.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return False
+    prefix = "ref: refs/heads/"
+    if not head.startswith(prefix):
+        return False
+    normalized_pattern = f"{pattern}**" if pattern.endswith("/") else pattern
+    return fnmatch.fnmatchcase(head.removeprefix(prefix), normalized_pattern)
+
+
+def _git_hasconfig_condition_matches(condition: str, *, repo_dir: Path) -> bool:
+    key_pattern, _, value_pattern = condition.partition(":")
+    if not key_pattern or not value_pattern:
+        return False
+    if key_pattern.lower() != "remote.*.url":
+        return False
+    seen_paths: set[Path] = set()
+    for config_path in _git_repo_config_paths(repo_dir):
+        if any(
+            fnmatch.fnmatchcase(value, value_pattern)
+            for value in _git_remote_urls_from_config_tree(config_path, seen_paths=seen_paths, repo_dir=repo_dir)
+        ):
+            return True
+    return False
+
+
+def _git_remote_urls_from_config_tree(config_path: Path, *, seen_paths: set[Path], repo_dir: Path) -> tuple[str, ...]:
+    normalized_path = config_path.expanduser().resolve()
+    if normalized_path in seen_paths:
+        return ()
+    seen_paths.add(normalized_path)
+    if not normalized_path.is_file():
+        return ()
+    try:
+        config_text = normalized_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ()
+    urls = list(_git_remote_urls_from_config(config_text))
+    for included_path in _git_config_include_paths(
+        config_text,
+        allow_hasconfig=False,
+        base_dir=normalized_path.parent,
+        repo_dir=repo_dir,
+    ):
+        urls.extend(_git_remote_urls_from_config_tree(included_path, seen_paths=seen_paths, repo_dir=repo_dir))
+    return tuple(urls)
+
+
+def _git_remote_urls_from_config(config_text: str) -> tuple[str, ...]:
+    urls: list[str] = []
+    in_remote_section = False
+    for raw_line in _git_config_logical_lines(config_text):
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        section_match = re.fullmatch(r"\[([^\]]+)\](?:\s*[#;].*)?", line)
+        if section_match:
+            in_remote_section = section_match.group(1).strip().lower().startswith("remote ")
+            continue
+        if not in_remote_section:
+            continue
+        key_match = re.match(r"(?i)^url\s*=\s*(.+)$", line)
+        if key_match is not None:
+            urls.append(_git_config_value_without_inline_comment(key_match.group(1)))
+    return tuple(urls)
+
+
+def _git_config_value_without_inline_comment(raw_value: str) -> str:
+    value = raw_value.strip()
+    if not value:
+        return value
+    quote = value[0] if value[0] in {"'", '"'} else None
+    if quote is not None:
+        escaped = False
+        parsed: list[str] = []
+        for char in value[1:]:
+            if escaped:
+                parsed.append(char)
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == quote:
+                return "".join(parsed)
+            parsed.append(char)
+        return "".join(parsed)
+    for index, char in enumerate(value):
+        if char in {"#", ";"} and (index == 0 or value[index - 1].isspace()):
+            return value[:index].strip()
+    return value
+
+
+def _git_config_enables_diff_helper(config_text: str) -> bool:
+    return any(
+        re.match(r"(?i)^\s*(?:command|external|textconv)\s*=", line) for line in _git_config_logical_lines(config_text)
+    )
+
+
+def _git_config_logical_lines(config_text: str) -> tuple[str, ...]:
+    lines: list[str] = []
+    pending = ""
+    for raw_line in config_text.splitlines():
+        line = raw_line.rstrip()
+        if _git_config_line_continues(line):
+            pending = f"{pending}{line[:-1]}"
+            continue
+        if pending:
+            lines.append(f"{pending}{line.lstrip()}")
+            pending = ""
+            continue
+        lines.append(line)
+    if pending:
+        lines.append(pending)
+    return tuple(lines)
+
+
+def _git_config_line_continues(line: str) -> bool:
+    backslashes = 0
+    for char in reversed(line):
+        if char != "\\":
+            break
+        backslashes += 1
+    return backslashes % 2 == 1
 
 
 def _git_grep_uses_external_execution(args: list[str]) -> bool:
