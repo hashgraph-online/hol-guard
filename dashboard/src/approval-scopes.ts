@@ -10,27 +10,32 @@ export const DEFAULT_SCOPE_CHOICES: ApprovalScopeChoice[] = [
   {
     value: "artifact",
     label: "Approve once",
-    description: "Allow only this exact action. Guard will ask again for anything different.",
+    description:
+      "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved.",
   },
   {
     value: "workspace",
     label: "Remember for project",
-    description: "Allow this action in the current workspace only.",
+    description:
+      "Save this decision for the current project. Future matching actions skip review here without asking again.",
   },
   {
     value: "publisher",
     label: "This source",
-    description: "Allow actions from the same source or publisher.",
+    description:
+      "Save this decision for all actions from the same source. Matching actions skip review in any project.",
   },
   {
     value: "harness",
     label: "This app",
-    description: "Allow similar actions from this AI app everywhere.",
+    description:
+      "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects.",
   },
   {
     value: "global",
     label: "Everywhere",
-    description: "Allow this action across all your projects. Use with care.",
+    description:
+      "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this.",
   },
 ];
 

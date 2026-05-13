@@ -13781,6 +13781,13 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
+function buildRetryAfterApprovalCopy(item, action) {
+  const harness = harnessDisplayName(item.harness);
+  if (action === "allow") {
+    return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;
+  }
+  return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
+}
 function resolveEnvelopeDisplayText(envelope) {
   if (envelope.action_type === "shell_command" && envelope.command !== null) {
     return envelope.command;
@@ -16932,27 +16939,27 @@ const DEFAULT_SCOPE_CHOICES = [
   {
     value: "artifact",
     label: "Approve once",
-    description: "Allow only this exact action. Guard will ask again for anything different."
+    description: "Allow only this exact action this time. Guard will ask again for anything different. Nothing is saved."
   },
   {
     value: "workspace",
     label: "Remember for project",
-    description: "Allow this action in the current workspace only."
+    description: "Save this decision for the current project. Future matching actions skip review here without asking again."
   },
   {
     value: "publisher",
     label: "This source",
-    description: "Allow actions from the same source or publisher."
+    description: "Save this decision for all actions from the same source. Matching actions skip review in any project."
   },
   {
     value: "harness",
     label: "This app",
-    description: "Allow similar actions from this AI app everywhere."
+    description: "Save this decision for this AI app everywhere. Matching actions from this app skip review in all your projects."
   },
   {
     value: "global",
     label: "Everywhere",
-    description: "Allow this action across all your projects. Use with care."
+    description: "Save this decision across all your projects on this machine. All matching actions skip review. Use only if you fully trust this."
   }
 ];
 function requestSupportsScope(item, scope) {
@@ -16998,6 +17005,42 @@ function buildDecisionPayload(input) {
     reason: input.reason
   };
 }
+const REVIEW_SEMANTIC_GROUPS = [
+  { id: "all", label: "All", matches: [] },
+  {
+    id: "files",
+    label: "Files",
+    matches: ["file_read", "source_edit", "docs_edit", "generated_inventory_edit"]
+  },
+  {
+    id: "shell",
+    label: "Shell",
+    matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control"]
+  },
+  {
+    id: "network",
+    label: "Network & Data",
+    matches: ["network", "secret_exfiltration", "secret_file_read", "credential_output", "file_upload"]
+  },
+  {
+    id: "tools",
+    label: "Tools & Apps",
+    matches: ["mcp_tool", "package_script", "harness_start", "browser_action", "package_install"]
+  },
+  {
+    id: "other",
+    label: "Other",
+    matches: [
+      "prompt_injection",
+      "system_prompt_access",
+      "guard_bypass",
+      "config_change",
+      "container_or_deploy",
+      "persistence_change",
+      "other"
+    ]
+  }
+];
 const QUEUE_CATEGORIES = [
   {
     id: "credential_output",
@@ -17163,6 +17206,56 @@ const QUEUE_CATEGORIES = [
   }
 ];
 const QUEUE_CATEGORY_BY_ID = new Map(QUEUE_CATEGORIES.map((category) => [category.id, category]));
+const SIGNAL_SEVERITY_SCORE = {
+  critical: 1,
+  high: 2,
+  medium: 3,
+  low: 4,
+  info: 5
+};
+const CATEGORY_RISK_SCORE = /* @__PURE__ */ new Map([
+  ["secret_exfiltration", 1],
+  ["credential_output", 1],
+  ["guard_bypass", 1],
+  ["prompt_injection", 2],
+  ["system_prompt_access", 2],
+  ["secret_file_read", 2],
+  ["encoded_shell", 2],
+  ["persistence_change", 3],
+  ["destructive_shell", 3],
+  ["file_delete_cleanup", 3],
+  ["network", 3],
+  ["container_or_deploy", 4],
+  ["git_operation", 4],
+  ["process_control", 4],
+  ["file_upload", 4],
+  ["package_install", 4],
+  ["package_script", 4],
+  ["source_edit", 5],
+  ["config_change", 5],
+  ["shell_command", 5],
+  ["mcp_tool", 5],
+  ["browser_action", 5],
+  ["harness_start", 5],
+  ["file_read", 6],
+  ["docs_edit", 6],
+  ["generated_inventory_edit", 6],
+  ["other", 6]
+]);
+function riskScore(item) {
+  if (item.policy_action === "block") {
+    return 0;
+  }
+  const signals = item.decision_v2_json?.signals ?? [];
+  if (signals.length > 0) {
+    const minSeverityScore = Math.min(...signals.map((s) => SIGNAL_SEVERITY_SCORE[s.severity] ?? 6));
+    const dedupeBonus2 = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
+    return minSeverityScore + dedupeBonus2;
+  }
+  const categoryScore = CATEGORY_RISK_SCORE.get(resolveQueueCategory(item).id) ?? 6;
+  const dedupeBonus = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
+  return categoryScore + dedupeBonus;
+}
 function isReadOnlyQueueGroup(group) {
   return group.primary.policy_action !== "block" && (group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request");
 }
@@ -17591,6 +17684,14 @@ function sourceEditCommand(command, text) {
   return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack);
 }
 function sortQueue(items, direction) {
+  if (direction === "highest_risk") {
+    const scores = new Map(items.map((item) => [item.request_id, riskScore(item)]));
+    return [...items].sort((a, b) => {
+      const scoreDelta = (scores.get(a.request_id) ?? 6) - (scores.get(b.request_id) ?? 6);
+      if (scoreDelta !== 0) return scoreDelta;
+      return new Date(b.last_seen_at ?? b.created_at).getTime() - new Date(a.last_seen_at ?? a.created_at).getTime();
+    });
+  }
   const categoryLabels = direction === "category" ? new Map(items.map((item) => [item.request_id, resolveQueueCategory(item).label])) : null;
   return [...items].sort((a, b) => {
     if (categoryLabels !== null) {
@@ -17676,7 +17777,7 @@ const scopeChoices = [
   }
 ];
 const QUEUE_PAGE_SIZE = 10;
-const commonScopeValues$1 = /* @__PURE__ */ new Set(["artifact", "workspace"]);
+const commonScopeValues$1 = /* @__PURE__ */ new Set(["artifact"]);
 function ReviewWorkspace(props) {
   const { requests, activeRequestId, detail } = props;
   const queueRef = reactExports.useRef(null);
@@ -17696,7 +17797,7 @@ function ReviewWorkspace(props) {
   const filteredRequests = reactExports.useMemo(() => {
     let items = requests;
     if (semanticFilter !== "all") {
-      const group = SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
+      const group = REVIEW_SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
       if (group && group.matches.length > 0) {
         items = items.filter((item) => group.matches.includes(resolveQueueCategory(item).id));
       }
@@ -17737,10 +17838,12 @@ function ReviewWorkspace(props) {
     if (filteredRequests.length === 0) {
       return;
     }
-    if (activeRequestId === null || !filteredRequests.some((item) => item.request_id === activeRequestId)) {
-      props.onOpenRequest(filteredRequests[0].request_id);
+    const activeInRequests = requests.some((item) => item.request_id === activeRequestId);
+    if (activeRequestId !== null && activeInRequests) {
+      return;
     }
-  }, [activeRequestId, filteredRequests, props.onOpenRequest]);
+    props.onOpenRequest(filteredRequests[0].request_id);
+  }, [activeRequestId, requests, filteredRequests, props.onOpenRequest]);
   reactExports.useEffect(() => {
     if (pagedRequests.length === 0) return;
     const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId);
@@ -17835,16 +17938,8 @@ function ReviewHeader({
     ] })
   ] });
 }
-const SEMANTIC_GROUPS = [
-  { id: "all", label: "All", matches: [] },
-  { id: "files", label: "Files", matches: ["file_read", "file_edit"] },
-  { id: "shell", label: "Shell", matches: ["shell_command", "destructive_shell", "encoded_shell"] },
-  { id: "network", label: "Network & Data", matches: ["network", "data_exfiltration", "secret_access"] },
-  { id: "tools", label: "Tools & Apps", matches: ["mcp_tool", "package_script", "harness_start", "browser_action"] },
-  { id: "other", label: "Other", matches: ["prompt_instruction", "config_change", "other"] }
-];
 function resolveSemanticGroup(categoryId) {
-  for (const group of SEMANTIC_GROUPS) {
+  for (const group of REVIEW_SEMANTIC_GROUPS) {
     if (group.matches.includes(categoryId)) return group.id;
   }
   return "other";
@@ -17879,6 +17974,15 @@ const ReviewQueueList = reactExports.forwardRef(({
   const handleSortChange = reactExports.useCallback((event) => {
     onSortDirectionChange(event.target.value);
   }, [onSortDirectionChange]);
+  const handleToggleFilters = reactExports.useCallback(() => {
+    setShowFilters((visible) => !visible);
+  }, []);
+  const handleClearFilters = reactExports.useCallback(() => {
+    onSearchTermChange("");
+    onCategoryFilterChange("all");
+    onSortDirectionChange("newest");
+    onSemanticFilterChange("all");
+  }, [onCategoryFilterChange, onSearchTermChange, onSemanticFilterChange, onSortDirectionChange]);
   const handlePreviousPage = reactExports.useCallback(() => {
     onPageChange(Math.max(1, page - 1));
   }, [page, onPageChange]);
@@ -17891,7 +17995,7 @@ const ReviewQueueList = reactExports.forwardRef(({
     for (const item of allFilteredRequests) {
       available.add(resolveSemanticGroup(resolveQueueCategory(item).id));
     }
-    return SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
+    return REVIEW_SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
   }, [allFilteredRequests]);
   const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
   const showPagination = filteredCount > QUEUE_PAGE_SIZE;
@@ -17923,7 +18027,8 @@ const ReviewQueueList = reactExports.forwardRef(({
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
-          onClick: () => setShowFilters((v) => !v),
+          type: "button",
+          onClick: handleToggleFilters,
           className: "flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
           children: [
             showFilters ? "Hide filters" : "Show filters",
@@ -17933,11 +18038,11 @@ const ReviewQueueList = reactExports.forwardRef(({
       ),
       showFilters && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1", children: visibleGroups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
+          SemanticFilterButton,
           {
-            onClick: () => onSemanticFilterChange(group.id),
-            className: `rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${activeSemanticGroup === group.id ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-            children: group.label
+            group,
+            selected: activeSemanticGroup === group.id,
+            onSelect: onSemanticFilterChange
           },
           group.id
         )) }),
@@ -17952,6 +18057,7 @@ const ReviewQueueList = reactExports.forwardRef(({
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "newest", children: "Newest first" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "oldest", children: "Oldest first" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "highest_risk", children: "Highest risk first" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "category", children: "Category" })
               ]
             }
@@ -17960,12 +18066,8 @@ const ReviewQueueList = reactExports.forwardRef(({
         isFiltered && /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
-            onClick: () => {
-              onSearchTermChange("");
-              onCategoryFilterChange("all");
-              onSortDirectionChange("newest");
-              onSemanticFilterChange("all");
-            },
+            type: "button",
+            onClick: handleClearFilters,
             className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
             children: "Clear all filters"
           }
@@ -18029,6 +18131,21 @@ const ReviewQueueList = reactExports.forwardRef(({
   ] });
 });
 ReviewQueueList.displayName = "ReviewQueueList";
+function SemanticFilterButton(props) {
+  const { group, selected, onSelect } = props;
+  const handleSelect = reactExports.useCallback(() => {
+    onSelect(group.id);
+  }, [group.id, onSelect]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      onClick: handleSelect,
+      className: `rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${selected ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+      children: group.label
+    }
+  );
+}
 function QueueItemRow({ item, active, index, onOpenRequest }) {
   const isBlocked = item.policy_action === "block";
   const category = resolveQueueCategory(item);
@@ -18044,10 +18161,7 @@ function QueueItemRow({ item, active, index, onOpenRequest }) {
       role: "option",
       "aria-selected": active,
       "aria-posinset": index + 1,
-      "aria-setsize": (
-        /* parent will provide */
-        void 0
-      ),
+      "aria-setsize": void 0,
       tabIndex: active ? 0 : -1,
       className: `w-full rounded-lg py-2.5 px-2 text-left transition-all ${active ? "border-brand-blue bg-brand-blue/[0.06]" : "border-transparent bg-white hover:bg-slate-50"}`,
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
@@ -18149,7 +18263,7 @@ function ReviewDecisionCard(props) {
   const [resolved, setResolved] = reactExports.useState(null);
   const [showConsequences, setShowConsequences] = reactExports.useState(false);
   const [showEvidence, setShowEvidence] = reactExports.useState(false);
-  const [showTechnical, setShowTechnical] = reactExports.useState(true);
+  const [showTechnical, setShowTechnical] = reactExports.useState(false);
   const [lastAction, setLastAction] = reactExports.useState(null);
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
   const timerRef = reactExports.useRef(null);
@@ -18241,6 +18355,21 @@ function ReviewDecisionCard(props) {
   const handleBlock = reactExports.useCallback(() => {
     handleRequestResolve("block");
   }, [handleRequestResolve]);
+  const handleToggleTechnical = reactExports.useCallback(() => {
+    setShowTechnical((visible) => !visible);
+  }, []);
+  const handleToggleConsequences = reactExports.useCallback(() => {
+    setShowConsequences((visible) => !visible);
+  }, []);
+  const handleToggleEvidence = reactExports.useCallback(() => {
+    setShowEvidence((visible) => !visible);
+  }, []);
+  const handleRetryLastAction = reactExports.useCallback(() => {
+    setErrorMessage(null);
+    if (lastAction !== null) {
+      handleRequestResolve(lastAction);
+    }
+  }, [handleRequestResolve, lastAction]);
   if (!detail || !item) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
@@ -18271,7 +18400,7 @@ function ReviewDecisionCard(props) {
               "aria-hidden": "true"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: item ? buildRetryAfterApprovalCopy(item, resolved) : resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped" })
         ]
       }
     ),
@@ -18296,7 +18425,8 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
-            onClick: () => setShowTechnical(!showTechnical),
+            type: "button",
+            onClick: handleToggleTechnical,
             className: "flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-brand-dark transition-colors",
             "aria-expanded": showTechnical,
             children: [
@@ -18311,7 +18441,8 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
-            onClick: () => setShowConsequences(!showConsequences),
+            type: "button",
+            onClick: handleToggleConsequences,
             className: "flex items-center gap-2 text-sm font-medium text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2",
             "aria-expanded": showConsequences,
             children: [
@@ -18335,8 +18466,8 @@ function ReviewDecisionCard(props) {
           choice.value
         )) }),
         broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Additional approval scopes" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These apply across more future sessions. Use them only when a project-level decision is too narrow." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Save for project or app" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These options save a decision that skips review for matching actions going forward. Choose the narrowest scope that fits what you meant to allow." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", children: broaderScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
             ScopeChoiceButton,
             {
@@ -18348,8 +18479,8 @@ function ReviewDecisionCard(props) {
           )) })
         ] }),
         advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention", children: "Advanced: applies everywhere" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "This affects every project on this machine. Prefer narrower scopes unless you are sure." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention", children: "Advanced: save everywhere on this machine" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "This saves a decision that applies across all your projects on this machine. Matching actions skip review permanently. Only use this if you fully trust this action everywhere." }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2", children: advancedScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
             ScopeChoiceButton,
             {
@@ -18368,10 +18499,8 @@ function ReviewDecisionCard(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
-              onClick: () => {
-                setErrorMessage(null);
-                if (lastAction) handleRequestResolve(lastAction);
-              },
+              type: "button",
+              onClick: handleRetryLastAction,
               className: "mt-2 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
               children: "Retry"
             }
@@ -18416,7 +18545,8 @@ function ReviewDecisionCard(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
-          onClick: () => setShowEvidence(!showEvidence),
+          type: "button",
+          onClick: handleToggleEvidence,
           className: "flex w-full items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2",
           "aria-expanded": showEvidence,
           children: [
@@ -18438,8 +18568,8 @@ function ReviewDecisionCard(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last time" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
         "You previously ",
-        detail.receipt.policy_decision,
-        "d a similar action",
+        pastDecisionVerb(detail.receipt.policy_decision),
+        " a similar action",
         " ",
         formatRelativeTime(detail.receipt.timestamp),
         "."
@@ -18612,6 +18742,15 @@ function buildWhatWouldHappen(item) {
     return `Without Guard, this tool would execute immediately. Guard paused it so you can review what data it accesses.`;
   }
   return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
+}
+function pastDecisionVerb(decision) {
+  if (decision === "allow") {
+    return "allowed";
+  }
+  if (decision === "block") {
+    return "blocked";
+  }
+  return "reviewed";
 }
 function ChipButton(props) {
   const handleClick = reactExports.useCallback(() => {
