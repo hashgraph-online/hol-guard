@@ -13,6 +13,8 @@ The runtime is split into:
 - `guard/store`: SQLite persistence for snapshots, diffs, receipts, managed installs, and sync state
 - `guard/schemas`: stable JSON payloads for consumer-mode outputs
 
+Runtime detectors include a Safe Decode sandbox for encoded commands and prompt text. It unwraps bounded base64, hex, gzip, heredoc, Python `-c`, Node `-e`, and PowerShell `-EncodedCommand` layers, redacts decoded previews, records the detector version in evidence, and never executes decoded payloads.
+
 Guard evaluates local artifacts in this order:
 
 1. Discover harness config and managed artifacts

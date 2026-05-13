@@ -39,3 +39,17 @@ def test_static_docs_include_canonical_install_connect_commands() -> None:
 
     for item in install_connect_command_catalog():
         assert item.command in docs_text
+
+
+def test_static_docs_explain_safe_decode_sandbox_guarantee() -> None:
+    docs_text = "\n".join(
+        [
+            _read_repo_file("docs/guard/architecture.md"),
+            _read_repo_file("docs/guard/local-vs-cloud.md"),
+        ]
+    ).lower()
+
+    assert "safe decode" in docs_text
+    assert "never executes decoded payloads" in docs_text
+    assert "base64" in docs_text
+    assert "powershell" in docs_text
