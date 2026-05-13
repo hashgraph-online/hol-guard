@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 
 import pytest
@@ -34,7 +35,9 @@ def test_live_cisco_scan_on_good_plugin() -> None:
 
 
 def test_live_cisco_mcp_scan_on_bad_plugin() -> None:
-    if importlib.util.find_spec("mcpscanner") is None:
+    try:
+        importlib_metadata.distribution("cisco-ai-mcp-scanner")
+    except importlib_metadata.PackageNotFoundError:
         pytest.skip("cisco-ai-mcp-scanner is not installed in this environment")
 
     result = scan_plugin(FIXTURES / "bad-plugin", ScanOptions(cisco_mcp_scan="on"))
