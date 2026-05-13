@@ -2342,8 +2342,6 @@ def run_guard_command(
                 approval_source=(
                     "inline"
                     if _optional_string(payload.get("user_override")) is not None
-                    else "approval_center"
-                    if policy_action == "require-reapproval"
                     else "policy"
                 ),
             )
