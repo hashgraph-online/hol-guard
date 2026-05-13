@@ -72,8 +72,8 @@ def test_gr093_harness_install_matrix_exposes_statuses_and_coverage(tmp_path: Pa
         {"managed_hooks_path": str(context.workspace_dir / ".codex" / "hooks.json")},
         "2026-05-12T00:00:00+00:00",
     )
-    (context.workspace_dir / ".cursor").mkdir(parents=True, exist_ok=True)
-    (context.workspace_dir / ".cursor" / "mcp.json").write_text(
+    (context.home_dir / ".cursor").mkdir(parents=True, exist_ok=True)
+    (context.home_dir / ".cursor" / "mcp.json").write_text(
         json.dumps({"mcpServers": {"team-tools": {"command": "node"}}}),
         encoding="utf-8",
     )
@@ -90,7 +90,7 @@ def test_gr093_harness_install_matrix_exposes_statuses_and_coverage(tmp_path: Pa
 
 def test_gr094_inactive_harness_copy_says_observed_not_protected(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    cursor_config = context.workspace_dir / ".cursor" / "mcp.json"
+    cursor_config = context.home_dir / ".cursor" / "mcp.json"
     cursor_config.parent.mkdir(parents=True, exist_ok=True)
     cursor_config.write_text(json.dumps({"mcpServers": {"team-tools": {"command": "node"}}}), encoding="utf-8")
 
