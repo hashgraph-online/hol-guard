@@ -56,8 +56,6 @@ import {
   WhyThisPaused,
   ApproveConsequence,
   BlockConsequence,
-  KeyboardHints,
-  ConfirmModal
 } from "./approval-center-review-cards";
 import {
   buildProgressCopy,
@@ -159,7 +157,6 @@ const scopeOptions: Array<{ value: DecisionScope; label: string; description: st
 ];
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
-const broadScopeValues = new Set<DecisionScope>(["publisher", "harness", "global"]);
 const queuePageSize = 8;
 export function ApprovalCenterLayout(props: LayoutProps) {
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
@@ -733,7 +730,6 @@ function DecisionWorkspace(props: {
   const [reason, setReason] = useState("approved in local approval center");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [confirmPending, setConfirmPending] = useState<"allow" | "block" | null>(null);
   const [resolvedBanner, setResolvedBanner] = useState<"allow" | "block" | null>(null);
   const [resolvedState, setResolvedState] = useState<"idle" | "decided" | "loaded">("idle");
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -794,25 +790,10 @@ function DecisionWorkspace(props: {
 
   const handleRequestResolve = useCallback(
     (action: "allow" | "block") => {
-      if (broadScopeValues.has(scope)) {
-        setConfirmPending(action);
-      } else {
-        void handleResolve(action);
-      }
+      void handleResolve(action);
     },
-    [scope, handleResolve]
+    [handleResolve]
   );
-
-  const handleConfirmResolve = useCallback(() => {
-    if (confirmPending !== null) {
-      void handleResolve(confirmPending);
-      setConfirmPending(null);
-    }
-  }, [confirmPending, handleResolve]);
-
-  const handleCancelConfirm = useCallback(() => {
-    setConfirmPending(null);
-  }, []);
 
   const handleAllowDirect = useCallback(() => handleRequestResolve("allow"), [handleRequestResolve]);
   const handleBlockDirect = useCallback(() => handleRequestResolve("block"), [handleRequestResolve]);
@@ -821,17 +802,6 @@ function DecisionWorkspace(props: {
     if (props.detail.kind !== "ready") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (submitting !== null) return;
-      if (confirmPending !== null) {
-        if (event.key === "Enter") {
-          handleConfirmResolve();
-          return;
-        }
-        if (event.key === "Escape") {
-          handleCancelConfirm();
-          return;
-        }
-        return;
-      }
       const target = event.target as HTMLElement;
       if (
         target.tagName === "INPUT" ||
@@ -844,7 +814,7 @@ function DecisionWorkspace(props: {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.detail.kind, submitting, handleRequestResolve, confirmPending, handleConfirmResolve, handleCancelConfirm]);
+  }, [props.detail.kind, submitting, handleRequestResolve]);
 
   if (props.detail.kind === "loading") {
     return (
@@ -930,14 +900,6 @@ function DecisionWorkspace(props: {
             This action was already decided — {decidedLabel}. No further action needed.
           </p>
         </div>
-      )}
-      {confirmPending !== null && (
-        <ConfirmModal
-          action={confirmPending}
-          scopeLabel={scopeLabel(scope)}
-          onConfirm={handleConfirmResolve}
-          onCancel={handleCancelConfirm}
-        />
       )}
       <RuleBuilder
         item={item}
