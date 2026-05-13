@@ -2323,6 +2323,7 @@ def run_guard_command(
             and policy_action not in {"block", "sandbox-required", "require-reapproval"}
         )
         if should_record_generic_hook_receipt:
+            # fmt: off
             receipt = build_receipt(
                 harness=args.harness,
                 artifact_id=artifact_id,
@@ -2342,6 +2343,7 @@ def run_guard_command(
                 user_override=_optional_string(payload.get("user_override")),
                 approval_source=("inline" if _optional_string(payload.get("user_override")) is not None else "policy"),
             )
+            # fmt: on
             store.add_receipt(receipt)
         if _should_emit_copilot_hook_response(args):
             _emit_copilot_hook_response(
