@@ -756,6 +756,40 @@ def test_safe_decode_detector_emits_code_execution_signal(tmp_path: Path) -> Non
     assert any(s.signal_id == "encoded.code-execution" for s in signals)
 
 
+def test_safe_decode_detector_inspects_shell_command_payloads(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    encoded = base64.b64encode(b"eval('shell command payload')").decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-command",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="bash",
+        command=f"node -e \"eval(atob('{encoded}'))\"",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert any(s.signal_id == "encoded.code-execution" for s in signals)
+    assert any("safe-decode.v2" in (s.technical_detail or "") for s in signals)
+
+
 def test_safe_decode_detector_returns_empty_for_plain_text(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
 

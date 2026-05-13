@@ -14,6 +14,8 @@ Local features available without sign-in:
 
 Guard does not meter local safety features. You can detect harnesses, install launchers, diff changes, prompt for approval, and inspect receipts without signing in.
 
+Safe Decode runs locally too. It inspects encoded payload layers for review evidence, but never executes decoded payloads and only syncs redacted summaries when optional cloud receipt sync is enabled.
+
 Optional cloud features:
 
 - receipt sync to an optional Guard endpoint
