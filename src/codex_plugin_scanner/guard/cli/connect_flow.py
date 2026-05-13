@@ -38,9 +38,9 @@ def run_guard_connect_command(
     opener,
     wait_timeout_seconds: int,
 ) -> dict[str, object]:
+    normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     ensure_guard_daemon(guard_home)
     daemon_client = _load_connect_daemon_client(guard_home)
-    normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     connect_request = daemon_client.create_connect_request(
         sync_url=sync_url,
         allowed_origin=allowed_origin,
