@@ -38,6 +38,44 @@ def test_update_detects_uv_tool_install_and_plans_uv_upgrade(monkeypatch: pytest
     assert payload["binary_diagnostics"]["path_status"] == "uv_tool_shim_detected"
 
 
+def test_update_version_check_marks_stale_local_install(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands.sys, "prefix", "/opt/guard-venv")
+    monkeypatch.setattr(update_commands.sys, "executable", "/opt/guard-venv/bin/python")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.10")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["version_check"] == {
+        "source": "pypi",
+        "status": "stale",
+        "current_version": "2.0.0",
+        "latest_version": "2.0.10",
+        "update_available": True,
+    }
+
+
+def test_update_version_check_handles_latest_lookup_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands.sys, "prefix", "/opt/guard-venv")
+    monkeypatch.setattr(update_commands.sys, "executable", "/opt/guard-venv/bin/python")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: None)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["version_check"] == {
+        "source": "pypi",
+        "status": "unavailable",
+        "current_version": "2.0.0",
+        "latest_version": None,
+        "update_available": None,
+    }
+
+
 def test_install_setup_listing_detects_safe_config_without_mutating_it(tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
@@ -55,6 +93,26 @@ def test_install_setup_listing_detects_safe_config_without_mutating_it(tmp_path:
     assert cursor_item["config_paths"] == [str(config_path)]
     assert config_path.read_text(encoding="utf-8") == config_text
     assert config_path.stat().st_mtime_ns == before_mtime
+
+
+def test_doctor_reports_partial_setup_for_found_unprotected_harness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    config_path = context.home_dir / ".cursor" / "mcp.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    payload = get_adapter("cursor").diagnostics(context)
+
+    assert payload["setup_status"] == "partial"
+    assert payload["command_available"] is False
+    assert payload["config_paths"] == [str(config_path)]
+    assert any("config was found" in warning for warning in payload["warnings"])
 
 
 def test_install_native_contract_output_prefers_native_hooks_for_supported_harnesses(tmp_path: Path) -> None:

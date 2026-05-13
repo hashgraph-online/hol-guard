@@ -12,6 +12,8 @@ import sqlite3
 import subprocess
 import sys
 import sysconfig
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
@@ -24,6 +26,7 @@ _ALREADY_CURRENT_HINTS = (
     "already at latest version",
     "already up-to-date",
 )
+_PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
 
 
 def run_guard_update(
@@ -58,6 +61,7 @@ def run_guard_update(
             )
             return payload, 0
     if dry_run:
+        payload["version_check"] = _version_check_payload(current_version)
         payload["status"] = "planned"
         payload["changed"] = False
         payload["message"] = "Review the planned installer command before updating."
@@ -205,6 +209,67 @@ def _success_notes(payload: dict[str, object]) -> list[str]:
     if str(payload.get("status") or "") not in {"current", "updated"}:
         return []
     return _output_lines(str(payload.get("stderr") or ""))
+
+
+def _version_check_payload(current_version: str) -> dict[str, object]:
+    latest_version = _latest_version_from_pypi()
+    if latest_version is None:
+        return {
+            "source": "pypi",
+            "status": "unavailable",
+            "current_version": current_version,
+            "latest_version": None,
+            "update_available": None,
+        }
+    update_available = _is_newer_version(latest_version, current_version)
+    return {
+        "source": "pypi",
+        "status": "stale" if update_available else "current",
+        "current_version": current_version,
+        "latest_version": latest_version,
+        "update_available": update_available,
+    }
+
+
+def _latest_version_from_pypi() -> str | None:
+    request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=0.35) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    info = payload.get("info")
+    if not isinstance(info, dict):
+        return None
+    version = info.get("version")
+    return version if isinstance(version, str) and version.strip() else None
+
+
+def _is_newer_version(latest_version: str, current_version: str) -> bool:
+    latest_parts = _numeric_version_parts(latest_version)
+    current_parts = _numeric_version_parts(current_version)
+    if latest_parts is None or current_parts is None:
+        return False
+    max_len = max(len(latest_parts), len(current_parts))
+    latest_padded = latest_parts + (0,) * (max_len - len(latest_parts))
+    current_padded = current_parts + (0,) * (max_len - len(current_parts))
+    return latest_padded > current_padded
+
+
+def _numeric_version_parts(version: str) -> tuple[int, ...] | None:
+    parts: list[int] = []
+    for raw_part in version.strip().split("."):
+        digits = ""
+        for character in raw_part:
+            if not character.isdigit():
+                break
+            digits += character
+        if not digits:
+            return None
+        parts.append(int(digits))
+    return tuple(parts) if parts else None
 
 
 def _current_version() -> str:

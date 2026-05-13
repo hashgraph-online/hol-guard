@@ -227,6 +227,11 @@ class HarnessAdapter:
         runtime_probe: dict[str, object] | None,
     ) -> list[str]:
         warnings = list(detection.warnings)
+        if detection.config_paths and not detection.installed:
+            warnings.append(
+                f"{self.harness} config was found, but Guard is not installed for this harness. "
+                f"Run `hol-guard install {self.harness}` to enable protection."
+            )
         if detection.config_paths and not detection.command_available:
             warnings.append(
                 f"{self.harness} config was found, but the {self.executable} command is not available on PATH."
@@ -248,15 +253,29 @@ class HarnessAdapter:
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         detection = self.detect(context)
         runtime_probe = self.runtime_probe(context)
+        warnings = self.diagnostic_warnings(detection, runtime_probe)
         return {
             "harness": self.harness,
             "installed": detection.installed,
+            "setup_status": _diagnostic_setup_status(detection, warnings),
             "command_available": detection.command_available,
             "config_paths": list(detection.config_paths),
             "artifacts": [artifact.to_dict() for artifact in detection.artifacts],
             "runtime_probe": runtime_probe,
-            "warnings": self.diagnostic_warnings(detection, runtime_probe),
+            "warnings": warnings,
         }
+
+
+def _diagnostic_setup_status(detection: HarnessDetection, warnings: list[str]) -> str:
+    if detection.config_paths and not detection.command_available:
+        return "partial"
+    if detection.installed and warnings:
+        return "broken"
+    if detection.installed:
+        return "active"
+    if detection.config_paths or detection.command_available:
+        return "partial"
+    return "not_found"
 
 
 __all__ = [
