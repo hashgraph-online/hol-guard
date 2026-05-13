@@ -543,6 +543,8 @@ class CodexHarnessAdapter(HarnessAdapter):
                 "`hol-guard install codex` or `hol-guard update` to repair protection."
             )
         payload["warnings"] = warnings
+        if payload.get("setup_status") == "active" and warnings:
+            payload["setup_status"] = "broken"
         payload["native_hook_state"] = hook_state
         return payload
 

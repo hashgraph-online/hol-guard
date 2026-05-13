@@ -156,6 +156,46 @@ def test_doctor_does_not_mark_harness_command_presence_as_guard_active(
     assert any("Guard is not installed" in warning for warning in payload["warnings"])
 
 
+def test_codex_doctor_marks_partial_native_hook_install_as_broken(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    config_path = context.workspace_dir / ".codex" / "config.toml"
+    hooks_path = context.workspace_dir / ".codex" / "hooks.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": (
+                                        "python -m codex_plugin_scanner.cli guard hook "
+                                        "--guard-home /tmp/guard --harness codex"
+                                    ),
+                                    "statusMessage": "HOL Guard checking tool action",
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    payload = get_adapter("codex").diagnostics(context)
+
+    assert payload["setup_status"] == "broken"
+    assert payload["native_hook_state"]["managed_pre_tool_hook_installed"] is True
+    assert payload["native_hook_state"]["managed_hook_installed"] is False
+    assert any("managed Codex hooks are missing" in warning for warning in payload["warnings"])
+
+
 def test_install_native_contract_output_prefers_native_hooks_for_supported_harnesses(tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
