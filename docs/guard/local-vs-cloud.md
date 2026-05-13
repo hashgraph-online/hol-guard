@@ -23,3 +23,12 @@ Optional cloud features:
 - shared team policy
 
 The local runtime does not require any hosted service. `hol-guard connect` is the preferred way to pair a machine with Guard Cloud later, and `hol-guard login` remains as a compatibility alias for the same browser sign-in flow. They do not unlock the core safety workflow.
+
+Use these commands when you need to check or repair optional cloud pairing without disturbing local protection:
+
+```bash
+hol-guard connect status
+hol-guard connect repair
+hol-guard sync
+hol-guard explain install-connect
+```
