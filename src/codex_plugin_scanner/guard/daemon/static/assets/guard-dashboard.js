@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/runtime-overview.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -13133,6 +13133,41 @@ function buildDemoRuntimeSnapshot() {
       last_heartbeat_at: now2,
       approval_center_url: "http://127.0.0.1:4455"
     },
+    device: {
+      installation_id: "demo-device-7f4a9c2d",
+      device_label: "Demo MacBook Pro",
+      local_registered: true
+    },
+    latest_connect_state: {
+      request_id: "demo-connect-request",
+      status: "connected",
+      milestone: "first_sync_pending",
+      reason: "waiting_for_first_sync",
+      created_at: now2,
+      updated_at: now2,
+      expires_at: now2,
+      completed_at: now2,
+      proof: {
+        pairing_completed_at: now2,
+        first_synced_at: null,
+        receipts_stored: 0,
+        inventory_items: 0,
+        runtime_session_id: "demo-runtime",
+        runtime_session_synced_at: null
+      }
+    },
+    proof_status: {
+      state: "pending",
+      label: "First proof pending",
+      detail: "Browser pairing finished. First proof sync has not completed yet.",
+      request_id: "demo-connect-request",
+      pairing_completed_at: now2,
+      first_synced_at: null,
+      receipts_stored: 0,
+      inventory_items: 0,
+      runtime_session_id: "demo-runtime",
+      runtime_session_synced_at: null
+    },
     pending_count: demoRequests2.length,
     receipt_count: demoReceipts.length,
     headline_state: demoRequests2.length > 0 ? "blocked" : "connected",
@@ -15023,12 +15058,12 @@ function SearchInput({ value, onChange }) {
   const handleClear = reactExports.useCallback(() => {
     onChange("");
   }, [onChange]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative flex flex-1 min-w-[180px] items-center", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative flex flex-1 min-w-[160px] items-center", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search evidence" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       HiMiniMagnifyingGlass,
       {
-        className: "absolute left-3 h-4 w-4 text-slate-400 pointer-events-none",
+        className: "absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none",
         "aria-hidden": "true"
       }
     ),
@@ -15038,8 +15073,8 @@ function SearchInput({ value, onChange }) {
         type: "search",
         value,
         onChange: handleChange,
-        placeholder: "Search artifact, app, capability...",
-        className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-8 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        placeholder: "Search...",
+        className: "min-h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-7 text-xs text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
       }
     ),
     value && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -15048,8 +15083,8 @@ function SearchInput({ value, onChange }) {
         type: "button",
         onClick: handleClear,
         "aria-label": "Clear search",
-        className: "absolute right-2 flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 transition-colors",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
+        className: "absolute right-2 flex h-4 w-4 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 transition-colors",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
       }
     )
   ] });
@@ -15132,8 +15167,8 @@ function EvidenceFilterBar({
   }, []);
   const hasActiveFilters = filters.search || filters.time !== "all" || filters.decision !== "all" || filters.harness !== "all" || filters.category || filters.sourceScope || filters.day;
   const isFiltered = filteredCount !== totalCount;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", "aria-label": "Evidence filters", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", "aria-label": "Evidence filters", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SearchInput, { value: filters.search, onChange: handleSearchChange }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "select",
@@ -15141,7 +15176,7 @@ function EvidenceFilterBar({
           value: filters.time,
           onChange: handleTimeChange,
           "aria-label": "Time period",
-          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          className: "min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
           children: Object.entries(EVIDENCE_TIME_LABELS).map(
             ([val, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: val, children: label }, val)
           )
@@ -15153,7 +15188,7 @@ function EvidenceFilterBar({
           value: filters.decision,
           onChange: handleDecisionChange,
           "aria-label": "Decision filter",
-          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          className: "min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
           children: Object.entries(EVIDENCE_DECISION_LABELS).map(
             ([val, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: val, children: label }, val)
           )
@@ -15166,22 +15201,22 @@ function EvidenceFilterBar({
           onClick: handleToggleMore,
           "aria-expanded": showMore,
           "aria-label": "Toggle more filters",
-          className: "inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
+          className: "inline-flex min-h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark hover:bg-slate-50 transition-colors",
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiFunnel, { className: "h-4 w-4", "aria-hidden": "true" }),
-            showMore ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiFunnel, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+            showMore ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" })
           ]
         }
       )
     ] }),
-    showMore && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 p-3", children: [
+    showMore && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50/60 p-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "select",
         {
           value: filters.harness,
           onChange: handleHarnessChange,
           "aria-label": "App filter",
-          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          className: "min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All apps" }),
             harnesses.map((h) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: h, children: harnessDisplayName(h) }, h))
@@ -15194,12 +15229,12 @@ function EvidenceFilterBar({
           value: filters.category,
           onChange: handleCategoryChange,
           "aria-label": "Category filter",
-          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          className: "min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
           children: CATEGORY_OPTIONS.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-sm text-brand-dark", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs font-medium text-slate-500", children: "Source scope:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-1.5 text-xs text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs font-medium text-slate-500", children: "Scope:" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
           {
@@ -15207,16 +15242,16 @@ function EvidenceFilterBar({
             value: filters.sourceScope,
             onChange: handleSourceScopeChange,
             placeholder: "e.g. workspace, global",
-            className: "min-h-9 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            className: "min-h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
           }
         )
       ] }),
       filters.day && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-slate-500", children: [
-        "Filtered by day: ",
+        "Day: ",
         /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: filters.day })
       ] })
     ] }),
-    hasActiveFilters && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
+    hasActiveFilters && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1", children: [
       filters.search && /* @__PURE__ */ jsxRuntimeExports.jsx(ActiveChip, { label: `"${filters.search}"`, onRemove: handleRemoveSearch }),
       filters.time !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ActiveChip,
@@ -15264,7 +15299,7 @@ function EvidenceFilterBar({
         }
       )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: isFiltered ? `Showing ${filteredCount} of ${totalCount} actions (filtered)` : `Showing all ${totalCount} actions` })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-slate-400", children: isFiltered ? `${filteredCount} of ${totalCount} shown` : `${totalCount} total` })
   ] });
 }
 function humanFileName(artifactName) {
@@ -15720,44 +15755,12 @@ function EvidenceActionDetail({
     }
   );
 }
-function StatTile({ label, value, tone }) {
-  const colorMap = {
-    blue: "text-brand-blue",
-    green: "text-brand-green",
-    attention: "text-brand-attention",
-    neutral: "text-brand-dark"
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-0.5 px-4 py-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-xl font-bold tabular-nums ${colorMap[tone]}`, children: value }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-medium text-slate-500", children: label })
-  ] });
-}
-function EvidenceInsightStrip({ metrics }) {
-  const lastAction = metrics.lastActivityAt ? new Date(metrics.lastActivityAt).toLocaleDateString(void 0, {
-    month: "short",
-    day: "numeric"
-  }) : "—";
-  const appCount = metrics.byHarness.size;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "flex flex-wrap divide-x divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white/80 shadow-sm",
-      "aria-label": "Evidence summary",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(StatTile, { label: "Total", value: String(metrics.total), tone: "neutral" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(StatTile, { label: "Stopped", value: String(metrics.blocked), tone: "attention" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(StatTile, { label: "Apps seen", value: String(appCount), tone: "blue" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(StatTile, { label: "Last action", value: lastAction, tone: "neutral" })
-      ]
-    }
-  );
-}
 function TrendBar({ bucket, maxTotal }) {
   const total = bucket.allowed + bucket.blocked + bucket.reviewed;
   const heightPct = maxTotal > 0 ? Math.max(4, total / maxTotal * 100) : 4;
   const blockedPct = total > 0 ? bucket.blocked / total * 100 : 0;
   const allowedPct = total > 0 ? bucket.allowed / total * 100 : 0;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-1 flex-1", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-1 flex-1 min-w-0", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
@@ -15768,7 +15771,7 @@ function TrendBar({ bucket, maxTotal }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "div",
             {
-              className: "w-full bg-green-300 transition-all",
+              className: "w-full bg-emerald-300 transition-all",
               style: { height: `${heightPct * (allowedPct / 100)}%` },
               "aria-hidden": "true"
             }
@@ -15804,18 +15807,18 @@ function AppBreakdownRow({
       type: "button",
       onClick: handleClick,
       "aria-label": `Filter by app ${harnessDisplayName(harness)}`,
-      className: "w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-left",
+      className: "w-full flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-left",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark w-28 shrink-0 truncate", children: harnessDisplayName(harness) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 bg-slate-100 rounded-full h-2 overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "div",
           {
-            className: "bg-brand-blue h-2 rounded-full transition-all",
+            className: "bg-brand-blue h-1.5 rounded-full transition-all",
             style: { width: `${pct}%` },
             "aria-hidden": "true"
           }
         ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs tabular-nums text-slate-500 shrink-0", children: total }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs tabular-nums text-slate-500 shrink-0 w-6 text-right", children: total }),
         blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-medium text-brand-attention shrink-0", children: [
           blocked,
           " blocked"
@@ -15842,19 +15845,19 @@ function CategoryBreakdownRow({
       type: "button",
       onClick: handleClick,
       "aria-label": `Filter by category ${catInfo.label}`,
-      className: "w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-left",
+      className: "w-full flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-left",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `shrink-0 ${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark w-24 shrink-0 truncate", children: catInfo.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 bg-slate-100 rounded-full h-2 overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "div",
           {
-            className: "bg-brand-purple h-2 rounded-full transition-all",
+            className: "bg-brand-purple h-1.5 rounded-full transition-all",
             style: { width: `${pct}%` },
             "aria-hidden": "true"
           }
         ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs tabular-nums text-slate-500 shrink-0", children: total }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs tabular-nums text-slate-500 shrink-0 w-6 text-right", children: total }),
         blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-medium text-brand-attention shrink-0", children: [
           blocked,
           " blocked"
@@ -15864,7 +15867,7 @@ function CategoryBreakdownRow({
   );
 }
 function SectionHeading({ children }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xs font-semibold uppercase tracking-wide text-slate-400 px-3", children });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-[11px] font-semibold uppercase tracking-wide text-slate-400 px-2", children });
 }
 function EvidenceAnalyticsPanel({
   metrics,
@@ -15890,9 +15893,9 @@ function EvidenceAnalyticsPanel({
     ] });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4 space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { children: "7-day trend" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-end gap-1.5 px-3 pt-2", children: metrics.trendBuckets.map((bucket) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-end gap-1.5 px-2 pt-1", children: metrics.trendBuckets.map((bucket) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         TrendBar,
         {
           bucket,
@@ -15900,9 +15903,9 @@ function EvidenceAnalyticsPanel({
         },
         bucket.dateKey
       )) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 px-3 text-[11px] text-slate-400", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 px-2 text-[11px] text-slate-400", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2 w-2 rounded-sm bg-green-300", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2 w-2 rounded-sm bg-emerald-300", "aria-hidden": "true" }),
           "Allowed"
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1", children: [
@@ -15911,7 +15914,7 @@ function EvidenceAnalyticsPanel({
         ] })
       ] })
     ] }),
-    sortedHarnesses.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4 space-y-2", children: [
+    sortedHarnesses.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { children: "By app" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0.5", children: sortedHarnesses.map(([harness, counts]) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         AppBreakdownRow,
@@ -15925,7 +15928,7 @@ function EvidenceAnalyticsPanel({
         harness
       )) })
     ] }),
-    sortedCategories.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4 space-y-2", children: [
+    sortedCategories.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { children: "By category" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0.5", children: sortedCategories.map(([cat, counts]) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         CategoryBreakdownRow,
@@ -15939,12 +15942,12 @@ function EvidenceAnalyticsPanel({
         cat
       )) })
     ] }),
-    metrics.topRecurring.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4 space-y-2", children: [
+    metrics.topRecurring.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { children: "Top recurring actions" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-100", children: metrics.topRecurring.slice(0, 5).map((action) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-100/60", children: metrics.topRecurring.slice(0, 5).map((action) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
         {
-          className: "flex items-center justify-between px-3 py-2",
+          className: "flex items-center justify-between px-2 py-1.5",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark truncate", children: action.name }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
@@ -16345,7 +16348,7 @@ function AppTabRaw({ receipts }) {
     setSearchTerm(e.target.value);
   }, []);
   if (appReceipts.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white/60 p-6 text-center", children: [
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-12 text-center", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: "App activity will appear here after Guard makes decisions." })
     ] });
@@ -16355,14 +16358,14 @@ function AppTabRaw({ receipts }) {
     const allowed = items.filter((r) => r.policy_decision === "allow").length;
     const blocked = items.filter((r) => r.policy_decision === "block").length;
     const color = harnessColor(selectedApp);
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
             onClick: () => setSelectedApp(null),
-            className: "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100",
-            children: "← Back to apps"
+            className: "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100",
+            children: "← Back"
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -16376,18 +16379,18 @@ function AppTabRaw({ receipts }) {
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white/60 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "span",
           {
-            className: "inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white",
+            className: "inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white",
             style: { backgroundColor: color },
             children: selectedApp[0]?.toUpperCase()
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: harnessDisplayName(selectedApp) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-500", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: harnessDisplayName(selectedApp) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
             items.length,
             " action",
             items.length !== 1 ? "s" : "",
@@ -16398,25 +16401,25 @@ function AppTabRaw({ receipts }) {
             " stopped"
           ] })
         ] })
-      ] }) }),
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(AppSparkline, { items }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0 divide-y divide-slate-100/60", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
         {
-          className: "rounded-xl border border-slate-100 bg-white p-3",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+          className: "flex items-start justify-between gap-3 py-2",
+          children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: plainEnglishDescription(receipt) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-400", children: formatRelativeTime(receipt.timestamp) })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-brand-green" : "text-brand-attention"}`, children: receipt.policy_decision === "allow" ? "Allowed" : "Stopped" })
-          ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-emerald-500" : "text-brand-attention"}`, children: receipt.policy_decision === "allow" ? "Allowed" : "Stopped" })
+          ]
         },
         receipt.receipt_id
       )) })
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search apps" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -16426,11 +16429,11 @@ function AppTabRaw({ receipts }) {
           value: searchTerm,
           onChange: handleSearchChange,
           placeholder: "Search apps...",
-          className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className: "min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         }
       )
     ] }),
-    filteredApps.map(([harness, items]) => {
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0 divide-y divide-slate-100/60", children: filteredApps.map(([harness, items]) => {
       const allowed = items.filter((r) => r.policy_decision === "allow").length;
       const blocked = items.filter((r) => r.policy_decision === "block").length;
       const lastActive = items[0]?.timestamp;
@@ -16441,19 +16444,19 @@ function AppTabRaw({ receipts }) {
           onClick: () => {
             setSelectedApp(harness);
           },
-          className: "flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white p-3 text-left transition-all hover:border-slate-200 hover:bg-slate-50/50",
+          className: "flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/50 rounded-lg px-2 -mx-2",
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2.5 min-w-0", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "span",
                 {
-                  className: "inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white",
+                  className: "inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shrink-0",
                   style: { backgroundColor: color },
                   children: harness[0]?.toUpperCase()
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark truncate", children: harnessDisplayName(harness) }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
                   items.length,
                   " actions · ",
@@ -16468,13 +16471,13 @@ function AppTabRaw({ receipts }) {
                 ] })
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300 shrink-0", "aria-hidden": "true" })
           ]
         },
         harness
       );
-    }),
-    filteredApps.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white/60 p-6 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No apps match your search." }) })
+    }) }),
+    filteredApps.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "py-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No apps match your search." }) })
   ] });
 }
 function AppSparkline({ items }) {
@@ -16493,11 +16496,11 @@ function AppSparkline({ items }) {
   }, [items]);
   const max = Math.max(...buckets, 1);
   const width = 200;
-  const height = 40;
+  const height = 32;
   const barWidth = width / buckets.length;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Last 7 days" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: `0 0 ${width} ${height}`, className: "mt-2 h-10 w-full", preserveAspectRatio: "none", children: buckets.map((count, i) => {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-medium text-slate-400", children: "Last 7 days" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: `0 0 ${width} ${height}`, className: "mt-1 h-8 w-full", preserveAspectRatio: "none", children: buckets.map((count, i) => {
       const barHeight = count / max * height;
       return /* @__PURE__ */ jsxRuntimeExports.jsx(
         "rect",
@@ -16544,25 +16547,25 @@ function EvidenceHeader({
     year: "numeric"
   }) : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 min-w-0", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-bold text-brand-dark", children: "Evidence" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "See every action HOL Guard reviewed on this machine." }),
-      lastActivityLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-1 text-xs text-slate-400", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-0.5 min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-semibold text-brand-dark", children: "Evidence" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Every action Guard reviewed on this machine." }),
+      lastActivityLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-1 text-[11px] text-slate-400", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "h-3 w-3", "aria-hidden": "true" }),
         "Last activity: ",
         lastActivityLabel
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 shrink-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
           type: "button",
           onClick: onExport,
           "aria-label": "Export evidence",
-          className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
+          className: "inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-dark hover:bg-slate-50 transition-colors",
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
             "Export"
           ]
         }
@@ -16573,7 +16576,7 @@ function EvidenceHeader({
           type: "button",
           onClick: onClear,
           "aria-label": "Clear all evidence",
-          className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors",
+          className: "inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors",
           children: "Clear"
         }
       )
@@ -16584,7 +16587,7 @@ function ViewTabBar({ view, onViewChange }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
-      className: "flex gap-0.5 border-b border-slate-200/70",
+      className: "flex gap-1 border-b border-slate-200/60",
       role: "tablist",
       "aria-label": "Evidence views",
       children: VIEW_TABS.map((tab) => {
@@ -16623,11 +16626,11 @@ function ViewTabButton({
       "aria-controls": `tabpanel-${tabKey}`,
       id: `tab-${tabKey}`,
       onClick: handleClick,
-      className: `relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${isActive ? "text-brand-dark" : "text-slate-500 hover:text-brand-dark"}`,
+      className: `relative flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${isActive ? "text-brand-dark" : "text-slate-500 hover:text-brand-dark"}`,
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: label }),
-        isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-brand-blue" })
+        isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute bottom-0 left-1 right-1 h-0.5 rounded-full bg-brand-blue" })
       ]
     },
     tabKey
@@ -16735,6 +16738,16 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
     setFilters(DEFAULT_FILTER_STATE);
     if (onClearEvidence) onClearEvidence();
   }, [onClearEvidence]);
+  reactExports.useEffect(() => {
+    function handlePopState() {
+      const urlState = readEvidenceUrlState();
+      setFilters(urlState);
+      setDebouncedSearch(urlState.search);
+      setPage(0);
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   if (receiptItems.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
@@ -16745,7 +16758,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceHeader,
       {
@@ -16755,7 +16768,6 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
         onClear: handleOpenClear
       }
     ),
-    metrics.total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightStrip, { metrics }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceFilterBar,
       {
@@ -16767,14 +16779,14 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ViewTabBar, { view: filters.view, onViewChange: handleViewChange }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-[300px]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-2", children: [
       filters.view === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
         {
           id: "tabpanel-actions",
           role: "tabpanel",
           "aria-labelledby": "tab-actions",
-          className: selectedReceipt ? "grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]" : "",
+          className: selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : "",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               EvidenceActionList,
@@ -16807,6 +16819,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
           id: "tabpanel-insights",
           role: "tabpanel",
           "aria-labelledby": "tab-insights",
+          className: "max-w-2xl",
           children: /* @__PURE__ */ jsxRuntimeExports.jsx(
             EvidenceAnalyticsPanel,
             {
@@ -16823,6 +16836,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
           id: "tabpanel-apps",
           role: "tabpanel",
           "aria-labelledby": "tab-apps",
+          className: "max-w-2xl",
           children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: filtered })
         }
       ),
@@ -16832,15 +16846,14 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
           id: "tabpanel-export",
           role: "tabpanel",
           "aria-labelledby": "tab-export",
-          className: "rounded-xl border border-slate-200 bg-white p-6",
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 mb-4", children: "Download your evidence records as CSV or JSON." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 mb-3", children: "Download your evidence records as CSV or JSON." }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "button",
               {
                 type: "button",
                 onClick: handleOpenExport,
-                className: "inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-blue/90 transition-colors",
+                className: "inline-flex items-center gap-2 rounded-lg bg-brand-blue px-3 py-2 text-sm font-semibold text-white hover:bg-brand-blue/90 transition-colors",
                 children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
                   "Open export options"
@@ -19688,11 +19701,11 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.SettingsWorkspace })));
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([2,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([3,1]) : void 0).then((m) => ({ default: m.HelpModal })));
+const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([3,2]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([4,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([5,1]) : void 0).then((m) => ({ default: m.HelpModal })));
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
