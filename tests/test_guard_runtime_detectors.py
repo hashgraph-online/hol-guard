@@ -926,6 +926,39 @@ def test_safe_decode_detector_does_not_match_sensitive_word_fragments(tmp_path: 
     assert signals == ()
 
 
+def test_safe_decode_detector_does_not_match_benign_aws_tooling(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-aws-sdk-fixture",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="prompt",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt="Decode fixture prose",
+        prompt_text=f"Use this aws-sdk and aws-cli binary fixture: {opaque}",
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
 def test_safe_decode_detector_returns_empty_for_plain_text(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
 
