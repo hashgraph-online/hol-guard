@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from ..approvals import approval_delivery_payload, approval_prompt_flow, queue_blocked_approvals
+from ..approvals import approval_delivery_payload, approval_prompt_flow, first_approval_url, queue_blocked_approvals
 from ..consumer import artifact_hash
 from ..models import HarnessDetection
 from ..receipts import build_receipt
@@ -291,7 +291,7 @@ class StdioGuardProxy:
                         )
                         event["approval_center_url"] = self.approval_center_url
                         event["approval_delivery"] = approval_delivery_payload(approval_flow)
-                        review_url = _first_approval_url(event["approval_requests"]) or self.approval_center_url
+                        review_url = first_approval_url(event["approval_requests"]) or self.approval_center_url
                         event["review_hint"] = (
                             f"{approval_flow['summary']} Open {review_url} to review the blocked request."
                         )
@@ -364,10 +364,3 @@ def _is_request(message: dict[str, Any]) -> bool:
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-
-def _first_approval_url(queued: list[dict[str, object]]) -> str | None:
-    for item in queued:
-        approval_url = item.get("approval_url")
-        if isinstance(approval_url, str) and approval_url.strip():
-            return approval_url.strip()
-    return None

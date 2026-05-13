@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
-from ..approvals import queue_blocked_approvals
+from ..approvals import first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
 from ..mcp_tool_calls import (
@@ -580,7 +580,7 @@ class RuntimeMcpGuardProxy:
             risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
         )
         request_id = str(queued[0]["request_id"]) if queued else "unknown"
-        review_url = _first_approval_url(queued) or approval_center_url
+        review_url = first_approval_url(queued) or approval_center_url
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
@@ -699,14 +699,6 @@ class ElicitationMcpGuardProxy(RuntimeMcpGuardProxy):
                 },
             },
         }
-
-
-def _first_approval_url(queued: list[dict[str, object]]) -> str | None:
-    for item in queued:
-        approval_url = item.get("approval_url")
-        if isinstance(approval_url, str) and approval_url.strip():
-            return approval_url.strip()
-    return None
 
 
 class CodexMcpGuardProxy(ElicitationMcpGuardProxy):
