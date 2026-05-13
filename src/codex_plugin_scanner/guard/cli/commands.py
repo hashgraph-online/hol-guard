@@ -2333,6 +2333,20 @@ def run_guard_command(
             policy_action = SAFE_CHANGED_HASH_ACTION
         if policy_action not in VALID_GUARD_ACTIONS:
             policy_action = SAFE_CHANGED_HASH_ACTION
+        daemon_status = _optional_string(payload.get("daemon_status"))
+        fail_mode = _optional_string(payload.get("fail_mode"))
+        if daemon_status in {"unreachable", "error", "failed", "404"} and fail_mode in {"strict", "permissive"}:
+            if fail_mode == "strict":
+                policy_action = "block"
+                payload["permission_decision_reason"] = (
+                    "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action."
+                )
+            else:
+                policy_action = "allow"
+                payload["permission_decision_reason"] = (
+                    "HOL Guard daemon was unreachable; permissive mode allowed this action and recorded the degraded "
+                    "state."
+                )
         hook_event_name = _hook_event_name(payload) or "PreToolUse"
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
@@ -4119,7 +4133,7 @@ def _emit_native_hook_response(
     hook_specific_output: dict[str, object] = {"hookEventName": event_name}
     if permission_decision is not None:
         hook_specific_output["permissionDecision"] = permission_decision
-        if permission_decision != "allow":
+        if permission_decision != "allow" or "daemon was unreachable" in reason.lower():
             hook_specific_output["permissionDecisionReason"] = reason
     payload["hookSpecificOutput"] = hook_specific_output
     _write_json_line(payload, output_stream=output_stream)

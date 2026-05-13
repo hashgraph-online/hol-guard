@@ -70,14 +70,18 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
         detected = detection["installed"] or detection["command_available"] or bool(detection["config_paths"])
         if detection["installed"]:
             status = "protected"
+            observed_copy = "Active Guard protection is installed."
         elif detected:
             status = "found"
+            observed_copy = "Observed locally, not protected by Guard yet."
         else:
             status = "not_found"
+            observed_copy = "Not installed on this machine."
         items.append(
             {
                 "harness": adapter.harness,
                 "status": status,
+                "observed_copy": observed_copy,
                 "installed": detection["installed"],
                 "command_available": detection["command_available"],
                 "config_paths": detection["config_paths"],
