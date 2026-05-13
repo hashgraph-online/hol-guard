@@ -69,6 +69,7 @@ def test_gr098_hook_failures_fail_safe_in_strict_and_explain_permissive(tmp_path
             "tool_input": {"command": "printf safe"},
             "daemon_status": "unreachable",
             "fail_mode": "strict",
+            "decision_v2_json": {"harness_message": "Approve it in HOL Guard, then retry."},
         },
     )
     permissive_exit_code, permissive_output = _run_hook(
@@ -80,6 +81,7 @@ def test_gr098_hook_failures_fail_safe_in_strict_and_explain_permissive(tmp_path
             "tool_input": {"command": "printf safe"},
             "daemon_status": "unreachable",
             "fail_mode": "permissive",
+            "decision_v2_json": {"harness_message": "No daemon copy should be hidden."},
         },
     )
 
@@ -89,9 +91,11 @@ def test_gr098_hook_failures_fail_safe_in_strict_and_explain_permissive(tmp_path
     assert strict_exit_code == 0
     assert strict_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "fail safe" in str(strict_payload["hookSpecificOutput"]).lower()
+    assert "Approve it in HOL Guard" not in str(strict_payload["hookSpecificOutput"])
     assert permissive_exit_code == 0
     assert permissive_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert "daemon" in str(permissive_payload["hookSpecificOutput"]).lower()
+    assert "No daemon copy should be hidden" not in str(permissive_payload["hookSpecificOutput"])
 
 
 def test_gr098_permissive_hook_failure_preserves_existing_deny_decision(tmp_path: Path) -> None:
@@ -132,6 +136,7 @@ def test_gr098_codex_strict_daemon_failure_points_to_daemon_recovery(
             "tool_input": {"command": "printf safe"},
             "daemon_status": "unreachable",
             "fail_mode": "strict",
+            "decision_v2_json": {"harness_message": "Approve it in HOL Guard, then retry."},
         },
     )
 

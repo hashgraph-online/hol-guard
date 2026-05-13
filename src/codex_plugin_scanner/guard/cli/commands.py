@@ -2347,19 +2347,23 @@ def run_guard_command(
             policy_action = SAFE_CHANGED_HASH_ACTION
         daemon_status = _optional_string(payload.get("daemon_status"))
         fail_mode = _optional_string(payload.get("fail_mode"))
+        daemon_failure_reason: str | None = None
         if daemon_status in _HOOK_DAEMON_FAILURE_STATUSES and fail_mode in _HOOK_DAEMON_FAIL_MODES:
             if fail_mode == "strict":
                 policy_action = "block"
-                payload["permission_decision_reason"] = _HOOK_DAEMON_STRICT_REASON
+                daemon_failure_reason = _HOOK_DAEMON_STRICT_REASON
+                payload["permission_decision_reason"] = daemon_failure_reason
             else:
                 if policy_action in {"block", "sandbox-required", "require-reapproval"}:
-                    payload["permission_decision_reason"] = _coalesce_string(
+                    daemon_failure_reason = _coalesce_string(
                         payload.get("permission_decision_reason"),
                         _HOOK_DAEMON_PRESERVED_DENY_REASON,
                     )
+                    payload["permission_decision_reason"] = daemon_failure_reason
                 else:
                     policy_action = "allow"
-                    payload["permission_decision_reason"] = _HOOK_DAEMON_PERMISSIVE_REASON
+                    daemon_failure_reason = _HOOK_DAEMON_PERMISSIVE_REASON
+                    payload["permission_decision_reason"] = daemon_failure_reason
         hook_event_name = _hook_event_name(payload) or "PreToolUse"
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
@@ -2397,7 +2401,11 @@ def run_guard_command(
                 output_stream=output_stream,
             )
             return 0
-        incoming_reason = _decision_v2_harness_message(payload) or payload.get("permission_decision_reason")
+        incoming_reason = (
+            daemon_failure_reason
+            or _decision_v2_harness_message(payload)
+            or payload.get("permission_decision_reason")
+        )
         if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
             _emit_native_hook_block_stderr(_native_hook_reason_for_harness(args.harness, incoming_reason))
             return 2
