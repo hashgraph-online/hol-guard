@@ -881,6 +881,12 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         cloud_pairing_url = payload.get("cloud_pairing_url") or payload.get("connect_url") or "unknown"
         body.add_row("Cloud URL", str(cloud_pairing_url))
         body.add_row("Sync endpoint", str(payload.get("sync_url") or "unknown"))
+        recovery_command = payload.get("recovery_command")
+        if isinstance(recovery_command, str) and recovery_command.strip():
+            body.add_row("Recovery command", recovery_command)
+        repair_message = payload.get("repair_message")
+        if isinstance(repair_message, str) and repair_message.strip():
+            body.add_row("Repair note", repair_message)
         sync_payload = payload.get("sync")
         should_render_sync_counts = False
         if isinstance(sync_payload, dict):

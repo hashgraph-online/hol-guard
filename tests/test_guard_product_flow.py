@@ -119,6 +119,46 @@ class TestGuardProductFlow:
         assert output["next_steps"][0]["command"] == "hol-guard install codex"
         assert output["next_steps"][1]["command"] == "hol-guard run codex --dry-run"
 
+    def test_guard_bootstrap_stays_local_when_cloud_is_unreachable(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.cli.bootstrap.ensure_guard_daemon",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+
+        def fail_cloud_call(*_args, **_kwargs):
+            raise AssertionError("offline bootstrap must not call Guard Cloud")
+
+        monkeypatch.setattr("codex_plugin_scanner.guard.cli.commands.sync_receipts", fail_cloud_call)
+        monkeypatch.setattr("codex_plugin_scanner.guard.cli.commands.sync_runtime_session", fail_cloud_call)
+        monkeypatch.setattr("codex_plugin_scanner.guard.cli.commands.webbrowser.open", fail_cloud_call)
+
+        rc = main(
+            [
+                "guard",
+                "bootstrap",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--skip-install",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["sync_configured"] is False
+        assert output["cloud_state"] == "local_only"
+        assert output["approval_center_url"] == "http://127.0.0.1:5474"
+        assert output["bootstrap_install"]["reason"] == "skipped_by_flag"
+        assert GuardStore(guard_home).get_sync_credentials() is None
+
     def test_guard_start_recommends_copilot_when_it_is_the_only_detected_harness(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -253,6 +293,8 @@ class TestGuardProductFlow:
         assert output["inbox_url"] == "https://hol.org/guard/inbox"
         assert output["fleet_url"] == "https://hol.org/guard/fleet"
         assert output["connect_command"] == "hol-guard connect"
+        assert output["connect_status_command"] == "hol-guard connect status"
+        assert output["connect_recovery_command"] == "hol-guard connect"
 
     def test_guard_help_groups_commands_by_everyday_cloud_and_advanced_work(self, capsys, monkeypatch):
         monkeypatch.setattr(sys, "argv", ["hol-guard"])

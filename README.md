@@ -32,6 +32,12 @@ pipx run hol-guard run codex --dry-run
 pipx run hol-guard run codex
 pipx run hol-guard approvals
 pipx run hol-guard receipts
+pipx run hol-guard status
+pipx run hol-guard connect
+pipx run hol-guard connect status
+pipx run hol-guard connect repair
+pipx run hol-guard sync
+pipx run hol-guard explain install-connect
 ```
 
 What you get from Guard:
