@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlparse
 
 from ..adapters import get_adapter
@@ -11,6 +12,7 @@ from ..config import GuardConfig
 from ..consumer import detect_all, evaluate_detection
 from ..daemon import load_guard_daemon_url
 from ..models import HarnessDetection
+from ..redaction import redact_local_path
 from ..store import GuardStore
 
 HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
@@ -74,7 +76,7 @@ def _build_guard_product_payload(
     include_steps: bool,
 ) -> dict[str, object]:
     detections = detect_all(context)
-    harnesses = [_summarize_harness(detection, store, config) for detection in detections]
+    harnesses = [_summarize_harness(detection, store, config, context.home_dir) for detection in detections]
     recommended = _recommended_harness(harnesses)
     receipt_count = store.count_receipts()
     managed_harnesses = sum(1 for item in harnesses if item["managed"] is True)
@@ -82,8 +84,8 @@ def _build_guard_product_payload(
     approval_center_url = load_guard_daemon_url(context.guard_home)
     payload: dict[str, object] = {
         "generated_at": _now(),
-        "guard_home": str(context.guard_home),
-        "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        "guard_home": _redacted_path(context.guard_home, context.home_dir),
+        "workspace": _redacted_path(context.workspace_dir, context.home_dir),
         "sync_configured": store.get_sync_credentials() is not None,
         "receipt_count": receipt_count,
         "pending_approvals": store.count_approval_requests(),
@@ -104,6 +106,7 @@ def _summarize_harness(
     detection: HarnessDetection,
     store: GuardStore,
     config: GuardConfig,
+    home_dir: Path,
 ) -> dict[str, object]:
     evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
     managed_install = store.get_managed_install(detection.harness)
@@ -124,8 +127,8 @@ def _summarize_harness(
         "review_count": review_count,
         "warning_count": len(detection.warnings),
         "managed": managed,
-        "shim_path": str(shim_path) if isinstance(shim_path, str) else None,
-        "config_paths": list(detection.config_paths),
+        "shim_path": _redacted_path(shim_path, home_dir) if isinstance(shim_path, str) else None,
+        "config_paths": [_redacted_path(config_path, home_dir) for config_path in detection.config_paths],
         "next_action": next_action,
         "install_command": f"{GUARD_COMMAND} install {detection.harness}",
         "run_command": f"{GUARD_COMMAND} run {detection.harness} --dry-run",
@@ -133,6 +136,12 @@ def _summarize_harness(
         "receipts_command": f"{GUARD_COMMAND} receipts",
         "approval_flow": approval_flow,
     }
+
+
+def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:
+    if path is None:
+        return None
+    return redact_local_path(str(path), home_dir=home_dir)
 
 
 def _recommended_harness(harnesses: list[dict[str, object]]) -> dict[str, object] | None:
