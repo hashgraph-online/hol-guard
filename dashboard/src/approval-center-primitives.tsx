@@ -86,6 +86,8 @@ export function ShellHeader(props: {
         </a>
         <div className="min-w-0 flex-1">
           <select
+            id="guard-mobile-navigation"
+            name="guard-mobile-navigation"
             aria-label="Navigate Guard sections"
             className="h-11 w-full rounded-full border border-white/25 bg-white/95 px-4 text-sm font-medium text-brand-dark shadow-none transition-colors duration-150 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40"
             onChange={handleMobileNavigationChange}
