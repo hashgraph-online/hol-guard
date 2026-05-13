@@ -40,7 +40,7 @@ cisco = [
 ]
 dev = [
     "build>=1.2.2",
-    "jsonschema>=4.23.0",
+    "jsonschema>=4.26.0",
     "pyyaml>=6.0.3",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
@@ -52,13 +52,14 @@ publish = [
 
 [tool.uv]
 override-dependencies = [
-    "click==8.3.1",
+    "click==8.3.3",
     "cisco-ai-skill-scanner==2.0.9",
-    "jsonschema==4.23.0",
+    "jsonschema==4.26.0",
     "litellm==1.83.0",
-    "openai==2.15.0",
-    "python-dotenv==1.2.1",
-    "python-multipart==0.0.22",
+    "openai==2.36.0",
+    "python-dotenv==1.2.2",
+    "python-multipart==0.0.28",
+    "urllib3==2.7.0",
 ]
 
 [project.scripts]
