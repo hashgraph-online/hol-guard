@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import importlib
 import importlib.metadata
 import json
@@ -12,7 +13,11 @@ import sqlite3
 import subprocess
 import sys
 import sysconfig
+import urllib.error
+import urllib.request
 from pathlib import Path
+
+from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
@@ -24,6 +29,8 @@ _ALREADY_CURRENT_HINTS = (
     "already at latest version",
     "already up-to-date",
 )
+_PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
+_PYPI_TIMEOUT_SECONDS = 3.0
 
 
 def run_guard_update(
@@ -58,6 +65,7 @@ def run_guard_update(
             )
             return payload, 0
     if dry_run:
+        payload["version_check"] = _version_check_payload(current_version)
         payload["status"] = "planned"
         payload["changed"] = False
         payload["message"] = "Review the planned installer command before updating."
@@ -205,6 +213,66 @@ def _success_notes(payload: dict[str, object]) -> list[str]:
     if str(payload.get("status") or "") not in {"current", "updated"}:
         return []
     return _output_lines(str(payload.get("stderr") or ""))
+
+
+def _version_check_payload(current_version: str) -> dict[str, object]:
+    latest_version = _latest_version_from_pypi()
+    if latest_version is None:
+        return {
+            "source": "pypi",
+            "status": "unavailable",
+            "current_version": current_version,
+            "latest_version": None,
+            "update_available": None,
+        }
+    update_available = _is_newer_version(latest_version, current_version)
+    if update_available is None:
+        return {
+            "source": "pypi",
+            "status": "unavailable",
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "update_available": None,
+        }
+    return {
+        "source": "pypi",
+        "status": "stale" if update_available else "current",
+        "current_version": current_version,
+        "latest_version": latest_version,
+        "update_available": update_available,
+    }
+
+
+def _latest_version_from_pypi() -> str | None:
+    request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (
+        OSError,
+        TimeoutError,
+        urllib.error.URLError,
+        http.client.IncompleteRead,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    info = payload.get("info")
+    if not isinstance(info, dict):
+        return None
+    version = info.get("version")
+    return version if isinstance(version, str) and version.strip() else None
+
+
+def _is_newer_version(latest_version: str, current_version: str) -> bool | None:
+    try:
+        latest = Version(latest_version)
+        current = Version(current_version)
+    except InvalidVersion:
+        return None
+    return latest > current
 
 
 def _current_version() -> str:
