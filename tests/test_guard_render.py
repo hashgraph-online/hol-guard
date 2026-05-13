@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 
 from codex_plugin_scanner.guard.cli import render
@@ -56,6 +58,35 @@ def test_guard_render_redacts_sensitive_values_before_rich_renderer(monkeypatch)
     assert isinstance(payload, dict)
     assert payload["api_key"] == "*****"
     assert payload["launch_summary"] == "api_key=***** token=*****"
+
+
+def test_guard_render_fallback_redacts_local_paths_when_redaction_module_is_stale() -> None:
+    home_dir = Path("/Users/example")
+
+    assert render.redact_local_path("/Users/example/project/file.txt", home_dir=home_dir) == "~/project/file.txt"
+    assert render.redact_local_path("/Users/other/project/file.txt", home_dir=home_dir) == "~/project/file.txt"
+    assert render.redact_local_path(r"C:\Users\example\project\file.txt") == r"~\project\file.txt"
+
+
+def test_guard_render_import_tolerates_stale_redaction_module_without_local_path_helper(monkeypatch) -> None:
+    module_name = "codex_plugin_scanner.guard.cli.render"
+    stale_redaction = types.ModuleType("codex_plugin_scanner.guard.redaction")
+
+    def fake_redact_text(value: str) -> object:
+        return types.SimpleNamespace(text=value)
+
+    stale_redaction.redact_text = fake_redact_text  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "codex_plugin_scanner.guard.redaction", stale_redaction)
+    monkeypatch.delitem(sys.modules, module_name)
+
+    try:
+        imported = __import__(module_name, fromlist=["redact_local_path"])
+    finally:
+        monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    assert imported.redact_local_path("/Users/example/project/file.txt", home_dir=Path("/Users/example")) == (
+        "~/project/file.txt"
+    )
 
 
 def test_guard_json_render_redacts_after_command_specific_payload_shape(capsys) -> None:
