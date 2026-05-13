@@ -256,9 +256,9 @@ export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
   runtime_state: GuardRuntimeState | null;
-  device?: GuardRuntimeDevice;
-  latest_connect_state?: GuardLatestConnectState | null;
-  proof_status?: GuardProofStatus;
+  device: GuardRuntimeDevice;
+  latest_connect_state: GuardLatestConnectState | null;
+  proof_status: GuardProofStatus;
   pending_count: number;
   receipt_count: number;
   headline_state: GuardHeadlineState;

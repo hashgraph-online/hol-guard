@@ -553,15 +553,16 @@ def _connect_state_proof(value: object) -> dict[str, object]:
 
 
 def _build_runtime_proof_status(latest_state: dict[str, object] | None) -> dict[str, object]:
+    proof = _connect_state_proof(latest_state.get("proof") if latest_state is not None else None)
     if latest_state is None:
+        status = "not_connected"
         return _runtime_proof_status_payload(
-            state="not_connected",
-            label="Cloud proof not started",
-            detail="Connect Guard Cloud to sync this device proof.",
+            state=status,
+            label=_runtime_proof_status_label(status),
+            detail=_runtime_proof_status_detail(status),
             request_id=None,
-            proof={},
+            proof=proof,
         )
-    proof = _connect_state_proof(latest_state.get("proof"))
     status = _runtime_proof_status_name(
         status=_optional_string(latest_state.get("status")),
         milestone=_optional_string(latest_state.get("milestone")),
@@ -589,12 +590,7 @@ def _runtime_proof_status_payload(
         "label": label,
         "detail": detail,
         "request_id": request_id,
-        "pairing_completed_at": _optional_string(proof.get("pairing_completed_at")),
-        "first_synced_at": _optional_string(proof.get("first_synced_at")),
-        "runtime_session_id": _optional_string(proof.get("runtime_session_id")),
-        "runtime_session_synced_at": _optional_string(proof.get("runtime_session_synced_at")),
-        "receipts_stored": _non_negative_int(proof.get("receipts_stored")),
-        "inventory_items": _non_negative_int(proof.get("inventory_items")),
+        **proof,
     }
 
 
