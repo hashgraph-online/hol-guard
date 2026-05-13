@@ -65,6 +65,7 @@ def test_guard_render_fallback_redacts_local_paths_when_redaction_module_is_stal
 
     assert render.redact_local_path("/Users/example/project/file.txt", home_dir=home_dir) == "~/project/file.txt"
     assert render.redact_local_path("/Users/other/project/file.txt", home_dir=home_dir) == "~/project/file.txt"
+    assert render.redact_local_path(r"C:\Users\example\project\file.txt") == r"~\project\file.txt"
 
 
 def test_guard_render_import_tolerates_stale_redaction_module_without_local_path_helper(monkeypatch) -> None:
