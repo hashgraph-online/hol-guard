@@ -157,6 +157,15 @@ _GUARD_CLIENT_VERSION = "2.0.0"
 _SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
 _SERVICE_RUNTIME_CHOICES = ("hermes", "openclaw", "custom")
 _SERVICE_RUNTIME_SURFACE = "agent-sdk"
+_HOOK_DAEMON_FAILURE_STATUSES = frozenset({"unreachable", "error", "failed", "404"})
+_HOOK_DAEMON_FAIL_MODES = frozenset({"strict", "permissive"})
+_HOOK_DAEMON_UNREACHABLE_REASON_MARKER = "daemon was unreachable"
+_HOOK_DAEMON_STRICT_REASON = (
+    "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action."
+)
+_HOOK_DAEMON_PERMISSIVE_REASON = (
+    "HOL Guard daemon was unreachable; permissive mode allowed this action and recorded the degraded state."
+)
 _GUARD_HELP_GROUPS = (
     "Everyday protection:\n"
     "  start        First-run setup and the Guard operating loop\n"
@@ -2335,18 +2344,13 @@ def run_guard_command(
             policy_action = SAFE_CHANGED_HASH_ACTION
         daemon_status = _optional_string(payload.get("daemon_status"))
         fail_mode = _optional_string(payload.get("fail_mode"))
-        if daemon_status in {"unreachable", "error", "failed", "404"} and fail_mode in {"strict", "permissive"}:
+        if daemon_status in _HOOK_DAEMON_FAILURE_STATUSES and fail_mode in _HOOK_DAEMON_FAIL_MODES:
             if fail_mode == "strict":
                 policy_action = "block"
-                payload["permission_decision_reason"] = (
-                    "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action."
-                )
+                payload["permission_decision_reason"] = _HOOK_DAEMON_STRICT_REASON
             else:
                 policy_action = "allow"
-                payload["permission_decision_reason"] = (
-                    "HOL Guard daemon was unreachable; permissive mode allowed this action and recorded the degraded "
-                    "state."
-                )
+                payload["permission_decision_reason"] = _HOOK_DAEMON_PERMISSIVE_REASON
         hook_event_name = _hook_event_name(payload) or "PreToolUse"
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
@@ -4133,7 +4137,7 @@ def _emit_native_hook_response(
     hook_specific_output: dict[str, object] = {"hookEventName": event_name}
     if permission_decision is not None:
         hook_specific_output["permissionDecision"] = permission_decision
-        if permission_decision != "allow" or "daemon was unreachable" in reason.lower():
+        if permission_decision != "allow" or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
             hook_specific_output["permissionDecisionReason"] = reason
     payload["hookSpecificOutput"] = hook_specific_output
     _write_json_line(payload, output_stream=output_stream)
