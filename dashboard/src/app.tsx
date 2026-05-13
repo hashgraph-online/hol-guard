@@ -333,6 +333,8 @@ export function App() {
   const handleOpenFleet = useCallback(() => navigate("/fleet"), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
+  const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
+  const handleCloseHelp = useCallback(() => setHelpOpen(false), []);
   const handleGoHome = useCallback(() => navigate("/"), []);
   const handleOpenRequest = useCallback((nextRequestId: string) => {
     navigate(`/requests/${nextRequestId}`);
@@ -624,6 +626,7 @@ export function App() {
             clearConfirm={clearConfirm}
             onConfirmClear={handleConfirmClear}
             onCancelClear={handleCancelClear}
+            onOpenHelp={handleOpenHelp}
           />
         </Suspense>
       }
@@ -666,7 +669,7 @@ export function App() {
     />
     {helpOpen && (
       <Suspense fallback={null}>
-        <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+        <HelpModal open={helpOpen} onClose={handleCloseHelp} />
       </Suspense>
     )}
     </>);

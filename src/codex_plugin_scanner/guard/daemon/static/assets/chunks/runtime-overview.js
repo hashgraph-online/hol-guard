@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, d as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, b as formatRelativeTime } from "../guard-dashboard.js";
 function resolveProtectionLevelCopy(level) {
   if (level === "gentle") {
     return "Monitors quietly, asks only for high-risk actions";
@@ -13,6 +13,15 @@ function resolveProtectionLevelCopy(level) {
     return "Asks before nearly every action";
   }
   return "Custom rules active";
+}
+function resolveCloudIntelCopy(state) {
+  if (state === "local_only") {
+    return { label: "Offline, free", detail: "Running locally with no cloud sync. Your choices stay on this machine." };
+  }
+  if (state === "paired_waiting") {
+    return { label: "Pairing…", detail: "Connected to Guard Cloud, waiting for sync to start." };
+  }
+  return { label: "Synced, pro", detail: "Guard Cloud is active and syncing choices across your devices." };
 }
 function resolveProofStatusCopy(proofStatus) {
   if (proofStatus.state === "synced") {
@@ -66,5 +75,6 @@ function DeviceProofCard(props) {
 }
 export {
   DeviceProofCard as D,
-  resolveProtectionLevelCopy as r
+  resolveProtectionLevelCopy as a,
+  resolveCloudIntelCopy as r
 };
