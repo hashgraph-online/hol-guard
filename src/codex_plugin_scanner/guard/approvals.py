@@ -262,8 +262,8 @@ def approval_center_hint(
     flow = approval_prompt_flow(harness, managed_install=managed_install)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
-    first_approval_url = _first_approval_url(queued)
-    review_url = first_approval_url or approval_center_url
+    approval_url = first_approval_url(queued)
+    review_url = approval_url or approval_center_url
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
         f"{flow['summary']} "
@@ -273,7 +273,7 @@ def approval_center_hint(
     )
 
 
-def _first_approval_url(queued: list[dict[str, object]]) -> str | None:
+def first_approval_url(queued: list[dict[str, object]]) -> str | None:
     for item in queued:
         approval_url = item.get("approval_url")
         if isinstance(approval_url, str) and approval_url.strip():
