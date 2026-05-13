@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY docker-requirements.txt LICENSE README.md /app/
 
-RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt
+RUN python3 -m pip install --no-deps --require-hashes -r /app/docker-requirements.txt
 
 COPY src /app/src
 
