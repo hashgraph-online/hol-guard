@@ -144,6 +144,8 @@ def test_redaction_stable_ids_and_settings_contracts_are_shared() -> None:
 def test_external_models_cover_agents_billing_affiliate_seo_funnel_and_privacy() -> None:
     assert EXTERNAL_INTEL_SOURCE_VALUES == ("cve", "advisory", "cisco", "openssf", "slsa", "trust_score")
     assert set(HERMES_OPENCLAW_RUNTIME_MODELS) == {"hermes", "openclaw"}
+    for model in HERMES_OPENCLAW_RUNTIME_MODELS.values():
+        assert model.token_scopes == ("runtime:sync", "runtime:read", "capabilities:read")
     assert BILLING_PLAN_VALUES == ("free", "pro", "team", "enterprise")
     assert AFFILIATE_FIELD_VALUES == (
         "affiliate",
@@ -177,6 +179,7 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
 
     assert routes["/"].auth_required is False
     assert routes["/inbox"].writes_state is True
+    assert routes["/fleet"].writes_state is False
     assert routes["/evidence"].writes_state is False
     for route in routes:
         assert _GuardDaemonHandler._is_dashboard_route(route)

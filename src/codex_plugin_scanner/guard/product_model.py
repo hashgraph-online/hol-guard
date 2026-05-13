@@ -172,7 +172,7 @@ HERMES_OPENCLAW_RUNTIME_MODELS = {
         docker_proof=True,
         drift=True,
         messenger_channels=("telegram", "terminal", "api"),
-        token_scopes=("agent:read", "agent:write", "inventory:sync"),
+        token_scopes=("runtime:sync", "runtime:read", "capabilities:read"),
     ),
     "openclaw": RuntimeModel(
         runtime="openclaw",
@@ -181,13 +181,14 @@ HERMES_OPENCLAW_RUNTIME_MODELS = {
         docker_proof=True,
         drift=True,
         messenger_channels=("terminal", "api"),
-        token_scopes=("agent:read", "agent:write", "inventory:sync"),
+        token_scopes=("runtime:sync", "runtime:read", "capabilities:read"),
     ),
 }
 
 LOCAL_ROUTE_OWNERSHIP = (
     RouteOwnership(route="/", persona=("vibe_coder", "solo_engineer"), auth_required=False, writes_state=False),
     RouteOwnership(route="/inbox", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/fleet", persona=("solo_engineer", "manager"), auth_required=True, writes_state=False),
     RouteOwnership(
         route="/evidence",
         persona=("solo_engineer", "security_lead"),

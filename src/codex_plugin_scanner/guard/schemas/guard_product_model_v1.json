@@ -151,9 +151,9 @@
         "api"
       ],
       "token_scopes": [
-        "agent:read",
-        "agent:write",
-        "inventory:sync"
+        "runtime:sync",
+        "runtime:read",
+        "capabilities:read"
       ]
     },
     "openclaw": {
@@ -167,9 +167,9 @@
         "api"
       ],
       "token_scopes": [
-        "agent:read",
-        "agent:write",
-        "inventory:sync"
+        "runtime:sync",
+        "runtime:read",
+        "capabilities:read"
       ]
     }
   },
@@ -243,6 +243,15 @@
       ],
       "auth_required": true,
       "writes_state": true
+    },
+    {
+      "route": "/fleet",
+      "persona": [
+        "solo_engineer",
+        "manager"
+      ],
+      "auth_required": true,
+      "writes_state": false
     },
     {
       "route": "/evidence",
