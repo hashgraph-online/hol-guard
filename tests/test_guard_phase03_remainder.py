@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import sys
 import urllib.parse
 from pathlib import Path
 
@@ -344,7 +345,7 @@ def test_doctor_recognizes_legacy_guard_launcher_shim(
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
-    monkeypatch.setattr(ClaudeCodeHarnessAdapter, "resolved_executable", lambda self, context: "/usr/bin/claude")
+    monkeypatch.setattr(ClaudeCodeHarnessAdapter, "resolved_executable", lambda self, context: sys.executable)
 
     payload = get_adapter("claude-code").diagnostics(context)
 
