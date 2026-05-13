@@ -5891,7 +5891,7 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path) -> tuple[Path
         line = raw_line.strip()
         if not line or line.startswith(("#", ";")):
             continue
-        section_match = re.fullmatch(r"\[([^\]]+)\]", line)
+        section_match = re.fullmatch(r"\[([^\]]+)\](?:\s*[#;].*)?", line)
         if section_match:
             section = section_match.group(1).strip().lower()
             continue
