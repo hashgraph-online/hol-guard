@@ -82,26 +82,26 @@ function EvidenceHeader({
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="space-y-1 min-w-0">
-        <h1 className="text-xl font-bold text-brand-dark">Evidence</h1>
-        <p className="text-sm text-slate-500">
-          See every action HOL Guard reviewed on this machine.
+      <div className="space-y-0.5 min-w-0">
+        <h1 className="text-lg font-semibold text-brand-dark">Evidence</h1>
+        <p className="text-xs text-slate-500">
+          Every action Guard reviewed on this machine.
         </p>
         {lastActivityLabel && (
-          <p className="flex items-center gap-1 text-xs text-slate-400">
-            <HiMiniClock className="h-3.5 w-3.5" aria-hidden="true" />
+          <p className="flex items-center gap-1 text-[11px] text-slate-400">
+            <HiMiniClock className="h-3 w-3" aria-hidden="true" />
             Last activity: {lastActivityLabel}
           </p>
         )}
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         <button
           type="button"
           onClick={onExport}
           aria-label="Export evidence"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-dark hover:bg-slate-50 transition-colors"
         >
-          <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
+          <HiMiniArrowDownTray className="h-3.5 w-3.5" aria-hidden="true" />
           Export
         </button>
         {onClear && totalCount > 0 && (
@@ -109,7 +109,7 @@ function EvidenceHeader({
             type="button"
             onClick={onClear}
             aria-label="Clear all evidence"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors"
           >
             Clear
           </button>
@@ -127,7 +127,7 @@ interface ViewTabBarProps {
 function ViewTabBar({ view, onViewChange }: ViewTabBarProps) {
   return (
     <div
-      className="flex gap-0.5 border-b border-slate-200/70"
+      className="flex gap-1 border-b border-slate-200/60"
       role="tablist"
       aria-label="Evidence views"
     >
@@ -176,16 +176,16 @@ function ViewTabButton({
       aria-controls={`tabpanel-${tabKey}`}
       id={`tab-${tabKey}`}
       onClick={handleClick}
-      className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+      className={`relative flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
         isActive
           ? "text-brand-dark"
           : "text-slate-500 hover:text-brand-dark"
       }`}
     >
-      <Icon className="h-4 w-4" aria-hidden="true" />
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
       <span className="hidden sm:inline">{label}</span>
       {isActive && (
-        <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-brand-blue" />
+        <span className="absolute bottom-0 left-1 right-1 h-0.5 rounded-full bg-brand-blue" />
       )}
     </button>
   );
@@ -324,6 +324,18 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
     if (onClearEvidence) onClearEvidence();
   }, [onClearEvidence]);
 
+  // Sync state when URL changes (e.g. direct navigation, back/forward)
+  useEffect(() => {
+    function handlePopState() {
+      const urlState = readEvidenceUrlState();
+      setFilters(urlState);
+      setDebouncedSearch(urlState.search);
+      setPage(0);
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   if (receiptItems.length === 0) {
     return (
       <EmptyState
@@ -335,15 +347,13 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <EvidenceHeader
         totalCount={receiptItems.length}
         lastActivityAt={metrics.lastActivityAt}
         onExport={handleOpenExport}
         onClear={handleOpenClear}
       />
-
-      {metrics.total > 0 && <EvidenceInsightStrip metrics={metrics} />}
 
       <EvidenceFilterBar
         filters={filters}
@@ -355,13 +365,13 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
 
       <ViewTabBar view={filters.view} onViewChange={handleViewChange} />
 
-      <div className="min-h-[300px]">
+      <div className="pt-2">
         {filters.view === "actions" && (
           <div
             id="tabpanel-actions"
             role="tabpanel"
             aria-labelledby="tab-actions"
-            className={selectedReceipt ? "grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]" : ""}
+            className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}
           >
             <EvidenceActionList
               receipts={sorted}
@@ -391,6 +401,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-insights"
             role="tabpanel"
             aria-labelledby="tab-insights"
+            className="max-w-2xl"
           >
             <EvidenceAnalyticsPanel
               metrics={metrics}
@@ -405,6 +416,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-apps"
             role="tabpanel"
             aria-labelledby="tab-apps"
+            className="max-w-2xl"
           >
             <AppTab receipts={filtered} />
           </div>
@@ -415,15 +427,14 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-export"
             role="tabpanel"
             aria-labelledby="tab-export"
-            className="rounded-xl border border-slate-200 bg-white p-6"
           >
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-slate-500 mb-3">
               Download your evidence records as CSV or JSON.
             </p>
             <button
               type="button"
               onClick={handleOpenExport}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-blue/90 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-3 py-2 text-sm font-semibold text-white hover:bg-brand-blue/90 transition-colors"
             >
               <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
               Open export options
