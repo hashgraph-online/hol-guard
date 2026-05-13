@@ -315,3 +315,32 @@ def test_approval_open_repairs_ipv6_local_url(tmp_path: Path, monkeypatch: pytes
     assert exit_code == 0
     assert payload["approval_url"] == "http://127.0.0.1:4781/approvals/request-ipv6"
     assert payload["repaired"] is True
+
+
+def test_approval_open_preserves_malformed_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    request = GuardApprovalRequest(
+        request_id="request-bad-url",
+        harness="codex",
+        artifact_id="artifact-1",
+        artifact_name="Tool",
+        artifact_hash="hash",
+        policy_action="block",
+        recommended_scope="artifact",
+        changed_fields=(),
+        source_scope="local",
+        config_path="config.toml",
+        review_command="hol-guard approvals approve request-bad-url",
+        approval_url="http://[::1:4000/approvals/request-bad-url",
+    )
+    store.add_approval_request(request, "2026-05-12T00:00:00Z")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.approval_commands.load_guard_daemon_url",
+        lambda guard_home: "http://127.0.0.1:4781",
+    )
+
+    payload, exit_code = run_approval_open_command(argparse.Namespace(request_id="request-bad-url"), store=store)
+
+    assert exit_code == 0
+    assert payload["approval_url"] == "http://[::1:4000/approvals/request-bad-url"
+    assert payload["repaired"] is False

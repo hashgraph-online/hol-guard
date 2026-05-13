@@ -189,8 +189,11 @@ def _repaired_approval_url(approval_url: str, guard_home: Path) -> str:
     daemon_url = load_guard_daemon_url(guard_home)
     if daemon_url is None:
         return approval_url
-    parsed_approval = urllib.parse.urlparse(approval_url)
-    parsed_daemon = urllib.parse.urlparse(daemon_url)
+    try:
+        parsed_approval = urllib.parse.urlparse(approval_url)
+        parsed_daemon = urllib.parse.urlparse(daemon_url)
+    except ValueError:
+        return approval_url
     if parsed_approval.scheme not in {"http", "https"} or parsed_approval.hostname not in {
         "127.0.0.1",
         "::1",
