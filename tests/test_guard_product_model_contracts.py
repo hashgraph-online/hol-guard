@@ -200,7 +200,10 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert apis_by_method[("POST", "/v1/connect/result")].writes_state is True
     assert apis_by_method[("GET", "/v1/runtime")].writes_state is False
     assert apis_by_method[("GET", "/v1/harnesses")].writes_state is False
-    assert apis_by_method[("POST", "/v1/harnesses/{harness}/{action}")].writes_state is True
+    assert apis_by_method[("POST", "/v1/harnesses/{harness}/install")].writes_state is True
+    assert apis_by_method[("POST", "/v1/harnesses/{harness}/verify")].writes_state is False
+    assert apis_by_method[("POST", "/v1/harnesses/{harness}/repair")].writes_state is True
+    assert apis_by_method[("POST", "/v1/harnesses/{harness}/uninstall")].writes_state is True
     assert apis_by_method[("GET", "/v1/inventory")].writes_state is False
     assert apis_by_method[("GET", "/v1/requests/{id}")].writes_state is False
     assert apis_by_method[("POST", "/v1/requests/{id}/approve")].writes_state is True

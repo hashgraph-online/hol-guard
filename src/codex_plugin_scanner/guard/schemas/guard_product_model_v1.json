@@ -387,9 +387,30 @@
       "writes_state": false
     },
     {
-      "path": "/v1/harnesses/{harness}/{action}",
+      "path": "/v1/harnesses/{harness}/install",
       "method": "POST",
       "category": "supply_chain",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/harnesses/{harness}/verify",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/harnesses/{harness}/repair",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/harnesses/{harness}/uninstall",
+      "method": "POST",
+      "category": "config",
       "auth_required": true,
       "writes_state": true
     },
