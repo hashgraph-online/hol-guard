@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import os
@@ -5787,9 +5788,10 @@ def _git_repo_diff_helpers_are_unconfigured(cwd: Path | None) -> bool:
     config_paths = _git_repo_config_paths(cwd)
     if not config_paths:
         return True
+    repo_dir = _git_repo_root(cwd)
     seen_paths: set[Path] = set()
     for config_path in config_paths:
-        if not _git_config_tree_disables_diff_helpers(config_path, seen_paths=seen_paths):
+        if not _git_config_tree_disables_diff_helpers(config_path, seen_paths=seen_paths, repo_dir=repo_dir):
             return False
     return True
 
@@ -5812,6 +5814,16 @@ def _git_repo_config_paths(cwd: Path) -> tuple[Path, ...]:
                 paths.extend([common_dir / "config", common_dir / "config.worktree"])
             return tuple(paths)
     return _git_global_config_paths()
+
+
+def _git_repo_root(cwd: Path) -> Path | None:
+    current = cwd.resolve()
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
 
 
 def _git_global_config_paths() -> tuple[Path, ...]:
@@ -5865,7 +5877,7 @@ def _git_common_dir(git_dir: Path) -> Path:
     return common_dir
 
 
-def _git_config_tree_disables_diff_helpers(config_path: Path, *, seen_paths: set[Path]) -> bool:
+def _git_config_tree_disables_diff_helpers(config_path: Path, *, seen_paths: set[Path], repo_dir: Path | None) -> bool:
     normalized_path = config_path.expanduser().resolve()
     if normalized_path in seen_paths:
         return True
@@ -5878,15 +5890,16 @@ def _git_config_tree_disables_diff_helpers(config_path: Path, *, seen_paths: set
         return False
     if _git_config_enables_diff_helper(config_text):
         return False
-    for included_path in _git_config_include_paths(config_text, base_dir=normalized_path.parent):
-        if not _git_config_tree_disables_diff_helpers(included_path, seen_paths=seen_paths):
+    for included_path in _git_config_include_paths(config_text, base_dir=normalized_path.parent, repo_dir=repo_dir):
+        if not _git_config_tree_disables_diff_helpers(included_path, seen_paths=seen_paths, repo_dir=repo_dir):
             return False
     return True
 
 
-def _git_config_include_paths(config_text: str, *, base_dir: Path) -> tuple[Path, ...]:
+def _git_config_include_paths(config_text: str, *, base_dir: Path, repo_dir: Path | None) -> tuple[Path, ...]:
     paths: list[Path] = []
     section = ""
+    section_active = False
     for raw_line in config_text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith(("#", ";")):
@@ -5894,8 +5907,9 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path) -> tuple[Path
         section_match = re.fullmatch(r"\[([^\]]+)\](?:\s*[#;].*)?", line)
         if section_match:
             section = section_match.group(1).strip().lower()
+            section_active = _git_include_section_is_active(section, repo_dir=repo_dir)
             continue
-        if not section.startswith("include"):
+        if not section_active:
             continue
         key_match = re.match(r"(?i)^path\s*=\s*(.+)$", line)
         if key_match is None:
@@ -5905,6 +5919,66 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path) -> tuple[Path
             include_path = (base_dir / include_path).resolve()
         paths.append(include_path)
     return tuple(paths)
+
+
+def _git_include_section_is_active(section: str, *, repo_dir: Path | None) -> bool:
+    if section == "include":
+        return True
+    if not section.startswith("includeif"):
+        return False
+    if repo_dir is None:
+        return False
+    condition_match = re.search(r'"([^"]+)"', section)
+    condition = condition_match.group(1) if condition_match else section.removeprefix("includeif").strip()
+    if condition.startswith("gitdir/i:"):
+        return _git_gitdir_condition_matches(
+            condition.removeprefix("gitdir/i:"),
+            repo_dir=repo_dir,
+            case_sensitive=False,
+        )
+    if condition.startswith("gitdir:"):
+        return _git_gitdir_condition_matches(condition.removeprefix("gitdir:"), repo_dir=repo_dir, case_sensitive=True)
+    if condition.startswith("onbranch:"):
+        return _git_onbranch_condition_matches(condition.removeprefix("onbranch:"), repo_dir=repo_dir)
+    return False
+
+
+def _git_gitdir_condition_matches(pattern: str, *, repo_dir: Path, case_sensitive: bool) -> bool:
+    normalized_pattern = str(Path(pattern).expanduser())
+    if not Path(normalized_pattern).is_absolute():
+        return False
+    repo_text = repo_dir.as_posix().rstrip("/") + "/"
+    pattern_text = Path(normalized_pattern).as_posix()
+    if pattern_text.endswith("/"):
+        pattern_text = f"{pattern_text}**"
+    elif pattern_text.endswith("/**"):
+        pass
+    else:
+        pattern_text = pattern_text.rstrip("/") + "/**"
+    if case_sensitive:
+        return fnmatch.fnmatchcase(repo_text, pattern_text)
+    return fnmatch.fnmatchcase(repo_text.lower(), pattern_text.lower())
+
+
+def _git_onbranch_condition_matches(pattern: str, *, repo_dir: Path) -> bool:
+    git_dir = repo_dir / ".git"
+    head_path: Path | None = None
+    if git_dir.is_dir():
+        head_path = git_dir / "HEAD"
+    elif git_dir.is_file():
+        parsed_git_dir = _git_dir_from_file(git_dir)
+        if parsed_git_dir is not None:
+            head_path = parsed_git_dir / "HEAD"
+    if head_path is None or not head_path.is_file():
+        return False
+    try:
+        head = head_path.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return False
+    prefix = "ref: refs/heads/"
+    if not head.startswith(prefix):
+        return False
+    return fnmatch.fnmatchcase(head.removeprefix(prefix), pattern)
 
 
 def _git_config_value_without_inline_comment(raw_value: str) -> str:
