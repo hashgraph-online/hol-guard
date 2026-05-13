@@ -733,6 +733,8 @@ class GuardStore:
             self._ensure_policy_column(connection, "expires_at", "text")
             self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
             self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
+            self._ensure_runtime_receipts_column(connection, "diff_summary", "text")
+            self._ensure_runtime_receipts_column(connection, "approval_source", "text")
             self._ensure_approval_column(connection, "artifact_type", "text not null default 'artifact'")
             self._ensure_approval_column(connection, "launch_target", "text")
             self._ensure_approval_column(connection, "transport", "text")
@@ -1449,9 +1451,10 @@ class GuardStore:
                 insert into runtime_receipts (
                   receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                   changed_capabilities_json,
-                  provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json, timestamp
+                  provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
+                  diff_summary, approval_source, timestamp
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     receipt.receipt_id,
@@ -1466,6 +1469,8 @@ class GuardStore:
                     receipt.artifact_name,
                     receipt.source_scope,
                     json.dumps(list(receipt.scanner_evidence), sort_keys=True),
+                    receipt.diff_summary,
+                    receipt.approval_source,
                     receipt.timestamp,
                 ),
             )
@@ -1485,19 +1490,32 @@ class GuardStore:
                 ),
             )
 
-    def list_receipts(self, limit: int = 50) -> list[dict[str, object]]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
+    def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
+        if harness is not None:
+            query = """
                 select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                         changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json, timestamp
+                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
+                       diff_summary, approval_source, timestamp
+                from runtime_receipts
+                where harness = ?
+                order by timestamp desc
+                limit ?
+                """
+            params: tuple[object, ...] = (harness, limit)
+        else:
+            query = """
+                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+                        changed_capabilities_json,
+                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
+                       diff_summary, approval_source, timestamp
                 from runtime_receipts
                 order by timestamp desc
                 limit ?
-                """,
-                (limit,),
-            ).fetchall()
+                """
+            params = (limit,)
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
         return [
             {
                 "receipt_id": str(row["receipt_id"]),
@@ -1512,6 +1530,8 @@ class GuardStore:
                 "artifact_name": row["artifact_name"],
                 "source_scope": row["source_scope"],
                 "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
+                "diff_summary": row["diff_summary"],
+                "approval_source": row["approval_source"],
                 "timestamp": str(row["timestamp"]),
             }
             for row in rows
@@ -1523,7 +1543,8 @@ class GuardStore:
                 """
                 select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                         changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json, timestamp
+                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
+                       diff_summary, approval_source, timestamp
                 from runtime_receipts
                 where receipt_id = ?
                 """,
@@ -1544,6 +1565,8 @@ class GuardStore:
             "artifact_name": row["artifact_name"],
             "source_scope": row["source_scope"],
             "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
+            "diff_summary": row["diff_summary"],
+            "approval_source": row["approval_source"],
             "timestamp": str(row["timestamp"]),
         }
 
@@ -1553,7 +1576,8 @@ class GuardStore:
                 """
                 select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                         changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json, timestamp
+                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
+                       diff_summary, approval_source, timestamp
                 from runtime_receipts
                 where harness = ? and artifact_id = ?
                 order by timestamp desc
@@ -1576,6 +1600,8 @@ class GuardStore:
             "artifact_name": row["artifact_name"],
             "source_scope": row["source_scope"],
             "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
+            "diff_summary": row["diff_summary"],
+            "approval_source": row["approval_source"],
             "timestamp": str(row["timestamp"]),
         }
 

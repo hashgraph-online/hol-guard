@@ -1472,7 +1472,9 @@ class TestGuardApprovals:
 
     @pytest.mark.parametrize("action", ["approve", "block"])
     @pytest.mark.parametrize("scope", ["artifact", "workspace", "publisher", "harness", "global"])
-    def test_guard_daemon_resolution_route_accepts_all_scope_kinds_without_clearing_queue(self, tmp_path, action, scope):
+    def test_guard_daemon_resolution_route_accepts_all_scope_kinds_without_clearing_queue(
+        self, tmp_path, action, scope
+    ):
         store = GuardStore(tmp_path / "guard-home")
         workspace = tmp_path / "workspace"
         request_id = f"req-{action}-{scope}"

@@ -12702,6 +12702,8 @@ function getDemoDiff(artifactId, harness) {
 }
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
+let guardTokenOverride = null;
+let guardTokenLocationKey = null;
 async function readJson(input, init) {
   const response = await fetch(guardApiInput(input), withGuardAuth(init));
   if (!response.ok) {
@@ -12731,12 +12733,58 @@ function guardParam(name) {
   return guardParams().get(name);
 }
 function readGuardToken() {
+  const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (guardTokenLocationKey !== locationKey) {
+    guardTokenOverride = null;
+    guardTokenLocationKey = locationKey;
+  }
+  if (guardTokenOverride !== null) {
+    return guardTokenOverride;
+  }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
     window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
     return guardToken;
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+}
+function saveGuardToken(guardToken) {
+  guardTokenOverride = guardToken;
+  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+}
+function parseAuthToken(payload) {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const authToken = payload["auth_token"];
+  return typeof authToken === "string" && authToken.trim() ? authToken : null;
+}
+async function refreshGuardToken() {
+  const response = await fetch(guardApiInput("/v1/initialize"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_name: "guard-dashboard",
+      client_title: "HOL Guard dashboard",
+      surface: "dashboard",
+      capabilities: ["approval-resolution"],
+      supported_protocol_versions: [1]
+    })
+  });
+  if (!response.ok) {
+    return null;
+  }
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    return null;
+  }
+  const authToken = parseAuthToken(payload);
+  if (authToken !== null) {
+    saveGuardToken(authToken);
+  }
+  return authToken;
 }
 function readGuardDaemonOrigin() {
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
@@ -12777,7 +12825,9 @@ function withGuardAuth(init) {
     return init;
   }
   const headers = new Headers(init?.headers);
-  headers.set("X-Guard-Token", guardToken);
+  if (!headers.has("X-Guard-Token")) {
+    headers.set("X-Guard-Token", guardToken);
+  }
   return {
     ...init,
     headers
@@ -12785,6 +12835,9 @@ function withGuardAuth(init) {
 }
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
+  return guardToken ? { "X-Guard-Token": guardToken } : {};
+}
+function guardAuthHeadersForToken(guardToken) {
   return guardToken ? { "X-Guard-Token": guardToken } : {};
 }
 function guardAwareHref(href) {
@@ -13316,11 +13369,12 @@ async function resolveRequestWithQueueResult(input) {
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
-  const payload = await readJson(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
+  const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
+  const init = (guardToken = readGuardToken()) => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...guardAuthHeaders()
+      ...guardAuthHeadersForToken(guardToken)
     },
     body: JSON.stringify({
       action: input.action,
@@ -13329,6 +13383,17 @@ async function resolveRequestWithQueueResult(input) {
       reason: input.reason || void 0
     })
   });
+  let response = await fetchGuardApi(path, init());
+  if (response.status === 401) {
+    const refreshedToken = await refreshGuardToken();
+    if (refreshedToken !== null) {
+      response = await fetchGuardApi(path, init(refreshedToken));
+    }
+  }
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+  const payload = await response.json();
   return normalizeQueueResolution(payload);
 }
 async function clearEvidence() {
@@ -13761,22 +13826,6 @@ function buildMemorySummary(item, receipt) {
     return `HOL Guard has not saved an earlier approval for ${item.artifact_name}.`;
   }
   return `The last saved decision for ${item.artifact_name} was ${receipt.policy_decision}.`;
-}
-function scopeLabel(scope) {
-  switch (scope) {
-    case "artifact":
-      return "This retry only";
-    case "workspace":
-      return "Same action in this project";
-    case "publisher":
-      return "This source in this app";
-    case "harness":
-      return "This app";
-    case "global":
-      return "Every project on this machine";
-    default:
-      return scope;
-  }
 }
 function policyActionLabel(action) {
   switch (action) {
@@ -17761,8 +17810,7 @@ function ReviewDecisionCard(props) {
   const [showConsequences, setShowConsequences] = reactExports.useState(false);
   const [showEvidence, setShowEvidence] = reactExports.useState(false);
   const [showTechnical, setShowTechnical] = reactExports.useState(true);
-  const [confirmScope, setConfirmScope] = reactExports.useState(null);
-  const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const [lastAction, setLastAction] = reactExports.useState(null);
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
@@ -17775,8 +17823,7 @@ function ReviewDecisionCard(props) {
       setScope(normalizeDecisionScope(item, item.recommended_scope));
       setResolved(null);
       setSubmitting(null);
-      setConfirmScope(null);
-      setPendingAction(null);
+      setLastAction(null);
       setErrorMessage(null);
     }
   }, [item?.request_id]);
@@ -17788,17 +17835,6 @@ function ReviewDecisionCard(props) {
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
       if (submitting !== null) return;
-      if (confirmScope !== null) {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          handleConfirm();
-        }
-        if (event.key === "Escape") {
-          event.preventDefault();
-          handleCancelConfirm();
-        }
-        return;
-      }
       const target = event.target;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
       if (event.key === "a" || event.key === "A") {
@@ -17817,7 +17853,7 @@ function ReviewDecisionCard(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, confirmScope, scope, item?.request_id, availableScopeChoices]);
+  }, [submitting, scope, item?.request_id, availableScopeChoices]);
   const handleResolve = reactExports.useCallback(
     async (action) => {
       if (!item) return;
@@ -17836,33 +17872,17 @@ function ReviewDecisionCard(props) {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
       } finally {
         setSubmitting(null);
-        setConfirmScope(null);
-        setPendingAction(null);
       }
     },
     [item, scope, props.onResolve]
   );
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
-      const broadScopes = ["publisher", "harness", "global"];
-      if (broadScopes.includes(scope)) {
-        setConfirmScope(scope);
-        setPendingAction(action);
-      } else {
-        void handleResolve(action);
-      }
+      setLastAction(action);
+      void handleResolve(action);
     },
-    [scope, handleResolve]
+    [handleResolve]
   );
-  const handleConfirm = reactExports.useCallback(() => {
-    if (pendingAction !== null) {
-      void handleResolve(pendingAction);
-    }
-  }, [pendingAction, handleResolve]);
-  const handleCancelConfirm = reactExports.useCallback(() => {
-    setConfirmScope(null);
-    setPendingAction(null);
-  }, []);
   if (!detail || !item) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
@@ -17897,29 +17917,6 @@ function ReviewDecisionCard(props) {
         ]
       }
     ),
-    confirmScope !== null && pendingAction !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in rounded-xl border border-brand-attention/15 bg-brand-attention/[0.03] p-4", role: "alertdialog", "aria-modal": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold text-brand-dark", children: [
-          pendingAction === "allow" ? "Allow" : "Block",
-          " for ",
-          availableScopeChoices.find((s) => s.value === confirmScope)?.label,
-          "?"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
-          "This choice will apply ",
-          confirmScope === "global" ? "across all your projects" : "broadly",
-          ". Are you sure?"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleConfirm, "data-primary": "true", children: [
-            "Yes, ",
-            pendingAction
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleCancelConfirm, children: "Cancel" })
-        ] })
-      ] })
-    ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
@@ -17994,7 +17991,7 @@ function ReviewDecisionCard(props) {
             {
               onClick: () => {
                 setErrorMessage(null);
-                if (pendingAction) handleRequestResolve(pendingAction);
+                if (lastAction) handleRequestResolve(lastAction);
               },
               className: "mt-2 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
               children: "Retry"
@@ -18273,53 +18270,6 @@ function BlockConsequence() {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: "If you block: HOL Guard will stop this action and you can allow it again any time from the Review Queue." })
   ] });
 }
-function ConfirmModal(props) {
-  const handleBackdropClick = reactExports.useCallback(
-    (e) => {
-      if (e.target === e.currentTarget) props.onCancel();
-    },
-    [props.onCancel]
-  );
-  const isAllow = props.action === "allow";
-  const titleText = isAllow ? "Broad approval — are you sure?" : "Broad block — are you sure?";
-  const confirmText = isAllow ? "Confirm approval" : "Confirm block";
-  const confirmClass = isAllow ? "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90" : "rounded-full bg-brand-purple px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-purple/90";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: "fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm",
-      onClick: handleBackdropClick,
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold tracking-tight text-brand-dark", children: titleText }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm leading-6 text-brand-dark/70", children: [
-          "This will remember your choice for ",
-          props.scopeLabel,
-          ". This is harder to undo."
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: props.onCancel,
-              className: "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
-              children: "Go back"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: props.onConfirm,
-              className: confirmClass,
-              children: confirmText
-            }
-          )
-        ] })
-      ] })
-    }
-  );
-}
 const scopeOptions = [
   {
     value: "artifact",
@@ -18336,7 +18286,6 @@ const scopeOptions = [
   { value: "global", label: "Every project", description: "Use this choice across this machine." }
 ];
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
-const broadScopeValues = /* @__PURE__ */ new Set(["publisher", "harness", "global"]);
 const queuePageSize = 8;
 function ApprovalCenterLayout(props) {
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
@@ -18809,7 +18758,6 @@ function DecisionWorkspace(props) {
   const [reason, setReason] = reactExports.useState("approved in local approval center");
   const [submitting, setSubmitting] = reactExports.useState(null);
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
-  const [confirmPending, setConfirmPending] = reactExports.useState(null);
   const [resolvedBanner, setResolvedBanner] = reactExports.useState(null);
   const [resolvedState, setResolvedState] = reactExports.useState("idle");
   const bannerTimerRef = reactExports.useRef(null);
@@ -18865,40 +18813,16 @@ function DecisionWorkspace(props) {
   );
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
-      if (broadScopeValues.has(scope)) {
-        setConfirmPending(action);
-      } else {
-        void handleResolve(action);
-      }
+      void handleResolve(action);
     },
-    [scope, handleResolve]
+    [handleResolve]
   );
-  const handleConfirmResolve = reactExports.useCallback(() => {
-    if (confirmPending !== null) {
-      void handleResolve(confirmPending);
-      setConfirmPending(null);
-    }
-  }, [confirmPending, handleResolve]);
-  const handleCancelConfirm = reactExports.useCallback(() => {
-    setConfirmPending(null);
-  }, []);
   const handleAllowDirect = reactExports.useCallback(() => handleRequestResolve("allow"), [handleRequestResolve]);
   const handleBlockDirect = reactExports.useCallback(() => handleRequestResolve("block"), [handleRequestResolve]);
   reactExports.useEffect(() => {
     if (props.detail.kind !== "ready") return;
     const onKeyDown = (event) => {
       if (submitting !== null) return;
-      if (confirmPending !== null) {
-        if (event.key === "Enter") {
-          handleConfirmResolve();
-          return;
-        }
-        if (event.key === "Escape") {
-          handleCancelConfirm();
-          return;
-        }
-        return;
-      }
       const target = event.target;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable) return;
       if (event.key === "a" || event.key === "A") handleRequestResolve("allow");
@@ -18906,7 +18830,7 @@ function DecisionWorkspace(props) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.detail.kind, submitting, handleRequestResolve, confirmPending, handleConfirmResolve, handleCancelConfirm]);
+  }, [props.detail.kind, submitting, handleRequestResolve]);
   if (props.detail.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       resolvedState === "decided" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -18981,15 +18905,6 @@ function DecisionWorkspace(props) {
         ". No further action needed."
       ] })
     ] }),
-    confirmPending !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ConfirmModal,
-      {
-        action: confirmPending,
-        scopeLabel: scopeLabel(scope),
-        onConfirm: handleConfirmResolve,
-        onCancel: handleCancelConfirm
-      }
-    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       RuleBuilder,
       {
