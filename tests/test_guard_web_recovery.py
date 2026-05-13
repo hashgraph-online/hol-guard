@@ -104,8 +104,47 @@ class TestApproveBlockRecoveryPayloads:
         recovery = payload.get("recovery")
         assert isinstance(recovery, dict), "Recovery payload must be a dict"
         assert recovery.get("code") == "request_resolved"
+        assert recovery.get("queue_url") == f"http://127.0.0.1:{daemon.port}/#/inbox"
         title = recovery.get("title", "")
         assert "already" in title.lower() or "resolved" in title.lower()
+
+    def test_approve_returns_harness_retry_hint_for_browser_resume(self, tmp_path: Path) -> None:
+        store = GuardStore(tmp_path / "guard")
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-opencode-resume",
+                harness="opencode",
+                artifact_id="opencode:project:test_tool",
+                artifact_name="test_tool",
+                artifact_hash="hash-test",
+                policy_action="block",
+                recommended_scope="artifact",
+                changed_fields=(),
+                source_scope="local",
+                config_path="/tmp/config",
+                review_command="hol-guard approvals approve req-opencode-resume",
+                approval_url="http://127.0.0.1:6174/#/approve/req-opencode-resume",
+            ),
+            "2026-01-01T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/req-opencode-resume/approve",
+                data=json.dumps({"scope": "artifact"}).encode("utf-8"),
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert payload["resolved"] is True
+        assert payload["retry_hint"] == "Return to OpenCode and retry"
+        assert payload["copy"] == {"title": "Approved. Retry in chat.", "body": "Return to OpenCode and retry"}
 
     def test_approve_with_wrong_token_returns_recovery_payload_not_bare_401(self, tmp_path: Path) -> None:
         """T697/T698: approve/block with wrong token returns structured recovery payload."""
@@ -188,3 +227,4 @@ class TestApproveBlockRecoveryPayloads:
         assert isinstance(recovery, dict), "404 GET on stale request must include recovery payload"
         assert recovery.get("code") in {"request_unknown", "not_found"}
         assert recovery.get("title") is not None
+        assert recovery.get("queue_url") == f"http://127.0.0.1:{daemon.port}/#/inbox"
