@@ -1,7 +1,46 @@
 import { useRef, useCallback } from "react";
 import type { GuardApprovalRequest, GuardQueueResolutionResult } from "./guard-types";
 
-export type QueueSortDirection = "newest" | "oldest" | "category";
+export type QueueSortDirection = "newest" | "oldest" | "category" | "highest_risk";
+
+export type SemanticGroupId = "all" | "files" | "shell" | "network" | "tools" | "other";
+
+export const REVIEW_SEMANTIC_GROUPS: { id: SemanticGroupId; label: string; matches: QueueCategoryId[] }[] = [
+  { id: "all", label: "All", matches: [] },
+  {
+    id: "files",
+    label: "Files",
+    matches: ["file_read", "source_edit", "docs_edit", "generated_inventory_edit"],
+  },
+  {
+    id: "shell",
+    label: "Shell",
+    matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control"],
+  },
+  {
+    id: "network",
+    label: "Network & Data",
+    matches: ["network", "secret_exfiltration", "secret_file_read", "credential_output", "file_upload"],
+  },
+  {
+    id: "tools",
+    label: "Tools & Apps",
+    matches: ["mcp_tool", "package_script", "harness_start", "browser_action", "package_install"],
+  },
+  {
+    id: "other",
+    label: "Other",
+    matches: [
+      "prompt_injection",
+      "system_prompt_access",
+      "guard_bypass",
+      "config_change",
+      "container_or_deploy",
+      "persistence_change",
+      "other",
+    ],
+  },
+];
 
 export type QueueCategoryId =
   | "credential_output"
@@ -205,6 +244,74 @@ export const QUEUE_CATEGORIES: QueueCategory[] = [
 ];
 
 const QUEUE_CATEGORY_BY_ID = new Map(QUEUE_CATEGORIES.map((category) => [category.id, category]));
+
+const SIGNAL_SEVERITY_SCORE: Record<string, number> = {
+  critical: 1,
+  high: 2,
+  medium: 3,
+  low: 4,
+  info: 5,
+};
+
+const CATEGORY_RISK_SCORE = new Map<QueueCategoryId, number>([
+  ["secret_exfiltration", 1],
+  ["credential_output", 1],
+  ["guard_bypass", 1],
+  ["prompt_injection", 2],
+  ["system_prompt_access", 2],
+  ["secret_file_read", 2],
+  ["encoded_shell", 2],
+  ["persistence_change", 3],
+  ["destructive_shell", 3],
+  ["file_delete_cleanup", 3],
+  ["network", 3],
+  ["container_or_deploy", 4],
+  ["git_operation", 4],
+  ["process_control", 4],
+  ["file_upload", 4],
+  ["package_install", 4],
+  ["package_script", 4],
+  ["source_edit", 5],
+  ["config_change", 5],
+  ["shell_command", 5],
+  ["mcp_tool", 5],
+  ["browser_action", 5],
+  ["harness_start", 5],
+  ["file_read", 6],
+  ["docs_edit", 6],
+  ["generated_inventory_edit", 6],
+  ["other", 6],
+]);
+
+export function riskScore(item: GuardApprovalRequest): number {
+  if (item.policy_action === "block") {
+    return 0;
+  }
+  const signals = item.decision_v2_json?.signals ?? [];
+  if (signals.length > 0) {
+    const minSeverityScore = Math.min(...signals.map((s) => SIGNAL_SEVERITY_SCORE[s.severity] ?? 6));
+    const dedupeBonus = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
+    return minSeverityScore + dedupeBonus;
+  }
+  const categoryScore = CATEGORY_RISK_SCORE.get(resolveQueueCategory(item).id) ?? 6;
+  const dedupeBonus = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
+  return categoryScore + dedupeBonus;
+}
+
+export function buildStaleRequestCopy(item: GuardApprovalRequest): string | null {
+  if (item.status === "resolved") {
+    return "This request was already decided. Return to your AI app to resume, or reload the queue.";
+  }
+  if (item.status === "expired") {
+    return "This request timed out. Return to your AI app to try the action again, then review the new request here.";
+  }
+  const seenAt = item.last_seen_at ?? item.created_at;
+  const ageMinutes = (Date.now() - new Date(seenAt).getTime()) / 60000;
+  if (ageMinutes > 30 && item.status === "pending") {
+    return "This request has been waiting a while. If you already decided this elsewhere, reload the queue to see the latest state.";
+  }
+  return null;
+}
 
 export type QueueGroup = {
   primary: GuardApprovalRequest;
@@ -779,6 +886,17 @@ export function sortQueue(
   items: GuardApprovalRequest[],
   direction: QueueSortDirection
 ): GuardApprovalRequest[] {
+  if (direction === "highest_risk") {
+    const scores = new Map(items.map((item) => [item.request_id, riskScore(item)]));
+    return [...items].sort((a, b) => {
+      const scoreDelta = (scores.get(a.request_id) ?? 6) - (scores.get(b.request_id) ?? 6);
+      if (scoreDelta !== 0) return scoreDelta;
+      return (
+        new Date(b.last_seen_at ?? b.created_at).getTime() -
+        new Date(a.last_seen_at ?? a.created_at).getTime()
+      );
+    });
+  }
   const categoryLabels =
     direction === "category"
       ? new Map(items.map((item) => [item.request_id, resolveQueueCategory(item).label]))

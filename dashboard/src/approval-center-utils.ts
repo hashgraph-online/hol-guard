@@ -67,6 +67,14 @@ function resolveDataFlowSinkLabel(signal: RiskSignalV2): string {
   return "External sink";
 }
 
+export function buildRetryAfterApprovalCopy(item: GuardApprovalRequest, action: "allow" | "block"): string {
+  const harness = harnessDisplayName(item.harness);
+  if (action === "allow") {
+    return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;
+  }
+  return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
+}
+
 export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): string | null {
   if (envelope.action_type === "shell_command" && envelope.command !== null) {
     return envelope.command;
