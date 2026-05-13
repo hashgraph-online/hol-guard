@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import redaction
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import product
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
@@ -137,6 +138,11 @@ class TestLocalPathRedaction:
         assert redact_local_path("/Users/alice/.hol-guard/config.toml", home_dir=Path("/Users/alice")) == (
             "~/.hol-guard/config.toml"
         )
+
+    def test_redact_local_path_survives_unresolved_current_home(self, monkeypatch) -> None:
+        monkeypatch.setattr(redaction, "_current_home_path", lambda: None)
+
+        assert redact_local_path("/Users/alice/.hol-guard/config.toml") == "~/.hol-guard/config.toml"
 
     def test_status_payload_omits_raw_username_and_home_paths(self, tmp_path: Path, monkeypatch) -> None:
         user_home = Path("/Users/alice")

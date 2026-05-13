@@ -119,9 +119,18 @@ def redact_local_path(value: str, *, home_dir: Path | None = None) -> str:
     redacted_value = value
     if home_dir is not None:
         redacted_value = _replace_home_prefix(redacted_value, str(home_dir))
-    redacted_value = _replace_home_prefix(redacted_value, str(Path.home()))
-    redacted_value = _POSIX_USER_PATH_PATTERN.sub(_replace_posix_user_path, redacted_value)
-    return _WINDOWS_USER_PATH_PATTERN.sub(_replace_windows_user_path, redacted_value)
+    current_home = _current_home_path()
+    if current_home is not None:
+        redacted_value = _replace_home_prefix(redacted_value, str(current_home))
+    redacted_value = _POSIX_USER_PATH_PATTERN.sub(_replace_user_path, redacted_value)
+    return _WINDOWS_USER_PATH_PATTERN.sub(_replace_user_path, redacted_value)
+
+
+def _current_home_path() -> Path | None:
+    try:
+        return Path.home()
+    except RuntimeError:
+        return None
 
 
 def _replace_home_prefix(value: str, home_value: str) -> str:
@@ -136,11 +145,6 @@ def _replace_home_prefix(value: str, home_value: str) -> str:
     return value
 
 
-def _replace_posix_user_path(match: re.Match[str]) -> str:
-    rest = match.group("rest")
-    return f"{match.group('prefix')}~{rest}"
-
-
-def _replace_windows_user_path(match: re.Match[str]) -> str:
+def _replace_user_path(match: re.Match[str]) -> str:
     rest = match.group("rest")
     return f"{match.group('prefix')}~{rest}"
