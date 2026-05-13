@@ -163,7 +163,7 @@ _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo",
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
-_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>]*)"
+_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>$`]*)"
 _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
     rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>perl|python|python3|ruby)\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
@@ -2634,6 +2634,9 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
+    for substitution_payload in _shell_command_substitution_payloads(normalized):
+        if _looks_destructive_shell_command(substitution_payload):
+            return True
     node_heredoc_script = _single_node_heredoc_script(normalized)
     if node_heredoc_script is not None:
         if _looks_like_safe_node_generated_file_heredoc(normalized, node_heredoc_script):
