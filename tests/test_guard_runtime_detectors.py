@@ -823,6 +823,43 @@ def test_safe_decode_detector_flags_opaque_payload_near_secret_context(tmp_path:
     assert any(s.signal_id == "encoded.opaque-sensitive" for s in signals)
 
 
+def test_safe_decode_detector_runs_with_encoded_category_filter(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-opaque-filtered",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="bash",
+        command=f"ssh-add ~/.ssh/id_ecdsa; openssl enc -d -base64 <<< '{opaque}'",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    result = DetectorRegistry((SafeDecodeDetector(),), clock=StepClock([0.0, 0.001])).run(
+        action,
+        _context(tmp_path),
+        enabled_categories=("encoded",),
+    )
+
+    assert any(s.signal_id == "encoded.opaque-sensitive" for s in result.signals)
+
+
 def test_safe_decode_detector_ignores_benign_binary_payload(tmp_path: Path) -> None:
     import base64
 

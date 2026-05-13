@@ -52,6 +52,11 @@ DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
 )
 DetectorRunStatus = Literal["ok", "disabled", "filtered", "timeout", "error"]
 _SLOW_DETECTOR_THRESHOLD_MS: int = 100
+_SENSITIVE_DECODE_CONTEXT_PATTERN = re.compile(
+    r"\.env|\.npmrc|id_(?:rsa|ed25519|ecdsa|dsa)|credential|secret|token|api[_-]?key|"
+    r"private[_-]?key|password|\.pem|\.key|aws[_-]",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,6 +235,7 @@ class SafeDecodeDetector:
 
     detector_id = "safe-decode.content"
     categories: tuple[RiskSignalCategory, ...] = (
+        "encoded",
         "execution",
         "network",
         "secret",
@@ -342,21 +348,7 @@ def _looks_like_opaque_decoded_payload(text: str) -> bool:
 
 
 def _has_sensitive_decode_context(text: str) -> bool:
-    lowered = text.lower()
-    sensitive_tokens = (
-        ".env",
-        ".npmrc",
-        "id_rsa",
-        "id_ed25519",
-        "credential",
-        "secret",
-        "token",
-        "api_key",
-        "apikey",
-        "private_key",
-        "password",
-    )
-    return any(token in lowered for token in sensitive_tokens)
+    return _SENSITIVE_DECODE_CONTEXT_PATTERN.search(text) is not None
 
 
 class FalsePositiveSuppressorDetector:
