@@ -172,7 +172,7 @@ HERMES_OPENCLAW_RUNTIME_MODELS = {
         docker_proof=True,
         drift=True,
         messenger_channels=("telegram", "terminal", "api"),
-        token_scopes=("runtime:sync", "runtime:read", "capabilities:read"),
+        token_scopes=("runtime:sync", "runtime:read", "capabilities:read", "messenger:bind"),
     ),
     "openclaw": RuntimeModel(
         runtime="openclaw",
@@ -181,7 +181,7 @@ HERMES_OPENCLAW_RUNTIME_MODELS = {
         docker_proof=True,
         drift=True,
         messenger_channels=("terminal", "api"),
-        token_scopes=("runtime:sync", "runtime:read", "capabilities:read"),
+        token_scopes=("runtime:sync", "runtime:read", "capabilities:read", "messenger:bind"),
     ),
 }
 
@@ -207,11 +207,12 @@ LOCAL_ROUTE_OWNERSHIP = (
         route="/evidence",
         persona=("solo_engineer", "security_lead"),
         auth_required=True,
-        writes_state=False,
+        writes_state=True,
     ),
     RouteOwnership(route="/settings", persona=("solo_engineer",), auth_required=True, writes_state=True),
 )
 LOCAL_API_OWNERSHIP = (
+    ApiOwnership(path="/v1/runtime", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/harnesses", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(
         path="/v1/harnesses/{harness}/{action}",
@@ -220,6 +221,7 @@ LOCAL_API_OWNERSHIP = (
         auth_required=True,
         writes_state=True,
     ),
+    ApiOwnership(path="/v1/inventory", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/requests", method="GET", category="unknown", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/requests/{id}", method="GET", category="unknown", auth_required=True, writes_state=False),
     ApiOwnership(
@@ -236,9 +238,22 @@ LOCAL_API_OWNERSHIP = (
         auth_required=True,
         writes_state=True,
     ),
+    ApiOwnership(path="/v1/receipts", method="GET", category="unknown", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/receipts/latest", method="GET", category="unknown", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/receipts/{id}", method="GET", category="unknown", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/policy", method="GET", category="config", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/policy/clear", method="POST", category="config", auth_required=True, writes_state=True),
+    ApiOwnership(
+        path="/v1/artifacts/{id}/diff",
+        method="GET",
+        category="unknown",
+        auth_required=True,
+        writes_state=False,
+    ),
     ApiOwnership(path="/v1/evidence", method="GET", category="unknown", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/evidence", method="DELETE", category="destructive", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/evidence/export", method="GET", category="unknown", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/daemon/repair", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/settings", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/settings", method="POST", category="config", auth_required=True, writes_state=True),
 )

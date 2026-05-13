@@ -145,7 +145,7 @@ def test_external_models_cover_agents_billing_affiliate_seo_funnel_and_privacy()
     assert EXTERNAL_INTEL_SOURCE_VALUES == ("cve", "advisory", "cisco", "openssf", "slsa", "trust_score")
     assert set(HERMES_OPENCLAW_RUNTIME_MODELS) == {"hermes", "openclaw"}
     for model in HERMES_OPENCLAW_RUNTIME_MODELS.values():
-        assert model.token_scopes == ("runtime:sync", "runtime:read", "capabilities:read")
+        assert model.token_scopes == ("runtime:sync", "runtime:read", "capabilities:read", "messenger:bind")
     assert BILLING_PLAN_VALUES == ("free", "pro", "team", "enterprise")
     assert AFFILIATE_FIELD_VALUES == (
         "affiliate",
@@ -183,15 +183,22 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert routes["/approvals"].writes_state is True
     assert routes["/approvals/{id}"].writes_state is True
     assert routes["/fleet"].writes_state is True
-    assert routes["/evidence"].writes_state is False
+    assert routes["/evidence"].writes_state is True
     for route in routes:
         assert _GuardDaemonHandler._is_dashboard_route(route)
     apis_by_method = {(api.method, api.path): api for api in LOCAL_API_OWNERSHIP}
+    assert apis_by_method[("GET", "/v1/runtime")].writes_state is False
     assert apis_by_method[("GET", "/v1/harnesses")].writes_state is False
     assert apis_by_method[("POST", "/v1/harnesses/{harness}/{action}")].writes_state is True
+    assert apis_by_method[("GET", "/v1/inventory")].writes_state is False
     assert apis_by_method[("GET", "/v1/requests/{id}")].writes_state is False
     assert apis_by_method[("POST", "/v1/requests/{id}/approve")].writes_state is True
+    assert apis_by_method[("GET", "/v1/receipts")].writes_state is False
+    assert apis_by_method[("GET", "/v1/policy")].category == "config"
+    assert apis_by_method[("POST", "/v1/policy/clear")].writes_state is True
+    assert apis_by_method[("GET", "/v1/artifacts/{id}/diff")].writes_state is False
     assert apis_by_method[("DELETE", "/v1/evidence")].category == "destructive"
+    assert apis_by_method[("POST", "/v1/daemon/repair")].writes_state is True
     assert apis_by_method[("GET", "/v1/evidence/export")].auth_required is True
     assert apis_by_method[("GET", "/v1/settings")].writes_state is False
     assert apis_by_method[("POST", "/v1/settings")].category == "config"

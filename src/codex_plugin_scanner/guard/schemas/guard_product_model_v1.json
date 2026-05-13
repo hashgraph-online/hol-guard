@@ -153,7 +153,8 @@
       "token_scopes": [
         "runtime:sync",
         "runtime:read",
-        "capabilities:read"
+        "capabilities:read",
+        "messenger:bind"
       ]
     },
     "openclaw": {
@@ -169,7 +170,8 @@
       "token_scopes": [
         "runtime:sync",
         "runtime:read",
-        "capabilities:read"
+        "capabilities:read",
+        "messenger:bind"
       ]
     }
   },
@@ -296,7 +298,7 @@
         "security_lead"
       ],
       "auth_required": true,
-      "writes_state": false
+      "writes_state": true
     },
     {
       "route": "/settings",
@@ -308,6 +310,13 @@
     }
   ],
   "local_apis": [
+    {
+      "path": "/v1/runtime",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
     {
       "path": "/v1/harnesses",
       "method": "GET",
@@ -321,6 +330,13 @@
       "category": "supply_chain",
       "auth_required": true,
       "writes_state": true
+    },
+    {
+      "path": "/v1/inventory",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
     },
     {
       "path": "/v1/requests",
@@ -351,6 +367,48 @@
       "writes_state": true
     },
     {
+      "path": "/v1/receipts",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/receipts/latest",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/receipts/{id}",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/policy",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/policy/clear",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/artifacts/{id}/diff",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
       "path": "/v1/evidence",
       "method": "GET",
       "category": "unknown",
@@ -370,6 +428,13 @@
       "category": "unknown",
       "auth_required": true,
       "writes_state": false
+    },
+    {
+      "path": "/v1/daemon/repair",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
     },
     {
       "path": "/v1/settings",
