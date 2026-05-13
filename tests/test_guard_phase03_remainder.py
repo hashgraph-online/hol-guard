@@ -97,6 +97,27 @@ def test_update_version_check_handles_latest_lookup_failure(monkeypatch: pytest.
     }
 
 
+def test_update_version_check_reports_invalid_current_version_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands.sys, "prefix", "/opt/guard-venv")
+    monkeypatch.setattr(update_commands.sys, "executable", "/opt/guard-venv/bin/python")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "unknown")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.1")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["version_check"] == {
+        "source": "pypi",
+        "status": "unavailable",
+        "current_version": "unknown",
+        "latest_version": "2.0.1",
+        "update_available": None,
+    }
+
+
 def test_latest_version_lookup_uses_practical_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     timeouts: list[float] = []
 
@@ -250,6 +271,23 @@ def test_doctor_treats_guard_launcher_shim_as_active_install(
     assert payload["setup_status"] == "active"
     assert any(artifact["artifact_type"] == "guard_launcher_shim" for artifact in payload["artifacts"])
     assert not any("Guard is not installed" in warning for warning in payload["warnings"])
+
+
+def test_doctor_ignores_non_utf8_guard_launcher_shim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    shim_path = context.guard_home / "bin" / "guard-cursor"
+    shim_path.parent.mkdir(parents=True, exist_ok=True)
+    shim_path.write_bytes(b"\xff\xfe\x00")
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    payload = get_adapter("cursor").diagnostics(context)
+
+    assert payload["setup_status"] == "not_found"
 
 
 def test_doctor_treats_guard_command_artifact_as_managed(

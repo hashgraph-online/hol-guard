@@ -225,6 +225,14 @@ def _version_check_payload(current_version: str) -> dict[str, object]:
             "update_available": None,
         }
     update_available = _is_newer_version(latest_version, current_version)
+    if update_available is None:
+        return {
+            "source": "pypi",
+            "status": "unavailable",
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "update_available": None,
+        }
     return {
         "source": "pypi",
         "status": "stale" if update_available else "current",
@@ -250,12 +258,12 @@ def _latest_version_from_pypi() -> str | None:
     return version if isinstance(version, str) and version.strip() else None
 
 
-def _is_newer_version(latest_version: str, current_version: str) -> bool:
+def _is_newer_version(latest_version: str, current_version: str) -> bool | None:
     try:
         latest = Version(latest_version)
         current = Version(current_version)
     except InvalidVersion:
-        return False
+        return None
     return latest > current
 
 

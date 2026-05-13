@@ -346,7 +346,7 @@ def _is_guard_launcher_shim(path: Path) -> bool:
         return False
     try:
         contents = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return False
     return "codex_plugin_scanner.cli" in contents and "guard" in contents and "run" in contents
 
