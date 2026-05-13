@@ -57,6 +57,7 @@ from ..config import (
     update_guard_settings,
 )
 from ..consumer import (
+    artifact_hash,
     detect_all,
     detect_harness,
     evaluate_detection,
@@ -1278,7 +1279,7 @@ def run_guard_command(
                 return 2
             scope = getattr(args, "scope", None)
             artifact_id = getattr(args, "artifact_id", None)
-            artifact_hash = getattr(args, "artifact_hash", None)
+            policy_artifact_hash = getattr(args, "artifact_hash", None)
             workspace = getattr(args, "policy_workspace", None)
             publisher = getattr(args, "publisher", None)
             cleared = store.clear_policy_decisions(
@@ -1286,7 +1287,7 @@ def run_guard_command(
                 getattr(args, "source", None),
                 scope=scope,
                 artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
+                artifact_hash=policy_artifact_hash,
                 workspace=workspace,
                 publisher=publisher,
             )
@@ -1299,7 +1300,7 @@ def run_guard_command(
                     "source": getattr(args, "source", None),
                     "scope": scope,
                     "artifact_id": artifact_id,
-                    "artifact_hash": artifact_hash,
+                    "artifact_hash": policy_artifact_hash,
                     "workspace": workspace,
                     "publisher": publisher,
                 },
