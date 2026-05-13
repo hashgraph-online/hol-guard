@@ -33,6 +33,7 @@ def _make_request(
     request_id: str,
     harness: str = "codex",
     status: str = "pending",
+    approval_url: str | None = None,
 ) -> GuardApprovalRequest:
     return GuardApprovalRequest(
         request_id=request_id,
@@ -46,7 +47,7 @@ def _make_request(
         source_scope="project",
         config_path="/tmp/config.toml",
         review_command=f"hol-guard approvals approve {request_id}",
-        approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
+        approval_url=approval_url or f"http://127.0.0.1:5474/approvals/{request_id}",
     )
 
 
@@ -158,6 +159,35 @@ class TestApprovalsAutoOpenCommand:
         assert opened_urls == ["http://127.0.0.1:5474/approvals/req-auto-open"]
         assert output["auto_open"]["opened"] is True
         assert output["auto_open"]["request_id"] == "req-auto-open"
+
+    def test_approvals_summary_repairs_stale_auto_open_url(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        home_dir = tmp_path / "guard-home"
+        store = GuardStore(home_dir)
+        store.add_approval_request(
+            _make_request(
+                request_id="req-stale-open",
+                approval_url="http://127.0.0.1:4000/approvals/req-stale-open",
+            ),
+            "2026-01-01T00:00:00Z",
+        )
+        opened_urls: list[str] = []
+        monkeypatch.setattr(
+            approval_commands_module,
+            "load_guard_daemon_url",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            approval_commands_module.webbrowser,
+            "open",
+            lambda url: opened_urls.append(url) or True,
+        )
+
+        rc = main(["guard", "approvals", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert opened_urls == ["http://127.0.0.1:5474/approvals/req-stale-open"]
+        assert output["auto_open"]["opened"] is True
 
     def test_approvals_summary_honors_native_only_auto_open_opt_out(self, tmp_path: Path, monkeypatch, capsys) -> None:
         home_dir = tmp_path / "guard-home"

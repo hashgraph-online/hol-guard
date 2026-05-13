@@ -155,14 +155,18 @@ def _auto_open_first_pending_request(*, store: GuardStore, workspace: Path | Non
     if request is None:
         return {"opened": False, "reason": "no-pending-request"}
     approval_url = str(request.get("approval_url") or "")
-    approval_center_url = approval_url or load_guard_daemon_url(store.guard_home)
+    approval_center_url = _repaired_approval_url(approval_url, store.guard_home) or load_guard_daemon_url(
+        store.guard_home
+    )
     if approval_center_url is None:
         return {"opened": False, "reason": "missing-approval-url"}
-    request_id = str(request.get("request_id") or approval_center_url)
+    request_id = str(request.get("request_id") or "")
+    if not request_id:
+        return {"opened": False, "reason": "missing-request-id"}
     config = load_guard_config(store.guard_home, workspace)
-    approval_surface_policy = (
-        "never-auto-open" if config.approval_surface_policy == "native-only" else config.approval_surface_policy
-    )
+    approval_surface_policy = config.approval_surface_policy
+    if approval_surface_policy == "native-only":
+        approval_surface_policy = "never-auto-open"
     result = GuardSurfaceRuntime(store).ensure_surface(
         surface="approval-center",
         approval_center_url=approval_center_url,
