@@ -49,6 +49,9 @@ export type FleetHeroCopy = {
   secondaryCtaHref: string;
 };
 
+const SUPPORTED_APPS_COPY =
+  "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.";
+
 export function resolveFleetHeroCopy(
   cloudState: "local_only" | "paired_waiting" | "paired_active",
   activeInstallCount: number,
@@ -61,7 +64,7 @@ export function resolveFleetHeroCopy(
       headline: hasApps ? "Your apps are covered" : "Connect an app to start",
       subheadline: hasApps
         ? "Guard is protecting your local AI apps."
-        : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.",
+        : SUPPORTED_APPS_COPY,
       primaryCtaLabel: "Connect this machine",
       primaryCtaHref: urls.connect_url,
       secondaryCtaLabel: "Open Home",
@@ -74,7 +77,7 @@ export function resolveFleetHeroCopy(
       headline: hasApps ? "Apps covered, first proof pending" : "Connect an app to start",
       subheadline: hasApps
         ? "Guard is running. First cloud proof is on its way."
-        : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.",
+        : SUPPORTED_APPS_COPY,
       primaryCtaLabel: "Open Cloud Devices",
       primaryCtaHref: urls.fleet_url,
       secondaryCtaLabel: "Open Home",
@@ -86,7 +89,7 @@ export function resolveFleetHeroCopy(
     headline: hasApps ? "Your apps are covered" : "Connect an app to start",
     subheadline: hasApps
       ? "Confirm that Guard is running and protecting your local AI apps."
-      : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.",
+      : SUPPORTED_APPS_COPY,
     primaryCtaLabel: "Open Cloud Devices",
     primaryCtaHref: urls.fleet_url,
     secondaryCtaLabel: "Open Home",

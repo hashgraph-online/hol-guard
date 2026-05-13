@@ -1,5 +1,19 @@
 import { r as reactExports, w as fetchSettings, x as fetchRuntimeSnapshot, y as updateSettings, z as clearPolicy, C as clearEvidence, D as exportDiagnostics, F as repairApprovalCenter, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, c as HiMiniShieldCheck, S as SectionLabel, I as HiMiniLockClosed, J as HiMiniCog6Tooth, H as HiMiniCheckCircle, A as ActionButton, n as HiMiniExclamationTriangle, l as HiMiniChevronUp, m as HiMiniChevronDown } from "../guard-dashboard.js";
-import { r as resolveProtectionLevelCopy } from "./runtime-overview.js";
+function resolveProtectionLevelCopy(level) {
+  if (level === "gentle") {
+    return "Monitors quietly, asks only for high-risk actions";
+  }
+  if (level === "balanced") {
+    return "Asks before secrets and destructive commands";
+  }
+  if (level === "strict") {
+    return "Asks more often, including new network";
+  }
+  if (level === "paranoid") {
+    return "Asks before nearly every action";
+  }
+  return "Custom rules active";
+}
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 function buildClearPolicyPayload(all) {
   return { all };

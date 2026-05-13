@@ -222,9 +222,17 @@ type DeviceProofCardProps = {
   proofStatus: GuardProofStatus;
 };
 
+function formatDeviceInstallationId(installationId: string | null | undefined): string {
+  const trimmed = installationId?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return "local";
+  }
+  return trimmed.slice(0, 8);
+}
+
 export function DeviceProofCard(props: DeviceProofCardProps) {
   const copy = resolveProofStatusCopy(props.proofStatus);
-  const shortId = props.device.installation_id.slice(0, 8);
+  const shortId = formatDeviceInstallationId(props.device.installation_id);
   const timeValue = props.proofStatus.first_synced_at ?? props.proofStatus.runtime_session_synced_at;
   return (
     <div className="rounded-xl border border-border bg-white px-5 py-4">

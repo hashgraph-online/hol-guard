@@ -37,9 +37,16 @@ function resolveProofStatusCopy(proofStatus) {
     tone: "slate"
   };
 }
+function formatDeviceInstallationId(installationId) {
+  const trimmed = installationId?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return "local";
+  }
+  return trimmed.slice(0, 8);
+}
 function DeviceProofCard(props) {
   const copy = resolveProofStatusCopy(props.proofStatus);
-  const shortId = props.device.installation_id.slice(0, 8);
+  const shortId = formatDeviceInstallationId(props.device.installation_id);
   const timeValue = props.proofStatus.first_synced_at ?? props.proofStatus.runtime_session_synced_at;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-white px-5 py-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [

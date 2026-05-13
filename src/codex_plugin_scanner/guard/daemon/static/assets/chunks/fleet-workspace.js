@@ -1,11 +1,12 @@
 import { i as isDisplayableHarness, j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, k as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, q as HiMiniExclamationCircle, s as HiMiniWrenchScrewdriver, t as HiMiniXCircle, r as reactExports, u as HiMiniClipboardDocumentCheck, v as HiMiniClipboard } from "../guard-dashboard.js";
+const SUPPORTED_APPS_COPY = "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.";
 function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
   const hasApps = activeInstallCount > 0;
   if (cloudState === "local_only") {
     return {
       status: hasApps ? "clear" : "setup_gap",
       headline: hasApps ? "Your apps are covered" : "Connect an app to start",
-      subheadline: hasApps ? "Guard is protecting your local AI apps." : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.",
+      subheadline: hasApps ? "Guard is protecting your local AI apps." : SUPPORTED_APPS_COPY,
       primaryCtaLabel: "Connect this machine",
       primaryCtaHref: urls.connect_url,
       secondaryCtaLabel: "Open Home",
@@ -16,7 +17,7 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
     return {
       status: hasApps ? "clear" : "setup_gap",
       headline: hasApps ? "Apps covered, first proof pending" : "Connect an app to start",
-      subheadline: hasApps ? "Guard is running. First cloud proof is on its way." : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.",
+      subheadline: hasApps ? "Guard is running. First cloud proof is on its way." : SUPPORTED_APPS_COPY,
       primaryCtaLabel: "Open Cloud Devices",
       primaryCtaHref: urls.fleet_url,
       secondaryCtaLabel: "Open Home",
@@ -26,7 +27,7 @@ function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
   return {
     status: hasApps ? "clear" : "setup_gap",
     headline: hasApps ? "Your apps are covered" : "Connect an app to start",
-    subheadline: hasApps ? "Confirm that Guard is running and protecting your local AI apps." : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.",
+    subheadline: hasApps ? "Confirm that Guard is running and protecting your local AI apps." : SUPPORTED_APPS_COPY,
     primaryCtaLabel: "Open Cloud Devices",
     primaryCtaHref: urls.fleet_url,
     secondaryCtaLabel: "Open Home",
