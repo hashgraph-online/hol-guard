@@ -35,6 +35,7 @@ import {
   ProofStrip,
 } from "./approval-center-primitives";
 import {
+  buildRetryAfterApprovalCopy,
   harnessDisplayName,
   resolveStoppedCommandText,
   resolveTerminalLabel,
@@ -72,9 +73,11 @@ import {
   resolveQueueCategory,
   searchQueue,
   sortQueue,
+  REVIEW_SEMANTIC_GROUPS,
   type QueueCategory,
   type QueueCategoryId,
   type QueueSortDirection,
+  type SemanticGroupId,
 } from "./queue-state";
 import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
 
@@ -131,7 +134,7 @@ const scopeChoices = [
 ];
 
 const QUEUE_PAGE_SIZE = 10;
-const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
+const commonScopeValues = new Set<DecisionScope>(["artifact"]);
 
 export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const { requests, activeRequestId, detail } = props;
@@ -166,7 +169,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, requests, searchTerm, sortDirection, semanticFilter]);
 
-  // Reset page when filters change
   useEffect(() => {
     setPage(1);
   }, [searchTerm, categoryFilter, sortDirection, semanticFilter]);
@@ -183,7 +185,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       ? requests.find((r) => r.request_id === activeRequestId) ?? null
       : null;
 
-  // Keyboard navigation for queue (scoped to visible page)
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (pagedRequests.length === 0) return;
@@ -207,12 +208,13 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     if (filteredRequests.length === 0) {
       return;
     }
-    if (activeRequestId === null || !filteredRequests.some((item) => item.request_id === activeRequestId)) {
-      props.onOpenRequest(filteredRequests[0].request_id);
+    const activeInRequests = requests.some((item) => item.request_id === activeRequestId);
+    if (activeRequestId !== null && activeInRequests) {
+      return;
     }
-  }, [activeRequestId, filteredRequests, props.onOpenRequest]);
+    props.onOpenRequest(filteredRequests[0].request_id);
+  }, [activeRequestId, requests, filteredRequests, props.onOpenRequest]);
 
-  // When page changes, ensure active item is on the current page
   useEffect(() => {
     if (pagedRequests.length === 0) return;
     const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId);
@@ -242,7 +244,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         activeHarness={activeItem.harness}
       />
 
-      {/* Mobile queue toggle */}
       <div className="md:hidden">
         <button
           onClick={handleToggleMobileQueue}
@@ -314,19 +315,8 @@ function ReviewHeader({
   );
 }
 
-type SemanticGroupId = "all" | "files" | "shell" | "network" | "tools" | "other";
-
-const SEMANTIC_GROUPS: { id: SemanticGroupId; label: string; matches: QueueCategoryId[] }[] = [
-  { id: "all", label: "All", matches: [] },
-  { id: "files", label: "Files", matches: ["file_read", "file_edit"] },
-  { id: "shell", label: "Shell", matches: ["shell_command", "destructive_shell", "encoded_shell"] },
-  { id: "network", label: "Network & Data", matches: ["network", "data_exfiltration", "secret_access"] },
-  { id: "tools", label: "Tools & Apps", matches: ["mcp_tool", "package_script", "harness_start", "browser_action"] },
-  { id: "other", label: "Other", matches: ["prompt_instruction", "config_change", "other"] },
-];
-
 function resolveSemanticGroup(categoryId: QueueCategoryId): SemanticGroupId {
-  for (const group of SEMANTIC_GROUPS) {
+  for (const group of REVIEW_SEMANTIC_GROUPS) {
     if (group.matches.includes(categoryId)) return group.id;
   }
   return "other";
@@ -382,6 +372,15 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   const handleSortChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     onSortDirectionChange(event.target.value as QueueSortDirection);
   }, [onSortDirectionChange]);
+  const handleToggleFilters = useCallback(() => {
+    setShowFilters((visible) => !visible);
+  }, []);
+  const handleClearFilters = useCallback(() => {
+    onSearchTermChange("");
+    onCategoryFilterChange("all");
+    onSortDirectionChange("newest");
+    onSemanticFilterChange("all");
+  }, [onCategoryFilterChange, onSearchTermChange, onSemanticFilterChange, onSortDirectionChange]);
   const handlePreviousPage = useCallback(() => {
     onPageChange(Math.max(1, page - 1));
   }, [page, onPageChange]);
@@ -391,13 +390,12 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
 
   const activeSemanticGroup = semanticFilter;
 
-  // Only show groups that have items (derive from full filtered set, not paged)
   const visibleGroups = useMemo(() => {
     const available = new Set<SemanticGroupId>();
     for (const item of allFilteredRequests) {
       available.add(resolveSemanticGroup(resolveQueueCategory(item).id));
     }
-    return SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
+    return REVIEW_SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
   }, [allFilteredRequests]);
 
   const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
@@ -425,7 +423,8 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
           />
         </label>
         <button
-          onClick={() => setShowFilters((v) => !v)}
+          type="button"
+          onClick={handleToggleFilters}
           className="flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
         >
           {showFilters ? "Hide filters" : "Show filters"}
@@ -435,17 +434,12 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
           <div className="space-y-2">
             <div className="flex flex-wrap gap-1">
               {visibleGroups.map((group) => (
-                <button
+                <SemanticFilterButton
                   key={group.id}
-                  onClick={() => onSemanticFilterChange(group.id)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
-                    activeSemanticGroup === group.id
-                      ? "bg-brand-blue text-white"
-                      : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-                  }`}
-                >
-                  {group.label}
-                </button>
+                  group={group}
+                  selected={activeSemanticGroup === group.id}
+                  onSelect={onSemanticFilterChange}
+                />
               ))}
             </div>
             <label className="block">
@@ -457,12 +451,14 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
               >
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
+                <option value="highest_risk">Highest risk first</option>
                 <option value="category">Category</option>
               </select>
             </label>
             {isFiltered && (
               <button
-                onClick={() => { onSearchTermChange(""); onCategoryFilterChange("all"); onSortDirectionChange("newest"); onSemanticFilterChange("all"); }}
+                type="button"
+                onClick={handleClearFilters}
                 className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
               >
                 Clear all filters
@@ -525,6 +521,31 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
 });
 ReviewQueueList.displayName = "ReviewQueueList";
 
+function SemanticFilterButton(props: {
+  group: (typeof REVIEW_SEMANTIC_GROUPS)[number];
+  selected: boolean;
+  onSelect: (group: SemanticGroupId) => void;
+}) {
+  const { group, selected, onSelect } = props;
+  const handleSelect = useCallback(() => {
+    onSelect(group.id);
+  }, [group.id, onSelect]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleSelect}
+      className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+        selected
+          ? "bg-brand-blue text-white"
+          : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
+      }`}
+    >
+      {group.label}
+    </button>
+  );
+}
+
 function QueueItemRow({ item, active, index, onOpenRequest }: {
   item: GuardApprovalRequest;
   active: boolean;
@@ -544,7 +565,7 @@ function QueueItemRow({ item, active, index, onOpenRequest }: {
       role="option"
       aria-selected={active}
       aria-posinset={index + 1}
-      aria-setsize={/* parent will provide */ undefined}
+      aria-setsize={undefined}
       tabIndex={active ? 0 : -1}
       className={`w-full rounded-lg py-2.5 px-2 text-left transition-all ${
         active
@@ -661,7 +682,7 @@ function ReviewDecisionCard(props: {
   const [resolved, setResolved] = useState<"allow" | "block" | null>(null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
-  const [showTechnical, setShowTechnical] = useState(true);
+  const [showTechnical, setShowTechnical] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -699,7 +720,6 @@ function ReviewDecisionCard(props: {
     };
   }, []);
 
-  // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (submitting !== null) return;
@@ -760,6 +780,21 @@ function ReviewDecisionCard(props: {
   const handleBlock = useCallback(() => {
     handleRequestResolve("block");
   }, [handleRequestResolve]);
+  const handleToggleTechnical = useCallback(() => {
+    setShowTechnical((visible) => !visible);
+  }, []);
+  const handleToggleConsequences = useCallback(() => {
+    setShowConsequences((visible) => !visible);
+  }, []);
+  const handleToggleEvidence = useCallback(() => {
+    setShowEvidence((visible) => !visible);
+  }, []);
+  const handleRetryLastAction = useCallback(() => {
+    setErrorMessage(null);
+    if (lastAction !== null) {
+      handleRequestResolve(lastAction);
+    }
+  }, [handleRequestResolve, lastAction]);
 
   if (!detail || !item) {
     return (
@@ -794,7 +829,7 @@ function ReviewDecisionCard(props: {
             aria-hidden="true"
           />
           <p className={`text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped"}
+            {item ? buildRetryAfterApprovalCopy(item, resolved) : (resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped")}
           </p>
         </div>
       )}
@@ -828,7 +863,8 @@ function ReviewDecisionCard(props: {
 
         <div className="mt-4">
           <button
-            onClick={() => setShowTechnical(!showTechnical)}
+            type="button"
+            onClick={handleToggleTechnical}
             className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-brand-dark transition-colors"
             aria-expanded={showTechnical}
           >
@@ -845,7 +881,8 @@ function ReviewDecisionCard(props: {
         {whatWouldHappen && (
           <div className="mt-5">
             <button
-              onClick={() => setShowConsequences(!showConsequences)}
+              type="button"
+              onClick={handleToggleConsequences}
               className="flex items-center gap-2 text-sm font-medium text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2"
               aria-expanded={showConsequences}
             >
@@ -880,10 +917,10 @@ function ReviewDecisionCard(props: {
           {broaderScopeOptions.length > 0 && (
             <details className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3">
               <summary className="cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue">
-                Additional approval scopes
+                Save for project or app
               </summary>
               <p className="mt-2 text-xs text-brand-dark/70">
-                These apply across more future sessions. Use them only when a project-level decision is too narrow.
+                These options save a decision that skips review for matching actions going forward. Choose the narrowest scope that fits what you meant to allow.
               </p>
               <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                 {broaderScopeOptions.map((choice) => (
@@ -900,10 +937,10 @@ function ReviewDecisionCard(props: {
           {advancedScopeOptions.length > 0 && (
             <details className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3">
               <summary className="cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention">
-                Advanced: applies everywhere
+                Advanced: save everywhere on this machine
               </summary>
               <p className="mt-2 text-xs text-brand-dark/70">
-                This affects every project on this machine. Prefer narrower scopes unless you are sure.
+                This saves a decision that applies across all your projects on this machine. Matching actions skip review permanently. Only use this if you fully trust this action everywhere.
               </p>
               <div className="mt-3 grid grid-cols-1 gap-2">
                 {advancedScopeOptions.map((choice) => (
@@ -926,10 +963,8 @@ function ReviewDecisionCard(props: {
               <div className="flex-1">
                 <p className="text-sm text-brand-purple">{errorMessage}</p>
                 <button
-                  onClick={() => {
-                    setErrorMessage(null);
-                    if (lastAction) handleRequestResolve(lastAction);
-                  }}
+                  type="button"
+                  onClick={handleRetryLastAction}
                   className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
                 >
                   Retry
@@ -982,7 +1017,8 @@ function ReviewDecisionCard(props: {
       {hasEvidence && (
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <button
-            onClick={() => setShowEvidence(!showEvidence)}
+            type="button"
+            onClick={handleToggleEvidence}
             className="flex w-full items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2"
             aria-expanded={showEvidence}
           >
@@ -1010,12 +1046,11 @@ function ReviewDecisionCard(props: {
         </div>
       )}
 
-      {/* Last time */}
       {detail.receipt && (
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <SectionLabel>Last time</SectionLabel>
           <p className="mt-2 text-sm text-muted-foreground">
-            You previously {detail.receipt.policy_decision}d a similar action{" "}
+            You previously {pastDecisionVerb(detail.receipt.policy_decision)} a similar action{" "}
             {formatRelativeTime(detail.receipt.timestamp)}.
           </p>
           {detail.diff && detail.diff.changed_fields.length > 0 && (
@@ -1159,7 +1194,6 @@ function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
 
   return (
     <div className="mt-5 space-y-3">
-      {/* MCP badge */}
       {isMcpTool && mcpServer !== null && mcpTool !== null && (
         <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2.5">
           <div className="flex items-center gap-2">
@@ -1178,7 +1212,6 @@ function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
         </div>
       )}
 
-      {/* Why it was paused */}
       <p className="text-sm leading-relaxed text-brand-dark/80">
         {pauseReason}
       </p>
@@ -1188,7 +1221,6 @@ function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
         </p>
       )}
 
-      {/* Terminal display of actual content */}
       <div className="overflow-hidden rounded-xl bg-[#0f172a]">
         <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
           <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
@@ -1250,4 +1282,14 @@ function buildWhatWouldHappen(item: GuardApprovalRequest): string | null {
     return `Without Guard, this tool would execute immediately. Guard paused it so you can review what data it accesses.`;
   }
   return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
+}
+
+function pastDecisionVerb(decision: string): string {
+  if (decision === "allow") {
+    return "allowed";
+  }
+  if (decision === "block") {
+    return "blocked";
+  }
+  return "reviewed";
 }
