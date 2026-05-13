@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import json
+import shlex
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -12,6 +14,7 @@ from pathlib import Path
 
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
+from ..redaction import redact_sensitive_text
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 
@@ -36,6 +39,8 @@ def run_guard_update(
         "current_version": current_version,
         "installer": installer,
         "command": command,
+        "retry_command": _shell_command(command),
+        "binary_diagnostics": _binary_diagnostics(command),
         "dry_run": dry_run,
     }
     direct_url = _direct_url_payload()
@@ -65,7 +70,8 @@ def run_guard_update(
     except OSError as error:
         payload["status"] = "failed"
         payload["changed"] = False
-        payload["error"] = str(error)
+        payload["error"] = redact_sensitive_text(str(error))
+        payload["message"] = "HOL Guard update failed before the installer started."
         return payload, 1
     payload["stdout"] = _normalize_output_text(result.stdout)
     payload["stderr"] = _normalize_output_text(result.stderr)
@@ -104,7 +110,28 @@ def run_guard_update(
 
 
 def _normalize_output_text(value: str) -> str:
-    return value.strip()
+    return redact_sensitive_text(value.strip())
+
+
+def _shell_command(command: list[str]) -> str:
+    return shlex.join(command)
+
+
+def _binary_diagnostics(command: list[str]) -> dict[str, object]:
+    resolved_binary = shutil.which("hol-guard")
+    installer_binary = command[0] if command else ""
+    path_status = "unknown"
+    if resolved_binary is None:
+        path_status = "not_on_path"
+    elif Path(resolved_binary).resolve() == Path(installer_binary).resolve():
+        path_status = "matches_installer"
+    else:
+        path_status = "path_mismatch"
+    return {
+        "resolved_hol_guard": resolved_binary,
+        "installer_binary": installer_binary,
+        "path_status": path_status,
+    }
 
 
 def _output_lines(value: str) -> list[str]:

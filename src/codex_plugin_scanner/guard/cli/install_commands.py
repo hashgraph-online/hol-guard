@@ -32,7 +32,7 @@ def apply_managed_install(
         store.set_managed_install(canonical_harness, active, workspace, manifest, now)
         managed_install = store.get_managed_install(canonical_harness)
         if managed_install is not None:
-            managed_installs.append(managed_install)
+            managed_installs.append(_managed_install_payload(managed_install))
     payload: dict[str, object] = {
         "managed_installs": managed_installs,
         "auto_detected": requested_harness is None or install_all,
@@ -43,6 +43,17 @@ def apply_managed_install(
         skill_scan = scan_workspace_skills(context.workspace_dir, store, now)
         if skill_scan:
             payload["skill_scan"] = skill_scan
+    return payload
+
+
+def _managed_install_payload(managed_install: dict[str, object]) -> dict[str, object]:
+    payload = dict(managed_install)
+    manifest = payload.get("manifest")
+    if isinstance(manifest, dict):
+        for key in ("config_path", "managed_config_path", "shim_path", "mode"):
+            value = manifest.get(key)
+            if value is not None:
+                payload[key] = value
     return payload
 
 

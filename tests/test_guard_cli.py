@@ -6699,12 +6699,14 @@ url = http://127.0.0.1:8787/guard-canary
                 "receiptsStored": 1,
             }
 
-        assert connect_rc == 1
-        assert connect_output["connected"] is False
-        assert connect_output["status"] == "retry_required"
-        assert connect_output["milestone"] == "first_sync_failed"
-        assert connect_output["reason"] == "Guard sync requires a Pro or Team plan."
-        assert connect_output["sync_message"] == "Guard sync requires a Pro or Team plan."
+        assert connect_rc == 0
+        assert connect_output["connected"] is True
+        assert connect_output["sync_available"] is False
+        assert connect_output["status"] == "connected"
+        assert connect_output["milestone"] == "sync_not_available"
+        assert connect_output["reason"] == "Local Guard is connected. Shared cloud sync needs a paid Guard plan."
+        assert connect_output["sync_message"] == "Local Guard is connected. Shared cloud sync needs a paid Guard plan."
+        assert connect_output["sync"]["sync_not_available_reason"] == "Guard sync requires a Pro or Team plan."
 
     def test_guard_dashboard_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -7308,10 +7310,12 @@ url = http://127.0.0.1:8787/guard-canary
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is False
-        assert payload["status"] == "retry_required"
-        assert payload["milestone"] == "first_sync_failed"
-        assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
+        assert payload["connected"] is True
+        assert payload["sync_available"] is False
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "sync_not_available"
+        assert payload["sync_message"] == "Local Guard is connected. Shared cloud sync needs a paid Guard plan."
+        assert payload["sync"]["sync_not_available_reason"] == "Guard Cloud sync requires a paid Guard plan"
 
     def test_guard_connect_reports_guard_plan_required_without_failing_pairing(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
@@ -7391,10 +7395,12 @@ url = http://127.0.0.1:8787/guard-canary
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is False
-        assert payload["status"] == "retry_required"
-        assert payload["milestone"] == "first_sync_failed"
-        assert payload["sync_message"] == "Guard plan required"
+        assert payload["connected"] is True
+        assert payload["sync_available"] is False
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "sync_not_available"
+        assert payload["sync_message"] == "Local Guard is connected. Shared cloud sync needs a paid Guard plan."
+        assert payload["sync"]["sync_not_available_reason"] == "Guard plan required"
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
