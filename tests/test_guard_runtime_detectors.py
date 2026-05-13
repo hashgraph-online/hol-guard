@@ -992,6 +992,39 @@ def test_safe_decode_detector_does_not_match_benign_secret_like_identifiers(tmp_
     assert signals == ()
 
 
+def test_safe_decode_detector_does_not_match_ssh_public_key_paths(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-ssh-public-key",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="bash",
+        command=f"ssh-copy-id -i ~/.ssh/id_ed25519.pub user@example.com; printf '{opaque}'",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
 def test_safe_decode_detector_returns_empty_for_plain_text(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
 

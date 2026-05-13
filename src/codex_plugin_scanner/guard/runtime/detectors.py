@@ -54,7 +54,7 @@ DetectorRunStatus = Literal["ok", "disabled", "filtered", "timeout", "error"]
 _SLOW_DETECTOR_THRESHOLD_MS: int = 100
 _SENSITIVE_DECODE_CONTEXT_PATTERN = re.compile(
     r"\.env(?:\.[A-Za-z0-9_-]+)?(?![A-Za-z0-9_-])|\.npmrc(?![A-Za-z0-9_-])|"
-    r"id_(?:rsa|ed25519|ecdsa|dsa)(?![A-Za-z0-9])|api[_-]?key(?![A-Za-z0-9])|"
+    r"id_(?:rsa|ed25519|ecdsa|dsa)(?![A-Za-z0-9]|\.pub\b)|api[_-]?key(?![A-Za-z0-9])|"
     r"private[_-]?key(?![A-Za-z0-9])|\.pem(?![A-Za-z0-9_-])|\.key(?![A-Za-z0-9_-])|"
     r"aws[_-](?:access[_-]?key|secret[_-]?access[_-]?key|session[_-]?token|credentials?)(?![A-Za-z0-9])|"
     r"(?<![A-Za-z0-9])(?:credentials?|secrets?|tokens?|passwords?)(?![A-Za-z0-9])",
