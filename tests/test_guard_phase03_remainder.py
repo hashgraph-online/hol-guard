@@ -97,6 +97,34 @@ def test_update_version_check_handles_latest_lookup_failure(monkeypatch: pytest.
     }
 
 
+def test_latest_version_lookup_uses_practical_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float] = []
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: object,
+        ) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"info":{"version":"2.0.1"}}'
+
+    def fake_urlopen(request: object, timeout: float) -> FakeResponse:
+        timeouts.append(timeout)
+        return FakeResponse()
+
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", fake_urlopen)
+
+    assert update_commands._latest_version_from_pypi() == "2.0.1"
+    assert timeouts == [3.0]
+
+
 def test_install_setup_listing_detects_safe_config_without_mutating_it(tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
@@ -202,7 +230,7 @@ def test_doctor_treats_guard_launcher_shim_as_active_install(
 ) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: True)
 
     install_payload = apply_managed_install(
         "install",
@@ -222,6 +250,58 @@ def test_doctor_treats_guard_launcher_shim_as_active_install(
     assert payload["setup_status"] == "active"
     assert any(artifact["artifact_type"] == "guard_launcher_shim" for artifact in payload["artifacts"])
     assert not any("Guard is not installed" in warning for warning in payload["warnings"])
+
+
+def test_doctor_treats_guard_command_artifact_as_managed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    config_path = context.home_dir / ".cursor" / "mcp.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps({"mcpServers": {"wrapped": {"command": "guard-cursor", "args": ["--flag"]}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: True)
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    payload = get_adapter("cursor").diagnostics(context)
+
+    assert payload["setup_status"] == "active"
+    assert not any("Guard is not installed" in warning for warning in payload["warnings"])
+
+
+def test_doctor_keeps_active_setup_status_for_runtime_probe_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    apply_managed_install(
+        "install",
+        "cursor",
+        False,
+        context,
+        store,
+        str(context.workspace_dir),
+        "2026-05-13T00:00:00Z",
+    )
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
+
+    def runtime_probe_timeout(self: CursorHarnessAdapter, context: HarnessContext) -> dict[str, object]:
+        return {"timed_out": True}
+
+    monkeypatch.setattr(CursorHarnessAdapter, "runtime_probe", runtime_probe_timeout)
+
+    payload = get_adapter("cursor").diagnostics(context)
+
+    assert payload["setup_status"] == "active"
+    assert any("timed out" in warning for warning in payload["warnings"])
 
 
 def test_install_native_contract_output_prefers_native_hooks_for_supported_harnesses(tmp_path: Path) -> None:

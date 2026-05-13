@@ -301,11 +301,11 @@ class HarnessAdapter:
 
 def _diagnostic_setup_status(detection: HarnessDetection, warnings: list[str]) -> str:
     guard_managed = _detection_has_guard_management(detection)
-    if guard_managed and warnings:
+    if guard_managed and _warnings_include_setup_failure(warnings):
         return "broken"
     if guard_managed:
         return "active"
-    if detection.config_paths or detection.command_available or detection.installed:
+    if detection.config_paths or detection.command_available:
         return "partial"
     return "not_found"
 
@@ -323,8 +323,17 @@ def _guard_managed_path(path: str) -> bool:
 def _artifact_uses_guard(artifact: GuardArtifact) -> bool:
     if artifact.artifact_type == "guard_launcher_shim":
         return True
+    if artifact.command is not None and _is_guard_command_name(artifact.command, artifact.harness):
+        return True
     values = [artifact.command or "", *artifact.args]
     return any(_value_mentions_guard(value) for value in values)
+
+
+def _is_guard_command_name(value: str, harness: str) -> bool:
+    normalized = Path(value.replace("\\", "/")).name.lower()
+    if normalized.endswith(".cmd"):
+        normalized = normalized[:-4]
+    return normalized == f"guard-{harness}"
 
 
 def _value_mentions_guard(value: str) -> bool:
@@ -340,6 +349,16 @@ def _is_guard_launcher_shim(path: Path) -> bool:
     except OSError:
         return False
     return "codex_plugin_scanner.cli" in contents and "guard" in contents and "run" in contents
+
+
+def _warnings_include_setup_failure(warnings: list[str]) -> bool:
+    setup_markers = (
+        "guard is not installed",
+        "command is not available",
+        "native hooks are disabled",
+        "managed codex hooks are missing",
+    )
+    return any(any(marker in warning.lower() for marker in setup_markers) for warning in warnings)
 
 
 __all__ = [

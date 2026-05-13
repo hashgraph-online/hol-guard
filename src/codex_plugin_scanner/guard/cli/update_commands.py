@@ -29,6 +29,7 @@ _ALREADY_CURRENT_HINTS = (
     "already up-to-date",
 )
 _PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
+_PYPI_TIMEOUT_SECONDS = 3.0
 
 
 def run_guard_update(
@@ -236,7 +237,7 @@ def _version_check_payload(current_version: str) -> dict[str, object]:
 def _latest_version_from_pypi() -> str | None:
     request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=0.35) as response:
+        with urllib.request.urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError):
         return None
