@@ -13678,6 +13678,60 @@ def test_codex_read_only_source_inspection_rejects_matched_git_include_if(
     )
 
 
+def test_codex_read_only_source_inspection_rejects_git_include_if_gitdir_matches_dot_git(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    included_config = tmp_path / "included-gitconfig"
+    _write_text(
+        included_config,
+        """
+[diff]
+    external = /tmp/guard-diff
+""".strip(),
+    )
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
+    global_config = tmp_path / "global-gitconfig"
+    _write_text(global_config, f'[includeIf "gitdir:{workspace_dir / ".git"}"]\n    path = {included_config}\n')
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_rejects_git_include_if_relative_gitdir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    included_config = tmp_path / "included-gitconfig"
+    _write_text(
+        included_config,
+        """
+[diff]
+    external = /tmp/guard-diff
+""".strip(),
+    )
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
+    global_config = tmp_path / "global-gitconfig"
+    _write_text(global_config, f'[includeIf "gitdir:./workspace/.git"]\n    path = {included_config}\n')
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
 def test_codex_read_only_source_inspection_allows_git_diff_with_external_helpers_disabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

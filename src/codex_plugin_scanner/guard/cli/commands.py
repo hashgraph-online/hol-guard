@@ -5906,8 +5906,8 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path, repo_dir: Pat
             continue
         section_match = re.fullmatch(r"\[([^\]]+)\](?:\s*[#;].*)?", line)
         if section_match:
-            section = section_match.group(1).strip().lower()
-            section_active = _git_include_section_is_active(section, repo_dir=repo_dir)
+            section = section_match.group(1).strip()
+            section_active = _git_include_section_is_active(section, base_dir=base_dir, repo_dir=repo_dir)
             continue
         if not section_active:
             continue
@@ -5921,43 +5921,73 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path, repo_dir: Pat
     return tuple(paths)
 
 
-def _git_include_section_is_active(section: str, *, repo_dir: Path | None) -> bool:
-    if section == "include":
+def _git_include_section_is_active(section: str, *, base_dir: Path, repo_dir: Path | None) -> bool:
+    section_lower = section.lower()
+    if section_lower == "include":
         return True
-    if not section.startswith("includeif"):
+    if not section_lower.startswith("includeif"):
         return False
     if repo_dir is None:
         return False
     condition_match = re.search(r'"([^"]+)"', section)
     condition = condition_match.group(1) if condition_match else section.removeprefix("includeif").strip()
-    if condition.startswith("gitdir/i:"):
+    condition_lower = condition.lower()
+    if condition_lower.startswith("gitdir/i:"):
         return _git_gitdir_condition_matches(
-            condition.removeprefix("gitdir/i:"),
+            condition[len("gitdir/i:") :],
+            base_dir=base_dir,
             repo_dir=repo_dir,
             case_sensitive=False,
         )
-    if condition.startswith("gitdir:"):
-        return _git_gitdir_condition_matches(condition.removeprefix("gitdir:"), repo_dir=repo_dir, case_sensitive=True)
-    if condition.startswith("onbranch:"):
-        return _git_onbranch_condition_matches(condition.removeprefix("onbranch:"), repo_dir=repo_dir)
+    if condition_lower.startswith("gitdir:"):
+        return _git_gitdir_condition_matches(
+            condition[len("gitdir:") :],
+            base_dir=base_dir,
+            repo_dir=repo_dir,
+            case_sensitive=True,
+        )
+    if condition_lower.startswith("onbranch:"):
+        return _git_onbranch_condition_matches(condition[len("onbranch:") :], repo_dir=repo_dir)
     return False
 
 
-def _git_gitdir_condition_matches(pattern: str, *, repo_dir: Path, case_sensitive: bool) -> bool:
-    normalized_pattern = str(Path(pattern).expanduser())
-    if not Path(normalized_pattern).is_absolute():
-        return False
-    repo_text = repo_dir.as_posix().rstrip("/") + "/"
-    pattern_text = Path(normalized_pattern).as_posix()
-    if pattern_text.endswith("/"):
-        pattern_text = f"{pattern_text}**"
-    elif pattern_text.endswith("/**"):
-        pass
-    else:
-        pattern_text = pattern_text.rstrip("/") + "/**"
+def _git_gitdir_condition_matches(pattern: str, *, base_dir: Path, repo_dir: Path, case_sensitive: bool) -> bool:
+    pattern_text = _git_gitdir_condition_pattern(pattern, base_dir=base_dir)
+    patterns = _git_gitdir_condition_patterns(pattern_text)
+    candidates = [repo_dir.as_posix().rstrip("/") + "/"]
+    git_dir = _git_effective_git_dir(repo_dir)
+    if git_dir is not None:
+        candidates.append(git_dir.as_posix().rstrip("/") + "/")
     if case_sensitive:
-        return fnmatch.fnmatchcase(repo_text, pattern_text)
-    return fnmatch.fnmatchcase(repo_text.lower(), pattern_text.lower())
+        return any(fnmatch.fnmatchcase(candidate, item) for candidate in candidates for item in patterns)
+    return any(fnmatch.fnmatchcase(candidate.lower(), item.lower()) for candidate in candidates for item in patterns)
+
+
+def _git_gitdir_condition_patterns(pattern_text: str) -> tuple[str, ...]:
+    if pattern_text.endswith("/**"):
+        return (pattern_text,)
+    if pattern_text.endswith("/"):
+        return (pattern_text, f"{pattern_text}**")
+    return (pattern_text, f"{pattern_text}/", f"{pattern_text}/**")
+
+
+def _git_gitdir_condition_pattern(pattern: str, *, base_dir: Path) -> str:
+    expanded_pattern = pattern.strip()
+    pattern_path = Path(expanded_pattern).expanduser()
+    if pattern_path.is_absolute():
+        return pattern_path.as_posix()
+    if expanded_pattern.startswith(("./", "../")):
+        return (base_dir / pattern_path).resolve().as_posix()
+    return f"**/{expanded_pattern}"
+
+
+def _git_effective_git_dir(repo_dir: Path) -> Path | None:
+    git_path = repo_dir / ".git"
+    if git_path.is_dir():
+        return git_path
+    if git_path.is_file():
+        return _git_dir_from_file(git_path)
+    return None
 
 
 def _git_onbranch_condition_matches(pattern: str, *, repo_dir: Path) -> bool:
