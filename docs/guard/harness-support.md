@@ -100,13 +100,12 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 
 | Harness | Install Aliases | Native Approval | Browser Fallback | Resume | Event Surfaces |
 |---------|-----------------|-----------------|------------------|--------|----------------|
-| `codex` | `codex`, `codex-cli` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read |
-| `codex-app` | `codex-app` | ❌ | ✅ | ❌ | shell, prompt |
+| `codex` | `codex` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read |
 | `claude-code` | `claude-code`, `claude` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read |
 | `opencode` | `opencode` | ❌ | ✅ | ❌ | shell, mcp_tool |
-| `copilot` | `copilot`, `copilot-cli`, `gh-copilot` | ✅ | ✅ | ✅ | shell, prompt |
-| `copilot-ide` | `copilot-ide`, `vscode-copilot` | ❌ | ✅ | ❌ | prompt |
+| `copilot` | `copilot` | ✅ | ✅ | ✅ | shell, prompt |
 | `cursor` | `cursor` | ❌ | ✅ | ❌ | mcp_tool |
-| `gemini` | `gemini`, `gemini-cli` | ❌ | ✅ | ❌ | shell, mcp_tool |
+| `gemini` | `gemini` | ❌ | ✅ | ❌ | shell, mcp_tool |
 | `hermes` | `hermes` | ❌ | ✅ | ❌ | shell, mcp_tool, prompt |
 | `openclaw` | `openclaw` | ❌ | ✅ | ❌ | mcp_tool |
+| `antigravity` | `antigravity` | ❌ | ✅ | ❌ | mcp_tool, prompt |
