@@ -55,12 +55,12 @@ def test_personas_and_activation_stages_cover_local_cloud_users() -> None:
         "agent_operator",
     )
     assert ACTIVATION_STAGE_VALUES == (
-        "local_installed",
+        "not_installed",
+        "installed_local",
         "cloud_connected",
-        "first_proof_landed",
         "team_started",
-        "agent_linked",
-        "paid",
+        "agents_started",
+        "paid_value_ready",
     )
 
 
@@ -207,7 +207,7 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert apis_by_method[("GET", "/v1/inventory")].writes_state is False
     assert apis_by_method[("GET", "/v1/requests/{id}")].writes_state is False
     assert apis_by_method[("POST", "/v1/requests/{id}/approve")].writes_state is True
-    assert apis_by_method[("POST", "/approvals/{id}/decision")].writes_state is True
+    assert apis_by_method[("POST", "/v1/approvals/{id}/decision")].writes_state is True
     assert apis_by_method[("GET", "/v1/receipts")].writes_state is False
     assert apis_by_method[("GET", "/v1/policy")].category == "config"
     assert apis_by_method[("POST", "/v1/policy/decisions")].writes_state is True

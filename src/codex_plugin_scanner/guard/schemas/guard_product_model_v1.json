@@ -8,12 +8,12 @@
     "agent_operator"
   ],
   "activation_stages": [
-    "local_installed",
+    "not_installed",
+    "installed_local",
     "cloud_connected",
-    "first_proof_landed",
     "team_started",
-    "agent_linked",
-    "paid"
+    "agents_started",
+    "paid_value_ready"
   ],
   "guard_actions": [
     "allow",
@@ -450,7 +450,7 @@
       "writes_state": true
     },
     {
-      "path": "/approvals/{id}/decision",
+      "path": "/v1/approvals/{id}/decision",
       "method": "POST",
       "category": "unknown",
       "auth_required": true,

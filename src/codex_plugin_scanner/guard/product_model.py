@@ -13,12 +13,12 @@ GUARD_PRODUCT_MODEL_VERSION = "guard-product-model.v1"
 
 Persona = Literal["vibe_coder", "solo_engineer", "manager", "security_lead", "agent_operator"]
 ActivationStage = Literal[
-    "local_installed",
+    "not_installed",
+    "installed_local",
     "cloud_connected",
-    "first_proof_landed",
     "team_started",
-    "agent_linked",
-    "paid",
+    "agents_started",
+    "paid_value_ready",
 ]
 ActionCategory = Literal["secrets", "network", "destructive", "mcp", "skill", "supply_chain", "config", "unknown"]
 ActionUrgency = Literal["low", "medium", "high", "critical"]
@@ -31,12 +31,12 @@ PERSONA_VALUES: tuple[Persona, ...] = (
     "agent_operator",
 )
 ACTIVATION_STAGE_VALUES: tuple[ActivationStage, ...] = (
-    "local_installed",
+    "not_installed",
+    "installed_local",
     "cloud_connected",
-    "first_proof_landed",
     "team_started",
-    "agent_linked",
-    "paid",
+    "agents_started",
+    "paid_value_ready",
 )
 CANONICAL_HARNESS_VALUES = (
     "codex",
@@ -273,7 +273,7 @@ LOCAL_API_OWNERSHIP = (
         writes_state=True,
     ),
     ApiOwnership(
-        path="/approvals/{id}/decision",
+        path="/v1/approvals/{id}/decision",
         method="POST",
         category="unknown",
         auth_required=True,
