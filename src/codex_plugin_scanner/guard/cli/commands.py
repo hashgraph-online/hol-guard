@@ -33,6 +33,7 @@ from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
     approval_prompt_flow,
+    first_approval_url,
     queue_blocked_approvals,
     wait_for_approval_requests,
 )
@@ -1796,11 +1797,12 @@ def run_guard_command(
                 managed_install=managed_install,
             )
             if _should_emit_copilot_hook_response(args):
+                review_context = _native_approval_center_context(response_payload, harness=args.harness)
                 _emit_copilot_permission_request_response(
                     behavior="deny",
-                    message=(
-                        f"HOL Guard blocked {artifact_name}. {decision.summary} "
-                        f"Approve the exact call in Guard, then retry."
+                    message=_copilot_hook_reason(
+                        f"HOL Guard blocked {artifact_name}. {decision.summary}",
+                        review_context,
                     ),
                     interrupt=True,
                     output_stream=output_stream,
@@ -3362,16 +3364,8 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
     if not isinstance(approval_center_url, str) or not approval_center_url.strip():
         return None
     queued = response_payload.get("approval_requests")
-    first_approval_url: str | None = None
-    if isinstance(queued, list):
-        for item in queued:
-            if not isinstance(item, dict):
-                continue
-            approval_url = item.get("approval_url")
-            if isinstance(approval_url, str) and approval_url.strip():
-                first_approval_url = approval_url.strip()
-                break
-    review_url = first_approval_url or approval_center_url.strip()
+    review_url = first_approval_url(queued) if isinstance(queued, list) else None
+    review_url = review_url or approval_center_url.strip()
     harness_label = {
         "claude-code": "Claude Code",
         "codex": "Codex",

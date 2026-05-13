@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
-from ..approvals import queue_blocked_approvals
+from ..approvals import first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
 from ..mcp_tool_calls import (
@@ -580,18 +580,28 @@ class RuntimeMcpGuardProxy:
             risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
         )
         request_id = str(queued[0]["request_id"]) if queued else "unknown"
+        review_url = first_approval_url(queued) or approval_center_url
+        response_data = {
+            "approvalCenterUrl": approval_center_url,
+            "approvalRequests": queued,
+            "reviewUrl": review_url,
+        }
         return _blocked_tool_response(
             message_id,
             tool_name,
             (
                 f"HOL Guard stopped tool call {tool_name} from {self.server_name}. "
-                f"Approve request {request_id} at {approval_center_url}, then retry the same action."
+                f"Approve request {request_id} at {review_url}, then retry the same action."
             ),
+            response_data,
         ), {
             "method": "tools/call",
             "tool_name": tool_name,
             "decision": "queue-approval",
             "redacted_params": _redact_json(params),
+            "approval_center_url": approval_center_url,
+            "approval_requests": queued,
+            "review_url": review_url,
         }
 
     def _capture_tools_catalog(

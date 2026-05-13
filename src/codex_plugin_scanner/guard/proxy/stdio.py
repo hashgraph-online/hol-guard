@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from ..approvals import approval_delivery_payload, approval_prompt_flow, queue_blocked_approvals
+from ..approvals import approval_delivery_payload, approval_prompt_flow, first_approval_url, queue_blocked_approvals
 from ..consumer import artifact_hash
 from ..models import HarnessDetection
 from ..receipts import build_receipt
@@ -291,8 +291,9 @@ class StdioGuardProxy:
                         )
                         event["approval_center_url"] = self.approval_center_url
                         event["approval_delivery"] = approval_delivery_payload(approval_flow)
+                        review_url = first_approval_url(event["approval_requests"]) or self.approval_center_url
                         event["review_hint"] = (
-                            f"{approval_flow['summary']} Open {self.approval_center_url} to review the blocked request."
+                            f"{approval_flow['summary']} Open {review_url} to review the blocked request."
                         )
                         blocked_message = f"{blocked_message} {event['review_hint']}"
                         response_data = {
@@ -300,6 +301,7 @@ class StdioGuardProxy:
                             "approvalRequests": event["approval_requests"],
                             "approvalDelivery": event["approval_delivery"],
                             "reviewHint": event["review_hint"],
+                            "reviewUrl": review_url,
                         }
                     response = _blocked_tool_response(
                         message.get("id"),

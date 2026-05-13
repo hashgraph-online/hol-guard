@@ -490,6 +490,7 @@ clearer UX and an implementation plan with technical references.
             return original_import(name, global_ns, local_ns, fromlist, level)
 
         monkeypatch.setattr(builtins, "__import__", _guarded_import)
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
 
         rc = main(
             [
@@ -547,6 +548,9 @@ clearer UX and an implementation plan with technical references.
         assert rc == 1
         assert output["artifact_type"] == "prompt_request"
         assert "read .authrc" in output["launch_summary"]
+        assert output["approval_center_url"] == "http://127.0.0.1:4455"
+        assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
+        assert approval_requests[0]["approval_url"] in output["review_hint"]
         assert approval_requests[0]["launch_target"] == "Codex prompt for `.authrc`: read .authrc"
         assert approval_requests[0]["action_envelope_json"]["action_type"] == "prompt"
         assert approval_requests[0]["action_envelope_json"]["prompt_excerpt"] == "read .authrc"
@@ -6190,6 +6194,7 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     assert output["interrupt"] is True
     assert "HOL Guard blocked" in output["message"]
     assert "danger_lab:dangerous_delete" in output["message"]
+    assert "http://127.0.0.1:4455/approvals/" in output["message"]
 
 
 def test_guard_hook_emits_copilot_permission_request_deny_from_tool_calls_payload(
