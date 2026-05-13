@@ -210,6 +210,15 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     }
   }, [activeRequestId, filteredRequests, props.onOpenRequest]);
 
+  // When page changes, ensure active item is on the current page
+  useEffect(() => {
+    if (pagedRequests.length === 0) return;
+    const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId);
+    if (!activeOnPage) {
+      props.onOpenRequest(pagedRequests[0].request_id);
+    }
+  }, [currentPage, pagedRequests, activeRequestId, props.onOpenRequest]);
+
   if (requests.length === 0) {
     return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} />;
   }
