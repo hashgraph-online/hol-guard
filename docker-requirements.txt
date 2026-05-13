@@ -393,7 +393,9 @@ cisco-ai-mcp-scanner==4.6.0 \
 cisco-ai-skill-scanner==2.0.9 \
     --hash=sha256:7718f6b7bb3a956560215a5481cb259853a38ef82108a213fbcaba70d8e1e4b9 \
     --hash=sha256:f74237097e004d01402c8100df9fe4ce9bfc87a5b9d69ef470624cf70ff15b26
-    # via hol-guard (pyproject.toml)
+    # via
+    #   --override (workspace)
+    #   hol-guard (pyproject.toml)
 click==8.3.1 \
     --hash=sha256:12ff4785d337a1bb490bb7e9c2b1ee5da3112e94a8622f26a6c77f5d2fc6842a \
     --hash=sha256:981153a64e25f12d547d3426c367a4857371575ee7ad18df2a6183ab0545b2a6
@@ -2294,13 +2296,17 @@ typing-extensions==4.15.0 \
     --hash=sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
     # via
+    #   aiosignal
     #   anthropic
+    #   anyio
     #   fastapi
     #   huggingface-hub
     #   mcp
     #   openai
     #   pydantic
     #   pydantic-core
+    #   referencing
+    #   starlette
     #   textual
     #   typing-inspection
 typing-inspection==0.4.2 \
