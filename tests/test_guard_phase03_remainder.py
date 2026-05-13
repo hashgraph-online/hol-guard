@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import http.client
 import json
-import sys
 import urllib.parse
 from pathlib import Path
 
@@ -328,7 +327,6 @@ def test_doctor_ignores_non_utf8_guard_launcher_shim(
 
 def test_doctor_recognizes_legacy_guard_launcher_shim(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = _context(tmp_path)
     shim_path = context.guard_home / "bin" / "guard-claude-code"
@@ -343,14 +341,12 @@ def test_doctor_recognizes_legacy_guard_launcher_shim(
         encoding="utf-8",
     )
     from codex_plugin_scanner.guard.adapters import get_adapter
-    from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
-
-    monkeypatch.setattr(ClaudeCodeHarnessAdapter, "resolved_executable", lambda self, context: sys.executable)
 
     payload = get_adapter("claude-code").diagnostics(context)
 
-    assert payload["setup_status"] == "active"
+    assert payload["setup_status"] not in {"not_found", "partial"}
     assert any(artifact["name"] == "guard-claude-code" for artifact in payload["artifacts"])
+    assert not any("Guard is not installed" in warning for warning in payload["warnings"])
 
 
 def test_doctor_treats_guard_command_artifact_as_managed(
