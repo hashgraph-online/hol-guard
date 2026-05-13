@@ -18,6 +18,9 @@ from ..store import GuardStore
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
+CONNECT_COMMAND = "hol-guard connect"
+CONNECT_STATUS_COMMAND = "hol-guard connect status"
+CONNECT_REPAIR_COMMAND = "hol-guard connect repair"
 
 
 def _load_connect_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
@@ -323,6 +326,48 @@ def build_connect_payload(
             "target": connect_url,
         }
     return payload
+
+
+def build_connect_status_payload(
+    *,
+    store: GuardStore,
+    sync_url: str,
+    connect_url: str,
+    action: str = "status",
+) -> dict[str, object]:
+    latest_state = store.get_latest_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
+    status = str(latest_state.get("status") or "not_paired") if latest_state is not None else "not_paired"
+    milestone = str(latest_state.get("milestone") or "not_started") if latest_state is not None else "not_started"
+    reason = latest_state.get("reason") if latest_state is not None else None
+    stored_sync_url = latest_state.get("sync_url") if latest_state is not None else None
+    payload: dict[str, object] = {
+        "status": status,
+        "milestone": milestone,
+        "reason": reason,
+        "latest_connect_state": latest_state,
+        "sync_url": stored_sync_url if isinstance(stored_sync_url, str) and stored_sync_url.strip() else sync_url,
+        "connect_url": connect_url,
+        "connect_command": CONNECT_COMMAND,
+        "recovery_command": connect_recovery_command(latest_state),
+        "connect_status_command": CONNECT_STATUS_COMMAND,
+        "connect_repair_command": CONNECT_REPAIR_COMMAND,
+    }
+    if action in {"repair", "re-pair"}:
+        payload["repair_action"] = "rerun_connect"
+        payload["repair_message"] = "Run hol-guard connect to create a fresh pairing request and first sync."
+    return payload
+
+
+def connect_recovery_command(latest_state: dict[str, object] | None) -> str:
+    if latest_state is None:
+        return CONNECT_COMMAND
+    milestone = str(latest_state.get("milestone") or "")
+    status = str(latest_state.get("status") or "")
+    if status in {"retry_required", "expired"} or milestone in {"first_sync_failed", "expired", "sync_not_available"}:
+        return CONNECT_COMMAND
+    if status == "connected" and milestone == "first_sync_succeeded":
+        return "hol-guard sync"
+    return CONNECT_COMMAND
 
 
 def _build_sync_not_available_payload(

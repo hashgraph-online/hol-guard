@@ -66,9 +66,18 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 
    ```bash
    hol-guard connect
+   hol-guard connect status
+   hol-guard connect repair
+   hol-guard sync
    ```
 
-9. Inspect or rotate the local installation identity that cloud sync uses:
+9. Share the generated install/connect command guide when someone needs the exact local-first flow:
+
+   ```bash
+   hol-guard explain install-connect
+   ```
+
+10. Inspect or rotate the local installation identity that cloud sync uses:
 
    ```bash
    hol-guard device show
@@ -81,6 +90,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | Situation | Command | What it answers |
 | :--- | :--- | :--- |
 | I need the current protection posture | `hol-guard status` | What is Guard watching, is sync connected, and what is the next action? |
+| I need install/connect docs | `hol-guard explain install-connect` | Which local-first setup and optional cloud commands should I share? |
 | I need setup or runtime troubleshooting | `hol-guard doctor <harness>` | Why is this harness or Guard runtime not behaving correctly? |
 | A launch was blocked or changed | `hol-guard diff <harness>` | What changed since the last recorded snapshot? |
 | I need to resolve a queued block | `hol-guard approvals` | Which requests are waiting, and how do I approve or deny them? |
@@ -98,7 +108,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | I approved a prompt and want proof | `hol-guard receipts` | `hol-guard explain <artifact-id>` for the latest receipt and diff context |
 | I need audit or handoff evidence | `hol-guard inventory` | `hol-guard abom --format json` for machine-readable export |
 | I need to understand recent activity | `hol-guard events` | Use `--name <event>` to filter a noisy local timeline |
-| Cloud sync or pairing looks wrong | `hol-guard status` | `hol-guard connect` or `hol-guard sync --json` depending on the status output |
+| Cloud sync or pairing looks wrong | `hol-guard connect status` | `hol-guard connect repair`, `hol-guard connect`, or `hol-guard sync --json` depending on the status output |
 
 ## Evidence-first decisions
 
@@ -302,4 +312,3 @@ curl -s -X POST "http://127.0.0.1:${GUARD_PORT}/v1/daemon/repair" \
 ```
 
 After repair, restart Guard, then retry the block message URL or relaunch your harness through Guard. Pending approval requests are preserved across repairs.
-
