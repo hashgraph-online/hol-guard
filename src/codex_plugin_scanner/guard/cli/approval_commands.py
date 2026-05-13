@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -153,7 +154,13 @@ def run_approval_open_command(
     item = store.get_approval_request(request_id)
     if item is None:
         return {"error": "not_found", "request_id": request_id}, 1
-    return {"request_id": request_id, "approval_url": str(item.get("approval_url", ""))}, 0
+    approval_url = str(item.get("approval_url", ""))
+    repaired_url = _repaired_approval_url(approval_url, store.guard_home)
+    return {
+        "request_id": request_id,
+        "approval_url": repaired_url,
+        "repaired": repaired_url != approval_url,
+    }, 0
 
 
 def run_approval_retry_hint_command(
@@ -176,3 +183,30 @@ def run_approval_retry_hint_command(
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _repaired_approval_url(approval_url: str, guard_home: Path) -> str:
+    daemon_url = load_guard_daemon_url(guard_home)
+    if daemon_url is None:
+        return approval_url
+    try:
+        parsed_approval = urllib.parse.urlparse(approval_url)
+        parsed_daemon = urllib.parse.urlparse(daemon_url)
+    except ValueError:
+        return approval_url
+    if parsed_approval.scheme not in {"http", "https"} or parsed_approval.hostname not in {
+        "127.0.0.1",
+        "::1",
+        "localhost",
+    }:
+        return approval_url
+    return urllib.parse.urlunparse(
+        (
+            parsed_daemon.scheme,
+            parsed_daemon.netloc,
+            parsed_approval.path,
+            parsed_approval.params,
+            parsed_approval.query,
+            parsed_approval.fragment,
+        )
+    )

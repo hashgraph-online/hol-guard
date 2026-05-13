@@ -1,5 +1,5 @@
-import { resolveCloudIntelCopy, resolveCloudSyncHealthCopy, resolveProtectionLevelCopy, resolveApprovalCenterHealth } from "./runtime-overview";
-import type { GuardCloudSyncHealth, GuardRuntimeSnapshot } from "./guard-types";
+import { resolveCloudIntelCopy, resolveCloudSyncHealthCopy, resolveProtectionLevelCopy, resolveApprovalCenterHealth, resolveProofStatusCopy } from "./runtime-overview";
+import type { GuardCloudSyncHealth, GuardProofStatus, GuardRuntimeSnapshot } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -65,6 +65,24 @@ const baseSnapshot: GuardRuntimeSnapshot = {
     last_heartbeat_at: new Date().toISOString(),
     approval_center_url: "http://localhost:7392/approval",
   },
+  device: {
+    installation_id: "install-abc123def456",
+    device_label: "My MacBook Pro",
+    local_registered: true,
+  },
+  latest_connect_state: null,
+  proof_status: {
+    state: "not_connected",
+    label: "Not connected",
+    detail: "No cloud proof yet.",
+    request_id: null,
+    pairing_completed_at: null,
+    first_synced_at: null,
+    receipts_stored: 0,
+    inventory_items: 0,
+    runtime_session_id: null,
+    runtime_session_synced_at: null,
+  },
   pending_count: 0,
   receipt_count: 0,
   headline_state: "protected",
@@ -113,3 +131,50 @@ const repairApproval = resolveApprovalCenterHealth(noUrlSnapshot);
 assert(repairApproval.state === "repair_needed", "T738: null approval_center_url should need repair");
 assert(repairApproval.label.toLowerCase().includes("unreachable"), "T738: repair label should mention unreachable");
 assert(repairApproval.detail.toLowerCase().includes("repair"), "T738: repair detail should suggest repair action");
+
+const baseProof: GuardProofStatus = {
+  state: "not_connected",
+  label: "Not connected",
+  detail: "No proof yet.",
+  request_id: null,
+  pairing_completed_at: null,
+  first_synced_at: null,
+  receipts_stored: 0,
+  inventory_items: 0,
+  runtime_session_id: null,
+  runtime_session_synced_at: null,
+};
+
+const notConnectedCopy = resolveProofStatusCopy(baseProof);
+assert(notConnectedCopy.tone === "slate", "P1: not_connected tone should be slate");
+assert(notConnectedCopy.label === "Local only", "P1: not_connected label should be 'Local only'");
+assert(notConnectedCopy.detail.toLowerCase().includes("local"), "P1: not_connected detail should mention local protection");
+
+const syncedCopy = resolveProofStatusCopy({ ...baseProof, state: "synced", label: "Synced", detail: "All good." });
+assert(syncedCopy.tone === "green", "P2: synced tone should be green");
+assert(syncedCopy.label === "Synced", "P2: synced label should match proof label");
+assert(syncedCopy.detail === "All good.", "P2: synced detail should pass through from proof");
+
+const pendingCopy = resolveProofStatusCopy({ ...baseProof, state: "pending", label: "Pending", detail: "Connecting..." });
+assert(pendingCopy.tone === "blue", "P3: pending tone should be blue");
+assert(pendingCopy.label === "Pending", "P3: pending label should match proof label");
+
+const waitingCopy = resolveProofStatusCopy({ ...baseProof, state: "waiting", label: "Waiting", detail: "Hold on." });
+assert(waitingCopy.tone === "blue", "P4: waiting tone should be blue");
+assert(waitingCopy.label === "Waiting", "P4: waiting label should match proof label");
+
+const failedCopy = resolveProofStatusCopy({ ...baseProof, state: "failed", label: "Failed", detail: "Connection error." });
+assert(failedCopy.tone === "attention", "P5: failed tone should be attention");
+assert(failedCopy.label === "Failed", "P5: failed label should match proof label");
+
+const expiredCopy = resolveProofStatusCopy({ ...baseProof, state: "expired", label: "Expired", detail: "Timed out." });
+assert(expiredCopy.tone === "attention", "P6: expired tone should be attention");
+assert(expiredCopy.label === "Expired", "P6: expired label should match proof label");
+
+const unavailableCopy = resolveProofStatusCopy({ ...baseProof, state: "sync_unavailable", label: "Unavailable", detail: "No plan." });
+assert(unavailableCopy.tone === "slate", "P7: sync_unavailable tone should be slate");
+assert(unavailableCopy.label === "Cloud proof not available", "P7: sync_unavailable label should indicate unavailability");
+assert(
+  unavailableCopy.detail.toLowerCase().includes("cloud") || unavailableCopy.detail.toLowerCase().includes("connect"),
+  `P7: sync_unavailable detail should mention cloud or connect (upgrade path) — got: "${unavailableCopy.detail}"`
+);
