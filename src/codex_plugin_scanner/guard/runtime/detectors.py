@@ -53,8 +53,8 @@ DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
 DetectorRunStatus = Literal["ok", "disabled", "filtered", "timeout", "error"]
 _SLOW_DETECTOR_THRESHOLD_MS: int = 100
 _SENSITIVE_DECODE_CONTEXT_PATTERN = re.compile(
-    r"\.env|\.npmrc|id_(?:rsa|ed25519|ecdsa|dsa)|credential|secret|token|api[_-]?key|"
-    r"private[_-]?key|password|\.pem|\.key|aws[_-]",
+    r"\.env|\.npmrc|id_(?:rsa|ed25519|ecdsa|dsa)|api[_-]?key|private[_-]?key|"
+    r"\.pem|\.key|aws[_-]|(?<![A-Za-z0-9])(?:credentials?|secrets?|tokens?|passwords?)(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
 
