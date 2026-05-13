@@ -542,6 +542,8 @@ _POLICY_SOURCES = frozenset(
         "heuristic",
         "policy",
         "auto",
+        "pre-tool-hook",
+        "permission-request-hook",
         "policy-allow",
         "policy-block",
         "policy_allow",

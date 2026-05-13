@@ -2333,7 +2333,13 @@ def run_guard_command(
                 artifact_name=artifact_name,
                 source_scope=_coalesce_string(payload.get("source_scope"), "project"),
                 user_override=_optional_string(payload.get("user_override")),
-                approval_source="approval_center",
+                approval_source=(
+                    "inline"
+                    if _optional_string(payload.get("user_override")) is not None
+                    else "approval_center"
+                    if policy_action == "require-reapproval"
+                    else "policy"
+                ),
             )
             store.add_receipt(receipt)
         if _should_emit_copilot_hook_response(args):

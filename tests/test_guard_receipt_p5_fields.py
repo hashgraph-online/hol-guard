@@ -223,6 +223,8 @@ class TestMapApprovalSource:
         ("heuristic", "policy"),
         ("policy", "policy"),
         ("auto", "policy"),
+        ("pre-tool-hook", "policy"),
+        ("permission-request-hook", "policy"),
         ("pending-approval", "approval_center"),
         ("approval-center-allow", "approval_center"),
         ("unknown-source", "approval_center"),
