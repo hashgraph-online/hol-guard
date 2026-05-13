@@ -129,7 +129,7 @@ def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]
         path_status = "not_on_path"
     elif installer == "pipx":
         path_status = "pipx_shim_detected"
-    elif expected_script_dir is not None and Path(resolved_binary).resolve().parent == expected_script_dir:
+    elif expected_script_dir is not None and _script_dir(resolved_binary) == expected_script_dir:
         path_status = "matches_installer"
     else:
         path_status = "path_mismatch"
@@ -144,7 +144,11 @@ def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]
 def _expected_script_dir(installer_binary: str, installer: str) -> Path | None:
     if installer != "pip" or not installer_binary:
         return None
-    return Path(installer_binary).resolve().parent
+    return _script_dir(installer_binary)
+
+
+def _script_dir(path: str) -> Path:
+    return Path(path).expanduser().parent
 
 
 def _output_lines(value: str) -> list[str]:

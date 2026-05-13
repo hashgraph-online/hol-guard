@@ -74,6 +74,26 @@ def test_update_binary_diagnostics_accepts_same_environment_script(monkeypatch: 
     assert payload["binary_diagnostics"]["expected_script_dir"] == "/opt/guard/bin"
 
 
+def test_update_binary_diagnostics_keeps_venv_script_dir_without_resolving_python(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pip")
+    monkeypatch.setattr(update_commands.sys, "executable", "/workspace/.venv/bin/python")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/workspace/.venv/bin/hol-guard" if name == "hol-guard" else None,
+    )
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["binary_diagnostics"]["path_status"] == "matches_installer"
+    assert payload["binary_diagnostics"]["expected_script_dir"] == "/workspace/.venv/bin"
+
+
 def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
