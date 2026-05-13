@@ -212,6 +212,7 @@ LOCAL_ROUTE_OWNERSHIP = (
     RouteOwnership(route="/settings", persona=("solo_engineer",), auth_required=True, writes_state=True),
 )
 LOCAL_API_OWNERSHIP = (
+    ApiOwnership(path="/v1/initialize", method="POST", category="config", auth_required=False, writes_state=True),
     ApiOwnership(path="/v1/runtime", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/harnesses", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(
