@@ -13807,6 +13807,31 @@ def test_codex_read_only_source_inspection_rejects_git_include_if_hasconfig_nest
     )
 
 
+def test_codex_read_only_source_inspection_rejects_git_config_continued_include_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
+    _write_text(workspace_dir / "helper-gitconfig", "[diff]\n    external = /tmp/guard-diff\n")
+    _write_text(
+        workspace_dir / ".git" / "config",
+        """
+[include]
+    path = ../helper-\\
+        gitconfig
+""".strip(),
+    )
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
 def test_codex_read_only_source_inspection_rejects_git_include_if_onbranch_prefix(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

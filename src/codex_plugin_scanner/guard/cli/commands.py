@@ -5911,7 +5911,7 @@ def _git_config_include_paths(
     paths: list[Path] = []
     section = ""
     section_active = False
-    for raw_line in config_text.splitlines():
+    for raw_line in _git_config_logical_lines(config_text):
         line = raw_line.strip()
         if not line or line.startswith(("#", ";")):
             continue
@@ -6077,7 +6077,7 @@ def _git_remote_urls_from_config_tree(config_path: Path, *, seen_paths: set[Path
 def _git_remote_urls_from_config(config_text: str) -> tuple[str, ...]:
     urls: list[str] = []
     in_remote_section = False
-    for raw_line in config_text.splitlines():
+    for raw_line in _git_config_logical_lines(config_text):
         line = raw_line.strip()
         if not line or line.startswith(("#", ";")):
             continue
@@ -6120,7 +6120,37 @@ def _git_config_value_without_inline_comment(raw_value: str) -> str:
 
 
 def _git_config_enables_diff_helper(config_text: str) -> bool:
-    return bool(re.search(r"(?im)^\s*(?:command|external|textconv)\s*=", config_text))
+    return any(
+        re.match(r"(?i)^\s*(?:command|external|textconv)\s*=", line)
+        for line in _git_config_logical_lines(config_text)
+    )
+
+
+def _git_config_logical_lines(config_text: str) -> tuple[str, ...]:
+    lines: list[str] = []
+    pending = ""
+    for raw_line in config_text.splitlines():
+        line = raw_line.rstrip()
+        if _git_config_line_continues(line):
+            pending = f"{pending}{line[:-1]}"
+            continue
+        if pending:
+            lines.append(f"{pending}{line.lstrip()}")
+            pending = ""
+            continue
+        lines.append(line)
+    if pending:
+        lines.append(pending)
+    return tuple(lines)
+
+
+def _git_config_line_continues(line: str) -> bool:
+    backslashes = 0
+    for char in reversed(line):
+        if char != "\\":
+            break
+        backslashes += 1
+    return backslashes % 2 == 1
 
 
 def _git_grep_uses_external_execution(args: list[str]) -> bool:
