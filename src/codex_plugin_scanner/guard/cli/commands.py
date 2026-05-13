@@ -3399,6 +3399,8 @@ def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str
         return reason
     if "approve it in hol guard, then retry." in reason.lower():
         return reason
+    if _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
+        return f"{reason} Restart HOL Guard, then retry."
     return f"{reason} Approve it in HOL Guard, then retry."
 
 
