@@ -52,6 +52,7 @@ except ImportError:
             redacted_value,
         )
 
+
 try:
     from rich import box
     from rich.console import Console
