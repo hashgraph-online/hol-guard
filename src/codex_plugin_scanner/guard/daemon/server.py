@@ -1146,6 +1146,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
             return True
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
+            return True
         if (
             len(path_parts) == 4
             and path_parts[:2] == ["v1", "harnesses"]
@@ -1319,6 +1321,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if not isinstance(action, str) or not action.strip():
                 return path_parts[1], None, True
             return path_parts[1], action.strip(), True
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
+            action = payload.get("action")
+            if not isinstance(action, str) or not action.strip():
+                return path_parts[2], None, True
+            return path_parts[2], action.strip(), True
         return None, None, False
 
     @staticmethod
@@ -1353,7 +1360,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             }
         ):
             return True
-        return len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision"
+        if len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision":
+            return True
+        return len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision"
 
     def _write_json(
         self,
@@ -1449,6 +1458,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         }:
             return True
         if path.startswith("/requests/"):
+            return True
+        if path.startswith("/apps/"):
             return True
         return path.startswith("/approvals/") and not path.endswith("/decision")
 
