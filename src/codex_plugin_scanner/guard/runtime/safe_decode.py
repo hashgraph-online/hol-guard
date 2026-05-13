@@ -142,12 +142,21 @@ def _clone_decode_result(result: DecodeResult) -> DecodeResult:
 def _cache_decode_result(key: str, result: DecodeResult) -> None:
     if key in _DECODE_CACHE:
         _DECODE_CACHE[key] = _clone_decode_result(result)
+        _touch_decode_cache_key(key)
         return
     _DECODE_CACHE[key] = _clone_decode_result(result)
     _DECODE_CACHE_ORDER.append(key)
     while len(_DECODE_CACHE_ORDER) > _DECODE_CACHE_LIMIT:
         oldest = _DECODE_CACHE_ORDER.pop(0)
         _DECODE_CACHE.pop(oldest, None)
+
+
+def _touch_decode_cache_key(key: str) -> None:
+    if key not in _DECODE_CACHE_ORDER:
+        _DECODE_CACHE_ORDER.append(key)
+        return
+    _DECODE_CACHE_ORDER.remove(key)
+    _DECODE_CACHE_ORDER.append(key)
 
 
 def _hash_preview(text: str) -> tuple[str, str]:
@@ -252,7 +261,7 @@ def _extract_powershell_encoded(text: str) -> str | None:
 
 
 def _unescape_command_argument(value: str) -> str:
-    return value.replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\")
+    return value.replace("\\\\", "\\").replace('\\"', '"').replace("\\'", "'")
 
 
 def _extract_heredoc(text: str) -> str | None:
@@ -346,6 +355,7 @@ def decode_layers(
     )
     cached = _DECODE_CACHE.get(key)
     if cached is not None:
+        _touch_decode_cache_key(key)
         return _clone_decode_result(cached)
     result = _decode_layers_uncached(
         content,

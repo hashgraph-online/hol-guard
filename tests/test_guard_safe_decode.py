@@ -215,6 +215,26 @@ def test_repeated_payloads_use_versioned_decode_cache(monkeypatch: pytest.Monkey
     assert first.final_text == second.final_text
 
 
+def test_decode_cache_access_marks_entry_recent(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_decode_cache()
+    monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE_LIMIT", 2)
+    first = _b64("exec('first')")
+    second = _b64("exec('second')")
+    third = _b64("exec('third')")
+    first_key = safe_decode_module.decode_cache_key(first)
+    second_key = safe_decode_module.decode_cache_key(second)
+    third_key = safe_decode_module.decode_cache_key(third)
+
+    decode_layers(first)
+    decode_layers(second)
+    decode_layers(first)
+    decode_layers(third)
+
+    assert first_key in safe_decode_module._DECODE_CACHE
+    assert second_key not in safe_decode_module._DECODE_CACHE
+    assert third_key in safe_decode_module._DECODE_CACHE
+
+
 def test_decode_cache_key_changes_with_detector_version() -> None:
     payload = _b64("exec('versioned payload')")
 
@@ -222,6 +242,12 @@ def test_decode_cache_key_changes_with_detector_version() -> None:
     next_key = safe_decode_module.decode_cache_key(payload, detector_version="safe-decode.vNEXT")
 
     assert current_key != next_key
+
+
+def test_unescape_command_argument_handles_backslashes_before_quotes() -> None:
+    value = r"print(\"C:\\tmp\")"
+
+    assert safe_decode_module._unescape_command_argument(value) == 'print("C:\\tmp")'
 
 
 def test_safe_decode_signal_receipt_payload_exports_redacted_summary() -> None:
