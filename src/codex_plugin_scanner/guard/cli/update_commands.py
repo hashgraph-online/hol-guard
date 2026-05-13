@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import json
+import os
 import shlex
 import shutil
 import sqlite3
@@ -114,6 +115,8 @@ def _normalize_output_text(value: str) -> str:
 
 
 def _shell_command(command: list[str]) -> str:
+    if os.name == "nt":
+        return subprocess.list2cmdline(command)
     return shlex.join(command)
 
 

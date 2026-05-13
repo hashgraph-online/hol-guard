@@ -73,7 +73,7 @@ def test_install_aliases_resolve_to_native_contracts() -> None:
         assert adapter.harness == canonical
         assert alias in contract.install_aliases
         assert contract.coverage.browser_fallback is True
-        assert contract.coverage.native_hooks == contract.coverage.native_hooks
+        assert contract.coverage.native_hooks == (canonical in {"claude-code", "codex", "copilot"})
 
 
 def test_managed_install_is_idempotent_and_uninstall_tracks_guard_owned_state(tmp_path: Path) -> None:
@@ -208,4 +208,33 @@ def test_approval_open_repairs_stale_local_url(tmp_path: Path, monkeypatch: pyte
 
     assert exit_code == 0
     assert payload["approval_url"] == "http://127.0.0.1:4781/approvals/request-1"
+    assert payload["repaired"] is True
+
+
+def test_approval_open_repairs_ipv6_local_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    request = GuardApprovalRequest(
+        request_id="request-ipv6",
+        harness="codex",
+        artifact_id="artifact-1",
+        artifact_name="Tool",
+        artifact_hash="hash",
+        policy_action="block",
+        recommended_scope="artifact",
+        changed_fields=(),
+        source_scope="local",
+        config_path="config.toml",
+        review_command="hol-guard approvals approve request-ipv6",
+        approval_url="http://[::1]:4000/approvals/request-ipv6",
+    )
+    store.add_approval_request(request, "2026-05-12T00:00:00Z")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.approval_commands.load_guard_daemon_url",
+        lambda guard_home: "http://127.0.0.1:4781",
+    )
+
+    payload, exit_code = run_approval_open_command(argparse.Namespace(request_id="request-ipv6"), store=store)
+
+    assert exit_code == 0
+    assert payload["approval_url"] == "http://127.0.0.1:4781/approvals/request-ipv6"
     assert payload["repaired"] is True
