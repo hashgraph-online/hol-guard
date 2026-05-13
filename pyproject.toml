@@ -52,13 +52,16 @@ publish = [
 
 [tool.uv]
 override-dependencies = [
+    "aiohttp==3.13.5",
     "click==8.3.3",
     "cisco-ai-skill-scanner==2.0.9",
+    "importlib-metadata==9.0.0",
     "jsonschema==4.26.0",
     "litellm==1.83.0",
     "openai==2.36.0",
     "python-dotenv==1.2.2",
     "python-multipart==0.0.28",
+    "tokenizers==0.23.1",
     "urllib3==2.7.0",
 ]
 
