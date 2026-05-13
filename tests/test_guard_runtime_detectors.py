@@ -959,6 +959,39 @@ def test_safe_decode_detector_does_not_match_benign_aws_tooling(tmp_path: Path) 
     assert signals == ()
 
 
+def test_safe_decode_detector_does_not_match_benign_secret_like_identifiers(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-benign-secret-like-identifiers",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="prompt",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt="Decode fixture prose",
+        prompt_text=f"Document .envoy .keycloak and api-keyboard binary fixture bytes: {opaque}",
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
 def test_safe_decode_detector_returns_empty_for_plain_text(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
 
