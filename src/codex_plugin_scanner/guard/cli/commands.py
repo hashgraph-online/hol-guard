@@ -5832,7 +5832,7 @@ def _git_repo_config_paths(cwd: Path) -> tuple[Path, ...]:
 
 
 def _git_repo_root(cwd: Path) -> Path | None:
-    current = cwd.resolve()
+    current = cwd.absolute()
     if current.is_file():
         current = current.parent
     for candidate in (current, *current.parents):
@@ -5993,13 +5993,24 @@ def _git_include_section_is_active(
 def _git_gitdir_condition_matches(pattern: str, *, base_dir: Path, repo_dir: Path, case_sensitive: bool) -> bool:
     pattern_text = _git_gitdir_condition_pattern(pattern, base_dir=base_dir)
     patterns = _git_gitdir_condition_patterns(pattern_text)
-    candidates = [repo_dir.as_posix().rstrip("/") + "/"]
+    candidates = [_git_gitdir_condition_candidate(path) for path in _git_path_aliases(repo_dir)]
     git_dir = _git_effective_git_dir(repo_dir)
     if git_dir is not None:
-        candidates.append(git_dir.as_posix().rstrip("/") + "/")
+        candidates.extend(_git_gitdir_condition_candidate(path) for path in _git_path_aliases(git_dir))
     if case_sensitive:
         return any(fnmatch.fnmatchcase(candidate, item) for candidate in candidates for item in patterns)
     return any(fnmatch.fnmatchcase(candidate.lower(), item.lower()) for candidate in candidates for item in patterns)
+
+
+def _git_path_aliases(path: Path) -> tuple[Path, ...]:
+    resolved = path.resolve()
+    if resolved == path:
+        return (path,)
+    return (path, resolved)
+
+
+def _git_gitdir_condition_candidate(path: Path) -> str:
+    return path.as_posix().rstrip("/") + "/"
 
 
 def _git_gitdir_condition_patterns(pattern_text: str) -> tuple[str, ...]:

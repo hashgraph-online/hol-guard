@@ -13705,6 +13705,38 @@ def test_codex_read_only_source_inspection_rejects_git_include_if_gitdir_matches
     )
 
 
+def test_codex_read_only_source_inspection_rejects_git_include_if_gitdir_matches_symlink(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    included_config = tmp_path / "included-gitconfig"
+    _write_text(
+        included_config,
+        """
+[diff]
+    external = /tmp/guard-diff
+""".strip(),
+    )
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+    _write_text(workspace_dir / ".git" / "HEAD", "ref: refs/heads/main\n")
+    symlink_dir = tmp_path / "workspace-link"
+    try:
+        symlink_dir.symlink_to(workspace_dir, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink unavailable: {exc}")
+    global_config = tmp_path / "global-gitconfig"
+    _write_text(global_config, f'[includeIf "gitdir:{symlink_dir / ".git"}"]\n    path = {included_config}\n')
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=symlink_dir,
+    )
+
+
 def test_codex_read_only_source_inspection_rejects_git_include_if_relative_gitdir(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
