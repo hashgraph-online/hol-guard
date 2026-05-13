@@ -50,6 +50,8 @@ import {
   resolveTerminalLabel,
   scopeLabel,
   STALE_REQUEST_COPY,
+  QUEUE_CONNECTION_ERROR_HEADLINE,
+  QUEUE_CONNECTION_ERROR_INSTRUCTION,
   isDisplayableHarness,
 } from "./approval-center-utils";
 import {
@@ -64,8 +66,11 @@ import {
   searchQueue,
   groupDuplicates,
   isReadOnlyQueueGroup,
+  isDuplicateGroup,
   bulkApproveActionCount,
   bulkApprovePrimaryIds,
+  bulkBlockEligibleGroups,
+  bulkBlockPrimaryIds,
   type QueueSortDirection,
 } from "./queue-state";
 import {
@@ -136,6 +141,7 @@ type LayoutProps = {
     reason: string;
   }) => void;
   onBulkApprove?: (ids: string[]) => void;
+  onBulkBlock?: (ids: string[], reason: string) => void;
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;
 };
@@ -143,20 +149,21 @@ type LayoutProps = {
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
   {
     value: "artifact",
-    label: "This retry only",
+    label: "Approve once",
     description: "Remember this exact prompt, command, tool, path, or host fingerprint."
   },
   {
     value: "workspace",
-    label: "Same action in this project",
+    label: "Remember for project",
     description: "Skip the next prompt for this same action here; different sensitive actions still ask."
   },
   { value: "publisher", label: "This source", description: "Trust future actions from the same source in this app." },
   { value: "harness", label: "This app", description: "Trust matching actions from this app." },
-  { value: "global", label: "Every project", description: "Use this choice across this machine." }
+  { value: "global", label: "Every project", description: "Use this choice across every project on this machine. Cannot easily be undone." }
 ];
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
+const advancedScopeValues = new Set<DecisionScope>(["global"]);
 const queuePageSize = 8;
 export function ApprovalCenterLayout(props: LayoutProps) {
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
@@ -202,6 +209,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
           onClose={handleCloseMobileQueue}
           onOpenRequest={props.onOpenRequest}
           onBulkApprove={props.onBulkApprove}
+          onBulkBlock={props.onBulkBlock}
         />
       )}
       <div className={`flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
@@ -244,6 +252,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 onGoHome={props.onGoHome}
                 onResolve={props.onResolve}
                 onBulkApprove={props.onBulkApprove}
+                onBulkBlock={props.onBulkBlock}
                 onRetry={props.onRetry}
                 onRepair={props.onRepair}
               />
@@ -261,6 +270,7 @@ function MobileQueueDrawer(props: {
   onClose: () => void;
   onOpenRequest: (requestId: string) => void;
   onBulkApprove?: (ids: string[]) => void;
+  onBulkBlock?: (ids: string[], reason: string) => void;
 }) {
   return (
     <div
@@ -290,6 +300,7 @@ function MobileQueueDrawer(props: {
             items={props.requests}
             onOpenRequest={props.onOpenRequest}
             onBulkApprove={props.onBulkApprove}
+            onBulkBlock={props.onBulkBlock}
           />
         </div>
       </div>
@@ -307,6 +318,7 @@ function QueueWorkspace(props: {
   onGoHome: () => void;
   onResolve: LayoutProps["onResolve"];
   onBulkApprove?: (ids: string[]) => void;
+  onBulkBlock?: (ids: string[], reason: string) => void;
   onRetry?: () => void;
   onRepair?: () => Promise<void>;
 }) {
@@ -343,15 +355,16 @@ function QueueWorkspace(props: {
     return (
       <div className="space-y-4">
         <Surface tone="danger">
-          <p className="text-sm font-semibold text-brand-purple">Guard daemon not responding — click to reconnect.</p>
+          <p className="text-sm font-semibold text-brand-purple">{QUEUE_CONNECTION_ERROR_HEADLINE}</p>
           <p className="mt-1 text-sm text-brand-purple/80">{props.requests.message}</p>
+          <p className="mt-2 text-sm text-brand-purple/70">{QUEUE_CONNECTION_ERROR_INSTRUCTION}</p>
           <div className="mt-4 flex flex-wrap gap-3">
             <ActionButton onClick={handleOpenDaemon}>
               Repair
             </ActionButton>
             {props.onRepair !== undefined && (
               <ActionButton onClick={handleRepair} disabled={repairing} variant="outline">
-                {repairing ? "Repairing…" : "Reconnect"}
+                {repairing ? "Repairing..." : "Reconnect"}
               </ActionButton>
             )}
             <code className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">hol-guard start</code>
@@ -408,6 +421,7 @@ function QueueWorkspace(props: {
               items={props.requests.items}
               onOpenRequest={props.onOpenRequest}
               onBulkApprove={props.onBulkApprove}
+              onBulkBlock={props.onBulkBlock}
             />
           </aside>
           <div>
@@ -469,6 +483,7 @@ function QueueBrowser(props: {
   items: GuardApprovalRequest[];
   onOpenRequest: (requestId: string) => void;
   onBulkApprove?: (ids: string[]) => void;
+  onBulkBlock?: (ids: string[], reason: string) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [harnessFilter, setHarnessFilter] = useState("all");
@@ -529,13 +544,21 @@ function QueueBrowser(props: {
 
   const showBulkApprove =
     props.onBulkApprove !== undefined &&
-    bulkEligibleGroups.length > 0 &&
-    bulkEligibleGroups.length === groups.length;
+    bulkEligibleGroups.length > 0;
 
   const handleBulkApprove = useCallback(() => {
     const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
     props.onBulkApprove?.(ids);
   }, [props.onBulkApprove, bulkEligibleGroups]);
+
+  const blockEligibleGroups = useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
+  const blockEligibleActionCount = useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
+  const showBulkBlock = props.onBulkBlock !== undefined && blockEligibleGroups.length > 0;
+
+  const handleBulkBlockConfirm = useCallback((reason: string) => {
+    const ids = bulkBlockPrimaryIds(blockEligibleGroups);
+    props.onBulkBlock?.(ids, reason);
+  }, [props.onBulkBlock, blockEligibleGroups]);
 
   return (
     <section>
@@ -550,6 +573,12 @@ function QueueBrowser(props: {
           </button>
         </div>
       )}
+      {showBulkBlock && (
+        <QueueBulkBlockForm
+          count={blockEligibleActionCount}
+          onBlock={handleBulkBlockConfirm}
+        />
+      )}
       <div className="mb-3 space-y-2">
         <label className="block">
           <span className="sr-only">Search waiting actions</span>
@@ -557,7 +586,7 @@ function QueueBrowser(props: {
             type="search"
             value={searchTerm}
             onChange={handleSearchChange}
-            placeholder="Command, file, MCP, host…"
+            placeholder="Command, file, MCP, host..."
             className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
@@ -685,6 +714,79 @@ function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; 
         )}
       </div>
     </button>
+  );
+}
+
+function QueueBulkBlockForm(props: {
+  count: number;
+  onBlock: (reason: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const handleExpand = useCallback(() => setExpanded(true), []);
+  const handleCollapse = useCallback(() => {
+    setExpanded(false);
+    setReason("");
+  }, []);
+  const handleReasonChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setReason(event.target.value);
+  }, []);
+  const handleConfirm = useCallback(() => {
+    props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group");
+    setExpanded(false);
+    setReason("");
+  }, [props.onBlock, reason]);
+
+  if (!expanded) {
+    return (
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={handleExpand}
+          className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50"
+        >
+          Keep blocked: all duplicates ({props.count})
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-sm font-medium text-brand-dark">
+        Block {props.count} duplicate {props.count === 1 ? "action" : "actions"}
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        This saves a block decision for each duplicate group. Add an optional note.
+      </p>
+      <label className="mt-3 block">
+        <span className="sr-only">Optional reason for blocking duplicates</span>
+        <input
+          type="text"
+          value={reason}
+          onChange={handleReasonChange}
+          placeholder="Why are you blocking these? (optional)"
+          className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        />
+      </label>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={handleConfirm}
+          className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-brand-dark shadow-sm transition-colors hover:bg-slate-50"
+        >
+          Keep blocked
+        </button>
+        <button
+          type="button"
+          onClick={handleCollapse}
+          className="rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-brand-dark"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -826,7 +928,7 @@ function DecisionWorkspace(props: {
             aria-live="polite"
           >
             <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
-            <p className="text-sm font-medium text-brand-green-text">Decided — loading next…</p>
+            <p className="text-sm font-medium text-brand-green-text">Decided: loading next...</p>
           </div>
         )}
         <div className="guard-skeleton h-8 w-48" />
@@ -867,11 +969,11 @@ function DecisionWorkspace(props: {
   const { item, diff, receipt, policy } = props.detail;
   const availableScopeOptions = filterScopeChoicesForRequest(item, scopeOptions);
   const commonScopeOpts = availableScopeOptions.filter((option) => commonScopeValues.has(option.value));
-  const broadScopeOpts = availableScopeOptions.filter((option) => !commonScopeValues.has(option.value));
+  const broaderScopeOpts = availableScopeOptions.filter((option) => !commonScopeValues.has(option.value) && !advancedScopeValues.has(option.value));
+  const advancedScopeOpts = availableScopeOptions.filter((option) => advancedScopeValues.has(option.value));
   const isAlreadyDecided = item.resolution_action !== null;
-  const decidedLabel =
-    item.resolution_action === "allow" ? "allow" : item.resolution_action === "block" ? "block" : item.resolution_action ?? "decided";
-  const allowLabel = scope === "artifact" ? "Approve once" : "Approve and remember";
+  const decidedLabel = resolveDecisionLabel(item.resolution_action);
+  const allowLabel = resolveAllowScopeLabel(scope);
   return (
     <div className="guard-surface-in space-y-4">
       {resolvedBanner !== null && (
@@ -897,7 +999,7 @@ function DecisionWorkspace(props: {
         <div className="flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-slate-50 px-4 py-3">
           <HiMiniInformationCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
-            This action was already decided — {decidedLabel}. No further action needed.
+            This action was already decided: {decidedLabel}. No further action needed.
           </p>
         </div>
       )}
@@ -908,7 +1010,8 @@ function DecisionWorkspace(props: {
         submitting={submitting}
         errorMessage={errorMessage}
         commonScopeOptions={commonScopeOpts}
-        broadScopeOptions={broadScopeOpts}
+        broaderScopeOptions={broaderScopeOpts}
+        advancedScopeOptions={advancedScopeOpts}
         onScopeChange={setScope}
         onReasonChange={setReason}
         onResolve={handleRequestResolve}
@@ -957,6 +1060,26 @@ function buildDecisionTitle(item: GuardApprovalRequest): string {
     return "HOL Guard kept this action blocked.";
   }
   return `${harnessDisplayName(item.harness)} wants to run this action.`;
+}
+
+function resolveDecisionLabel(action: GuardApprovalRequest["resolution_action"]): string {
+  if (action === "allow") {
+    return "allow";
+  }
+  if (action === "block") {
+    return "block";
+  }
+  return action ?? "decided";
+}
+
+function resolveAllowScopeLabel(scope: DecisionScope): string {
+  if (scope === "artifact") {
+    return "Approve once";
+  }
+  if (scope === "workspace") {
+    return "Remember for project";
+  }
+  return "Approve and remember";
 }
 
 function WhyGuardCares(props: { item: GuardApprovalRequest }) {
@@ -1031,13 +1154,14 @@ function RuleBuilder(props: {
   submitting: "allow" | "block" | null;
   errorMessage: string | null;
   commonScopeOptions: typeof scopeOptions;
-  broadScopeOptions: typeof scopeOptions;
+  broaderScopeOptions: typeof scopeOptions;
+  advancedScopeOptions: typeof scopeOptions;
   onScopeChange: (scope: DecisionScope) => void;
   onReasonChange: (reason: string) => void;
   onResolve: (action: "allow" | "block") => void;
 }) {
   const previewText = getRulePreviewText(props.item, props.scope);
-  const allowLabel = props.scope === "artifact" ? "Approve once" : "Approve and remember";
+  const allowLabel = resolveAllowScopeLabel(props.scope);
   const retryInstruction = props.item.decision_v2_json?.retry_instruction ?? null;
 
   const handleAllow = useCallback(() => props.onResolve("allow"), [props.onResolve]);
@@ -1078,8 +1202,6 @@ function RuleBuilder(props: {
         />
       </div>
 
-      {/* Decision steps and keyboard hints removed for calmer UX */}
-
       <div className="relative mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] xl:items-start">
         <BlockedActionCard item={props.item} />
         <div className="space-y-4 xl:sticky xl:top-6">
@@ -1104,26 +1226,50 @@ function RuleBuilder(props: {
                 />
               ))}
             </div>
-            <details>
-              <summary className="cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-brand-dark/70 [&::-webkit-details-marker]:hidden">
-                › Broader approval scopes
-              </summary>
-              <div className="mt-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-2">
-                <p className="mb-2 px-1 text-[11px] font-medium text-brand-blue">
-                  Broader scopes apply across more sessions. Use only when the narrower options are not enough.
-                </p>
-                <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-                  {props.broadScopeOptions.map((option) => (
-                    <ScopeOptionRow
-                      key={option.value}
-                      option={option}
-                      checked={props.scope === option.value}
-                      onScopeChange={props.onScopeChange}
-                    />
-                  ))}
+            {props.broaderScopeOptions.length > 0 && (
+              <details>
+                <summary className="cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-brand-dark/70 [&::-webkit-details-marker]:hidden">
+                  › Additional approval scopes
+                </summary>
+                <div className="mt-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-2">
+                  <p className="mb-2 px-1 text-[11px] font-medium text-brand-blue">
+                    These scopes apply across more sessions. Use only when the narrower options are not enough.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                    {props.broaderScopeOptions.map((option) => (
+                      <ScopeOptionRow
+                        key={option.value}
+                        option={option}
+                        checked={props.scope === option.value}
+                        onScopeChange={props.onScopeChange}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </details>
+              </details>
+            )}
+            {props.advancedScopeOptions.length > 0 && (
+              <details>
+                <summary className="cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-attention/80 transition-colors hover:text-brand-attention [&::-webkit-details-marker]:hidden">
+                  Advanced: applies everywhere
+                </summary>
+                <div className="mt-2 rounded-xl border border-brand-attention/25 bg-brand-attention/[0.04] p-2">
+                  <p className="mb-2 px-1 text-[11px] font-medium text-brand-attention">
+                    This scope applies across every project on this machine. It cannot easily be undone. Only use when no narrower scope is appropriate.
+                  </p>
+                  <div className="grid gap-2 xl:grid-cols-1">
+                    {props.advancedScopeOptions.map((option) => (
+                      <ScopeOptionRow
+                        key={option.value}
+                        option={option}
+                        checked={props.scope === option.value}
+                        onScopeChange={props.onScopeChange}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </details>
+            )}
           </fieldset>
           <div>
             <label htmlFor="guard-reason" className="block font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -1190,22 +1336,32 @@ function resolveAllowButtonText(
   allowLabel: string
 ): string {
   if (submitting === "allow") {
-    return "Saving…";
+    return "Saving...";
   }
   if (blocked) {
-    return "Allow — override block";
+    return "Allow: override block";
   }
   return allowLabel;
 }
 
 function resolveBlockButtonText(submitting: "allow" | "block" | null, blocked: boolean): string {
   if (submitting === "block") {
-    return "Saving…";
+    return "Saving...";
   }
   if (blocked) {
     return "Keep blocked";
   }
   return "Block this action";
+}
+
+function copyApprovalUrlLabel(shareState: "idle" | "copied" | "failed"): string {
+  if (shareState === "copied") {
+    return "Copied";
+  }
+  if (shareState === "failed") {
+    return "Copy failed";
+  }
+  return "Copy link";
 }
 
 function DecisionSteps(props: { activeStep: number }) {
@@ -1275,7 +1431,7 @@ function resolveMcpInputSummary(payload: Record<string, unknown>): string | null
   try {
     const serialized = JSON.stringify(inputs);
     if (serialized.length <= 2) return null;
-    return serialized.length > 140 ? `${serialized.slice(0, 140)}…` : serialized;
+    return serialized.length > 140 ? `${serialized.slice(0, 140)}...` : serialized;
   } catch {
     return null;
   }
@@ -1330,7 +1486,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
               aria-label="Copy local review link"
             >
               <HiMiniClipboard className="h-3 w-3" aria-hidden="true" />
-              {shareState === "copied" ? "Copied" : shareState === "failed" ? "Copy failed" : "Copy link"}
+              {copyApprovalUrlLabel(shareState)}
             </button>
             <a
               href={approvalUrl}

@@ -5,6 +5,8 @@ import {
   displayArtifactName,
   EMPTY_QUEUE_TITLE,
   STALE_REQUEST_COPY,
+  QUEUE_CONNECTION_ERROR_HEADLINE,
+  QUEUE_CONNECTION_ERROR_INSTRUCTION,
   buildRecommendation,
   scopeLabel,
 } from "./approval-center-utils";
@@ -108,7 +110,7 @@ assert(
 const harnessStartEnvelope: GuardActionEnvelope = { ...BASE_ENVELOPE, action_type: "harness_start" };
 assert(
   resolveEnvelopeDisplayText(harnessStartEnvelope) === null,
-  "T496: resolveEnvelopeDisplayText returns null for harness_start — no raw content displayed"
+  "T496: resolveEnvelopeDisplayText returns null for harness_start; no raw content displayed"
 );
 
 assert(
@@ -193,22 +195,22 @@ assert(
 
 assert(
   EMPTY_QUEUE_TITLE === "No blocked actions",
-  'C5: Empty queue shows friendly copy "No blocked actions" — EMPTY_QUEUE_TITLE constant is correct'
+  'C5: Empty queue shows friendly copy "No blocked actions"; EMPTY_QUEUE_TITLE constant is correct'
 );
 
 assert(
   EMPTY_QUEUE_TITLE.toLowerCase().includes("no blocked"),
-  'C5: Empty queue title does not say "no items" — uses friendly language instead'
+  'C5: Empty queue title does not say "no items"; uses friendly language instead'
 );
 
 assert(
   STALE_REQUEST_COPY === "This request was already decided.",
-  'C6: Stale request shows "already decided" copy — STALE_REQUEST_COPY constant is correct'
+  'C6: Stale request shows "already decided" copy; STALE_REQUEST_COPY constant is correct'
 );
 
 assert(
   STALE_REQUEST_COPY.toLowerCase().includes("already decided"),
-  'C6: Stale request copy contains "already decided" — not approve/block buttons'
+  'C6: Stale request copy contains "already decided"; not approve/block buttons'
 );
 
 assert(
@@ -224,4 +226,34 @@ assert(
 assert(
   buildRecommendation(BASE_REQUEST).includes("Project approval remembers this same action"),
   "C9: Recommendation explains project approval does not trust new sensitive actions"
+);
+
+assert(
+  QUEUE_CONNECTION_ERROR_HEADLINE.toLowerCase().includes("daemon"),
+  "C10: Connection error headline mentions the daemon so users know what to start"
+);
+
+assert(
+  QUEUE_CONNECTION_ERROR_HEADLINE.toLowerCase().includes("approval link"),
+  "C10: Connection error headline explains approval links require the daemon to be running"
+);
+
+assert(
+  QUEUE_CONNECTION_ERROR_INSTRUCTION.toLowerCase().includes("reload"),
+  "C11: Connection error instruction tells users to reload after starting Guard"
+);
+
+assert(
+  QUEUE_CONNECTION_ERROR_INSTRUCTION.toLowerCase().includes("start"),
+  "C11: Connection error instruction tells users to start Guard on this machine"
+);
+
+assert(
+  scopeLabel("workspace") === "Same action in this project",
+  "C12: scopeLabel for workspace is unchanged; only button label changes (GR125)"
+);
+
+assert(
+  scopeLabel("global") !== "Remember for project",
+  "C12: scopeLabel for global is not the project-scoped label"
 );
