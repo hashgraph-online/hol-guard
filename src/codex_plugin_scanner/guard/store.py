@@ -118,7 +118,9 @@ _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
 _WORKSPACE_POLICY_KEY_PREFIX = "workspace:"
-_SCOPED_HARNESS_FAMILIES = frozenset({"file-read", "mcp-tool", "prompt", "prompt-env-read", "tool-action"})
+_SCOPED_HARNESS_FAMILIES = frozenset(
+    {"file-read", "mcp-tool", "prompt", "prompt-env-read", "prompt-file", "tool-action"}
+)
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 
 

@@ -382,6 +382,7 @@ def test_gr117_harness_scope_applies_only_same_action_family(tmp_path: Path) -> 
     assert store.get_approval_request("req-mcp")["status"] == "pending"
     assert store.resolve_policy("codex", "codex:project:tool-action:other", "hash-new") == "allow"
     assert store.resolve_policy("codex", "codex:project:mcp-tool:other", "hash-new") is None
+    assert store.resolve_policy("codex", "codex:project:prompt-file:abcdef", "hash-new") is None
 
 
 def test_gr120_clearing_approval_history_does_not_delete_evidence(tmp_path: Path) -> None:
