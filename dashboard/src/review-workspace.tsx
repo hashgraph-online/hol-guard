@@ -246,6 +246,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         <div className={`${mobileQueueOpen ? "block" : "hidden"} md:block`}>
           <ReviewQueueList
             requests={pagedRequests}
+            allFilteredRequests={filteredRequests}
             totalCount={requests.length}
             filteredCount={filteredRequests.length}
             activeRequestId={activeItem.request_id}
@@ -322,6 +323,7 @@ function resolveSemanticGroup(categoryId: QueueCategoryId): SemanticGroupId {
 
 const ReviewQueueList = forwardRef<HTMLDivElement, {
   requests: GuardApprovalRequest[];
+  allFilteredRequests: GuardApprovalRequest[];
   totalCount: number;
   filteredCount: number;
   activeRequestId: string | null;
@@ -340,6 +342,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   onOpenRequest: (requestId: string) => void;
 }>(({
   requests,
+  allFilteredRequests,
   totalCount,
   filteredCount,
   activeRequestId,
@@ -377,14 +380,14 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
 
   const activeSemanticGroup = semanticFilter;
 
-  // Only show groups that have items
+  // Only show groups that have items (derive from full filtered set, not paged)
   const visibleGroups = useMemo(() => {
     const available = new Set<SemanticGroupId>();
-    for (const item of requests) {
+    for (const item of allFilteredRequests) {
       available.add(resolveSemanticGroup(resolveQueueCategory(item).id));
     }
     return SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
-  }, [requests]);
+  }, [allFilteredRequests]);
 
   const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
   const showPagination = filteredCount > QUEUE_PAGE_SIZE;

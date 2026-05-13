@@ -406,7 +406,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             role="tabpanel"
             aria-labelledby="tab-apps"
           >
-            <AppTab receipts={receiptItems} />
+            <AppTab receipts={filtered} />
           </div>
         )}
 
