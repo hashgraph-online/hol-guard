@@ -93,6 +93,8 @@ class HarnessAdapter:
     harness = ""
     aliases: tuple[str, ...] = ()
     executable = ""
+    launcher_name = ""
+    legacy_launcher_names: tuple[str, ...] = ()
     approval_tier = "approval-center"
     approval_summary = "Guard pauses the launch and routes approval through the local approval center."
     fallback_hint = "Use `hol-guard approvals` if you want to resolve it from the terminal."
@@ -148,6 +150,12 @@ class HarnessAdapter:
 
     def resolved_executable(self, context: HarnessContext) -> str | None:
         return _resolve_command(self.executable, self.executable_candidates(context))
+
+    def guard_launcher_paths(self, context: HarnessContext) -> tuple[Path, ...]:
+        shim_name = self.launcher_name or self.harness
+        shim_dir = context.guard_home / "bin"
+        names = (shim_name, *self.legacy_launcher_names)
+        return tuple(shim_dir / f"guard-{name}{suffix}" for name in names for suffix in ("", ".cmd"))
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         command = [self.resolved_executable(context) or self.executable]
@@ -227,9 +235,20 @@ class HarnessAdapter:
         runtime_probe: dict[str, object] | None,
     ) -> list[str]:
         warnings = list(detection.warnings)
+        guard_managed = _detection_has_guard_management(detection)
+        if detection.config_paths and not guard_managed:
+            warnings.append(
+                f"{self.harness} config was found, but Guard is not installed for this harness. "
+                f"Run `hol-guard install {self.harness}` to enable protection."
+            )
         if detection.config_paths and not detection.command_available:
             warnings.append(
                 f"{self.harness} config was found, but the {self.executable} command is not available on PATH."
+            )
+        elif guard_managed and not detection.command_available:
+            warnings.append(
+                f"Guard launcher for {self.harness} is installed, but the {self.executable} command is not available "
+                "on PATH."
             )
         if runtime_probe is not None and runtime_probe.get("timed_out") is True:
             warnings.append(f"{self.executable} diagnostics timed out before Guard could confirm runtime state.")
@@ -246,17 +265,108 @@ class HarnessAdapter:
         }
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
-        detection = self.detect(context)
+        detection = self._detection_with_guard_launcher(context, self.detect(context))
         runtime_probe = self.runtime_probe(context)
+        warnings = self.diagnostic_warnings(detection, runtime_probe)
         return {
             "harness": self.harness,
             "installed": detection.installed,
+            "setup_status": _diagnostic_setup_status(detection, warnings),
             "command_available": detection.command_available,
             "config_paths": list(detection.config_paths),
             "artifacts": [artifact.to_dict() for artifact in detection.artifacts],
             "runtime_probe": runtime_probe,
-            "warnings": self.diagnostic_warnings(detection, runtime_probe),
+            "warnings": warnings,
         }
+
+    def _detection_with_guard_launcher(
+        self,
+        context: HarnessContext,
+        detection: HarnessDetection,
+    ) -> HarnessDetection:
+        shim_path = next((path for path in self.guard_launcher_paths(context) if _is_guard_launcher_shim(path)), None)
+        if shim_path is None:
+            return detection
+        artifact = GuardArtifact(
+            artifact_id=f"{self.harness}:guard-launcher-shim",
+            name=shim_path.name,
+            harness=self.harness,
+            artifact_type="guard_launcher_shim",
+            source_scope="guard",
+            config_path=str(shim_path),
+            command=str(shim_path),
+            metadata={"shim_dir": str(shim_path.parent)},
+        )
+        return HarnessDetection(
+            harness=detection.harness,
+            installed=True,
+            command_available=detection.command_available,
+            config_paths=detection.config_paths,
+            artifacts=(*detection.artifacts, artifact),
+            warnings=detection.warnings,
+        )
+
+
+def _diagnostic_setup_status(detection: HarnessDetection, warnings: list[str]) -> str:
+    guard_managed = _detection_has_guard_management(detection)
+    if guard_managed and _warnings_include_setup_failure(warnings):
+        return "broken"
+    if guard_managed:
+        return "active"
+    if detection.config_paths or detection.command_available:
+        return "partial"
+    return "not_found"
+
+
+def _detection_has_guard_management(detection: HarnessDetection) -> bool:
+    if any(_guard_managed_path(path) for path in detection.config_paths):
+        return True
+    return any(_artifact_uses_guard(artifact) for artifact in detection.artifacts)
+
+
+def _guard_managed_path(path: str) -> bool:
+    return Path(path).name.lower().startswith("hol-guard")
+
+
+def _artifact_uses_guard(artifact: GuardArtifact) -> bool:
+    if artifact.artifact_type == "guard_launcher_shim":
+        return True
+    if artifact.command is not None and _is_guard_command_name(artifact.command, artifact.harness):
+        return True
+    values = [artifact.command or "", *artifact.args]
+    return any(_value_mentions_guard(value) for value in values)
+
+
+def _is_guard_command_name(value: str, harness: str) -> bool:
+    normalized = Path(value.replace("\\", "/")).name.lower()
+    if normalized.endswith(".cmd"):
+        normalized = normalized[:-4]
+    return normalized == f"guard-{harness}"
+
+
+def _value_mentions_guard(value: str) -> bool:
+    normalized = value.lower()
+    return "codex_plugin_scanner.cli" in normalized or "hol-guard" in normalized
+
+
+def _is_guard_launcher_shim(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        contents = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    return "codex_plugin_scanner.cli" in contents and "guard" in contents and "run" in contents
+
+
+def _warnings_include_setup_failure(warnings: list[str]) -> bool:
+    setup_markers = (
+        "guard is not installed",
+        "command is not available",
+        "native hooks are disabled",
+        "managed codex hooks are missing",
+    )
+    return any(any(marker in warning.lower() for marker in setup_markers) for warning in warnings)
 
 
 __all__ = [

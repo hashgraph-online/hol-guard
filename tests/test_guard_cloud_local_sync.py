@@ -408,6 +408,101 @@ def test_runtime_snapshot_reports_endpoint_unavailable_sync_as_degraded(tmp_path
     assert snapshot["cloud_sync_health"]["label"] == "Cloud sync degraded"
 
 
+def test_runtime_snapshot_exposes_local_device_without_cloud_pairing(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    device = store.get_device_metadata()
+
+    snapshot = build_runtime_snapshot(
+        store=store,
+        approval_center_url=None,
+        now="2026-04-24T00:00:00+00:00",
+    )
+
+    assert snapshot["device"] == {
+        "installation_id": device["installation_id"],
+        "device_label": device["device_label"],
+        "local_registered": True,
+    }
+    assert snapshot["latest_connect_state"] is None
+    assert snapshot["proof_status"] == {
+        "state": "not_connected",
+        "label": "Cloud proof not started",
+        "detail": "Connect Guard Cloud to sync this device proof.",
+        "request_id": None,
+        "pairing_completed_at": None,
+        "first_synced_at": None,
+        "runtime_session_id": None,
+        "runtime_session_synced_at": None,
+        "receipts_stored": 0,
+        "inventory_items": 0,
+    }
+
+
+def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-24T00:00:00+00:00",
+    )
+    request_id = str(connect_request["request_id"])
+    store.complete_guard_connect_request(
+        request_id=request_id,
+        pairing_secret=str(connect_request["pairing_secret"]),
+        token="secret-browser-session-token",
+        now="2026-04-24T00:01:00+00:00",
+    )
+    store.record_guard_connect_result(
+        request_id=request_id,
+        status="connected",
+        milestone="first_sync_succeeded",
+        now="2026-04-24T00:02:00+00:00",
+        sync_payload={
+            "synced_at": "2026-04-24T00:02:00+00:00",
+            "receipts_stored": 3,
+            "inventory_tracked": 5,
+            "runtime_session_id": "runtime-session-1",
+            "runtime_session_synced_at": "2026-04-24T00:01:30+00:00",
+        },
+    )
+
+    snapshot = build_runtime_snapshot(
+        store=store,
+        approval_center_url=None,
+        now="2026-04-24T00:03:00+00:00",
+    )
+    latest_connect_state = snapshot["latest_connect_state"]
+    proof_status = snapshot["proof_status"]
+
+    assert isinstance(latest_connect_state, dict)
+    assert latest_connect_state["request_id"] == request_id
+    assert latest_connect_state["status"] == "connected"
+    assert latest_connect_state["milestone"] == "first_sync_succeeded"
+    assert "sync_url" not in latest_connect_state
+    assert "allowed_origin" not in latest_connect_state
+    assert "secret-browser-session-token" not in json.dumps(latest_connect_state)
+    assert latest_connect_state["proof"] == {
+        "pairing_completed_at": "2026-04-24T00:01:00+00:00",
+        "first_synced_at": "2026-04-24T00:02:00+00:00",
+        "receipts_stored": 3,
+        "inventory_items": 5,
+        "runtime_session_id": "runtime-session-1",
+        "runtime_session_synced_at": "2026-04-24T00:01:30+00:00",
+    }
+    assert proof_status == {
+        "state": "synced",
+        "label": "First proof synced",
+        "detail": "This device completed its first Guard Cloud proof sync.",
+        "request_id": request_id,
+        "pairing_completed_at": "2026-04-24T00:01:00+00:00",
+        "first_synced_at": "2026-04-24T00:02:00+00:00",
+        "runtime_session_id": "runtime-session-1",
+        "runtime_session_synced_at": "2026-04-24T00:01:30+00:00",
+        "receipts_stored": 3,
+        "inventory_items": 5,
+    }
+
+
 def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
