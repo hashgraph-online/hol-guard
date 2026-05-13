@@ -674,6 +674,22 @@ NODE"""
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_heredoc_safe_write_then_delete_operation():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": """node - <<'NODE'
+const fs = require('fs');
+fs.writeFileSync('/tmp/send-ready.json', JSON.stringify({ ok: true }));
+fs.unlinkSync('dangerous-marker.json');
+NODE"""
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_node_heredoc_network_generation_flow():
     request = extract_sensitive_tool_action_request(
         "bash",
