@@ -1792,6 +1792,38 @@ def test_tool_action_request_classifier_detects_versioned_python_heredoc_file_wr
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_versioned_python_inline_file_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "/opt/codex-runtime/dependencies/python/bin/python3.12.1 -c "
+                "\"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\""
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_allows_patch_versioned_python_pdf_text_extraction_heredoc():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "/opt/codex-runtime/dependencies/python/bin/python3.12.1 - <<'PY'\n"
+                "from pathlib import Path\n"
+                "pdf = Path('/tmp/HOL Coordination Layer-compressed.pdf')\n"
+                "print(pdf.name)\n"
+                "PY"
+            )
+        },
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_semicolon_chained_interpreter_script():
     request = extract_sensitive_tool_action_request(
         "bash",
