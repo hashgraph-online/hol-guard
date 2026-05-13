@@ -206,7 +206,7 @@ export function EvidenceFilterBar({
           value={filters.time}
           onChange={handleTimeChange}
           aria-label="Time period"
-          className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         >
           {(Object.entries(EVIDENCE_TIME_LABELS) as [EvidenceTimeFilter, string][]).map(
             ([val, label]) => (
@@ -221,7 +221,7 @@ export function EvidenceFilterBar({
           value={filters.decision}
           onChange={handleDecisionChange}
           aria-label="Decision filter"
-          className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         >
           {(Object.entries(EVIDENCE_DECISION_LABELS) as [EvidenceDecision, string][]).map(
             ([val, label]) => (
@@ -232,42 +232,14 @@ export function EvidenceFilterBar({
           )}
         </select>
 
-        <select
-          value={filters.harness}
-          onChange={handleHarnessChange}
-          aria-label="App filter"
-          className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        >
-          <option value="all">All apps</option>
-          {harnesses.map((h) => (
-            <option key={h} value={h}>
-              {harnessDisplayName(h)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filters.category}
-          onChange={handleCategoryChange}
-          aria-label="Category filter"
-          className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        >
-          {CATEGORY_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-
         <button
           type="button"
           onClick={handleToggleMore}
           aria-expanded={showMore}
           aria-label="Toggle more filters"
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors"
+          className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors"
         >
           <HiFunnel className="h-4 w-4" aria-hidden="true" />
-          More
           {showMore ? (
             <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
           ) : (
@@ -278,6 +250,33 @@ export function EvidenceFilterBar({
 
       {showMore && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
+          <select
+            value={filters.harness}
+            onChange={handleHarnessChange}
+            aria-label="App filter"
+            className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          >
+            <option value="all">All apps</option>
+            {harnesses.map((h) => (
+              <option key={h} value={h}>
+                {harnessDisplayName(h)}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.category}
+            onChange={handleCategoryChange}
+            aria-label="Category filter"
+            className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          >
+            {CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
           <label className="flex items-center gap-2 text-sm text-brand-dark">
             <span className="shrink-0 text-xs font-medium text-slate-500">
               Source scope:
