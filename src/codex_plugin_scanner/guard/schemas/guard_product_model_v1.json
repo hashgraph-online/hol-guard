@@ -2,8 +2,8 @@
   "version": "guard-product-model.v1",
   "personas": [
     "vibe_coder",
-    "solo_engineer",
-    "manager",
+    "solo",
+    "team_manager",
     "security_lead",
     "agent_operator"
   ],
@@ -232,7 +232,7 @@
       "route": "/",
       "persona": [
         "vibe_coder",
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": false,
       "writes_state": false
@@ -241,7 +241,7 @@
       "route": "/home",
       "persona": [
         "vibe_coder",
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": false,
       "writes_state": false
@@ -250,7 +250,7 @@
       "route": "/dashboard",
       "persona": [
         "vibe_coder",
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": false,
       "writes_state": false
@@ -259,7 +259,7 @@
       "route": "/inbox",
       "persona": [
         "vibe_coder",
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": true,
       "writes_state": true
@@ -268,7 +268,7 @@
       "route": "/requests",
       "persona": [
         "vibe_coder",
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": true,
       "writes_state": true
@@ -277,7 +277,7 @@
       "route": "/requests/{id}",
       "persona": [
         "vibe_coder",
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": true,
       "writes_state": true
@@ -286,7 +286,7 @@
       "route": "/approvals",
       "persona": [
         "vibe_coder",
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": true,
       "writes_state": true
@@ -295,7 +295,7 @@
       "route": "/approvals/{id}",
       "persona": [
         "vibe_coder",
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": true,
       "writes_state": true
@@ -303,8 +303,8 @@
     {
       "route": "/fleet",
       "persona": [
-        "solo_engineer",
-        "manager"
+        "solo",
+        "team_manager"
       ],
       "auth_required": true,
       "writes_state": true
@@ -312,8 +312,8 @@
     {
       "route": "/apps/{slug}",
       "persona": [
-        "solo_engineer",
-        "manager"
+        "solo",
+        "team_manager"
       ],
       "auth_required": true,
       "writes_state": true
@@ -321,7 +321,7 @@
     {
       "route": "/evidence",
       "persona": [
-        "solo_engineer",
+        "solo",
         "security_lead"
       ],
       "auth_required": true,
@@ -330,7 +330,7 @@
     {
       "route": "/settings",
       "persona": [
-        "solo_engineer"
+        "solo"
       ],
       "auth_required": true,
       "writes_state": true
@@ -451,6 +451,13 @@
     },
     {
       "path": "/v1/approvals/{id}/decision",
+      "method": "POST",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "path": "/approvals/{id}/decision",
       "method": "POST",
       "category": "unknown",
       "auth_required": true,

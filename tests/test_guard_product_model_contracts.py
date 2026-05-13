@@ -49,8 +49,8 @@ def test_product_model_reuses_existing_guard_action_and_scope_contracts() -> Non
 def test_personas_and_activation_stages_cover_local_cloud_users() -> None:
     assert PERSONA_VALUES == (
         "vibe_coder",
-        "solo_engineer",
-        "manager",
+        "solo",
+        "team_manager",
         "security_lead",
         "agent_operator",
     )
@@ -208,6 +208,7 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert apis_by_method[("GET", "/v1/requests/{id}")].writes_state is False
     assert apis_by_method[("POST", "/v1/requests/{id}/approve")].writes_state is True
     assert apis_by_method[("POST", "/v1/approvals/{id}/decision")].writes_state is True
+    assert apis_by_method[("POST", "/approvals/{id}/decision")].writes_state is True
     assert apis_by_method[("GET", "/v1/receipts")].writes_state is False
     assert apis_by_method[("GET", "/v1/policy")].category == "config"
     assert apis_by_method[("POST", "/v1/policy/decisions")].writes_state is True

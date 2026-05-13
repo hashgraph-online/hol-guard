@@ -1146,6 +1146,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
             return True
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
+            return True
         if (
             len(path_parts) == 4
             and path_parts[:2] == ["v1", "harnesses"]

@@ -11,7 +11,7 @@ from codex_plugin_scanner.guard.models import DECISION_SCOPE_VALUES, GUARD_ACTIO
 
 GUARD_PRODUCT_MODEL_VERSION = "guard-product-model.v1"
 
-Persona = Literal["vibe_coder", "solo_engineer", "manager", "security_lead", "agent_operator"]
+Persona = Literal["vibe_coder", "solo", "team_manager", "security_lead", "agent_operator"]
 ActivationStage = Literal[
     "not_installed",
     "installed_local",
@@ -25,8 +25,8 @@ ActionUrgency = Literal["low", "medium", "high", "critical"]
 
 PERSONA_VALUES: tuple[Persona, ...] = (
     "vibe_coder",
-    "solo_engineer",
-    "manager",
+    "solo",
+    "team_manager",
     "security_lead",
     "agent_operator",
 )
@@ -186,38 +186,38 @@ HERMES_OPENCLAW_RUNTIME_MODELS = {
 }
 
 LOCAL_ROUTE_OWNERSHIP = (
-    RouteOwnership(route="/", persona=("vibe_coder", "solo_engineer"), auth_required=False, writes_state=False),
-    RouteOwnership(route="/home", persona=("vibe_coder", "solo_engineer"), auth_required=False, writes_state=False),
+    RouteOwnership(route="/", persona=("vibe_coder", "solo"), auth_required=False, writes_state=False),
+    RouteOwnership(route="/home", persona=("vibe_coder", "solo"), auth_required=False, writes_state=False),
     RouteOwnership(
         route="/dashboard",
-        persona=("vibe_coder", "solo_engineer"),
+        persona=("vibe_coder", "solo"),
         auth_required=False,
         writes_state=False,
     ),
-    RouteOwnership(route="/inbox", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
-    RouteOwnership(route="/requests", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/inbox", persona=("vibe_coder", "solo"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/requests", persona=("vibe_coder", "solo"), auth_required=True, writes_state=True),
     RouteOwnership(
         route="/requests/{id}",
-        persona=("vibe_coder", "solo_engineer"),
+        persona=("vibe_coder", "solo"),
         auth_required=True,
         writes_state=True,
     ),
-    RouteOwnership(route="/approvals", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/approvals", persona=("vibe_coder", "solo"), auth_required=True, writes_state=True),
     RouteOwnership(
         route="/approvals/{id}",
-        persona=("vibe_coder", "solo_engineer"),
+        persona=("vibe_coder", "solo"),
         auth_required=True,
         writes_state=True,
     ),
-    RouteOwnership(route="/fleet", persona=("solo_engineer", "manager"), auth_required=True, writes_state=True),
-    RouteOwnership(route="/apps/{slug}", persona=("solo_engineer", "manager"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/fleet", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/apps/{slug}", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
     RouteOwnership(
         route="/evidence",
-        persona=("solo_engineer", "security_lead"),
+        persona=("solo", "security_lead"),
         auth_required=True,
         writes_state=True,
     ),
-    RouteOwnership(route="/settings", persona=("solo_engineer",), auth_required=True, writes_state=True),
+    RouteOwnership(route="/settings", persona=("solo",), auth_required=True, writes_state=True),
 )
 LOCAL_API_OWNERSHIP = (
     ApiOwnership(path="/v1/initialize", method="POST", category="config", auth_required=False, writes_state=True),
@@ -274,6 +274,13 @@ LOCAL_API_OWNERSHIP = (
     ),
     ApiOwnership(
         path="/v1/approvals/{id}/decision",
+        method="POST",
+        category="unknown",
+        auth_required=True,
+        writes_state=True,
+    ),
+    ApiOwnership(
+        path="/approvals/{id}/decision",
         method="POST",
         category="unknown",
         auth_required=True,
