@@ -4,7 +4,8 @@ import {
 } from "./queue-state";
 import { harnessDisplayName } from "./approval-center-utils";
 import { resolveNewAppDiscoveries } from "./home-dashboard";
-import type { GuardManagedInstall } from "./guard-types";
+import { resolveProofStatusCopy } from "./runtime-overview";
+import type { GuardManagedInstall, GuardProofStatus } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -257,4 +258,77 @@ assert(
 assert(
   !containsExtendedJargon(setupStateForJargon.ctaLabel),
   `C4: setup_needed CTA label has no jargon — got: "${setupStateForJargon.ctaLabel}"`
+);
+
+const demoProof: GuardProofStatus = {
+  state: "pending",
+  label: "First proof pending",
+  detail: "Browser pairing finished. First proof sync has not completed yet.",
+  request_id: "demo-connect-request",
+  pairing_completed_at: new Date().toISOString(),
+  first_synced_at: null,
+  receipts_stored: 0,
+  inventory_items: 0,
+  runtime_session_id: "demo-runtime",
+  runtime_session_synced_at: null,
+};
+
+const demoPendingCopy = resolveProofStatusCopy(demoProof);
+assert(
+  demoPendingCopy.tone === "blue",
+  `D1: demo pending proof tone should be blue — got: "${demoPendingCopy.tone}"`
+);
+assert(
+  demoPendingCopy.label === "First proof pending",
+  `D1: demo pending proof label should pass through — got: "${demoPendingCopy.label}"`
+);
+assert(
+  demoPendingCopy.detail.length > 0,
+  "D1: demo pending proof detail should not be empty"
+);
+
+const syncedProof: GuardProofStatus = {
+  state: "synced",
+  label: "First proof synced",
+  detail: "Your first protected session is recorded on Guard Cloud.",
+  request_id: "demo-connect-request",
+  pairing_completed_at: new Date().toISOString(),
+  first_synced_at: new Date().toISOString(),
+  receipts_stored: 3,
+  inventory_items: 2,
+  runtime_session_id: "demo-runtime",
+  runtime_session_synced_at: new Date().toISOString(),
+};
+
+const syncedCopyForHome = resolveProofStatusCopy(syncedProof);
+assert(
+  syncedCopyForHome.tone === "green",
+  `D2: synced proof shown on home route should use green tone — got: "${syncedCopyForHome.tone}"`
+);
+assert(
+  syncedCopyForHome.label === "First proof synced",
+  `D2: synced proof label on home route should read "First proof synced" — got: "${syncedCopyForHome.label}"`
+);
+
+const localOnlyProof: GuardProofStatus = {
+  state: "not_connected",
+  label: "Not connected",
+  detail: "No cloud proof yet.",
+  request_id: null,
+  pairing_completed_at: null,
+  first_synced_at: null,
+  receipts_stored: 0,
+  inventory_items: 0,
+  runtime_session_id: null,
+  runtime_session_synced_at: null,
+};
+
+const localOnlyCopyForHome = resolveProofStatusCopy(localOnlyProof);
+assert(
+  localOnlyCopyForHome.tone === "slate",
+  `D3: not_connected proof on home route uses slate tone — got: "${localOnlyCopyForHome.tone}"`
+);
+assert(
+  localOnlyCopyForHome.label === "Local only",
+  `D3: not_connected proof label on home route reads "Local only" — got: "${localOnlyCopyForHome.label}"`
 );

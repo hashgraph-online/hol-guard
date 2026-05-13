@@ -1,4 +1,39 @@
 import { i as isDisplayableHarness, j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, k as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, q as HiMiniExclamationCircle, s as HiMiniWrenchScrewdriver, t as HiMiniXCircle, r as reactExports, u as HiMiniClipboardDocumentCheck, v as HiMiniClipboard } from "../guard-dashboard.js";
+const SUPPORTED_APPS_COPY = "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.";
+function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
+  const hasApps = activeInstallCount > 0;
+  if (cloudState === "local_only") {
+    return {
+      status: hasApps ? "clear" : "setup_gap",
+      headline: hasApps ? "Your apps are covered" : "Connect an app to start",
+      subheadline: hasApps ? "Guard is protecting your local AI apps." : SUPPORTED_APPS_COPY,
+      primaryCtaLabel: "Connect this machine",
+      primaryCtaHref: urls.connect_url,
+      secondaryCtaLabel: "Open Home",
+      secondaryCtaHref: urls.dashboard_url
+    };
+  }
+  if (cloudState === "paired_waiting") {
+    return {
+      status: hasApps ? "clear" : "setup_gap",
+      headline: hasApps ? "Apps covered, first proof pending" : "Connect an app to start",
+      subheadline: hasApps ? "Guard is running. First cloud proof is on its way." : SUPPORTED_APPS_COPY,
+      primaryCtaLabel: "Open Cloud Devices",
+      primaryCtaHref: urls.fleet_url,
+      secondaryCtaLabel: "Open Home",
+      secondaryCtaHref: urls.dashboard_url
+    };
+  }
+  return {
+    status: hasApps ? "clear" : "setup_gap",
+    headline: hasApps ? "Your apps are covered" : "Connect an app to start",
+    subheadline: hasApps ? "Confirm that Guard is running and protecting your local AI apps." : SUPPORTED_APPS_COPY,
+    primaryCtaLabel: "Open Cloud Devices",
+    primaryCtaHref: urls.fleet_url,
+    secondaryCtaLabel: "Open Home",
+    secondaryCtaHref: urls.dashboard_url
+  };
+}
 function collectHarnesses(snapshot) {
   const harnesses = /* @__PURE__ */ new Set();
   for (const item of snapshot.items) {
@@ -47,15 +82,24 @@ function FleetWorkspace(props) {
   ).sort((a, b) => a.localeCompare(b));
   const runtimeState = props.runtime.runtime_state;
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isDisplayableHarness));
+  const heroCopy = resolveFleetHeroCopy(
+    props.runtime.cloud_state,
+    activeInstalls.length,
+    {
+      fleet_url: props.runtime.fleet_url,
+      dashboard_url: props.runtime.dashboard_url,
+      connect_url: props.runtime.connect_url
+    }
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,
       {
-        status: activeInstalls.length > 0 ? "clear" : "setup_gap",
-        headline: activeInstalls.length > 0 ? "Your apps are covered" : "Connect an app to start",
-        subheadline: activeInstalls.length > 0 ? "Confirm that Guard is running and protecting your local AI apps." : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.",
-        cta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.runtime.fleet_url, children: "Open Cloud Devices" }),
-        secondaryCta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.runtime.dashboard_url, variant: "outline", children: "Open Home" })
+        status: heroCopy.status,
+        headline: heroCopy.headline,
+        subheadline: heroCopy.subheadline,
+        cta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.primaryCtaHref, children: heroCopy.primaryCtaLabel }),
+        secondaryCta: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: heroCopy.secondaryCtaHref, variant: "outline", children: heroCopy.secondaryCtaLabel })
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -225,5 +269,6 @@ function SetupStep(props) {
   ] });
 }
 export {
-  FleetWorkspace
+  FleetWorkspace,
+  resolveFleetHeroCopy
 };

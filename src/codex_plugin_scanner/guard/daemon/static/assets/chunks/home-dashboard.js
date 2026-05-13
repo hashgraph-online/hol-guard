@@ -1,5 +1,6 @@
 import { r as reactExports, i as isDisplayableHarness, j as jsxRuntimeExports, E as EmptyState, A as ActionButton, H as HiMiniCheckCircle, G as GuardHero, P as ProofStrip, f as formatNumber, a as HiMiniFire, b as HiMiniCalendarDays, c as HiMiniShieldCheck, S as SectionLabel, h as harnessDisplayName, d as formatRelativeTime, e as HiMiniSparkles, g as HiMiniXMark, B as Badge, k as HiMiniChevronRight, l as HiMiniChevronUp, m as HiMiniChevronDown, n as HiMiniExclamationTriangle, o as HiMiniBolt, p as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
+import { D as DeviceProofCard } from "./runtime-overview.js";
 function HomeWorkspace(props) {
   const [toastMessage, setToastMessage] = reactExports.useState(null);
   const toastTimerRef = reactExports.useRef(null);
@@ -158,6 +159,7 @@ function HomeWorkspace(props) {
         )
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DeviceProofCard, { device: snapshot.device, proofStatus: snapshot.proof_status }),
         snapshot.latest_receipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProtectionSection, { receipts: snapshot.latest_receipts }),
         policyItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Reset remembered decisions" }),
