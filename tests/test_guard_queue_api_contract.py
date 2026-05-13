@@ -101,11 +101,20 @@ def _get_json(port: int, path: str) -> dict[str, object]:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _post_json(port: int, token: str, path: str, payload: dict[str, object]) -> dict[str, object]:
+def _post_json(
+    port: int,
+    token: str,
+    path: str,
+    payload: dict[str, object],
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, object]:
+    headers = {"Content-Type": "application/json", "X-Guard-Token": token}
+    if extra_headers is not None:
+        headers.update(extra_headers)
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "X-Guard-Token": token},
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=5) as response:
@@ -152,6 +161,8 @@ def test_resolving_active_item_with_two_remaining_returns_next_hint(tmp_path: Pa
     assert payload["remaining_pending_count"] == 2
     assert payload["next_selectable_request_id"] == "req-newest"
     assert {item["request_id"] for item in payload["remaining_pending_summaries"]} == {"req-newest", "req-old"}
+    assert payload["copy"]["body"] == "Return to Codex and retry"
+    assert store.get_approval_request("req-active")["resolution_action"] == "allow"
 
 
 def test_resolving_last_item_returns_empty_queue_hint(tmp_path: Path) -> None:
@@ -173,6 +184,8 @@ def test_resolving_last_item_returns_empty_queue_hint(tmp_path: Path) -> None:
     assert payload["remaining_pending_count"] == 0
     assert payload["next_selectable_request_id"] is None
     assert payload["remaining_pending_summaries"] == []
+    assert payload["copy"]["title"] == "Blocked. Guard will remember this decision."
+    assert store.get_approval_request("req-only")["resolution_action"] == "block"
 
 
 def test_resolving_duplicate_group_reports_collapsed_ids(tmp_path: Path) -> None:
@@ -326,6 +339,35 @@ def test_request_resolution_without_auth_returns_session_recovery(tmp_path: Path
     assert payload["error"] == "unauthorized"
     assert payload["recovery"]["code"] == "session_stale"
     assert "Request failed with 401" not in json.dumps(payload)
+
+
+def test_authenticated_hosted_origin_request_resolution_does_not_401(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _populate(store, [_request("req-hosted-auth")])
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/requests/req-hosted-auth/approve",
+            data=json.dumps({"scope": "artifact", "reason": "reviewed"}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Origin": "https://hol.org",
+                "X-Guard-Token": daemon._server.auth_token,
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            allow_origin = response.headers.get("Access-Control-Allow-Origin")
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["copy"]["body"] == "Return to Codex and retry"
+    assert allow_origin == "https://hol.org"
+    assert store.get_approval_request("req-hosted-auth")["resolution_action"] == "allow"
 
 
 def test_request_list_status_filter_includes_resolved_items(tmp_path: Path) -> None:
