@@ -91,12 +91,20 @@ assert(
   "T-ADW-GR119-02: artifact policy payload includes artifact_hash"
 );
 assert(
+  buildClearPayload(grArtifactPolicy).harness === "codex",
+  "T-ADW-GR119-02b: artifact policy payload includes harness"
+);
+assert(
   buildClearPayload(grWorkspacePolicy).scope === "workspace",
   "T-ADW-GR119-02a: workspace policy payload includes workspace scope"
 );
 assert(
   buildClearPayload(grWorkspacePolicy).workspace === "/home/user/project",
   "T-ADW-GR119-03: workspace policy payload includes workspace path"
+);
+assert(
+  buildClearPayload(grWorkspacePolicy).harness === "codex",
+  "T-ADW-GR119-03b: workspace policy payload includes harness"
 );
 assert(
   buildClearPayload(grHarnessPolicy).scope === "harness",

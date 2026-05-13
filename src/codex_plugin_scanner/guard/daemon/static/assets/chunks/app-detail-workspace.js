@@ -1,4 +1,4 @@
-import { r as reactExports, K as fetchApprovalPage, L as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, M as HiMiniArrowLeft, k as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, N as HiMiniHome, o as HiMiniBolt, O as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, n as HiMiniExclamationTriangle, T as Tag, Q as detectCategory, R as CATEGORIES, B as Badge, E as EmptyState, U as HiMiniCloud, V as HiMiniChartBar, W as runHarnessAction, X as GuardHarnessActionError, Y as HiMiniRocketLaunch, c as HiMiniShieldCheck, Z as HiMiniArrowPath, H as HiMiniCheckCircle, _ as HiMiniTrash, $ as clearLabelForScope, m as HiMiniChevronDown, a0 as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, K as fetchApprovalPage, L as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, M as HiMiniArrowLeft, k as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, N as HiMiniHome, o as HiMiniBolt, O as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, n as HiMiniExclamationTriangle, T as Tag, Q as detectCategory, R as CATEGORIES, B as Badge, E as EmptyState, U as policyIdentityKey, V as HiMiniCloud, W as HiMiniChartBar, X as runHarnessAction, Y as GuardHarnessActionError, Z as HiMiniRocketLaunch, c as HiMiniShieldCheck, _ as HiMiniArrowPath, H as HiMiniCheckCircle, $ as HiMiniTrash, a0 as clearLabelForScope, m as HiMiniChevronDown, a1 as formatHarnessCommand } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 const tabOrder = ["overview", "activity", "settings"];
 function readTabFromUrl() {
@@ -870,7 +870,7 @@ function AppSettingsTab(props) {
   const handleClearRowConfirm = reactExports.useCallback(async () => {
     if (!props.onClearPolicy || clearingRowKey === null) return;
     const policy = props.harnessPolicies.find(
-      (p) => `${p.scope}-${p.artifact_id ?? p.workspace ?? "global"}` === clearingRowKey
+      (item) => policyIdentityKey(item) === clearingRowKey
     );
     if (!policy) return;
     setClearingRowInFlight(true);
@@ -934,7 +934,7 @@ function AppSettingsTab(props) {
             tone: "teach"
           }
         ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mt-4 space-y-2 ${clearing ? "guard-fade-out" : ""}`, children: props.harnessPolicies.map((policy) => {
-          const rowKey = `${policy.scope}-${policy.artifact_id ?? policy.workspace ?? "global"}`;
+          const rowKey = policyIdentityKey(policy);
           const isConfirmingThis = clearingRowKey === rowKey;
           return /* @__PURE__ */ jsxRuntimeExports.jsx(
             PolicyDecisionRow,

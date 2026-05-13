@@ -19,8 +19,14 @@ export type ClearPolicyInput = {
   publisher?: string | null;
 };
 
+export type ClearPolicyKeyInput = ClearPolicyInput & {
+  action?: string | null;
+  reason?: string | null;
+  updated_at?: string | null;
+};
+
 /**
- * Builds the minimal `clearPolicy` payload for the given remembered-decision scope.
+ * Builds an exact `clearPolicy` payload for the given remembered-decision scope.
  * Artifact scope targets by artifact_id; workspace scope by workspace path;
  * publisher scope by publisher name; harness scope by harness name; global clears all.
  */
@@ -28,14 +34,25 @@ export function buildClearPayload(input: ClearPolicyInput): ClearPolicyPayload {
   switch (input.scope) {
     case "artifact":
       return {
+        harness: input.harness,
         scope: "artifact",
         artifact_id: input.artifact_id ?? undefined,
         artifact_hash: input.artifact_hash ?? undefined,
       };
     case "workspace":
-      return { scope: "workspace", workspace: input.workspace ?? undefined };
+      return {
+        harness: input.harness,
+        scope: "workspace",
+        artifact_id: input.artifact_id ?? undefined,
+        artifact_hash: input.artifact_hash ?? undefined,
+        workspace: input.workspace ?? undefined,
+      };
     case "publisher":
-      return { scope: "publisher", publisher: input.publisher ?? undefined };
+      return {
+        harness: input.harness,
+        scope: "publisher",
+        publisher: input.publisher ?? undefined,
+      };
     case "harness":
       return {
         scope: "harness",
@@ -46,6 +63,20 @@ export function buildClearPayload(input: ClearPolicyInput): ClearPolicyPayload {
     case "global":
       return { scope: "global", all: true };
   }
+}
+
+export function policyIdentityKey(input: ClearPolicyKeyInput): string {
+  return JSON.stringify([
+    input.harness,
+    input.scope,
+    input.artifact_id ?? null,
+    input.artifact_hash ?? null,
+    input.workspace ?? null,
+    input.publisher ?? null,
+    input.action ?? null,
+    input.reason ?? null,
+    input.updated_at ?? null,
+  ]);
 }
 
 /**

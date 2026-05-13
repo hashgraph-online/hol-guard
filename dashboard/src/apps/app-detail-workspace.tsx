@@ -36,7 +36,7 @@ import {
   runHarnessAction,
 } from "../guard-api";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
-import { buildClearPayload, clearLabelForScope } from "../clear-policy-payload";
+import { buildClearPayload, clearLabelForScope, policyIdentityKey } from "../clear-policy-payload";
 import { useFocusTrap } from "../use-focus-trap";
 import { detectCategory, CATEGORIES } from "../evidence/categories";
 import type {
@@ -1147,7 +1147,7 @@ function AppSettingsTab(props: {
   const handleClearRowConfirm = useCallback(async () => {
     if (!props.onClearPolicy || clearingRowKey === null) return;
     const policy = props.harnessPolicies.find(
-      (p) => `${p.scope}-${p.artifact_id ?? p.workspace ?? "global"}` === clearingRowKey
+      (item) => policyIdentityKey(item) === clearingRowKey
     );
     if (!policy) return;
     setClearingRowInFlight(true);
@@ -1215,7 +1215,7 @@ function AppSettingsTab(props: {
           ) : (
             <div className={`mt-4 space-y-2 ${clearing ? "guard-fade-out" : ""}`}>
               {props.harnessPolicies.map((policy) => {
-                const rowKey = `${policy.scope}-${policy.artifact_id ?? policy.workspace ?? "global"}`;
+                const rowKey = policyIdentityKey(policy);
                 const isConfirmingThis = clearingRowKey === rowKey;
                 return (
                   <PolicyDecisionRow

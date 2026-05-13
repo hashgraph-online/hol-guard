@@ -354,6 +354,11 @@ export function App() {
     if (snapshotResult.status === "fulfilled") {
       setRuntime({ kind: "ready", snapshot: snapshotResult.value });
       setRequests({ kind: "ready", items: snapshotResult.value.items });
+    } else {
+      const message =
+        snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "Unable to load the local approval queue.";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
     }
     if (receiptsResult.status === "fulfilled") {
       setReceipts({ kind: "ready", items: receiptsResult.value });
@@ -393,6 +398,11 @@ export function App() {
     if (snapshotResult.status === "fulfilled") {
       setRuntime({ kind: "ready", snapshot: snapshotResult.value });
       setRequests({ kind: "ready", items: snapshotResult.value.items });
+    } else {
+      const message =
+        snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "Unable to load the local approval queue.";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
     }
     if (policiesResult.status === "fulfilled") {
       setPolicies({ kind: "ready", items: policiesResult.value });

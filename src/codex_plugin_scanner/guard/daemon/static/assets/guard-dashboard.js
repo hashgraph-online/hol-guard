@@ -19915,14 +19915,25 @@ function buildClearPayload(input) {
   switch (input.scope) {
     case "artifact":
       return {
+        harness: input.harness,
         scope: "artifact",
         artifact_id: input.artifact_id ?? void 0,
         artifact_hash: input.artifact_hash ?? void 0
       };
     case "workspace":
-      return { scope: "workspace", workspace: input.workspace ?? void 0 };
+      return {
+        harness: input.harness,
+        scope: "workspace",
+        artifact_id: input.artifact_id ?? void 0,
+        artifact_hash: input.artifact_hash ?? void 0,
+        workspace: input.workspace ?? void 0
+      };
     case "publisher":
-      return { scope: "publisher", publisher: input.publisher ?? void 0 };
+      return {
+        harness: input.harness,
+        scope: "publisher",
+        publisher: input.publisher ?? void 0
+      };
     case "harness":
       return {
         scope: "harness",
@@ -19933,6 +19944,19 @@ function buildClearPayload(input) {
     case "global":
       return { scope: "global", all: true };
   }
+}
+function policyIdentityKey(input) {
+  return JSON.stringify([
+    input.harness,
+    input.scope,
+    input.artifact_id ?? null,
+    input.artifact_hash ?? null,
+    input.workspace ?? null,
+    input.publisher ?? null,
+    input.action ?? null,
+    input.reason ?? null,
+    input.updated_at ?? null
+  ]);
 }
 function clearLabelForScope(scope) {
   switch (scope) {
@@ -20249,6 +20273,10 @@ function App() {
     if (snapshotResult.status === "fulfilled") {
       setRuntime({ kind: "ready", snapshot: snapshotResult.value });
       setRequests({ kind: "ready", items: snapshotResult.value.items });
+    } else {
+      const message = snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "Unable to load the local approval queue.";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
     }
     if (receiptsResult.status === "fulfilled") {
       setReceipts({ kind: "ready", items: receiptsResult.value });
@@ -20286,6 +20314,10 @@ function App() {
     if (snapshotResult.status === "fulfilled") {
       setRuntime({ kind: "ready", snapshot: snapshotResult.value });
       setRequests({ kind: "ready", items: snapshotResult.value.items });
+    } else {
+      const message = snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "Unable to load the local approval queue.";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
     }
     if (policiesResult.status === "fulfilled") {
       setPolicies({ kind: "ready", items: policiesResult.value });
@@ -20501,7 +20533,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  clearLabelForScope as $,
+  HiMiniTrash as $,
   ActionButton as A,
   Badge as B,
   clearEvidence as C,
@@ -20522,17 +20554,18 @@ export {
   CATEGORIES as R,
   SectionLabel as S,
   Tag as T,
-  HiMiniCloud as U,
-  HiMiniChartBar as V,
-  runHarnessAction as W,
-  GuardHarnessActionError as X,
-  HiMiniRocketLaunch as Y,
-  HiMiniArrowPath as Z,
-  HiMiniTrash as _,
+  policyIdentityKey as U,
+  HiMiniCloud as V,
+  HiMiniChartBar as W,
+  runHarnessAction as X,
+  GuardHarnessActionError as Y,
+  HiMiniRocketLaunch as Z,
+  HiMiniArrowPath as _,
   HiMiniFire as a,
-  formatHarnessCommand as a0,
-  HiMiniCommandLine as a1,
-  HiMiniQuestionMarkCircle as a2,
+  clearLabelForScope as a0,
+  formatHarnessCommand as a1,
+  HiMiniCommandLine as a2,
+  HiMiniQuestionMarkCircle as a3,
   HiMiniCalendarDays as b,
   HiMiniShieldCheck as c,
   formatRelativeTime as d,

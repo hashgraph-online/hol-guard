@@ -1,4 +1,4 @@
-import { buildClearPayload, clearLabelForScope } from "./clear-policy-payload";
+import { buildClearPayload, clearLabelForScope, policyIdentityKey } from "./clear-policy-payload";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -61,6 +61,10 @@ assert(
   "T-CP-GR119-02: artifact scope payload must include artifact_hash"
 );
 assert(
+  artifactPayload.harness === "codex",
+  "T-CP-GR119-02a: artifact scope payload must include harness"
+);
+assert(
   artifactPayload.all === undefined,
   "T-CP-GR119-03: artifact scope payload must not set all"
 );
@@ -79,12 +83,12 @@ assert(
   "T-CP-GR119-05: workspace scope payload must include workspace path"
 );
 assert(
-  workspacePayload.harness === undefined,
-  "T-CP-GR119-06: workspace scope payload must not include harness"
+  workspacePayload.harness === "codex",
+  "T-CP-GR119-06: workspace scope payload must include harness"
 );
 assert(
-  workspacePayload.artifact_id === undefined,
-  "T-CP-GR119-07: workspace scope payload must not include artifact_id"
+  workspacePayload.artifact_id === "npmjs:lodash",
+  "T-CP-GR119-07: workspace scope payload must include artifact_id when present"
 );
 
 const publisherPayload = buildClearPayload(publisherInput);
@@ -97,8 +101,8 @@ assert(
   "T-CP-GR119-08: publisher scope payload must include publisher"
 );
 assert(
-  publisherPayload.harness === undefined,
-  "T-CP-GR119-09: publisher scope payload must not include harness"
+  publisherPayload.harness === "codex",
+  "T-CP-GR119-09: publisher scope payload must include harness"
 );
 
 const harnessPayload = buildClearPayload(harnessInput);
@@ -164,4 +168,13 @@ assert(
 assert(
   clearLabelForScope("publisher") === "Clear publisher decision",
   "T-CP-GR119-20: publisher scope label must be 'Clear publisher decision'"
+);
+
+assert(
+  policyIdentityKey({ ...publisherInput, publisher: "one" }) !== policyIdentityKey({ ...publisherInput, publisher: "two" }),
+  "T-CP-GR119-21: policy identity key must distinguish publisher rows"
+);
+assert(
+  policyIdentityKey({ ...workspaceInput, artifact_id: "one" }) !== policyIdentityKey({ ...workspaceInput, artifact_id: "two" }),
+  "T-CP-GR119-22: policy identity key must distinguish workspace artifact rows"
 );

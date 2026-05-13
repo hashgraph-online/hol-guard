@@ -2144,8 +2144,8 @@ class GuardStore:
             conditions.append("artifact_hash = ?")
             params.append(artifact_hash)
         if workspace is not None:
-            conditions.append("workspace = ?")
-            params.append(_stored_workspace_policy_key(workspace))
+            conditions.append("(workspace = ? or workspace = ?)")
+            params.extend((_stored_workspace_policy_key(workspace), _normalized_workspace_path(workspace)))
         if publisher is not None:
             conditions.append("publisher = ?")
             params.append(publisher)
