@@ -163,7 +163,7 @@ _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>$`]*)"
 _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>[^\s;&|<>$`]*(?:perl|python(?:\d+(?:\.\d+)?)?|ruby))\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
+    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>[^\s;&|<>$`]*(?:perl|python(?:\d+(?:\.\d+)*)?|ruby))\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 _SINGLE_NODE_HEREDOC_PATTERN = re.compile(
@@ -2655,7 +2655,9 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     if _looks_like_read_only_interpreter_command(normalized, parts, parsed_command_names):
         return False
-    if _single_interpreter_heredoc_script(normalized) is not None:
+    if _single_interpreter_heredoc_script(normalized) is not None or any(
+        _is_python_interpreter_command(command_name) for command_name in parsed_command_names
+    ):
         return True
     if _contains_unmodeled_inline_interpreter_eval(normalized, parts, parsed_command_names):
         return True
@@ -3966,7 +3968,7 @@ def _is_unmodeled_inline_interpreter_command(command_name: str) -> bool:
 
 
 def _is_python_interpreter_command(command_name: str) -> bool:
-    return re.fullmatch(r"python(?:\d+(?:\.\d+)?)?", command_name) is not None
+    return re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", command_name) is not None
 
 
 def _script_is_benign_wait(script_text: str) -> bool:
