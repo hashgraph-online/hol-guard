@@ -94,6 +94,7 @@ class HarnessAdapter:
     aliases: tuple[str, ...] = ()
     executable = ""
     launcher_name = ""
+    legacy_launcher_names: tuple[str, ...] = ()
     approval_tier = "approval-center"
     approval_summary = "Guard pauses the launch and routes approval through the local approval center."
     fallback_hint = "Use `hol-guard approvals` if you want to resolve it from the terminal."
@@ -153,7 +154,8 @@ class HarnessAdapter:
     def guard_launcher_paths(self, context: HarnessContext) -> tuple[Path, ...]:
         shim_name = self.launcher_name or self.harness
         shim_dir = context.guard_home / "bin"
-        return (shim_dir / f"guard-{shim_name}", shim_dir / f"guard-{shim_name}.cmd")
+        names = (shim_name, *self.legacy_launcher_names)
+        return tuple(shim_dir / f"guard-{name}{suffix}" for name in names for suffix in ("", ".cmd"))
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         command = [self.resolved_executable(context) or self.executable]

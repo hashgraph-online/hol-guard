@@ -300,6 +300,33 @@ def test_doctor_ignores_non_utf8_guard_launcher_shim(
     assert payload["setup_status"] == "not_found"
 
 
+def test_doctor_recognizes_legacy_guard_launcher_shim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    shim_path = context.guard_home / "bin" / "guard-claude-code"
+    shim_path.parent.mkdir(parents=True, exist_ok=True)
+    shim_path.write_text(
+        "\n".join(
+            (
+                "#!/usr/bin/env python",
+                "base_command = ['python', '-m', 'codex_plugin_scanner.cli', 'guard', 'run', 'claude-code']",
+            )
+        ),
+        encoding="utf-8",
+    )
+    from codex_plugin_scanner.guard.adapters import get_adapter
+    from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+
+    monkeypatch.setattr(ClaudeCodeHarnessAdapter, "resolved_executable", lambda self, context: None)
+
+    payload = get_adapter("claude-code").diagnostics(context)
+
+    assert payload["setup_status"] == "active"
+    assert any(artifact["name"] == "guard-claude-code" for artifact in payload["artifacts"])
+
+
 def test_doctor_treats_guard_command_artifact_as_managed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
