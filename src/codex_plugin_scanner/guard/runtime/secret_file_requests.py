@@ -793,7 +793,7 @@ def _shell_segment_network_sink_receives_pipeline(segment: list[str]) -> bool:
     if command_name == "curl":
         return _curl_segment_consumes_stdin(args)
     if command_name == "wget":
-        return _wget_segment_consumes_stdin(args)
+        return False
     if command_name == "ssh":
         return _ssh_segment_consumes_stdin(args)
     return command_name in {"nc", "ncat", "netcat"}
@@ -846,11 +846,11 @@ def _ssh_segment_consumes_stdin(args: list[str]) -> bool:
             continue
         if arg.startswith("-o") and len(arg) > 2:
             continue
-        if arg in {"-n", "-f", "-G", "-Q", "-V"}:
+        if arg in {"-n", "-f", "-G", "-N", "-Q", "-V"}:
             return False
-        if arg.startswith(("-G", "-Q")) and len(arg) > 2:
+        if arg.startswith(("-G", "-N", "-Q")) and len(arg) > 2:
             return False
-        if arg.startswith("-") and not arg.startswith("--") and any(flag in arg[1:] for flag in ("G", "V")):
+        if arg.startswith("-") and not arg.startswith("--") and any(flag in arg[1:] for flag in ("G", "N", "V")):
             return False
         if arg.startswith("-") and not arg.startswith("--") and any(flag in arg[1:] for flag in ("n", "f")):
             return False
@@ -1998,16 +1998,16 @@ def _wget_segment_uses_file_upload(segment_args: list[str], *, stdin_uses_local_
             return False
         if token in _WGET_UPLOAD_FLAGS_WITH_VALUE:
             value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
-            if _direct_file_operand_uses_local_file(value, stdin_uses_local_file=stdin_uses_local_file):
+            if _direct_file_operand_uses_local_file(value, stdin_uses_local_file=False):
                 return True
             index += 2
             continue
         if token.startswith("--body-file=") and _direct_file_operand_uses_local_file(
-            token.split("=", 1)[1], stdin_uses_local_file=stdin_uses_local_file
+            token.split("=", 1)[1], stdin_uses_local_file=False
         ):
             return True
         if token.startswith("--post-file=") and _direct_file_operand_uses_local_file(
-            token.split("=", 1)[1], stdin_uses_local_file=stdin_uses_local_file
+            token.split("=", 1)[1], stdin_uses_local_file=False
         ):
             return True
         index += 1
