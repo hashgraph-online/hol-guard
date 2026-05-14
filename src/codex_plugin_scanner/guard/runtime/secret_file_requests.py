@@ -773,9 +773,9 @@ def _shell_segment_reads_sensitive_path(segment: list[str], *, cwd: Path | None,
     command_name, command_index = _shell_segment_primary_command(segment)
     if command_name not in _SHELL_LOCAL_READ_COMMANDS or command_index is None:
         return False
-    for token in segment[command_index + 1 :]:
+    for token in _shell_segment_file_operand_tokens(segment[command_index:]):
         normalized_token = _shell_command_token_without_attached_redirection(token).strip("'\"")
-        if not normalized_token or normalized_token.startswith("-"):
+        if not normalized_token:
             continue
         if classify_sensitive_path(normalized_token, cwd=cwd, home_dir=home_dir) is not None:
             return True
@@ -783,8 +783,156 @@ def _shell_segment_reads_sensitive_path(segment: list[str], *, cwd: Path | None,
 
 
 def _shell_segment_network_sink_receives_pipeline(segment: list[str]) -> bool:
-    command_name, _command_index = _shell_segment_primary_command(segment)
-    return command_name in _SHELL_NETWORK_SINK_COMMANDS
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name not in _SHELL_NETWORK_SINK_COMMANDS or command_index is None:
+        return False
+    args = segment[command_index + 1 :]
+    if command_name == "curl":
+        return _curl_segment_consumes_stdin(args)
+    if command_name == "wget":
+        return _wget_segment_consumes_stdin(args)
+    if command_name == "ssh":
+        return not any(arg in {"-n", "-f"} for arg in args)
+    return command_name in {"nc", "ncat", "netcat"}
+
+
+def _shell_segment_file_operand_tokens(segment: list[str]) -> tuple[str, ...]:
+    if not segment:
+        return ()
+    command_name = Path(segment[0]).name.lower()
+    args = segment[1:]
+    if command_name in {"cat", "head", "tail"}:
+        return _plain_file_operand_tokens(args)
+    if command_name == "sed":
+        return _sed_file_operand_tokens(args)
+    if command_name in {"grep", "egrep", "fgrep", "rg"}:
+        return _search_file_operand_tokens(args)
+    return ()
+
+
+def _plain_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
+    operands: list[str] = []
+    skip_next = False
+    after_options = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if after_options:
+            operands.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in {"-n", "--lines", "-c", "--bytes"}:
+            skip_next = True
+            continue
+        if arg.startswith("--lines=") or arg.startswith("--bytes=") or re.fullmatch(r"-\d{1,6}", arg):
+            continue
+        if arg.startswith("-"):
+            continue
+        operands.append(arg)
+    return tuple(operands)
+
+
+def _sed_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
+    operands: list[str] = []
+    scripts_seen = 0
+    skip_script = False
+    after_options = False
+    for arg in args:
+        if skip_script:
+            skip_script = False
+            scripts_seen += 1
+            continue
+        if after_options:
+            operands.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in {"-n", "--quiet", "--silent"}:
+            continue
+        if arg in {"-e", "--expression"}:
+            skip_script = True
+            continue
+        if arg.startswith("-e") and len(arg) > 2:
+            scripts_seen += 1
+            continue
+        if arg.startswith("--expression="):
+            scripts_seen += 1
+            continue
+        if arg.startswith("-"):
+            continue
+        if scripts_seen == 0:
+            scripts_seen += 1
+            continue
+        operands.append(arg)
+    return tuple(operands)
+
+
+def _search_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
+    operands: list[str] = []
+    pattern_seen = False
+    skip_next = False
+    after_options = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if after_options:
+            operands.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in {"-e", "--regexp", "-f", "--file", "-g", "--glob", "--iglob", "--type", "-t", "--type-not"}:
+            skip_next = True
+            if arg in {"-e", "--regexp", "-f", "--file"}:
+                pattern_seen = True
+            continue
+        search_value_flags = ("--regexp", "--file", "--glob", "--iglob", "--type", "--type-not")
+        if any(arg.startswith(f"{flag}=") for flag in search_value_flags):
+            if arg.startswith(("--regexp=", "--file=")):
+                pattern_seen = True
+            continue
+        if arg.startswith("-e") and len(arg) > 2:
+            pattern_seen = True
+            continue
+        if arg.startswith("-"):
+            continue
+        if not pattern_seen:
+            pattern_seen = True
+            continue
+        operands.append(arg)
+    return tuple(operands)
+
+
+def _curl_segment_consumes_stdin(args: list[str]) -> bool:
+    for index, arg in enumerate(args):
+        if arg in _CURL_AT_FILE_FLAGS_WITH_VALUE or arg in _CURL_FORM_FLAGS_WITH_VALUE:
+            return index + 1 < len(args) and _curl_value_consumes_stdin(args[index + 1])
+        if any(arg.startswith(f"{flag}=") for flag in _CURL_AT_FILE_FLAGS_WITH_VALUE | _CURL_FORM_FLAGS_WITH_VALUE):
+            return _curl_value_consumes_stdin(arg.split("=", 1)[1])
+        if arg.startswith("-d") and len(arg) > 2:
+            return _curl_value_consumes_stdin(arg[2:])
+        if arg.startswith("-F") and len(arg) > 2:
+            return _curl_value_consumes_stdin(arg[2:])
+    return False
+
+
+def _curl_value_consumes_stdin(value: str) -> bool:
+    stripped = value.strip("'\"")
+    return stripped == "@-" or stripped.endswith("=@-")
+
+
+def _wget_segment_consumes_stdin(args: list[str]) -> bool:
+    for index, arg in enumerate(args):
+        if arg in _WGET_UPLOAD_FLAGS_WITH_VALUE:
+            return index + 1 < len(args) and args[index + 1].strip("'\"") == "-"
+        if any(arg.startswith(f"{flag}=") for flag in _WGET_UPLOAD_FLAGS_WITH_VALUE):
+            return arg.split("=", 1)[1].strip("'\"") == "-"
+    return False
 
 
 def _shell_segments_contain_credential_exfiltration(parts: list[str]) -> bool:
@@ -2951,7 +3099,17 @@ def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
 
 
 def _read_only_lookup_filter_grep_args_are_safe(args: list[str]) -> bool:
-    return bool(args) and all(arg == "--" or not _read_only_lookup_target_is_path_like(arg) for arg in args)
+    return bool(args) and all(
+        not _read_only_lookup_arg_is_redirection(arg)
+        and (arg == "--" or not _read_only_lookup_target_is_path_like(arg))
+        for arg in args
+    )
+
+
+def _read_only_lookup_arg_is_redirection(arg: str) -> bool:
+    if arg in {">", ">>", ">|", "1>", "1>>", "1>|", "2>", "2>>", "2>|", "<", "0<"}:
+        return True
+    return _split_attached_redirection_token(arg) is not None
 
 
 def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
