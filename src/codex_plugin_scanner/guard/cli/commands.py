@@ -104,6 +104,12 @@ from ..runtime.cisco_preflight import (
     scan_action_for_cisco_evidence,
 )
 from ..runtime.data_flow_rules import detect_data_flow_exfiltration
+from ..runtime.false_positive_rules import (
+    SOURCE_INSPECTION_BENIGN_DOTFILES,
+    SOURCE_INSPECTION_EXTENSIONS,
+    SOURCE_INSPECTION_PARTS,
+    SOURCE_INSPECTION_SENSITIVE_PARTS,
+)
 from ..runtime.runner import (
     GuardSyncNotConfiguredError,
     extract_prompt_requests,
@@ -5156,44 +5162,9 @@ _CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE = {
 _CODEX_GIT_GLOBAL_VALUE_FLAGS = frozenset(
     {"-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace"}
 )
-_CODEX_SOURCE_SEARCH_PREFIXES = (
-    "src/",
-    "app/",
-    "lib/",
-    "tests/",
-    "__tests__/",
-    "workers/",
-    "scripts/",
-    "dashboard/",
-    "packages/",
-)
-_CODEX_SOURCE_SEARCH_EXTENSIONS = frozenset(
-    {
-        ".c",
-        ".cc",
-        ".cpp",
-        ".css",
-        ".go",
-        ".h",
-        ".hpp",
-        ".html",
-        ".java",
-        ".js",
-        ".jsx",
-        ".json",
-        ".md",
-        ".mjs",
-        ".py",
-        ".rs",
-        ".sh",
-        ".toml",
-        ".ts",
-        ".tsx",
-        ".yaml",
-        ".yml",
-    }
-)
-_CODEX_BENIGN_SOURCE_DOTFILES = frozenset({".nvmrc"})
+_CODEX_SOURCE_SEARCH_PREFIXES = tuple(f"{part}/" for part in sorted(SOURCE_INSPECTION_PARTS))
+_CODEX_SOURCE_SEARCH_EXTENSIONS = SOURCE_INSPECTION_EXTENSIONS
+_CODEX_BENIGN_SOURCE_DOTFILES = SOURCE_INSPECTION_BENIGN_DOTFILES
 _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     r"""(?ix)
     \s*
@@ -5206,21 +5177,7 @@ _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     )
     \s*"""
 )
-_CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
-    {
-        ".aws",
-        ".docker",
-        ".env",
-        ".git-credentials",
-        ".kube",
-        ".netrc",
-        ".npmrc",
-        ".pypirc",
-        ".ssh",
-        "credentials",
-        "id_rsa",
-    }
-)
+_CODEX_SENSITIVE_SEARCH_BASENAMES = SOURCE_INSPECTION_SENSITIVE_PARTS | frozenset({"id_rsa"})
 _CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
 _CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
     {
@@ -6359,27 +6316,38 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     stripped = target.strip().strip("'\"")
     if not stripped:
         return False
-    if stripped.startswith(("~", "/")):
+    if stripped.startswith("~"):
         return False
     if any(char in stripped for char in ("*", "?", "{", "}")):
         return False
     target_path = Path(stripped)
     base_dir = (cwd or Path.cwd()).resolve()
-    unresolved_candidate = base_dir / target_path
-    if _path_contains_symlink(unresolved_candidate, base_dir=base_dir):
-        return False
-    try:
-        candidate = unresolved_candidate.resolve(strict=False)
-    except RuntimeError:
-        return False
-    if candidate.exists():
+    if target_path.is_absolute():
+        unresolved_candidate = target_path
         try:
+            candidate = unresolved_candidate.resolve(strict=False)
             relative_candidate = candidate.relative_to(base_dir)
-        except ValueError:
+        except (RuntimeError, ValueError):
+            return False
+        if _path_contains_symlink(candidate, base_dir=base_dir):
             return False
         parts = [part for part in relative_candidate.parts if part not in {"", "."}]
     else:
-        parts = [part for part in target_path.parts if part not in {"", "."}]
+        unresolved_candidate = base_dir / target_path
+        if _path_contains_symlink(unresolved_candidate, base_dir=base_dir):
+            return False
+        try:
+            candidate = unresolved_candidate.resolve(strict=False)
+        except RuntimeError:
+            return False
+        if candidate.exists():
+            try:
+                relative_candidate = candidate.relative_to(base_dir)
+            except ValueError:
+                return False
+            parts = [part for part in relative_candidate.parts if part not in {"", "."}]
+        else:
+            parts = [part for part in target_path.parts if part not in {"", "."}]
     if not parts:
         return False
     lowered_parts = [part.lower() for part in parts]
@@ -6396,6 +6364,22 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     if Path(stripped).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES:
         return True
     return Path(stripped).suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
+
+
+def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:
+    parts = [part for part in target_path.parts if part not in {"", "/", "."}]
+    if not parts:
+        return False
+    lowered_parts = [part.lower() for part in parts]
+    if any(part in _CODEX_SENSITIVE_SEARCH_BASENAMES for part in lowered_parts):
+        return False
+    hidden_parts = [part for part in lowered_parts if part.startswith(".")]
+    if hidden_parts and not all(part in _CODEX_BENIGN_SOURCE_DOTFILES for part in hidden_parts):
+        return False
+    normalized = "/".join(parts)
+    if any(f"/{prefix}" in f"/{normalized}" for prefix in _CODEX_SOURCE_SEARCH_PREFIXES):
+        return True
+    return target_path.suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
 
 
 def _path_contains_symlink(path: Path, *, base_dir: Path) -> bool:
