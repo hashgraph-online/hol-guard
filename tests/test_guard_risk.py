@@ -730,6 +730,7 @@ def test_tool_action_request_classifier_detects_read_only_filter_redirection_wri
     [
         "find . -fprintf out.txt '%p\\n'",
         "find . -fprint out.txt",
+        "find . -fprint0 out.bin",
         "find . -fls out.txt",
         "find . -exec rm {} \\;",
         "find . -ok rm {} \\;",
