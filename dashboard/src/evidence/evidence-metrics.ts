@@ -2,6 +2,16 @@ import type { GuardReceipt } from "../guard-types";
 import { detectCategory } from "./categories";
 import { harnessDisplayName } from "../approval-center-utils";
 
+export interface PeriodComparison {
+  periodDays: number;
+  currentTotal: number;
+  previousTotal: number;
+  currentBlocked: number;
+  previousBlocked: number;
+  blockedDelta: number;
+  totalDelta: number;
+}
+
 export interface EvidenceMetrics {
   total: number;
   allowed: number;
@@ -13,6 +23,8 @@ export interface EvidenceMetrics {
   topRecurring: RecurringAction[];
   insights: EvidenceInsightData[];
   lastActivityAt: string | null;
+  periodComparison7d: PeriodComparison;
+  periodComparison30d: PeriodComparison;
 }
 
 export interface TrendBucket {
@@ -84,7 +96,6 @@ export function computeTrendBuckets(
       else if (r.policy_decision === "block") bucket.blocked++;
       else bucket.reviewed++;
     } catch {
-      // skip malformed timestamps
     }
   }
 
@@ -171,6 +182,9 @@ export function computeMetrics(
     byCategory
   );
 
+  const periodComparison7d = computePeriodComparison(receipts, 7, now);
+  const periodComparison30d = computePeriodComparison(receipts, 30, now);
+
   return {
     total,
     allowed,
@@ -182,6 +196,8 @@ export function computeMetrics(
     topRecurring,
     insights,
     lastActivityAt,
+    periodComparison7d,
+    periodComparison30d,
   };
 }
 
@@ -260,4 +276,46 @@ export function metricsSummaryText(metrics: EvidenceMetrics): string {
   const stoppedPct =
     total > 0 ? Math.round((blocked / total) * 100) : 0;
   return `${total} actions total — ${allowed} allowed, ${blocked} stopped (${stoppedPct}%).`;
+}
+
+export function computePeriodComparison(
+  receipts: GuardReceipt[],
+  days: number,
+  now?: Date
+): PeriodComparison {
+  const base = now ?? new Date();
+  const periodMs = days * 24 * 60 * 60 * 1000;
+  const currentStart = new Date(base.getTime() - periodMs);
+  const previousStart = new Date(base.getTime() - 2 * periodMs);
+
+  let currentTotal = 0;
+  let currentBlocked = 0;
+  let previousTotal = 0;
+  let previousBlocked = 0;
+
+  for (const r of receipts) {
+    try {
+      const ts = new Date(r.timestamp).getTime();
+      if (isNaN(ts)) continue;
+      if (ts >= currentStart.getTime() && ts <= base.getTime()) {
+        currentTotal++;
+        if (r.policy_decision === "block") currentBlocked++;
+      } else if (ts >= previousStart.getTime() && ts < currentStart.getTime()) {
+        previousTotal++;
+        if (r.policy_decision === "block") previousBlocked++;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return {
+    periodDays: days,
+    currentTotal,
+    previousTotal,
+    currentBlocked,
+    previousBlocked,
+    blockedDelta: currentBlocked - previousBlocked,
+    totalDelta: currentTotal - previousTotal,
+  };
 }

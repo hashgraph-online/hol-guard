@@ -1,5 +1,5 @@
-import { useMemo, useState, memo } from "react";
-import { HiMiniChevronRight, HiMiniLockClosed, HiMiniGlobeAlt, HiMiniExclamationTriangle, HiMiniEyeSlash, HiMiniDocumentText, HiMiniWrenchScrewdriver, HiMiniCircleStack } from "react-icons/hi2";
+import { useMemo, useState, memo, useCallback } from "react";
+import { HiMiniChevronRight, HiMiniLockClosed, HiMiniGlobeAlt, HiMiniExclamationTriangle, HiMiniEyeSlash, HiMiniDocumentText, HiMiniWrenchScrewdriver, HiMiniCircleStack, HiMiniChevronLeft } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES } from "./categories";
 import { plainEnglishDescription } from "./plain-english";
@@ -20,10 +20,50 @@ const ICON_MAP: Record<ReceiptCategory, React.ReactNode> = {
   other: <HiMiniCircleStack className="h-5 w-5" aria-hidden="true" />,
 };
 
+interface CategoryRowProps {
+  cat: typeof CATEGORIES[0];
+  count: number;
+  onSelect: (key: ReceiptCategory) => void;
+}
+
+function CategoryRow({ cat, count, onSelect }: CategoryRowProps) {
+  const handleClick = useCallback(() => {
+    onSelect(cat.key);
+  }, [cat.key, onSelect]);
+
+  return (
+    <button
+      key={cat.key}
+      onClick={handleClick}
+      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md"
+    >
+      <div className="flex items-center gap-3">
+        <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 ${cat.color}`}>
+          {ICON_MAP[cat.key]}
+        </span>
+        <div>
+          <p className="text-sm font-medium text-brand-dark">{cat.label}</p>
+          <p className="text-xs text-slate-500">{count} action{count !== 1 ? "s" : ""}</p>
+        </div>
+      </div>
+      <HiMiniChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
+    </button>
+  );
+}
+
 function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
   const [selectedCategory, setSelectedCategory] = useState<ReceiptCategory | null>(null);
 
   const groups = useMemo(() => groupByCategory(receipts), [receipts]);
+
+  const handleBack = useCallback(() => {
+    setSelectedCategory(null);
+  }, []);
+
+  const handleSelectCategory = useCallback((key: ReceiptCategory) => {
+    setSelectedCategory(key);
+    onFilterCategory?.(key);
+  }, [onFilterCategory]);
 
   if (selectedCategory) {
     const items = groups.get(selectedCategory) ?? [];
@@ -31,10 +71,11 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
     return (
       <div className="space-y-6">
         <button
-          onClick={() => setSelectedCategory(null)}
+          onClick={handleBack}
           className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100"
         >
-          ← Back to categories
+          <HiMiniChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Back to categories
         </button>
 
         <div className="rounded-2xl border border-slate-100 bg-white/60 p-5">
@@ -82,25 +123,12 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
         const items = groups.get(cat.key) ?? [];
         if (items.length === 0) return null;
         return (
-          <button
+          <CategoryRow
             key={cat.key}
-            onClick={() => {
-              setSelectedCategory(cat.key);
-              onFilterCategory?.(cat.key);
-            }}
-            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md"
-          >
-            <div className="flex items-center gap-3">
-              <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 ${cat.color}`}>
-                {ICON_MAP[cat.key]}
-              </span>
-              <div>
-                <p className="text-sm font-medium text-brand-dark">{cat.label}</p>
-                <p className="text-xs text-slate-500">{items.length} action{items.length !== 1 ? "s" : ""}</p>
-              </div>
-            </div>
-            <HiMiniChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
-          </button>
+            cat={cat}
+            count={items.length}
+            onSelect={handleSelectCategory}
+          />
         );
       })}
 

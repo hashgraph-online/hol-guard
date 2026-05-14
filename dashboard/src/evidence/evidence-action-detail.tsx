@@ -130,6 +130,7 @@ export function EvidenceActionDetail({
   onClose,
 }: EvidenceActionDetailProps) {
   const [copied, setCopied] = useState(false);
+  const [copyUnavailable, setCopyUnavailable] = useState(false);
 
   const handleCopyId = useCallback(async () => {
     if (!receipt) return;
@@ -138,7 +139,8 @@ export function EvidenceActionDetail({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // clipboard not available
+      setCopyUnavailable(true);
+      setTimeout(() => setCopyUnavailable(false), 2000);
     }
   }, [receipt]);
 
@@ -157,6 +159,12 @@ export function EvidenceActionDetail({
   const catInfo = getCategoryInfo(category);
   const description = plainEnglishDescription(receipt);
   const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  let copyLabel = "Copy receipt ID";
+  if (copied) {
+    copyLabel = "Copied!";
+  } else if (copyUnavailable) {
+    copyLabel = "Unavailable";
+  }
 
   return (
     <div
@@ -215,7 +223,7 @@ export function EvidenceActionDetail({
           className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
         >
           <HiMiniClipboardDocument className="h-3.5 w-3.5" aria-hidden="true" />
-          {copied ? "Copied!" : "Copy receipt ID"}
+          {copyLabel}
         </button>
       </div>
     </div>
