@@ -414,7 +414,7 @@ export type GuardInventoryItem = {
 
 export type GuardSettings = {
   mode: "observe" | "prompt" | "enforce";
-  security_level: "balanced" | "strict" | "custom";
+  security_level: "relaxed" | "balanced" | "strict" | "custom";
   default_action: string;
   unknown_publisher_action: string;
   changed_hash_action: string;
@@ -433,5 +433,11 @@ export type GuardSettings = {
 export type GuardSettingsPayload = {
   guard_home: string;
   config_path: string;
+  settings: GuardSettings;
+};
+
+export type GuardSettingsExport = {
+  schema_version: 1;
+  privacy_warning: string;
   settings: GuardSettings;
 };
