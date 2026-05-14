@@ -3410,7 +3410,7 @@ def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg in {"-delete", "-fprint", "-fprintf", "-fls"}:
+        if arg in {"-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}:
             return True
         if arg in {"-exec", "-execdir", "-ok", "-okdir"}:
             if index + 1 >= len(args):
