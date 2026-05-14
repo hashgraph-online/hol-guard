@@ -104,6 +104,12 @@ from ..runtime.cisco_preflight import (
     scan_action_for_cisco_evidence,
 )
 from ..runtime.data_flow_rules import detect_data_flow_exfiltration
+from ..runtime.false_positive_rules import (
+    SOURCE_INSPECTION_BENIGN_DOTFILES,
+    SOURCE_INSPECTION_EXTENSIONS,
+    SOURCE_INSPECTION_PARTS,
+    SOURCE_INSPECTION_SENSITIVE_PARTS,
+)
 from ..runtime.runner import (
     GuardSyncNotConfiguredError,
     extract_prompt_requests,
@@ -5156,44 +5162,9 @@ _CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE = {
 _CODEX_GIT_GLOBAL_VALUE_FLAGS = frozenset(
     {"-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace"}
 )
-_CODEX_SOURCE_SEARCH_PREFIXES = (
-    "src/",
-    "app/",
-    "lib/",
-    "tests/",
-    "__tests__/",
-    "workers/",
-    "scripts/",
-    "dashboard/",
-    "packages/",
-)
-_CODEX_SOURCE_SEARCH_EXTENSIONS = frozenset(
-    {
-        ".c",
-        ".cc",
-        ".cpp",
-        ".css",
-        ".go",
-        ".h",
-        ".hpp",
-        ".html",
-        ".java",
-        ".js",
-        ".jsx",
-        ".json",
-        ".md",
-        ".mjs",
-        ".py",
-        ".rs",
-        ".sh",
-        ".toml",
-        ".ts",
-        ".tsx",
-        ".yaml",
-        ".yml",
-    }
-)
-_CODEX_BENIGN_SOURCE_DOTFILES = frozenset({".nvmrc"})
+_CODEX_SOURCE_SEARCH_PREFIXES = tuple(f"{part}/" for part in sorted(SOURCE_INSPECTION_PARTS))
+_CODEX_SOURCE_SEARCH_EXTENSIONS = SOURCE_INSPECTION_EXTENSIONS
+_CODEX_BENIGN_SOURCE_DOTFILES = SOURCE_INSPECTION_BENIGN_DOTFILES
 _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     r"""(?ix)
     \s*
@@ -5206,21 +5177,7 @@ _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     )
     \s*"""
 )
-_CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
-    {
-        ".aws",
-        ".docker",
-        ".env",
-        ".git-credentials",
-        ".kube",
-        ".netrc",
-        ".npmrc",
-        ".pypirc",
-        ".ssh",
-        "credentials",
-        "id_rsa",
-    }
-)
+_CODEX_SENSITIVE_SEARCH_BASENAMES = SOURCE_INSPECTION_SENSITIVE_PARTS | frozenset({"id_rsa"})
 _CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
 _CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
     {

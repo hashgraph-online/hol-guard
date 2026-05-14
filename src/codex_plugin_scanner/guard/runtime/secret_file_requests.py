@@ -17,6 +17,12 @@ from pathlib import Path
 
 from ..models import GuardArtifact
 from .actions import GuardActionEnvelope
+from .false_positive_rules import (
+    SOURCE_INSPECTION_BENIGN_DOTFILES,
+    SOURCE_INSPECTION_EXTENSIONS,
+    SOURCE_INSPECTION_PARTS,
+    SOURCE_INSPECTION_SENSITIVE_PARTS,
+)
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
 
@@ -96,38 +102,6 @@ _READ_ONLY_LOOKUP_COMMANDS = frozenset(
     {"cat", "fd", "find", "grep", "egrep", "fgrep", "head", "ls", "rg", "sed", "tail"}
 )
 _READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", "tail"})
-_READ_ONLY_LOOKUP_SOURCE_PARTS = frozenset(
-    {"__tests__", "app", "dashboard", "docs", "lib", "packages", "scripts", "src", "test", "tests", "workers"}
-)
-_READ_ONLY_LOOKUP_SOURCE_EXTENSIONS = frozenset(
-    {
-        ".c",
-        ".cc",
-        ".cpp",
-        ".css",
-        ".go",
-        ".h",
-        ".hpp",
-        ".html",
-        ".java",
-        ".js",
-        ".jsx",
-        ".json",
-        ".md",
-        ".mjs",
-        ".py",
-        ".rs",
-        ".sh",
-        ".toml",
-        ".ts",
-        ".tsx",
-        ".yaml",
-        ".yml",
-    }
-)
-_READ_ONLY_LOOKUP_SENSITIVE_PARTS = frozenset(
-    {".aws", ".docker", ".env", ".git-credentials", ".kube", ".netrc", ".npmrc", ".pypirc", ".ssh", "credentials"}
-)
 _NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
 _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
     {
@@ -194,7 +168,7 @@ _WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE = frozenset(
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
-_SHELL_NETWORK_SINK_COMMANDS = frozenset({"curl", "wget", "nc", "ncat", "netcat", "scp", "rsync"})
+_SHELL_NETWORK_SINK_COMMANDS = frozenset({"curl", "wget", "nc", "ncat", "netcat", "scp", "rsync", "ssh"})
 _SHELL_LOCAL_READ_COMMANDS = frozenset({"cat", "grep", "egrep", "fgrep", "head", "rg", "sed", "tail"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
@@ -778,12 +752,12 @@ def _shell_pipeline_reads_sensitive_path_to_network(
     secret_in_pipeline = False
     segment: list[str] = []
     for token in [*parts, ";"]:
-        if token == "|":
+        if token in {"|", "|&"}:
             if _shell_segment_reads_sensitive_path(segment, cwd=cwd, home_dir=home_dir):
                 secret_in_pipeline = True
             segment = []
             continue
-        if token in {"&&", "||", ";", "&", "|&"}:
+        if token in {"&&", "||", ";", "&"}:
             if _shell_segment_network_sink_receives_pipeline(segment) and secret_in_pipeline:
                 return True
             secret_in_pipeline = False
@@ -2948,7 +2922,7 @@ def _read_only_lookup_plain_targets_are_safe(args: list[str], *, allow_dirs: boo
         if arg.startswith("-"):
             continue
         targets.append(arg)
-    return bool(targets) and all(_read_only_lookup_target_is_safe(target, allow_dirs=allow_dirs) for target in targets)
+    return all(_read_only_lookup_target_is_safe(target, allow_dirs=allow_dirs) for target in targets)
 
 
 def _read_only_lookup_ls_args_are_safe(args: list[str]) -> bool:
@@ -2957,9 +2931,7 @@ def _read_only_lookup_ls_args_are_safe(args: list[str]) -> bool:
 
 def _read_only_lookup_search_args_are_safe(args: list[str]) -> bool:
     targets = [arg for arg in args if arg and not arg.startswith("-")]
-    if len(targets) < 2:
-        return False
-    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets[1:])
+    return len(targets) < 2 or all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets[1:])
 
 
 def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
@@ -2984,21 +2956,25 @@ def _read_only_lookup_filter_grep_args_are_safe(args: list[str]) -> bool:
 
 def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
     stripped = target.strip().strip("'\"")
-    if not stripped or stripped == "-":
+    if stripped in {"", "."}:
+        return allow_dirs
+    if stripped == "-":
         return False
     if any(marker in stripped for marker in ("$", "`", "<", ">", "|", ";", "&")):
         return False
     normalized = stripped.replace("\\", "/")
     parts = [part for part in Path(normalized).parts if part not in {"", "/", "."}]
     lowered_parts = [part.lower() for part in parts]
-    if not parts or any(part in _READ_ONLY_LOOKUP_SENSITIVE_PARTS for part in lowered_parts):
+    if not parts:
+        return allow_dirs
+    if any(part in SOURCE_INSPECTION_SENSITIVE_PARTS for part in lowered_parts):
         return False
     hidden_parts = [part for part in lowered_parts if part.startswith(".")]
-    if hidden_parts and not all(part in {".nvmrc"} for part in hidden_parts):
+    if hidden_parts and not all(part in SOURCE_INSPECTION_BENIGN_DOTFILES for part in hidden_parts):
         return False
-    if any(part in _READ_ONLY_LOOKUP_SOURCE_PARTS for part in lowered_parts):
+    if any(part in SOURCE_INSPECTION_PARTS for part in lowered_parts):
         return True
-    if Path(normalized).suffix.lower() in _READ_ONLY_LOOKUP_SOURCE_EXTENSIONS:
+    if Path(normalized).suffix.lower() in SOURCE_INSPECTION_EXTENSIONS:
         return True
     return allow_dirs
 
