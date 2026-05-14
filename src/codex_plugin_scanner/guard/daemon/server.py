@@ -41,6 +41,8 @@ from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
     clear_evidence,
     count_evidence,
+    evidence_record_to_dict,
+    export_evidence_csv,
     export_evidence_json,
     list_evidence,
 )
@@ -273,19 +275,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     before_cursor=before_q if isinstance(before_q, str) else None,
                     limit=limit_v,
                 )
-                total = count_evidence(conn)
+                total = count_evidence(
+                    conn,
+                    harness=harness_q if isinstance(harness_q, str) else None,
+                    category=category_q if isinstance(category_q, str) else None,
+                    severity=severity_q if isinstance(severity_q, str) else None,
+                )
             self._write_json(
                 {
-                    "items": [vars(r) for r in records],
+                    "items": [evidence_record_to_dict(record) for record in records],
                     "total": total,
                 }
             )
             return
         if parsed.path == "/v1/evidence/export":
+            query = parse_qs(parsed.query)
+            format_q = query.get("format", ["json"])[-1]
             with store._connect() as conn:
-                payload = export_evidence_json(conn, limit=10_000)
+                if format_q == "json":
+                    payload = export_evidence_json(conn, limit=10_000)
+                    content_type = "application/json"
+                elif format_q == "csv":
+                    payload = export_evidence_csv(conn, limit=10_000)
+                    content_type = "text/csv; charset=utf-8"
+                else:
+                    self._write_json({"error": "invalid_export_format"}, status=400)
+                    return
             self.send_response(200)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", content_type)
             self.end_headers()
             self.wfile.write(payload.encode("utf-8"))
             return

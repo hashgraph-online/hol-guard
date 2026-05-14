@@ -1,16 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  HiMiniListBullet,
-  HiMiniChartBar,
-  HiMiniComputerDesktop,
-  HiMiniArrowDownTray,
-  HiMiniClock,
-} from "react-icons/hi2";
+import { HiMiniArrowDownTray } from "react-icons/hi2";
 
 import { EmptyState } from "./approval-center-primitives";
 import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
-import type { EvidenceFilterState, EvidenceView } from "./evidence/evidence-types";
+import type { EvidenceFilterState, EvidenceView, EvidenceSortKey } from "./evidence/evidence-types";
 import { filterEvidence } from "./evidence/evidence-filters";
 import { sortEvidence } from "./evidence/evidence-sort";
 import { computeMetrics } from "./evidence/evidence-metrics";
@@ -19,6 +13,12 @@ import {
   writeEvidenceUrlState,
   DEFAULT_FILTER_STATE,
 } from "./evidence/evidence-url-state";
+import {
+  EvidenceLoadingState,
+  EvidenceErrorState,
+  EvidenceHeader,
+  ViewTabBar,
+} from "./evidence/evidence-view-shell";
 import { EvidenceFilterBar } from "./evidence/evidence-filter-bar";
 import { EvidenceActionList } from "./evidence/evidence-action-list";
 import { EvidenceActionDetail } from "./evidence/evidence-action-detail";
@@ -27,6 +27,8 @@ import { EvidenceAnalyticsPanel } from "./evidence/evidence-analytics-panel";
 import { EvidenceExportDrawer } from "./evidence/evidence-export-drawer";
 import { EvidenceClearModal } from "./evidence/evidence-clear-modal";
 import { AppTab } from "./evidence/app-tab";
+import { StoryTab } from "./evidence/story-tab";
+import { CategoryTab } from "./evidence/category-tab";
 
 export type ReceiptsState =
   | { kind: "loading" }
@@ -34,162 +36,6 @@ export type ReceiptsState =
   | { kind: "ready"; items: GuardReceipt[] };
 
 const PAGE_SIZE = 50;
-
-const VIEW_TABS: { key: EvidenceView; label: string; icon: React.ElementType }[] = [
-  { key: "actions", label: "All actions", icon: HiMiniListBullet },
-  { key: "insights", label: "Insights", icon: HiMiniChartBar },
-  { key: "apps", label: "Apps", icon: HiMiniComputerDesktop },
-  { key: "export", label: "Export", icon: HiMiniArrowDownTray },
-];
-
-function EvidenceLoadingState() {
-  return (
-    <div className="space-y-4" aria-busy="true" aria-label="Loading evidence">
-      <div className="guard-skeleton h-8 w-64" />
-      <div className="guard-skeleton h-32 w-full" />
-    </div>
-  );
-}
-
-function EvidenceErrorState({ message }: { message: string }) {
-  return (
-    <div className="rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4">
-      <p className="text-sm text-brand-dark">{message}</p>
-    </div>
-  );
-}
-
-interface EvidenceHeaderProps {
-  totalCount: number;
-  lastActivityAt: string | null;
-  onExport: () => void;
-  onClear?: () => void;
-}
-
-function EvidenceHeader({
-  totalCount,
-  lastActivityAt,
-  onExport,
-  onClear,
-}: EvidenceHeaderProps) {
-  const lastActivityLabel = lastActivityAt
-    ? new Date(lastActivityAt).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : null;
-
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="space-y-0.5 min-w-0">
-        <h1 className="text-lg font-semibold text-brand-dark">Evidence</h1>
-        <p className="text-xs text-slate-500">
-          Every action Guard reviewed on this machine.
-        </p>
-        {lastActivityLabel && (
-          <p className="flex items-center gap-1 text-[11px] text-slate-400">
-            <HiMiniClock className="h-3 w-3" aria-hidden="true" />
-            Last activity: {lastActivityLabel}
-          </p>
-        )}
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <button
-          type="button"
-          onClick={onExport}
-          aria-label="Export evidence"
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-dark hover:bg-slate-50 transition-colors"
-        >
-          <HiMiniArrowDownTray className="h-3.5 w-3.5" aria-hidden="true" />
-          Export
-        </button>
-        {onClear && totalCount > 0 && (
-          <button
-            type="button"
-            onClick={onClear}
-            aria-label="Clear all evidence"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors"
-          >
-            Clear
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-interface ViewTabBarProps {
-  view: EvidenceView;
-  onViewChange: (view: EvidenceView) => void;
-}
-
-function ViewTabBar({ view, onViewChange }: ViewTabBarProps) {
-  return (
-    <div
-      className="flex gap-1 border-b border-slate-200/60"
-      role="tablist"
-      aria-label="Evidence views"
-    >
-      {VIEW_TABS.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = view === tab.key;
-        return (
-          <ViewTabButton
-            key={tab.key}
-            tabKey={tab.key}
-            label={tab.label}
-            icon={Icon}
-            isActive={isActive}
-            onSelect={onViewChange}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-interface ViewTabButtonProps {
-  tabKey: EvidenceView;
-  label: string;
-  icon: React.ElementType;
-  isActive: boolean;
-  onSelect: (key: EvidenceView) => void;
-}
-
-function ViewTabButton({
-  tabKey,
-  label,
-  icon: Icon,
-  isActive,
-  onSelect,
-}: ViewTabButtonProps) {
-  const handleClick = useCallback(() => {
-    onSelect(tabKey);
-  }, [tabKey, onSelect]);
-
-  return (
-    <button
-      key={tabKey}
-      role="tab"
-      aria-selected={isActive}
-      aria-controls={`tabpanel-${tabKey}`}
-      id={`tab-${tabKey}`}
-      onClick={handleClick}
-      className={`relative flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-        isActive
-          ? "text-brand-dark"
-          : "text-slate-500 hover:text-brand-dark"
-      }`}
-    >
-      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-      <span className="hidden sm:inline">{label}</span>
-      {isActive && (
-        <span className="absolute bottom-0 left-1 right-1 h-0.5 rounded-full bg-brand-blue" />
-      )}
-    </button>
-  );
-}
 
 interface EvidenceWorkbenchProps {
   receiptItems: GuardReceipt[];
@@ -295,6 +141,14 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
     setFilters((prev) => ({ ...prev, category }));
   }, []);
 
+  const handleSortChange = useCallback((sort: EvidenceSortKey) => {
+    handleFilterChange({ sort });
+  }, [handleFilterChange]);
+
+  const handleSelectDay = useCallback((day: string) => {
+    setFilters((prev) => ({ ...prev, day }));
+  }, []);
+
   const handleLoadMore = useCallback(() => {
     setPage((prev) => prev + 1);
   }, []);
@@ -324,7 +178,6 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
     if (onClearEvidence) onClearEvidence();
   }, [onClearEvidence]);
 
-  // Sync state when URL changes (e.g. direct navigation, back/forward)
   useEffect(() => {
     function handlePopState() {
       const urlState = readEvidenceUrlState();
@@ -373,18 +226,21 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             aria-labelledby="tab-actions"
             className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}
           >
-            <EvidenceActionList
-              receipts={sorted}
-              selectedId={filters.selectedId}
-              onSelectId={handleSelectId}
-              onFilterHarness={handleFilterHarness}
-              onFilterCategory={handleFilterCategory}
-              sort={filters.sort}
-              onSortChange={(sort) => handleFilterChange({ sort })}
-              page={page}
-              pageSize={PAGE_SIZE}
-              onLoadMore={handleLoadMore}
-            />
+            <div className="space-y-3">
+              <EvidenceInsightStrip metrics={metrics} />
+              <EvidenceActionList
+                receipts={sorted}
+                selectedId={filters.selectedId}
+                onSelectId={handleSelectId}
+                onFilterHarness={handleFilterHarness}
+                onFilterCategory={handleFilterCategory}
+                sort={filters.sort}
+                onSortChange={handleSortChange}
+                page={page}
+                pageSize={PAGE_SIZE}
+                onLoadMore={handleLoadMore}
+              />
+            </div>
             {selectedReceipt && (
               <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                 <EvidenceActionDetail
@@ -422,6 +278,32 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
           </div>
         )}
 
+        {filters.view === "story" && (
+          <div
+            id="tabpanel-story"
+            role="tabpanel"
+            aria-labelledby="tab-story"
+            className="max-w-2xl"
+          >
+            <StoryTab
+              receipts={filtered}
+              selectedDay={filters.day ?? ""}
+              onSelectDay={handleSelectDay}
+            />
+          </div>
+        )}
+
+        {filters.view === "categories" && (
+          <div
+            id="tabpanel-categories"
+            role="tabpanel"
+            aria-labelledby="tab-categories"
+            className="max-w-2xl"
+          >
+            <CategoryTab receipts={filtered} onFilterCategory={handleFilterCategory} />
+          </div>
+        )}
+
         {filters.view === "export" && (
           <div
             id="tabpanel-export"
@@ -439,6 +321,12 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
               <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
               Open export options
             </button>
+            <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-1">
+              <p className="text-xs font-semibold text-brand-dark">Keep evidence in sync across devices</p>
+              <p className="text-xs text-slate-500">
+                Cloud backup lets you access your evidence history from any device. Available in HOL Guard Cloud.
+              </p>
+            </div>
           </div>
         )}
       </div>
