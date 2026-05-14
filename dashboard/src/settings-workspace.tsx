@@ -176,7 +176,8 @@ function normalizeSettingsPayload(payload: GuardSettingsPayload): GuardSettingsP
 }
 
 function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
-  const defaults = riskProfileActions[settings.security_level];
+  const securityLevel = settings.security_level === "gentle" ? "relaxed" : settings.security_level;
+  const defaults = riskProfileActions[securityLevel];
   const explicitOverrides = settings.risk_action_overrides ?? {};
   const effectiveRiskActions = riskControls.reduce<Record<RiskKey, string>>((actions, risk) => {
     actions[risk.key] = settings.risk_actions?.[risk.key] ?? explicitOverrides[risk.key] ?? defaults[risk.key];
@@ -184,6 +185,7 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
   }, {} as Record<RiskKey, string>);
   return {
     ...settings,
+    security_level: securityLevel,
     risk_actions: effectiveRiskActions,
     risk_action_overrides: explicitOverrides,
     harness_risk_actions: settings.harness_risk_actions ?? {}

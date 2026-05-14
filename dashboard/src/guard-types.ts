@@ -414,7 +414,7 @@ export type GuardInventoryItem = {
 
 export type GuardSettings = {
   mode: "observe" | "prompt" | "enforce";
-  security_level: "relaxed" | "balanced" | "strict" | "custom";
+  security_level: "relaxed" | "gentle" | "balanced" | "strict" | "custom";
   default_action: string;
   unknown_publisher_action: string;
   changed_hash_action: string;

@@ -442,13 +442,13 @@ def _coerce_editable_setting(key: str, value: object) -> object:
 
 def _coerce_security_level(value: object) -> str:
     if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
-        return "relaxed" if value == "gentle" else value
+        return value
     raise ValueError("Invalid Guard security level.")
 
 
 def _coerce_loaded_security_level(value: object) -> str:
     if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
-        return "relaxed" if value == "gentle" else value
+        return value
     return DEFAULT_SECURITY_LEVEL
 
 

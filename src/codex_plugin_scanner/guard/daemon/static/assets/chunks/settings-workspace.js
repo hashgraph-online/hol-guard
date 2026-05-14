@@ -138,7 +138,8 @@ function normalizeSettingsPayload(payload) {
   return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
 function normalizeGuardSettings(settings) {
-  const defaults = riskProfileActions[settings.security_level];
+  const securityLevel = settings.security_level === "gentle" ? "relaxed" : settings.security_level;
+  const defaults = riskProfileActions[securityLevel];
   const explicitOverrides = settings.risk_action_overrides ?? {};
   const effectiveRiskActions = riskControls.reduce((actions, risk) => {
     actions[risk.key] = settings.risk_actions?.[risk.key] ?? explicitOverrides[risk.key] ?? defaults[risk.key];
@@ -146,6 +147,7 @@ function normalizeGuardSettings(settings) {
   }, {});
   return {
     ...settings,
+    security_level: securityLevel,
     risk_actions: effectiveRiskActions,
     risk_action_overrides: explicitOverrides,
     harness_risk_actions: settings.harness_risk_actions ?? {}
