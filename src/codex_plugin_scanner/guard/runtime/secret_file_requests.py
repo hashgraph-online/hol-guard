@@ -3422,9 +3422,24 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
 
 
 def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
+    value_taking_predicates = {
+        "-ilname",
+        "-iname",
+        "-iwholename",
+        "-ipath",
+        "-iregex",
+        "-lname",
+        "-name",
+        "-path",
+        "-regex",
+        "-wholename",
+    }
     index = 0
     while index < len(args):
         arg = args[index]
+        if arg in value_taking_predicates and index + 1 < len(args):
+            index += 2
+            continue
         if arg in {"-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}:
             return True
         if arg in {"-exec", "-execdir", "-ok", "-okdir"}:
