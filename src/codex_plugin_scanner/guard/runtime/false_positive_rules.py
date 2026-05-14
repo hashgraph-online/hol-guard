@@ -20,6 +20,39 @@ _SOURCE_SEARCH_TOOLS = frozenset(
 )
 
 _READ_ONLY_INLINE_TOOLS = frozenset({"jq", "yq", "awk", "sed"})
+SOURCE_INSPECTION_PARTS = frozenset(
+    {"__tests__", "app", "dashboard", "docs", "lib", "packages", "scripts", "src", "test", "tests", "workers"}
+)
+SOURCE_INSPECTION_EXTENSIONS = frozenset(
+    {
+        ".c",
+        ".cc",
+        ".cpp",
+        ".css",
+        ".go",
+        ".h",
+        ".hpp",
+        ".html",
+        ".java",
+        ".js",
+        ".jsx",
+        ".json",
+        ".md",
+        ".mjs",
+        ".py",
+        ".rs",
+        ".sh",
+        ".toml",
+        ".ts",
+        ".tsx",
+        ".yaml",
+        ".yml",
+    }
+)
+SOURCE_INSPECTION_SENSITIVE_PARTS = frozenset(
+    {".aws", ".docker", ".env", ".git-credentials", ".kube", ".netrc", ".npmrc", ".pypirc", ".ssh", "credentials"}
+)
+SOURCE_INSPECTION_BENIGN_DOTFILES = frozenset({".nvmrc"})
 
 _SECRET_FILE_NAMES = re.compile(
     r"(?<![A-Za-z0-9_.-])"
