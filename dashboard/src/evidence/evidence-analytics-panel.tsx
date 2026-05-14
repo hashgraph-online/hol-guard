@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { EvidenceMetrics, TrendBucket } from "./evidence-metrics";
+import type { EvidenceMetrics, TrendBucket, PeriodComparison } from "./evidence-metrics";
 import { harnessDisplayName } from "../approval-center-utils";
 import { getCategoryInfo } from "./categories";
 import type { ReceiptCategory } from "./categories";
@@ -160,6 +160,38 @@ function SectionHeading({ children }: SectionHeadingProps) {
   );
 }
 
+interface PeriodComparisonCardProps {
+  comparison: PeriodComparison;
+  label: string;
+}
+
+function PeriodComparisonCard({ comparison, label }: PeriodComparisonCardProps) {
+  const blockedDeltaSign = comparison.blockedDelta > 0 ? "+" : "";
+  const totalDeltaSign = comparison.totalDelta > 0 ? "+" : "";
+  let blockedColor = "text-slate-400";
+  if (comparison.blockedDelta > 0) {
+    blockedColor = "text-brand-attention";
+  } else if (comparison.blockedDelta < 0) {
+    blockedColor = "text-emerald-600";
+  }
+
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2.5 space-y-1">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <div className="flex items-baseline gap-3">
+        <span className="text-sm font-medium text-brand-dark tabular-nums">
+          {comparison.currentTotal} actions
+          <span className="ml-1.5 text-xs text-slate-400">({totalDeltaSign}{comparison.totalDelta})</span>
+        </span>
+        <span className={`text-xs font-medium tabular-nums ${blockedColor}`}>
+          {comparison.currentBlocked} stopped
+          <span className="ml-1">({blockedDeltaSign}{comparison.blockedDelta})</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function EvidenceAnalyticsPanel({
   metrics,
   onFilterHarness,
@@ -193,7 +225,6 @@ export function EvidenceAnalyticsPanel({
 
   return (
     <div className="space-y-6">
-      {/* 7-day trend - minimal card */}
       <div className="space-y-2">
         <SectionHeading>7-day trend</SectionHeading>
         <div className="flex items-end gap-1.5 px-2 pt-1">
@@ -217,7 +248,12 @@ export function EvidenceAnalyticsPanel({
         </div>
       </div>
 
-      {/* By app - flat list */}
+      <div className="space-y-2">
+        <SectionHeading>Period comparison</SectionHeading>
+        <PeriodComparisonCard comparison={metrics.periodComparison7d} label="vs. prior 7 days" />
+        <PeriodComparisonCard comparison={metrics.periodComparison30d} label="vs. prior 30 days" />
+      </div>
+
       {sortedHarnesses.length > 0 && (
         <div className="space-y-1">
           <SectionHeading>By app</SectionHeading>
@@ -236,7 +272,6 @@ export function EvidenceAnalyticsPanel({
         </div>
       )}
 
-      {/* By category - flat list */}
       {sortedCategories.length > 0 && (
         <div className="space-y-1">
           <SectionHeading>By category</SectionHeading>
@@ -255,7 +290,6 @@ export function EvidenceAnalyticsPanel({
         </div>
       )}
 
-      {/* Top recurring - flat list */}
       {metrics.topRecurring.length > 0 && (
         <div className="space-y-1">
           <SectionHeading>Top recurring actions</SectionHeading>

@@ -17,7 +17,6 @@ interface StoryTabProps {
 }
 
 function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
-  // Build a set of all days that have receipts
   const daysWithData = useMemo(() => {
     const set = new Set<string>();
     for (const r of receipts) {
@@ -28,7 +27,6 @@ function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
     return set;
   }, [receipts]);
 
-  // Default selectedDay to most recent day with data if not set
   const effectiveDay = useMemo(() => {
     if (selectedDay) return selectedDay;
     if (daysWithData.size === 0) return "";
@@ -65,7 +63,6 @@ function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
     return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   }, [effectiveDay]);
 
-  // Find prev/next day that actually has data
   const sortedDays = useMemo(() => Array.from(daysWithData).sort(), [daysWithData]);
 
   const currentIndex = useMemo(() => sortedDays.indexOf(effectiveDay), [sortedDays, effectiveDay]);
