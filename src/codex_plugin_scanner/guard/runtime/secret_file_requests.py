@@ -753,6 +753,8 @@ def _shell_pipeline_reads_sensitive_path_to_network(
     segment: list[str] = []
     for token in [*parts, ";"]:
         if token in {"|", "|&"}:
+            if _shell_segment_network_sink_receives_pipeline(segment) and secret_in_pipeline:
+                return True
             if _shell_segment_reads_sensitive_path(segment, cwd=cwd, home_dir=home_dir):
                 secret_in_pipeline = True
             segment = []
@@ -919,15 +921,58 @@ def _search_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
         if arg == "--":
             after_options = True
             continue
-        if arg in {"-e", "--regexp", "-f", "--file", "-g", "--glob", "--iglob", "--type", "-t", "--type-not"}:
+        if arg in {
+            "-A",
+            "-B",
+            "-C",
+            "-e",
+            "-f",
+            "-g",
+            "-m",
+            "-t",
+            "--after-context",
+            "--before-context",
+            "--context",
+            "--exclude",
+            "--exclude-dir",
+            "--file",
+            "--glob",
+            "--iglob",
+            "--include",
+            "--max-count",
+            "--max-depth",
+            "--max-filesize",
+            "--regexp",
+            "--type",
+            "--type-not",
+        }:
             skip_next = True
             if arg in {"-e", "--regexp", "-f", "--file"}:
                 pattern_seen = True
             continue
-        search_value_flags = ("--regexp", "--file", "--glob", "--iglob", "--type", "--type-not")
+        search_value_flags = (
+            "--after-context",
+            "--before-context",
+            "--context",
+            "--exclude",
+            "--exclude-dir",
+            "--file",
+            "--glob",
+            "--iglob",
+            "--include",
+            "--max-count",
+            "--max-depth",
+            "--max-filesize",
+            "--regexp",
+            "--type",
+            "--type-not",
+        )
         if any(arg.startswith(f"{flag}=") for flag in search_value_flags):
             if arg.startswith(("--regexp=", "--file=")):
                 pattern_seen = True
+            continue
+        option_value_prefixes = ("-A", "-B", "-C", "-m")
+        if any(arg.startswith(prefix) and len(arg) > len(prefix) for prefix in option_value_prefixes):
             continue
         if arg.startswith("-e") and len(arg) > 2:
             pattern_seen = True
