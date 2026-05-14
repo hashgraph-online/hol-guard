@@ -764,8 +764,6 @@ def _shell_pipeline_reads_sensitive_path_to_network(
             segment = []
             continue
         segment.append(token)
-        if _shell_segment_network_sink_receives_pipeline(segment) and secret_in_pipeline:
-            return True
     return False
 
 
@@ -773,7 +771,10 @@ def _shell_segment_reads_sensitive_path(segment: list[str], *, cwd: Path | None,
     command_name, command_index = _shell_segment_primary_command(segment)
     if command_name not in _SHELL_LOCAL_READ_COMMANDS or command_index is None:
         return False
-    for token in _shell_segment_file_operand_tokens(segment[command_index:]):
+    command_segment = segment[command_index:]
+    if not _shell_read_segment_can_emit_stdout(command_segment):
+        return False
+    for token in _shell_segment_file_operand_tokens(command_segment):
         normalized_token = _shell_command_token_without_attached_redirection(token).strip("'\"")
         if not normalized_token:
             continue
@@ -792,8 +793,40 @@ def _shell_segment_network_sink_receives_pipeline(segment: list[str]) -> bool:
     if command_name == "wget":
         return _wget_segment_consumes_stdin(args)
     if command_name == "ssh":
-        return not any(arg in {"-n", "-f"} for arg in args)
+        return _ssh_segment_consumes_stdin(args)
     return command_name in {"nc", "ncat", "netcat"}
+
+
+def _shell_read_segment_can_emit_stdout(segment: list[str]) -> bool:
+    if not segment:
+        return False
+    command_name = Path(segment[0]).name.lower()
+    args = segment[1:]
+    if command_name in {"grep", "egrep", "fgrep", "rg"}:
+        return not _search_args_use_quiet_mode(args)
+    return True
+
+
+def _search_args_use_quiet_mode(args: list[str]) -> bool:
+    for arg in args:
+        if arg in {"-q", "--quiet", "--silent"}:
+            return True
+        if arg.startswith("--quiet=") or arg.startswith("--silent="):
+            return True
+        if arg.startswith("-") and not arg.startswith("--") and "q" in arg[1:]:
+            return True
+    return False
+
+
+def _ssh_segment_consumes_stdin(args: list[str]) -> bool:
+    for arg in args:
+        if arg in {"-n", "-f", "-Q"}:
+            return False
+        if arg.startswith("-Q") and len(arg) > 2:
+            return False
+        if arg.startswith("-") and not arg.startswith("--") and any(flag in arg[1:] for flag in ("n", "f")):
+            return False
+    return True
 
 
 def _shell_segment_file_operand_tokens(segment: list[str]) -> tuple[str, ...]:
@@ -3104,7 +3137,7 @@ def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
 
 
 def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
-    if any(arg in {"-delete", "-exec", "-execdir", "-fprint", "-fprintf", "-fls"} for arg in args):
+    if _find_args_use_write_or_unsafe_exec_action(args):
         return False
     targets = [arg for arg in args if arg and not arg.startswith("-")]
     if not targets:
@@ -3288,7 +3321,7 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
         if (
             command_name == "find"
             and command_index is not None
-            and any(arg in {"-exec", "-execdir", "-fprint", "-fprintf", "-fls"} for arg in segment[command_index + 1 :])
+            and _find_args_use_write_or_unsafe_exec_action(segment[command_index + 1 :])
         ):
             return True
         if (
@@ -3300,6 +3333,19 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
             )
         ):
             return True
+    return False
+
+
+def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
+    for index, arg in enumerate(args):
+        if arg in {"-fprint", "-fprintf", "-fls"}:
+            return True
+        if arg in {"-exec", "-execdir"}:
+            if index + 1 >= len(args):
+                return True
+            command_name = Path(args[index + 1]).name.lower()
+            if command_name not in {"echo", "printf", "true", "false", "test", "["}:
+                return True
     return False
 
 
