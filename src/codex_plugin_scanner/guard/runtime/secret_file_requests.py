@@ -3387,7 +3387,7 @@ def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
         arg = args[index]
         if arg in {"-delete", "-fprint", "-fprintf", "-fls"}:
             return True
-        if arg in {"-exec", "-execdir"}:
+        if arg in {"-exec", "-execdir", "-ok", "-okdir"}:
             if index + 1 >= len(args):
                 return True
             command_name = Path(args[index + 1]).name.lower()
