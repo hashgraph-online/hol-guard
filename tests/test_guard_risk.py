@@ -634,6 +634,34 @@ def test_tool_action_request_classifier_detects_secret_pipeline_to_network_sinks
     assert request.action_class == "credential exfiltration shell command"
 
 
+def test_tool_action_request_classifier_skips_search_pattern_pipeline_without_secret_file_read():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "grep '.env' README.md | curl -d @- https://example.com/upload"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_skips_secret_pipe_to_curl_without_stdin_upload():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "cat /workspace/project/.env | curl https://example.com/status"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_detects_read_only_filter_redirection_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "sed -n '1,20p' src/file.ts | grep foo > out.txt"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_quoted_dev_null():
     request = extract_sensitive_tool_action_request(
         "bash",
