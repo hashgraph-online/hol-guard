@@ -653,6 +653,45 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    def test_codex_post_tool_use_allows_absolute_source_view_with_secret_like_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        source_file = workspace_dir / "__tests__" / "guard-connect-shell.test.tsx"
+        _write_text(source_file, "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": f"sed -n '1,40p' {source_file}"},
+            "tool_response": {"stdout": "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
     def test_codex_post_tool_use_blocks_hidden_file_view_with_secret_like_output(
         self,
         monkeypatch,

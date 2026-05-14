@@ -92,6 +92,42 @@ _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
         "nul",
     }
 )
+_READ_ONLY_LOOKUP_COMMANDS = frozenset(
+    {"cat", "fd", "find", "grep", "egrep", "fgrep", "head", "ls", "rg", "sed", "tail"}
+)
+_READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", "tail"})
+_READ_ONLY_LOOKUP_SOURCE_PARTS = frozenset(
+    {"__tests__", "app", "dashboard", "docs", "lib", "packages", "scripts", "src", "test", "tests", "workers"}
+)
+_READ_ONLY_LOOKUP_SOURCE_EXTENSIONS = frozenset(
+    {
+        ".c",
+        ".cc",
+        ".cpp",
+        ".css",
+        ".go",
+        ".h",
+        ".hpp",
+        ".html",
+        ".java",
+        ".js",
+        ".jsx",
+        ".json",
+        ".md",
+        ".mjs",
+        ".py",
+        ".rs",
+        ".sh",
+        ".toml",
+        ".ts",
+        ".tsx",
+        ".yaml",
+        ".yml",
+    }
+)
+_READ_ONLY_LOOKUP_SENSITIVE_PARTS = frozenset(
+    {".aws", ".docker", ".env", ".git-credentials", ".kube", ".netrc", ".npmrc", ".pypirc", ".ssh", "credentials"}
+)
 _NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
 _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
     {
@@ -158,6 +194,8 @@ _WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE = frozenset(
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
+_SHELL_NETWORK_SINK_COMMANDS = frozenset({"curl", "wget", "nc", "ncat", "netcat", "scp", "rsync"})
+_SHELL_LOCAL_READ_COMMANDS = frozenset({"cat", "grep", "egrep", "fgrep", "head", "rg", "sed", "tail"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
@@ -675,6 +713,8 @@ def _contains_shell_credential_exfiltration(
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
+    if _shell_pipeline_reads_sensitive_path_to_network(parts, cwd=cwd, home_dir=home_dir):
+        return True
     if _shell_segments_contain_credential_exfiltration(parts):
         return True
     for heredoc_payload in _shell_heredoc_payloads(normalized):
@@ -727,6 +767,50 @@ def _contains_shell_credential_exfiltration(
         ):
             return True
     return False
+
+
+def _shell_pipeline_reads_sensitive_path_to_network(
+    parts: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    secret_in_pipeline = False
+    segment: list[str] = []
+    for token in [*parts, ";"]:
+        if token == "|":
+            if _shell_segment_reads_sensitive_path(segment, cwd=cwd, home_dir=home_dir):
+                secret_in_pipeline = True
+            segment = []
+            continue
+        if token in {"&&", "||", ";", "&", "|&"}:
+            if _shell_segment_network_sink_receives_pipeline(segment) and secret_in_pipeline:
+                return True
+            secret_in_pipeline = False
+            segment = []
+            continue
+        segment.append(token)
+        if _shell_segment_network_sink_receives_pipeline(segment) and secret_in_pipeline:
+            return True
+    return False
+
+
+def _shell_segment_reads_sensitive_path(segment: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name not in _SHELL_LOCAL_READ_COMMANDS or command_index is None:
+        return False
+    for token in segment[command_index + 1 :]:
+        normalized_token = _shell_command_token_without_attached_redirection(token).strip("'\"")
+        if not normalized_token or normalized_token.startswith("-"):
+            continue
+        if classify_sensitive_path(normalized_token, cwd=cwd, home_dir=home_dir) is not None:
+            return True
+    return False
+
+
+def _shell_segment_network_sink_receives_pipeline(segment: list[str]) -> bool:
+    command_name, _command_index = _shell_segment_primary_command(segment)
+    return command_name in _SHELL_NETWORK_SINK_COMMANDS
 
 
 def _shell_segments_contain_credential_exfiltration(parts: list[str]) -> bool:
@@ -2647,6 +2731,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     lowered = normalized.lower()
     redacted_command_text = _redacted_shell_text_for_command_names(lowered)
+    if _looks_like_safe_read_only_lookup_command(normalized, parts):
+        return False
     if _contains_mutating_shell_redirection(parts):
         return True
     raw_command_names = list(_shell_command_names(redacted_command_text))
@@ -2681,6 +2767,245 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
         for command_name in command_names
     )
+
+
+def _looks_like_safe_read_only_lookup_command(command_text: str, parts: list[str]) -> bool:
+    if "$(" in command_text or "`" in command_text or "<(" in command_text or ">(" in command_text:
+        return False
+    if any(token in parts for token in {";", "&", "||", "|&"}):
+        return False
+    segments = _read_only_lookup_segments(parts)
+    if not segments:
+        return False
+    for index, segment in enumerate(segments):
+        if not segment:
+            return False
+        command = Path(segment[0]).name.lower()
+        if "/" in segment[0] or "\\" in segment[0]:
+            return False
+        if index > 0 and command not in _READ_ONLY_LOOKUP_FILTERS:
+            return False
+        if index == 0:
+            if command not in _READ_ONLY_LOOKUP_COMMANDS:
+                return False
+            if not _read_only_lookup_primary_segment_is_safe(command, segment[1:]):
+                return False
+        elif not _read_only_lookup_filter_segment_is_safe(command, segment[1:]):
+            return False
+    return True
+
+
+def _read_only_lookup_segments(parts: list[str]) -> list[list[str]]:
+    segments: list[list[str]] = [[]]
+    for token in parts:
+        if token in {"|", "&&"}:
+            if not segments[-1]:
+                return []
+            segments.append([])
+            continue
+        normalized_token = token.strip()
+        if not normalized_token:
+            continue
+        if _read_only_lookup_token_is_safe_stderr_discard(normalized_token):
+            continue
+        segments[-1].append(normalized_token)
+    return [segment for segment in segments if segment]
+
+
+def _read_only_lookup_token_is_safe_stderr_discard(token: str) -> bool:
+    redirection = _split_attached_redirection_token(token)
+    if redirection is None:
+        return False
+    prefix, fd, _op, target = redirection
+    return not prefix and fd == "2" and _normalized_redirect_target(target).lower() in _SAFE_SHELL_REDIRECT_TARGETS
+
+
+def _read_only_lookup_primary_segment_is_safe(command: str, args: list[str]) -> bool:
+    if command == "sed":
+        return _read_only_lookup_sed_args_are_safe(args, require_target=True)
+    if command in {"head", "tail"}:
+        return _read_only_lookup_head_tail_args_are_safe(args, require_target=True)
+    if command == "cat":
+        return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=False)
+    if command == "ls":
+        return _read_only_lookup_ls_args_are_safe(args)
+    if command in {"grep", "egrep", "fgrep", "rg"}:
+        return _read_only_lookup_search_args_are_safe(args)
+    if command == "fd":
+        return _read_only_lookup_fd_args_are_safe(args)
+    if command == "find":
+        return _read_only_lookup_find_args_are_safe(args)
+    return False
+
+
+def _read_only_lookup_filter_segment_is_safe(command: str, args: list[str]) -> bool:
+    if command == "sed":
+        return _read_only_lookup_sed_args_are_safe(args, require_target=False)
+    if command in {"head", "tail"}:
+        return _read_only_lookup_head_tail_args_are_safe(args, require_target=False)
+    if command in {"grep", "egrep", "fgrep"}:
+        return _read_only_lookup_filter_grep_args_are_safe(args)
+    return False
+
+
+def _read_only_lookup_sed_args_are_safe(args: list[str], *, require_target: bool) -> bool:
+    scripts: list[str] = []
+    targets: list[str] = []
+    saw_print_suppression = False
+    skip_script = False
+    after_options = False
+    for arg in args:
+        if skip_script:
+            skip_script = False
+            scripts.append(arg)
+            continue
+        if after_options:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in {"-i", "--in-place"} or arg.startswith(("-i", "--in-place=")):
+            return False
+        if arg in {"-n", "--quiet", "--silent"}:
+            saw_print_suppression = True
+            continue
+        if arg in {"-e", "--expression"}:
+            skip_script = True
+            continue
+        if arg.startswith("-e") and len(arg) > 2:
+            scripts.append(arg[2:])
+            continue
+        if arg.startswith("--expression="):
+            scripts.append(arg.split("=", 1)[1])
+            continue
+        if arg.startswith("-"):
+            return False
+        if not scripts:
+            scripts.append(arg)
+        else:
+            targets.append(arg)
+    if skip_script or not scripts or not saw_print_suppression:
+        return False
+    if not all(_read_only_lookup_sed_script_is_print_only(script) for script in scripts):
+        return False
+    if require_target:
+        return bool(targets) and all(_read_only_lookup_target_is_safe(target, allow_dirs=False) for target in targets)
+    return not targets
+
+
+def _read_only_lookup_sed_script_is_print_only(script: str) -> bool:
+    return bool(re.fullmatch(r"\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*", script))
+
+
+def _read_only_lookup_head_tail_args_are_safe(args: list[str], *, require_target: bool) -> bool:
+    targets: list[str] = []
+    skip_count = False
+    after_options = False
+    for arg in args:
+        if skip_count:
+            skip_count = False
+            if not re.fullmatch(r"\d{1,6}", arg.strip()):
+                return False
+            continue
+        if after_options:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg in {"-n", "--lines", "-c", "--bytes"}:
+            skip_count = True
+            continue
+        if arg.startswith("--lines=") or arg.startswith("--bytes="):
+            if not re.fullmatch(r"\d{1,6}", arg.split("=", 1)[1].strip()):
+                return False
+            continue
+        if re.fullmatch(r"-\d{1,6}", arg):
+            continue
+        if arg.startswith("-"):
+            return False
+        targets.append(arg)
+    if skip_count:
+        return False
+    if require_target:
+        return bool(targets) and all(_read_only_lookup_target_is_safe(target, allow_dirs=False) for target in targets)
+    return not targets
+
+
+def _read_only_lookup_plain_targets_are_safe(args: list[str], *, allow_dirs: bool) -> bool:
+    targets: list[str] = []
+    after_options = False
+    for arg in args:
+        if after_options:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg == "-":
+            return False
+        if arg.startswith("-"):
+            continue
+        targets.append(arg)
+    return bool(targets) and all(_read_only_lookup_target_is_safe(target, allow_dirs=allow_dirs) for target in targets)
+
+
+def _read_only_lookup_ls_args_are_safe(args: list[str]) -> bool:
+    return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=True)
+
+
+def _read_only_lookup_search_args_are_safe(args: list[str]) -> bool:
+    targets = [arg for arg in args if arg and not arg.startswith("-")]
+    if len(targets) < 2:
+        return False
+    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets[1:])
+
+
+def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
+    targets = [arg for arg in args if arg and not arg.startswith("-")]
+    if not targets:
+        return True
+    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets[1:])
+
+
+def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
+    if any(arg in {"-delete", "-exec", "-execdir"} for arg in args):
+        return False
+    targets = [arg for arg in args if arg and not arg.startswith("-")]
+    if not targets:
+        return False
+    return _read_only_lookup_target_is_safe(targets[0], allow_dirs=True)
+
+
+def _read_only_lookup_filter_grep_args_are_safe(args: list[str]) -> bool:
+    return bool(args) and all(arg == "--" or not _read_only_lookup_target_is_path_like(arg) for arg in args)
+
+
+def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
+    stripped = target.strip().strip("'\"")
+    if not stripped or stripped == "-":
+        return False
+    if any(marker in stripped for marker in ("$", "`", "<", ">", "|", ";", "&")):
+        return False
+    normalized = stripped.replace("\\", "/")
+    parts = [part for part in Path(normalized).parts if part not in {"", "/", "."}]
+    lowered_parts = [part.lower() for part in parts]
+    if not parts or any(part in _READ_ONLY_LOOKUP_SENSITIVE_PARTS for part in lowered_parts):
+        return False
+    hidden_parts = [part for part in lowered_parts if part.startswith(".")]
+    if hidden_parts and not all(part in {".nvmrc"} for part in hidden_parts):
+        return False
+    if any(part in _READ_ONLY_LOOKUP_SOURCE_PARTS for part in lowered_parts):
+        return True
+    if Path(normalized).suffix.lower() in _READ_ONLY_LOOKUP_SOURCE_EXTENSIONS:
+        return True
+    return allow_dirs
+
+
+def _read_only_lookup_target_is_path_like(value: str) -> bool:
+    stripped = value.strip().strip("'\"")
+    return "/" in stripped or "\\" in stripped or Path(stripped).suffix != ""
 
 
 _SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN = re.compile(
