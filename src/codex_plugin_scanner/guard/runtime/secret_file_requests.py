@@ -2873,6 +2873,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return True
     if _contains_destructive_git_command(parts):
         return True
+    if _find_or_fd_uses_write_or_exec_action(parts):
+        return True
     command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
@@ -3083,6 +3085,10 @@ def _read_only_lookup_search_args_are_safe(args: list[str]) -> bool:
 
 
 def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
+    if any(
+        arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")) for arg in args
+    ):
+        return False
     targets = [arg for arg in args if arg and not arg.startswith("-")]
     if not targets:
         return True
@@ -3090,7 +3096,7 @@ def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
 
 
 def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
-    if any(arg in {"-delete", "-exec", "-execdir"} for arg in args):
+    if any(arg in {"-delete", "-exec", "-execdir", "-fprint", "-fprintf", "-fls"} for arg in args):
         return False
     targets = [arg for arg in args if arg and not arg.startswith("-")]
     if not targets:
@@ -3264,6 +3270,27 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
         if command_name != "node" or command_index is None:
             continue
         if _segment_contains_destructive_node_inline_eval(segment[command_index + 1 :]):
+            return True
+    return False
+
+
+def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if (
+            command_name == "find"
+            and command_index is not None
+            and any(arg in {"-exec", "-execdir", "-fprint", "-fprintf", "-fls"} for arg in segment[command_index + 1 :])
+        ):
+            return True
+        if (
+            command_name == "fd"
+            and command_index is not None
+            and any(
+                arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch="))
+                for arg in segment[command_index + 1 :]
+            )
+        ):
             return True
     return False
 

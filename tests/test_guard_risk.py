@@ -662,6 +662,25 @@ def test_tool_action_request_classifier_detects_read_only_filter_redirection_wri
     assert request.action_class == "destructive shell command"
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "find . -fprintf out.txt '%p\\n'",
+        "find . -fprint out.txt",
+        "find . -fls out.txt",
+        "fd -x rm {}",
+        "fd --exec rm {}",
+        "fd -X sh -c 'echo {} > out.txt'",
+        "fd --exec-batch rm {}",
+    ],
+)
+def test_tool_action_request_classifier_rejects_lookup_tools_that_write_or_exec(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_quoted_dev_null():
     request = extract_sensitive_tool_action_request(
         "bash",
