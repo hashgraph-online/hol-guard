@@ -911,13 +911,21 @@ def _search_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
 def _curl_segment_consumes_stdin(args: list[str]) -> bool:
     for index, arg in enumerate(args):
         if arg in _CURL_AT_FILE_FLAGS_WITH_VALUE or arg in _CURL_FORM_FLAGS_WITH_VALUE:
-            return index + 1 < len(args) and _curl_value_consumes_stdin(args[index + 1])
+            if index + 1 < len(args) and _curl_value_consumes_stdin(args[index + 1]):
+                return True
+            continue
         if any(arg.startswith(f"{flag}=") for flag in _CURL_AT_FILE_FLAGS_WITH_VALUE | _CURL_FORM_FLAGS_WITH_VALUE):
-            return _curl_value_consumes_stdin(arg.split("=", 1)[1])
+            if _curl_value_consumes_stdin(arg.split("=", 1)[1]):
+                return True
+            continue
         if arg.startswith("-d") and len(arg) > 2:
-            return _curl_value_consumes_stdin(arg[2:])
+            if _curl_value_consumes_stdin(arg[2:]):
+                return True
+            continue
         if arg.startswith("-F") and len(arg) > 2:
-            return _curl_value_consumes_stdin(arg[2:])
+            if _curl_value_consumes_stdin(arg[2:]):
+                return True
+            continue
     return False
 
 
