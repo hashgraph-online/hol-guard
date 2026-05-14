@@ -194,6 +194,12 @@ const securityToneClasses = {
   }
 } as const;
 
+type SecurityTone = keyof typeof securityToneClasses;
+
+function getSecurityToneClasses(tone: SecurityTone) {
+  return securityToneClasses[tone] ?? securityToneClasses.slate;
+}
+
 function normalizeSettingsPayload(payload: GuardSettingsPayload): GuardSettingsPayload {
   return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
@@ -881,7 +887,7 @@ type SecurityLevelCardProps = {
 
 function SecurityLevelCard({ level, isSelected, onSelect }: SecurityLevelCardProps) {
   const LevelIcon = level.icon;
-  const toneClasses = securityToneClasses[level.tone];
+  const toneClasses = getSecurityToneClasses(level.tone);
   const iconColorClass = toneClasses.icon;
   const iconBgClass = toneClasses.iconBg;
   const selectedBorderClass = toneClasses.selected;

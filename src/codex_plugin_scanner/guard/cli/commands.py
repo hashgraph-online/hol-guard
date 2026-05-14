@@ -157,6 +157,7 @@ _GUARD_CLIENT_VERSION = "2.0.0"
 _SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
 _SERVICE_RUNTIME_CHOICES = ("hermes", "openclaw", "custom")
 _SERVICE_RUNTIME_SURFACE = "agent-sdk"
+_NAMED_SECURITY_LEVELS = {"relaxed", "balanced", "strict", "gentle", "paranoid"}
 _HOOK_DAEMON_FAILURE_STATUSES = frozenset({"unreachable", "error", "failed", "404"})
 _HOOK_DAEMON_FAIL_MODES = frozenset({"strict", "permissive"})
 _HOOK_DAEMON_UNREACHABLE_REASON_MARKER = "daemon was unreachable"
@@ -3764,7 +3765,7 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
     settings_command = getattr(args, "settings_set_command", None)
     if settings_command == "security-level":
         payload: dict[str, object] = {"security_level": args.security_level}
-        if args.security_level in {"balanced", "strict", "gentle", "paranoid"}:
+        if args.security_level in _NAMED_SECURITY_LEVELS:
             payload["risk_actions"] = {}
             payload["harness_risk_actions"] = {}
         elif args.security_level == "custom":
@@ -3773,7 +3774,7 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
     if settings_command == "preset":
         preset = str(args.preset)
         payload_preset: dict[str, object] = {"security_level": preset}
-        if preset in {"balanced", "strict", "gentle", "paranoid"}:
+        if preset in _NAMED_SECURITY_LEVELS:
             payload_preset["risk_actions"] = {}
             payload_preset["harness_risk_actions"] = {}
         elif preset == "custom":

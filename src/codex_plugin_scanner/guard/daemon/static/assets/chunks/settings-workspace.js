@@ -156,6 +156,9 @@ const securityToneClasses = {
     selected: "border-slate-300 bg-slate-50"
   }
 };
+function getSecurityToneClasses(tone) {
+  return securityToneClasses[tone] ?? securityToneClasses.slate;
+}
 function normalizeSettingsPayload(payload) {
   return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
@@ -752,7 +755,7 @@ function SettingToggle(props) {
 }
 function SecurityLevelCard({ level, isSelected, onSelect }) {
   const LevelIcon = level.icon;
-  const toneClasses = securityToneClasses[level.tone];
+  const toneClasses = getSecurityToneClasses(level.tone);
   const iconColorClass = toneClasses.icon;
   const iconBgClass = toneClasses.iconBg;
   const selectedBorderClass = toneClasses.selected;
