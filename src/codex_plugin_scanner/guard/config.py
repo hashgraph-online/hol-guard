@@ -33,7 +33,7 @@ GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
-VALID_SECURITY_LEVELS = {"gentle", "balanced", "strict", "paranoid", "custom"}
+VALID_SECURITY_LEVELS = {"relaxed", "gentle", "balanced", "strict", "paranoid", "custom"}
 VALID_RISK_ACTION_KEYS = {
     "local_secret_read",
     "credential_exfiltration",
@@ -52,6 +52,22 @@ VALID_RISK_ACTION_KEYS = {
 }
 DEFAULT_SECURITY_LEVEL = "balanced"
 SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
+    "relaxed": {
+        "local_secret_read": "warn",
+        "credential_exfiltration": "warn",
+        "data_flow_exfiltration": "warn",
+        "destructive_shell": "warn",
+        "encoded_execution": "warn",
+        "network_egress": "allow",
+        "prompt_injection": "warn",
+        "mcp_dangerous_tool": "warn",
+        "malicious_skill": "warn",
+        "package_script": "warn",
+        "persistence": "warn",
+        "guard_bypass": "warn",
+        "cloud_advisory": "allow",
+        "encoded_exfiltration": "warn",
+    },
     "gentle": {
         "local_secret_read": "warn",
         "credential_exfiltration": "warn",
@@ -379,6 +395,17 @@ def update_guard_settings(guard_home: Path, payload: dict[str, object]) -> Guard
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue
         next_payload[key] = _coerce_editable_setting(key, value)
+    if next_payload.get("sync") is True and next_payload.get("billing") is not True:
+        raise ValueError("Cloud sync requires a paid team plan.")
+    _write_guard_config(guard_home / "config.toml", next_payload)
+    return load_guard_config(guard_home)
+
+
+def reset_guard_settings(guard_home: Path) -> GuardConfig:
+    """Reset editable local Guard settings while preserving non-dashboard config."""
+
+    current = _read_toml(guard_home / "config.toml")
+    next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
     _write_guard_config(guard_home / "config.toml", next_payload)
     return load_guard_config(guard_home)
 

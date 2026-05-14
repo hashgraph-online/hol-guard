@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, a1 as HiMiniCommandLine, d as HiMiniXMark, l as HiMiniQuestionMarkCircle } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, a3 as HiMiniCommandLine, d as HiMiniXMark, l as HiMiniQuestionMarkCircle } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 const shortcuts = [
   {

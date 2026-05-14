@@ -26,6 +26,7 @@ import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardSettingsPayload,
+  GuardSettingsExport,
   GuardSettings,
   DecisionScope,
   RiskSignalV2,
@@ -734,7 +735,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
         approval_wait_timeout_seconds: 120,
         approval_surface_policy: "auto-open-once",
         telemetry: false,
-        sync: true,
+        sync: false,
         billing: false
       }
     };
@@ -754,6 +755,46 @@ export async function updateSettings(settings: Partial<GuardSettings>): Promise<
       ...guardAuthHeaders()
     },
     body: JSON.stringify({ settings })
+  });
+}
+
+export async function exportSettings(): Promise<GuardSettingsExport> {
+  if (isGuardDemoMode()) {
+    const current = await fetchSettings();
+    return {
+      schema_version: 1,
+      privacy_warning: "Exports include local Guard preferences but not secrets or receipt evidence.",
+      settings: current.settings
+    };
+  }
+  return readJson<GuardSettingsExport>("/v1/settings/export");
+}
+
+export async function importSettings(settingsExport: GuardSettingsExport): Promise<GuardSettingsPayload> {
+  if (isGuardDemoMode()) {
+    return { guard_home: "~/.hol-guard", config_path: "~/.hol-guard/config.toml", settings: settingsExport.settings };
+  }
+  return readJson<GuardSettingsPayload>("/v1/settings/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify(settingsExport)
+  });
+}
+
+export async function resetSettings(): Promise<GuardSettingsPayload> {
+  if (isGuardDemoMode()) {
+    return fetchSettings();
+  }
+  return readJson<GuardSettingsPayload>("/v1/settings/reset", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({ confirm: "reset-local-settings" })
   });
 }
 
