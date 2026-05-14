@@ -3382,8 +3382,10 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
 
 
 def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
-    for index, arg in enumerate(args):
-        if arg in {"-fprint", "-fprintf", "-fls"}:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in {"-delete", "-fprint", "-fprintf", "-fls"}:
             return True
         if arg in {"-exec", "-execdir"}:
             if index + 1 >= len(args):
@@ -3391,6 +3393,13 @@ def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
             command_name = Path(args[index + 1]).name.lower()
             if command_name not in {"echo", "printf", "true", "false", "test", "["}:
                 return True
+            index += 2
+            while index < len(args) and args[index] not in {";", r"\;", "+"}:
+                index += 1
+            if index < len(args):
+                index += 1
+            continue
+        index += 1
     return False
 
 
