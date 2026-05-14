@@ -810,7 +810,20 @@ def _shell_read_segment_can_emit_stdout(segment: list[str]) -> bool:
 
 
 def _search_args_use_quiet_mode(args: list[str]) -> bool:
+    skip_next = False
     for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--":
+            return False
+        if arg in {"-e", "--regexp", "-f", "--file"}:
+            skip_next = True
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in ("--regexp", "--file")):
+            continue
+        if (arg.startswith("-e") or arg.startswith("-f")) and len(arg) > 2:
+            continue
         if arg in {"-q", "--quiet", "--silent"}:
             return True
         if arg.startswith("--quiet=") or arg.startswith("--silent="):
@@ -988,6 +1001,18 @@ def _search_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
 
 def _curl_segment_consumes_stdin(args: list[str]) -> bool:
     for index, arg in enumerate(args):
+        if arg in _CURL_DIRECT_FILE_FLAGS_WITH_VALUE:
+            if index + 1 < len(args) and args[index + 1].strip("'\"") == "-":
+                return True
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in _CURL_DIRECT_FILE_FLAGS_WITH_VALUE):
+            if arg.split("=", 1)[1].strip("'\"") == "-":
+                return True
+            continue
+        if arg.startswith("-T") and len(arg) > 2:
+            if arg[2:].strip("'\"") == "-":
+                return True
+            continue
         if arg in _CURL_AT_FILE_FLAGS_WITH_VALUE or arg in _CURL_FORM_FLAGS_WITH_VALUE:
             if index + 1 < len(args) and _curl_value_consumes_stdin(args[index + 1]):
                 return True
