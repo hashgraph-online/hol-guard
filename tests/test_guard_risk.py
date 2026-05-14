@@ -712,6 +712,8 @@ def test_tool_action_request_classifier_detects_read_only_filter_redirection_wri
         "find . -fprint out.txt",
         "find . -fls out.txt",
         "find . -exec rm {} \\;",
+        "find . -ok rm {} \\;",
+        "find . -okdir rm {} \\;",
         "fd -x rm {}",
         "fd --exec rm {}",
         "fd -X sh -c 'echo {} > out.txt'",
