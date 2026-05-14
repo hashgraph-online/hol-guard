@@ -6359,11 +6359,13 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     stripped = target.strip().strip("'\"")
     if not stripped:
         return False
-    if stripped.startswith(("~", "/")):
+    if stripped.startswith("~"):
         return False
     if any(char in stripped for char in ("*", "?", "{", "}")):
         return False
     target_path = Path(stripped)
+    if target_path.is_absolute():
+        return _codex_absolute_search_target_is_source_like(target_path)
     base_dir = (cwd or Path.cwd()).resolve()
     unresolved_candidate = base_dir / target_path
     if _path_contains_symlink(unresolved_candidate, base_dir=base_dir):
@@ -6396,6 +6398,22 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     if Path(stripped).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES:
         return True
     return Path(stripped).suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
+
+
+def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:
+    parts = [part for part in target_path.parts if part not in {"", "/", "."}]
+    if not parts:
+        return False
+    lowered_parts = [part.lower() for part in parts]
+    if any(part in _CODEX_SENSITIVE_SEARCH_BASENAMES for part in lowered_parts):
+        return False
+    hidden_parts = [part for part in lowered_parts if part.startswith(".")]
+    if hidden_parts and not all(part in _CODEX_BENIGN_SOURCE_DOTFILES for part in hidden_parts):
+        return False
+    normalized = "/".join(parts)
+    if any(f"/{prefix}" in f"/{normalized}" for prefix in _CODEX_SOURCE_SEARCH_PREFIXES):
+        return True
+    return target_path.suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
 
 
 def _path_contains_symlink(path: Path, *, base_dir: Path) -> bool:
