@@ -171,6 +171,29 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
   }
 };
 
+const securityToneClasses = {
+  green: {
+    icon: "text-emerald-600",
+    iconBg: "bg-emerald-50",
+    selected: "border-emerald-300 bg-emerald-50"
+  },
+  blue: {
+    icon: "text-brand-blue",
+    iconBg: "bg-brand-blue/10",
+    selected: "border-brand-blue/30 bg-brand-blue/[0.05]"
+  },
+  purple: {
+    icon: "text-brand-purple",
+    iconBg: "bg-brand-purple/10",
+    selected: "border-brand-purple/30 bg-brand-purple/[0.04]"
+  },
+  slate: {
+    icon: "text-slate-500",
+    iconBg: "bg-slate-100",
+    selected: "border-slate-300 bg-slate-50"
+  }
+} as const;
+
 function normalizeSettingsPayload(payload: GuardSettingsPayload): GuardSettingsPayload {
   return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
@@ -206,6 +229,23 @@ function buildConsequenceSummary(settings: GuardSettings): string {
 function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
   if (saved === null || draft === null) return false;
   return JSON.stringify(saved) !== JSON.stringify(draft);
+}
+
+function protectionModeHelp(mode: GuardSettings["mode"]): string {
+  if (mode === "enforce") {
+    return "Guard blocks risky actions until a saved decision allows them.";
+  }
+  if (mode === "observe") {
+    return "Guard records what it sees without pausing actions.";
+  }
+  return "Guard asks before risky actions continue.";
+}
+
+function saveStatusText(saveSuccess: boolean, saveError: string | null): string {
+  if (saveSuccess) {
+    return "Settings saved successfully.";
+  }
+  return saveError ?? "";
 }
 
 export function SettingsWorkspace() {
@@ -323,7 +363,8 @@ export function SettingsWorkspace() {
 
   const handleTimeoutChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number.parseInt(event.target.value, 10);
-    setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: Number.isNaN(nextValue) ? 0 : nextValue });
+    const nextTimeout = Number.isNaN(nextValue) ? 0 : nextValue;
+    setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: nextTimeout });
     setSaveError(null);
   }, []);
 
@@ -445,7 +486,7 @@ export function SettingsWorkspace() {
     return <EmptyState title="Settings are unavailable" body={state.kind === "error" ? state.message : "Guard did not return editable settings."} tone="teach" />;
   }
 
-  const modeHelp = draft.mode === "enforce" ? "Guard blocks risky actions until a saved decision allows them." : draft.mode === "observe" ? "Guard records what it sees without pausing actions." : "Guard asks before risky actions continue.";
+  const modeHelp = protectionModeHelp(draft.mode);
   const consequenceSummary = buildConsequenceSummary(draft);
   const searchMatches = filterSettingsBySearch(searchQuery);
   const hasSearch = searchQuery.trim().length > 0;
@@ -710,7 +751,7 @@ export function SettingsWorkspace() {
             <p className="text-xs text-slate-500">Use this for local tuning. Team policy from Guard Cloud may still override some decisions.</p>
           )}
           <div aria-live="polite" aria-atomic="true" className="sr-only">
-            {saveSuccess ? "Settings saved successfully." : saveError ? saveError : ""}
+            {saveStatusText(saveSuccess, saveError)}
           </div>
         </div>
       </div>
@@ -743,13 +784,13 @@ type AccordionSectionProps = {
   subtitle: string;
   expanded: boolean;
   onToggle: () => void;
-  sectionId?: string;
+  sectionId: string;
   children: React.ReactNode;
 };
 
 function AccordionSection(props: AccordionSectionProps) {
-  const panelId = props.sectionId ? `accordion-panel-${props.sectionId}` : undefined;
-  const buttonId = props.sectionId ? `accordion-btn-${props.sectionId}` : undefined;
+  const panelId = `accordion-panel-${props.sectionId}`;
+  const buttonId = `accordion-btn-${props.sectionId}`;
   return (
     <div className="overflow-hidden rounded-xl border border-slate-100">
       <button
@@ -840,9 +881,10 @@ type SecurityLevelCardProps = {
 
 function SecurityLevelCard({ level, isSelected, onSelect }: SecurityLevelCardProps) {
   const LevelIcon = level.icon;
-  const iconColorClass = level.tone === "green" ? "text-emerald-600" : level.tone === "blue" ? "text-brand-blue" : level.tone === "purple" ? "text-brand-purple" : "text-slate-500";
-  const iconBgClass = level.tone === "green" ? "bg-emerald-50" : level.tone === "blue" ? "bg-brand-blue/10" : level.tone === "purple" ? "bg-brand-purple/10" : "bg-slate-100";
-  const selectedBorderClass = level.tone === "green" ? "border-emerald-300 bg-emerald-50" : level.tone === "blue" ? "border-brand-blue/30 bg-brand-blue/[0.05]" : level.tone === "purple" ? "border-brand-purple/30 bg-brand-purple/[0.04]" : "border-slate-300 bg-slate-50";
+  const toneClasses = securityToneClasses[level.tone];
+  const iconColorClass = toneClasses.icon;
+  const iconBgClass = toneClasses.iconBg;
+  const selectedBorderClass = toneClasses.selected;
 
   const handleClick = useCallback(() => onSelect(level.value), [onSelect, level.value]);
 

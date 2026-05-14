@@ -134,6 +134,28 @@ const riskProfileActions = {
     encoded_exfiltration: "require-reapproval"
   }
 };
+const securityToneClasses = {
+  green: {
+    icon: "text-emerald-600",
+    iconBg: "bg-emerald-50",
+    selected: "border-emerald-300 bg-emerald-50"
+  },
+  blue: {
+    icon: "text-brand-blue",
+    iconBg: "bg-brand-blue/10",
+    selected: "border-brand-blue/30 bg-brand-blue/[0.05]"
+  },
+  purple: {
+    icon: "text-brand-purple",
+    iconBg: "bg-brand-purple/10",
+    selected: "border-brand-purple/30 bg-brand-purple/[0.04]"
+  },
+  slate: {
+    icon: "text-slate-500",
+    iconBg: "bg-slate-100",
+    selected: "border-slate-300 bg-slate-50"
+  }
+};
 function normalizeSettingsPayload(payload) {
   return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
@@ -166,6 +188,21 @@ function buildConsequenceSummary(settings) {
 function hasUnsavedChanges(saved, draft) {
   if (saved === null || draft === null) return false;
   return JSON.stringify(saved) !== JSON.stringify(draft);
+}
+function protectionModeHelp(mode) {
+  if (mode === "enforce") {
+    return "Guard blocks risky actions until a saved decision allows them.";
+  }
+  if (mode === "observe") {
+    return "Guard records what it sees without pausing actions.";
+  }
+  return "Guard asks before risky actions continue.";
+}
+function saveStatusText(saveSuccess, saveError) {
+  if (saveSuccess) {
+    return "Settings saved successfully.";
+  }
+  return saveError ?? "";
 }
 function SettingsWorkspace() {
   const [state, setState] = reactExports.useState({ kind: "loading" });
@@ -274,7 +311,8 @@ function SettingsWorkspace() {
   }, []);
   const handleTimeoutChange = reactExports.useCallback((event) => {
     const nextValue = Number.parseInt(event.target.value, 10);
-    setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: Number.isNaN(nextValue) ? 0 : nextValue });
+    const nextTimeout = Number.isNaN(nextValue) ? 0 : nextValue;
+    setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: nextTimeout });
     setSaveError(null);
   }, []);
   const handleModeChange = reactExports.useCallback((event) => {
@@ -388,7 +426,7 @@ function SettingsWorkspace() {
   if (state.kind === "error" || draft === null) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "Settings are unavailable", body: state.kind === "error" ? state.message : "Guard did not return editable settings.", tone: "teach" });
   }
-  const modeHelp = draft.mode === "enforce" ? "Guard blocks risky actions until a saved decision allows them." : draft.mode === "observe" ? "Guard records what it sees without pausing actions." : "Guard asks before risky actions continue.";
+  const modeHelp = protectionModeHelp(draft.mode);
   const consequenceSummary = buildConsequenceSummary(draft);
   const searchMatches = filterSettingsBySearch(searchQuery);
   const hasSearch = searchQuery.trim().length > 0;
@@ -626,7 +664,7 @@ function SettingsWorkspace() {
             ] })
           ] }),
           saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-emerald-600", children: "Settings saved" }) : saveError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: saveError }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Use this for local tuning. Team policy from Guard Cloud may still override some decisions." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: saveSuccess ? "Settings saved successfully." : saveError ? saveError : "" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: saveStatusText(saveSuccess, saveError) })
         ] })
       }
     ),
@@ -646,8 +684,8 @@ function SettingsWorkspace() {
   ] });
 }
 function AccordionSection(props) {
-  const panelId = props.sectionId ? `accordion-panel-${props.sectionId}` : void 0;
-  const buttonId = props.sectionId ? `accordion-btn-${props.sectionId}` : void 0;
+  const panelId = `accordion-panel-${props.sectionId}`;
+  const buttonId = `accordion-btn-${props.sectionId}`;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl border border-slate-100", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
@@ -714,9 +752,10 @@ function SettingToggle(props) {
 }
 function SecurityLevelCard({ level, isSelected, onSelect }) {
   const LevelIcon = level.icon;
-  const iconColorClass = level.tone === "green" ? "text-emerald-600" : level.tone === "blue" ? "text-brand-blue" : level.tone === "purple" ? "text-brand-purple" : "text-slate-500";
-  const iconBgClass = level.tone === "green" ? "bg-emerald-50" : level.tone === "blue" ? "bg-brand-blue/10" : level.tone === "purple" ? "bg-brand-purple/10" : "bg-slate-100";
-  const selectedBorderClass = level.tone === "green" ? "border-emerald-300 bg-emerald-50" : level.tone === "blue" ? "border-brand-blue/30 bg-brand-blue/[0.05]" : level.tone === "purple" ? "border-brand-purple/30 bg-brand-purple/[0.04]" : "border-slate-300 bg-slate-50";
+  const toneClasses = securityToneClasses[level.tone];
+  const iconColorClass = toneClasses.icon;
+  const iconBgClass = toneClasses.iconBg;
+  const selectedBorderClass = toneClasses.selected;
   const handleClick = reactExports.useCallback(() => onSelect(level.value), [onSelect, level.value]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "button",
