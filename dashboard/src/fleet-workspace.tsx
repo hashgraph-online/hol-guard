@@ -7,6 +7,7 @@ import {
   HiMiniChevronRight,
   HiMiniClipboard,
   HiMiniClipboardDocumentCheck,
+  HiMiniEye,
 } from "react-icons/hi2";
 import {
   ActionButton,
@@ -17,6 +18,7 @@ import {
   ProofStrip,
 } from "./approval-center-primitives";
 import { harnessDisplayName, isDisplayableHarness } from "./approval-center-utils";
+import { SUPPORTED_APPS_BRIEF, resolveAppInstallStatus, APP_STATUS_LABELS } from "./apps/app-catalog";
 import type { GuardInventoryItem, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
 type FleetWorkspaceProps = {
@@ -49,8 +51,7 @@ export type FleetHeroCopy = {
   secondaryCtaHref: string;
 };
 
-const SUPPORTED_APPS_COPY =
-  "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.";
+const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 
 export function resolveFleetHeroCopy(
   cloudState: "local_only" | "paired_waiting" | "paired_active",
@@ -112,7 +113,7 @@ function renderReceiptContext(receipt: GuardReceipt): string {
   return `${harnessDisplayName(receipt.harness)} · ${receipt.policy_decision.replace(/-/g, " ")}`;
 }
 
-type AppStatus = "protected" | "found_unprotected" | "needs_repair" | "not_found";
+type AppStatus = "protected" | "partial" | "found_unprotected" | "needs_repair" | "not_found";
 
 function resolveAppStatus(
   install: { active?: boolean } | undefined,
@@ -127,18 +128,80 @@ function resolveAppStatus(
   return "found_unprotected";
 }
 
+function toInstallStatus(status: AppStatus): ReturnType<typeof resolveAppInstallStatus> {
+  if (status === "protected") return "active";
+  if (status === "needs_repair") return "partial";
+  if (status === "found_unprotected") return "observed";
+  return "not_installed";
+}
+
 function StatusIcon({ status }: { status: AppStatus }) {
   if (status === "protected") return <HiMiniCheckCircle className="h-4 w-4 text-emerald-500" aria-hidden="true" />;
-  if (status === "found_unprotected") return <HiMiniExclamationCircle className="h-4 w-4 text-brand-attention" aria-hidden="true" />;
+  if (status === "found_unprotected") return <HiMiniEye className="h-4 w-4 text-slate-400" aria-hidden="true" />;
   if (status === "needs_repair") return <HiMiniWrenchScrewdriver className="h-4 w-4 text-brand-purple" aria-hidden="true" />;
-  return <HiMiniXCircle className="h-4 w-4 text-slate-300" aria-hidden="true" />;
+  if (status === "not_found") return <HiMiniXCircle className="h-4 w-4 text-slate-300" aria-hidden="true" />;
+  return <HiMiniExclamationCircle className="h-4 w-4 text-brand-attention" aria-hidden="true" />;
 }
 
 function StatusBadge({ status }: { status: AppStatus }) {
-  if (status === "protected") return <span className="text-xs font-medium text-emerald-600">Active</span>;
-  if (status === "found_unprotected") return <span className="text-xs font-medium text-brand-attention">Needs setup</span>;
-  if (status === "needs_repair") return <span className="text-xs font-medium text-brand-attention">Needs setup</span>;
-  return <span className="text-xs text-slate-400">Inactive</span>;
+  const installStatus = toInstallStatus(status);
+  const label = APP_STATUS_LABELS[installStatus];
+  if (installStatus === "active") return <span className="text-xs font-medium text-emerald-600">{label}</span>;
+  if (installStatus === "partial") return <span className="text-xs font-medium text-brand-purple">{label}</span>;
+  if (installStatus === "observed") return <span className="text-xs font-medium text-slate-500">{label}</span>;
+  return <span className="text-xs text-slate-400">{label}</span>;
+}
+
+type AppRowProps = {
+  harness: string;
+  status: AppStatus;
+  inventoryCount: number;
+  policyCount: number;
+  onOpenAppDetail?: (harness: string) => void;
+};
+
+function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail }: AppRowProps) {
+  const isClickable = onOpenAppDetail !== undefined;
+
+  const handleClick = useCallback(() => {
+    onOpenAppDetail?.(harness);
+  }, [onOpenAppDetail, harness]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onOpenAppDetail?.(harness);
+      }
+    },
+    [onOpenAppDetail, harness]
+  );
+
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 py-3 transition-colors ${
+        isClickable ? "cursor-pointer hover:bg-slate-50/60" : ""
+      }`}
+      onClick={isClickable ? handleClick : undefined}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={isClickable ? handleKeyDown : undefined}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <StatusIcon status={status} />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-brand-dark">{harnessDisplayName(harness)}</p>
+          <p className="text-xs text-slate-400">
+            {inventoryCount} actions · {policyCount} decisions
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <StatusBadge status={status} />
+        {isClickable && <HiMiniChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />}
+      </div>
+    </div>
+  );
 }
 
 export function FleetWorkspace(props: FleetWorkspaceProps) {
@@ -205,49 +268,22 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
                 const harnessPolicies = props.policies.filter((p) => p.harness === harness);
                 const hasReceipts = receiptHarnesses.has(harness);
                 const status = resolveAppStatus(install, harnessInventory.length > 0, hasReceipts);
-                const isClickable = props.onOpenAppDetail !== undefined;
-
                 return (
-                  <div
+                  <AppRow
                     key={harness}
-                    className={`flex items-center justify-between gap-3 py-3 transition-colors ${
-                      isClickable ? "cursor-pointer hover:bg-slate-50/60" : ""
-                    }`}
-                    onClick={isClickable ? () => props.onOpenAppDetail?.(harness) : undefined}
-                    role={isClickable ? "button" : undefined}
-                    tabIndex={isClickable ? 0 : undefined}
-                    onKeyDown={
-                      isClickable
-                        ? (e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              props.onOpenAppDetail?.(harness);
-                            }
-                          }
-                        : undefined
-                    }
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <StatusIcon status={status} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-brand-dark">{harnessDisplayName(harness)}</p>
-                        <p className="text-xs text-slate-400">
-                          {harnessInventory.length} actions · {harnessPolicies.length} decisions
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={status} />
-                      {isClickable && <HiMiniChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />}
-                    </div>
-                  </div>
+                    harness={harness}
+                    status={status}
+                    inventoryCount={harnessInventory.length}
+                    policyCount={harnessPolicies.length}
+                    onOpenAppDetail={props.onOpenAppDetail}
+                  />
                 );
               })}
             </div>
           ) : (
             <EmptyState
               title="No watched apps yet"
-              body="Run HOL Guard once with Codex, Claude Code, Cursor, Hermes, or another supported app and this machine will show coverage here."
+              body="Run HOL Guard once with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, or another supported app and this machine will show coverage here."
               tone="teach"
             />
           )}

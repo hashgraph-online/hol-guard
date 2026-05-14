@@ -33,7 +33,13 @@ from ..cli.install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
-from ..config import editable_guard_settings, load_guard_config, update_guard_settings
+from ..config import (
+    GuardConfig,
+    editable_guard_settings,
+    load_guard_config,
+    reset_guard_settings,
+    update_guard_settings,
+)
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
@@ -178,15 +184,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             ]
             self._write_json({"items": enriched, "available": uninstalled})
             return
+        if parsed.path == "/v1/settings/export":
+            config = load_guard_config(store.guard_home)
+            self._write_json(_settings_export_payload(config))
+            return
         if parsed.path == "/v1/settings":
             config = load_guard_config(store.guard_home)
-            self._write_json(
-                {
-                    "guard_home": str(store.guard_home),
-                    "config_path": str(store.guard_home / "config.toml"),
-                    "settings": editable_guard_settings(config),
-                }
-            )
+            self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
             self._handle_session_resume(path_parts[2])
@@ -438,6 +442,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/settings":
             self._handle_settings_update(payload)
+            return
+        if parsed.path == "/v1/settings/import":
+            self._handle_settings_import(payload)
+            return
+        if parsed.path == "/v1/settings/reset":
+            self._handle_settings_reset(payload)
             return
         if parsed.path == "/v1/daemon/repair":
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
@@ -729,13 +739,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
             return
-        self._write_json(
-            {
-                "guard_home": str(self.server.store.guard_home),  # type: ignore[attr-defined]
-                "config_path": str(self.server.store.guard_home / "config.toml"),  # type: ignore[attr-defined]
-                "settings": editable_guard_settings(config),
-            }
-        )
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
+
+    def _handle_settings_import(self, payload: dict[str, object]) -> None:
+        settings = payload.get("settings")
+        if not isinstance(settings, dict):
+            self._write_json({"error": "invalid_settings_import"}, status=400)
+            return
+        try:
+            config = update_guard_settings(self.server.store.guard_home, settings)  # type: ignore[attr-defined]
+        except ValueError as error:
+            self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
+            return
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
+
+    def _handle_settings_reset(self, payload: dict[str, object]) -> None:
+        confirm = payload.get("confirm")
+        if confirm != "reset-local-settings":
+            self._write_json({"error": "confirmation_required", "confirm": "reset-local-settings"}, status=400)
+            return
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        config = reset_guard_settings(guard_home)
+        self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
 
     def _handle_initialize(self, payload: dict[str, object]) -> None:
         client_name = self._optional_string(payload.get("client_name")) or "guard-client"
@@ -1191,6 +1218,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/requests",
             "/v1/runtime",
             "/v1/settings",
+            "/v1/settings/export",
+            "/v1/settings/import",
+            "/v1/settings/reset",
         }:
             return True
         if len(path_parts) == 3 and path_parts[:2] in (["v1", "requests"], ["v1", "receipts"]):
@@ -1282,6 +1312,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         normalized_action = str(action).strip()
         if normalized_scope not in DECISION_SCOPE_VALUES or normalized_action not in GUARD_ACTION_VALUES:
             self._write_json({"saved": False, "error": "unsupported_policy_value"}, status=400)
+            return
+        if normalized_scope == "global" and normalized_action == "allow":
+            self._write_json({"saved": False, "error": "broad_allow_requires_narrow_scope"}, status=400)
             return
         record = {
             "harness": str(harness).strip(),
@@ -1392,6 +1425,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/decisions",
             "/v1/policy/clear",
             "/v1/settings",
+            "/v1/settings/import",
+            "/v1/settings/reset",
             "/v1/daemon/repair",
         }:
             return True
@@ -1651,6 +1686,22 @@ _DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
 def _build_resolution_copy(action: str, harness: str) -> dict[str, str]:
     title = "Approved. Retry in chat." if action == "allow" else "Blocked. Guard will remember this decision."
     return {"title": title, "body": _HARNESS_RETRY_COPY.get(harness, _DEFAULT_RETRY_COPY)}
+
+
+def _settings_response_payload(guard_home: Path, settings: dict[str, object]) -> dict[str, object]:
+    return {
+        "guard_home": str(guard_home),
+        "config_path": str(guard_home / "config.toml"),
+        "settings": settings,
+    }
+
+
+def _settings_export_payload(config: GuardConfig) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "privacy_warning": "Exports include local Guard preferences but not secrets or receipt evidence.",
+        "settings": editable_guard_settings(config),
+    }
 
 
 def _now() -> str:

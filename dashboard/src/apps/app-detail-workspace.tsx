@@ -55,6 +55,12 @@ type TabKey = "overview" | "activity" | "settings";
 
 const tabOrder: TabKey[] = ["overview", "activity", "settings"];
 
+const TAB_DEFINITIONS = [
+  { key: "overview" as TabKey, label: "Overview", icon: HiMiniHome },
+  { key: "activity" as TabKey, label: "Activity", icon: HiMiniBolt },
+  { key: "settings" as TabKey, label: "Settings", icon: HiMiniAdjustmentsHorizontal },
+] as const;
+
 type AppDetailWorkspaceProps = {
   harness: string;
   runtime: GuardRuntimeSnapshot;
@@ -88,6 +94,87 @@ function writeTabToUrl(tab: TabKey) {
     url.searchParams.set("tab", tab);
   }
   window.history.replaceState({}, "", url.toString());
+}
+
+function resolveHeroStatus(status: "active" | "needs_setup" | "observed" | "unknown"): "clear" | "setup_gap" | "needs_review" {
+  if (status === "active") return "clear";
+  if (status === "needs_setup") return "setup_gap";
+  return "needs_review";
+}
+
+function resolveHeroHeadline(status: "active" | "needs_setup" | "observed" | "unknown", harness: string, isObserved: boolean): string {
+  if (status === "active") return `${harnessDisplayName(harness)} is protected`;
+  if (status === "needs_setup") return `${harnessDisplayName(harness)} needs setup`;
+  if (isObserved) return `${harnessDisplayName(harness)} is observed`;
+  return harnessDisplayName(harness);
+}
+
+function resolveHeroSubheadline(status: "active" | "needs_setup" | "observed" | "unknown", isObserved: boolean): string {
+  if (status === "active") return "Guard is watching this app. Review its activity and settings below.";
+  if (status === "needs_setup") return "Finish setup so Guard can protect this app.";
+  if (isObserved) return "Guard has seen activity but install is not active.";
+  return "This app has not been seen yet.";
+}
+
+function resolveHeroCta(opts: {
+  pendingCount: number;
+  status: "active" | "needs_setup" | "observed" | "unknown";
+  onGoActivity: () => void;
+  onGoSettings: () => void;
+}): React.ReactNode {
+  if (opts.pendingCount > 0) {
+    return (
+      <ActionButton onClick={opts.onGoActivity} data-primary="true">
+        Review {opts.pendingCount} pending
+      </ActionButton>
+    );
+  }
+  if (opts.status === "needs_setup") {
+    return (
+      <ActionButton onClick={opts.onGoSettings} data-primary="true">
+        Open Settings
+      </ActionButton>
+    );
+  }
+  return (
+    <ActionButton onClick={opts.onGoActivity} data-primary="true">
+      View Activity
+    </ActionButton>
+  );
+}
+
+type TabButtonProps = {
+  tabKey: TabKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: true }>;
+  isActive: boolean;
+  tabRefs: React.MutableRefObject<Record<TabKey, HTMLButtonElement | null>>;
+  onSelect: (key: TabKey) => void;
+};
+
+function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }: TabButtonProps) {
+  const handleClick = useCallback(() => onSelect(tabKey), [onSelect, tabKey]);
+  const setRef = useCallback((el: HTMLButtonElement | null) => {
+    if (el) tabRefs.current[tabKey] = el;
+  }, [tabRefs, tabKey]);
+
+  return (
+    <button
+      ref={setRef}
+      role="tab"
+      aria-selected={isActive}
+      aria-label={label}
+      aria-controls={`tabpanel-${tabKey}`}
+      id={`tab-${tabKey}`}
+      tabIndex={isActive ? 0 : -1}
+      onClick={handleClick}
+      className={`group relative flex min-w-[44px] items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${isActive ? "text-brand-blue" : "text-brand-dark hover:text-brand-blue"}`}
+    >
+      <Icon className="h-4 w-4" aria-hidden={true} />
+      <span className="hidden sm:inline">{label}</span>
+      {isActive && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue" />}
+    </button>
+  );
 }
 
 export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
@@ -195,23 +282,42 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
     ? "observed"
     : "unknown";
 
-  const heroStatus = status === "active" ? "clear" : status === "needs_setup" ? "setup_gap" : "needs_review";
-  const heroHeadline =
-    status === "active"
-      ? `${harnessDisplayName(harness)} is protected`
-      : status === "needs_setup"
-      ? `${harnessDisplayName(harness)} needs setup`
-      : isObserved
-      ? `${harnessDisplayName(harness)} is observed`
-      : `${harnessDisplayName(harness)}`;
-  const heroSub =
-    status === "active"
-      ? "Guard is watching this app. Review its activity and settings below."
-      : status === "needs_setup"
-      ? "Finish setup so Guard can protect this app."
-      : isObserved
-      ? "Guard has seen activity but install is not active."
-      : "This app has not been seen yet.";
+  const heroStatus = resolveHeroStatus(status);
+  const heroHeadline = resolveHeroHeadline(status, harness, isObserved);
+  const heroSub = resolveHeroSubheadline(status, isObserved);
+
+  const handleTabChange = useCallback((next: TabKey) => {
+    const currentIndex = tabOrder.indexOf(activeTab);
+    const nextIndex = tabOrder.indexOf(next);
+    setTabDirection(nextIndex > currentIndex ? "right" : "left");
+    setActiveTab(next);
+    writeTabToUrl(next);
+  }, [activeTab]);
+
+  const handleTabKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const focused = document.activeElement as HTMLElement | null;
+    const focusedTab = focused?.getAttribute("role") === "tab" ? (focused.id.replace("tab-", "") as TabKey) : activeTab;
+    const currentIndex = tabOrder.indexOf(focusedTab);
+    let nextIndex = -1;
+
+    if (e.key === "ArrowRight") nextIndex = Math.min(currentIndex + 1, tabOrder.length - 1);
+    else if (e.key === "ArrowLeft") nextIndex = Math.max(currentIndex - 1, 0);
+    else if (e.key === "Home") nextIndex = 0;
+    else if (e.key === "End") nextIndex = tabOrder.length - 1;
+
+    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
+      e.preventDefault();
+      const nextTab = tabOrder[nextIndex];
+      handleTabChange(nextTab);
+      const nextEl = tabRefs.current[nextTab];
+      if (nextEl) nextEl.focus();
+    }
+  }, [activeTab, handleTabChange]);
+
+  const handleGoActivity = useCallback(() => handleTabChange("activity"), [handleTabChange]);
+  const handleGoSettings = useCallback(() => handleTabChange("settings"), [handleTabChange]);
+
+  const heroCta = resolveHeroCta({ pendingCount: pendingItems.length, status, onGoActivity: handleGoActivity, onGoSettings: handleGoSettings });
 
   return (
     <div className="space-y-6">
@@ -233,24 +339,7 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
         status={heroStatus}
         headline={heroHeadline}
         subheadline={heroSub}
-        cta={
-          pendingItems.length > 0 ? (
-            <ActionButton
-              onClick={() => setActiveTab("activity")}
-              data-primary="true"
-            >
-              Review {pendingItems.length} pending
-            </ActionButton>
-          ) : status === "needs_setup" ? (
-            <ActionButton onClick={() => setActiveTab("settings")} data-primary="true">
-              Open Settings
-            </ActionButton>
-          ) : (
-            <ActionButton onClick={() => setActiveTab("activity")} data-primary="true">
-              View Activity
-            </ActionButton>
-          )
-        }
+        cta={heroCta}
       />
 
       <ProofStrip
@@ -269,40 +358,17 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
         onKeyDown={handleTabKeyDown}
       >
         <div className="flex gap-1 border-b border-slate-200/70">
-          {(
-            [
-              { key: "overview" as TabKey, label: "Overview", icon: HiMiniHome },
-              { key: "activity" as TabKey, label: "Activity", icon: HiMiniBolt },
-              { key: "settings" as TabKey, label: "Settings", icon: HiMiniAdjustmentsHorizontal },
-            ] as const
-          ).map((t) => {
-            const Icon = t.icon;
-            const isActiveTab = activeTab === t.key;
-            return (
-              <button
-                key={t.key}
-                ref={(el) => { if (el) tabRefs.current[t.key] = el; }}
-                role="tab"
-                aria-selected={isActiveTab}
-                aria-label={t.label}
-                aria-controls={`tabpanel-${t.key}`}
-                id={`tab-${t.key}`}
-                tabIndex={isActiveTab ? 0 : -1}
-                onClick={() => handleTabChange(t.key)}
-                className={`group relative flex min-w-[44px] items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                  isActiveTab
-                    ? "text-brand-blue"
-                    : "text-brand-dark hover:text-brand-blue"
-                }`}
-              >
-                <Icon className="h-4 w-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t.label}</span>
-                {isActiveTab && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue" />
-                )}
-              </button>
-            );
-          })}
+          {TAB_DEFINITIONS.map((t) => (
+            <TabButton
+              key={t.key}
+              tabKey={t.key}
+              label={t.label}
+              icon={t.icon}
+              isActive={activeTab === t.key}
+              tabRefs={tabRefs}
+              onSelect={handleTabChange}
+            />
+          ))}
         </div>
       </div>
 
@@ -366,34 +432,6 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
       </div>
     </div>
   );
-
-  function handleTabChange(next: TabKey) {
-    const currentIndex = tabOrder.indexOf(activeTab);
-    const nextIndex = tabOrder.indexOf(next);
-    setTabDirection(nextIndex > currentIndex ? "right" : "left");
-    setActiveTab(next);
-    writeTabToUrl(next);
-  }
-
-  function handleTabKeyDown(e: React.KeyboardEvent) {
-    const focused = document.activeElement as HTMLElement | null;
-    const focusedTab = focused?.getAttribute("role") === "tab" ? (focused.id.replace("tab-", "") as TabKey) : activeTab;
-    const currentIndex = tabOrder.indexOf(focusedTab);
-    let nextIndex = -1;
-
-    if (e.key === "ArrowRight") nextIndex = Math.min(currentIndex + 1, tabOrder.length - 1);
-    else if (e.key === "ArrowLeft") nextIndex = Math.max(currentIndex - 1, 0);
-    else if (e.key === "Home") nextIndex = 0;
-    else if (e.key === "End") nextIndex = tabOrder.length - 1;
-
-    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
-      e.preventDefault();
-      const nextTab = tabOrder[nextIndex];
-      handleTabChange(nextTab);
-      const nextEl = tabRefs.current[nextTab];
-      if (nextEl) nextEl.focus();
-    }
-  }
 }
 
 function AppStatusBadge({ status }: { status: "active" | "needs_setup" | "observed" | "unknown" }) {

@@ -8,6 +8,7 @@ import {
   HiMiniExclamationTriangle,
   HiMiniChevronDown,
   HiMiniChevronUp,
+  HiMiniMagnifyingGlass,
 } from "react-icons/hi2";
 
 import {
@@ -20,6 +21,7 @@ import {
 } from "./approval-center-primitives";
 import { clearEvidence, exportDiagnostics, fetchRuntimeSnapshot, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
+import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch, securityLevelLabel } from "./apps/app-catalog";
 import type { GuardRuntimeSnapshot, GuardSettings, GuardSettingsPayload } from "./guard-types";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
@@ -50,8 +52,8 @@ const surfacePolicyOptions = [
 
 const securityLevels = [
   {
-    value: "gentle" as const,
-    label: "Gentle",
+    value: "relaxed" as const,
+    label: "Relaxed",
     description: "Ask before dangerous actions. Allow most safe ones.",
     icon: HiMiniShieldCheck,
     protects: ["Destructive commands", "Credential sharing"],
@@ -84,24 +86,40 @@ const securityLevels = [
 ];
 
 const riskControls = [
-  { key: "local_secret_read", label: "Local secrets", description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials." },
-  { key: "credential_exfiltration", label: "Credential sharing", description: "Commands or scripts that appear to send keys, tokens, or credentials away." },
-  { key: "data_flow_exfiltration", label: "Secret data flow", description: "Detected source-to-sink route where a local secret is read and its value reaches a network or external sink." },
-  { key: "destructive_shell", label: "Destructive commands", description: "Shell actions that delete, overwrite, or rewrite local files." },
-  { key: "encoded_execution", label: "Hidden scripts", description: "Encoded, encrypted, or decoded-and-run command payloads." },
-  { key: "network_egress", label: "New network destinations", description: "Outbound connections Guard has not seen in this context." }
+  { key: "local_secret_read", label: "Local secrets", description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials.", consequence: RISK_CONTROL_CONSEQUENCES["local_secret_read"] },
+  { key: "credential_exfiltration", label: "Credential sharing", description: "Commands or scripts that appear to send keys, tokens, or credentials away.", consequence: RISK_CONTROL_CONSEQUENCES["credential_exfiltration"] },
+  { key: "data_flow_exfiltration", label: "Secret data flow", description: "Detected source-to-sink route where a local secret is read and its value reaches a network or external sink.", consequence: RISK_CONTROL_CONSEQUENCES["data_flow_exfiltration"] },
+  { key: "destructive_shell", label: "Destructive commands", description: "Shell actions that delete, overwrite, or rewrite local files.", consequence: RISK_CONTROL_CONSEQUENCES["destructive_shell"] },
+  { key: "encoded_execution", label: "Hidden scripts", description: "Encoded, encrypted, or decoded-and-run command payloads.", consequence: RISK_CONTROL_CONSEQUENCES["encoded_execution"] },
+  { key: "network_egress", label: "New network destinations", description: "Outbound connections Guard has not seen in this context.", consequence: RISK_CONTROL_CONSEQUENCES["network_egress"] },
+  { key: "prompt_injection", label: "Prompt injection", description: "Prompts that try to override Guard, leak secrets, or weaken review.", consequence: RISK_CONTROL_CONSEQUENCES["prompt_injection"] },
+  { key: "mcp_dangerous_tool", label: "MCP tools", description: "MCP server and tool calls that can touch files, shell, or network.", consequence: RISK_CONTROL_CONSEQUENCES["mcp_dangerous_tool"] },
+  { key: "malicious_skill", label: "Skills", description: "Agent skills from unknown or risky sources.", consequence: RISK_CONTROL_CONSEQUENCES["malicious_skill"] },
+  { key: "package_script", label: "Package scripts", description: "Lifecycle scripts such as postinstall, prepare, and prepublish.", consequence: RISK_CONTROL_CONSEQUENCES["package_script"] },
+  { key: "persistence", label: "Persistence", description: "Startup files, launch agents, scheduled jobs, and recurring hooks.", consequence: RISK_CONTROL_CONSEQUENCES["persistence"] },
+  { key: "guard_bypass", label: "Guard bypass", description: "Attempts to disable Guard hooks, policies, or approval flow.", consequence: RISK_CONTROL_CONSEQUENCES["guard_bypass"] },
+  { key: "cloud_advisory", label: "Cloud advisories", description: "Team and Cloud guidance for known risky patterns.", consequence: RISK_CONTROL_CONSEQUENCES["cloud_advisory"] },
+  { key: "encoded_exfiltration", label: "Encoded exfiltration", description: "Encoded payloads that hide secret extraction and network transfer.", consequence: RISK_CONTROL_CONSEQUENCES["encoded_exfiltration"] },
 ] as const;
 
 type RiskKey = (typeof riskControls)[number]["key"];
 
-const riskProfileActions: Record<"gentle" | "balanced" | "strict" | "custom", Record<RiskKey, string>> = {
-  gentle: {
+const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", Record<RiskKey, string>> = {
+  relaxed: {
     local_secret_read: "warn",
-    credential_exfiltration: "require-reapproval",
-    data_flow_exfiltration: "require-reapproval",
-    destructive_shell: "require-reapproval",
+    credential_exfiltration: "warn",
+    data_flow_exfiltration: "warn",
+    destructive_shell: "warn",
     encoded_execution: "warn",
-    network_egress: "allow"
+    network_egress: "allow",
+    prompt_injection: "warn",
+    mcp_dangerous_tool: "warn",
+    malicious_skill: "warn",
+    package_script: "warn",
+    persistence: "warn",
+    guard_bypass: "warn",
+    cloud_advisory: "allow",
+    encoded_exfiltration: "warn"
   },
   balanced: {
     local_secret_read: "require-reapproval",
@@ -109,7 +127,15 @@ const riskProfileActions: Record<"gentle" | "balanced" | "strict" | "custom", Re
     data_flow_exfiltration: "require-reapproval",
     destructive_shell: "require-reapproval",
     encoded_execution: "require-reapproval",
-    network_egress: "warn"
+    network_egress: "warn",
+    prompt_injection: "require-reapproval",
+    mcp_dangerous_tool: "require-reapproval",
+    malicious_skill: "require-reapproval",
+    package_script: "warn",
+    persistence: "require-reapproval",
+    guard_bypass: "block",
+    cloud_advisory: "warn",
+    encoded_exfiltration: "require-reapproval"
   },
   strict: {
     local_secret_read: "require-reapproval",
@@ -117,7 +143,15 @@ const riskProfileActions: Record<"gentle" | "balanced" | "strict" | "custom", Re
     data_flow_exfiltration: "block",
     destructive_shell: "require-reapproval",
     encoded_execution: "require-reapproval",
-    network_egress: "require-reapproval"
+    network_egress: "require-reapproval",
+    prompt_injection: "block",
+    mcp_dangerous_tool: "block",
+    malicious_skill: "block",
+    package_script: "require-reapproval",
+    persistence: "block",
+    guard_bypass: "block",
+    cloud_advisory: "require-reapproval",
+    encoded_exfiltration: "block"
   },
   custom: {
     local_secret_read: "require-reapproval",
@@ -125,16 +159,54 @@ const riskProfileActions: Record<"gentle" | "balanced" | "strict" | "custom", Re
     data_flow_exfiltration: "require-reapproval",
     destructive_shell: "require-reapproval",
     encoded_execution: "require-reapproval",
-    network_egress: "warn"
+    network_egress: "warn",
+    prompt_injection: "require-reapproval",
+    mcp_dangerous_tool: "require-reapproval",
+    malicious_skill: "require-reapproval",
+    package_script: "warn",
+    persistence: "require-reapproval",
+    guard_bypass: "block",
+    cloud_advisory: "warn",
+    encoded_exfiltration: "require-reapproval"
   }
 };
+
+const securityToneClasses = {
+  green: {
+    icon: "text-emerald-600",
+    iconBg: "bg-emerald-50",
+    selected: "border-emerald-300 bg-emerald-50"
+  },
+  blue: {
+    icon: "text-brand-blue",
+    iconBg: "bg-brand-blue/10",
+    selected: "border-brand-blue/30 bg-brand-blue/[0.05]"
+  },
+  purple: {
+    icon: "text-brand-purple",
+    iconBg: "bg-brand-purple/10",
+    selected: "border-brand-purple/30 bg-brand-purple/[0.04]"
+  },
+  slate: {
+    icon: "text-slate-500",
+    iconBg: "bg-slate-100",
+    selected: "border-slate-300 bg-slate-50"
+  }
+} as const;
+
+type SecurityTone = keyof typeof securityToneClasses;
+
+function getSecurityToneClasses(tone: SecurityTone) {
+  return securityToneClasses[tone] ?? securityToneClasses.slate;
+}
 
 function normalizeSettingsPayload(payload: GuardSettingsPayload): GuardSettingsPayload {
   return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
 
 function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
-  const defaults = riskProfileActions[settings.security_level];
+  const securityLevel = settings.security_level === "gentle" ? "relaxed" : settings.security_level;
+  const defaults = riskProfileActions[securityLevel];
   const explicitOverrides = settings.risk_action_overrides ?? {};
   const effectiveRiskActions = riskControls.reduce<Record<RiskKey, string>>((actions, risk) => {
     actions[risk.key] = settings.risk_actions?.[risk.key] ?? explicitOverrides[risk.key] ?? defaults[risk.key];
@@ -142,6 +214,7 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
   }, {} as Record<RiskKey, string>);
   return {
     ...settings,
+    security_level: securityLevel,
     risk_actions: effectiveRiskActions,
     risk_action_overrides: explicitOverrides,
     harness_risk_actions: settings.harness_risk_actions ?? {}
@@ -152,7 +225,7 @@ function buildConsequenceSummary(settings: GuardSettings): string {
   const level = settings.security_level;
   const mode = settings.mode;
   if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
-  if (level === "gentle") return "Guard will ask before destructive commands and credential sharing. Most safe actions are allowed automatically. Good for trusted environments.";
+  if (level === "relaxed") return "Guard will ask before destructive commands and credential sharing. Most safe actions are allowed automatically. Good for trusted environments.";
   if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
   if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
   if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
@@ -162,6 +235,23 @@ function buildConsequenceSummary(settings: GuardSettings): string {
 function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
   if (saved === null || draft === null) return false;
   return JSON.stringify(saved) !== JSON.stringify(draft);
+}
+
+function protectionModeHelp(mode: GuardSettings["mode"]): string {
+  if (mode === "enforce") {
+    return "Guard blocks risky actions until a saved decision allows them.";
+  }
+  if (mode === "observe") {
+    return "Guard records what it sees without pausing actions.";
+  }
+  return "Guard asks before risky actions continue.";
+}
+
+function saveStatusText(saveSuccess: boolean, saveError: string | null): string {
+  if (saveSuccess) {
+    return "Settings saved successfully.";
+  }
+  return saveError ?? "";
 }
 
 export function SettingsWorkspace() {
@@ -178,6 +268,7 @@ export function SettingsWorkspace() {
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ "protection": true, "risk": false, "diagnostics": false });
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSettingsRef = useRef<GuardSettings | null>(null);
@@ -205,7 +296,7 @@ export function SettingsWorkspace() {
     let cancelled = false;
     fetchRuntimeSnapshot()
       .then((snapshot) => { if (!cancelled) setPerfSnapshot(snapshot); })
-      .catch((error: unknown) => { console.error("Failed to fetch runtime snapshot:", error); });
+      .catch((_err: unknown) => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -226,6 +317,18 @@ export function SettingsWorkspace() {
 
   const toggleSection = useCallback((key: string) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const handleToggleProtection = useCallback(() => toggleSection("protection"), [toggleSection]);
+  const handleToggleRisk = useCallback(() => toggleSection("risk"), [toggleSection]);
+  const handleToggleDiagnostics = useCallback(() => toggleSection("diagnostics"), [toggleSection]);
+
+  const handleAdvancedToggle = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setShowAdvanced(event.target.checked);
+  }, []);
+
+  const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(event.target.value);
   }, []);
 
   const handleStringChange = useCallback(
@@ -266,7 +369,8 @@ export function SettingsWorkspace() {
 
   const handleTimeoutChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number.parseInt(event.target.value, 10);
-    setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: Number.isNaN(nextValue) ? 0 : nextValue });
+    const nextTimeout = Number.isNaN(nextValue) ? 0 : nextValue;
+    setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: nextTimeout });
     setSaveError(null);
   }, []);
 
@@ -388,8 +492,14 @@ export function SettingsWorkspace() {
     return <EmptyState title="Settings are unavailable" body={state.kind === "error" ? state.message : "Guard did not return editable settings."} tone="teach" />;
   }
 
-  const modeHelp = draft.mode === "enforce" ? "Guard blocks risky actions until a saved decision allows them." : draft.mode === "observe" ? "Guard records what it sees without pausing actions." : "Guard asks before risky actions continue.";
+  const modeHelp = protectionModeHelp(draft.mode);
   const consequenceSummary = buildConsequenceSummary(draft);
+  const searchMatches = filterSettingsBySearch(searchQuery);
+  const hasSearch = searchQuery.trim().length > 0;
+  const riskSearchMatches = searchMatches.filter((m) => m.section === "risk");
+  const visibleRiskControls = hasSearch
+    ? riskControls.filter((rc) => riskSearchMatches.some((m) => m.key === rc.key))
+    : riskControls;
 
   return (
     <div className="space-y-6">
@@ -400,7 +510,43 @@ export function SettingsWorkspace() {
         cta={<Tag tone="blue">{draft.mode}</Tag>}
       />
 
-      {consequenceSummary && (
+      <div className="relative">
+        <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+        <input
+          id="settings-search"
+          name="settings-search"
+          type="search"
+          value={searchQuery}
+          onChange={handleSearchChange}
+          placeholder="Search settings..."
+          aria-label="Search settings"
+          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        />
+      </div>
+
+      {hasSearch && searchMatches.length === 0 && (
+        <p className="text-sm text-slate-500">No settings match your search.</p>
+      )}
+
+      {hasSearch && riskSearchMatches.length > 0 && (
+        <div className="rounded-xl border border-slate-100 p-4">
+          <SectionLabel>Risk controls matching search</SectionLabel>
+          <div className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
+            {visibleRiskControls.map((risk) => (
+              <RiskControlRow
+                key={risk.key}
+                risk={risk}
+                value={draft.risk_actions[risk.key] ?? "require-reapproval"}
+                disabled={draft.security_level !== "custom"}
+                onChange={handleRiskActionChange(risk.key)}
+                showConsequence
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!hasSearch && consequenceSummary && (
         <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4">
           <div className="flex items-start gap-3">
             <HiMiniShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand-blue" />
@@ -412,58 +558,31 @@ export function SettingsWorkspace() {
         </div>
       )}
 
-      <div className="space-y-2">
-        {/* Protection Level */}
+      <div className="space-y-2" role="region" aria-label="Settings sections">
         <AccordionSection
           title="Protection level"
-          subtitle={`${draft.security_level === "gentle" ? "Gentle" : draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`}
+          subtitle={`${securityLevelLabel(draft.security_level)} · ${draft.mode}`}
           expanded={expandedSections["protection"]}
-          onToggle={() => toggleSection("protection")}
+          onToggle={handleToggleProtection}
+          sectionId="protection"
         >
-          <div className="space-y-6">
+          <fieldset className="space-y-6">
+            <legend className="sr-only">Security level</legend>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              {securityLevels.map((level) => {
-                const LevelIcon = level.icon;
-                const isSelected = draft.security_level === level.value;
-                const iconColorClass = level.tone === "green" ? "text-emerald-600" : level.tone === "blue" ? "text-brand-blue" : level.tone === "purple" ? "text-brand-purple" : "text-slate-500";
-                const iconBgClass = level.tone === "green" ? "bg-emerald-50" : level.tone === "blue" ? "bg-brand-blue/10" : level.tone === "purple" ? "bg-brand-purple/10" : "bg-slate-100";
-                const selectedBorderClass = level.tone === "green" ? "border-emerald-300 bg-emerald-50" : level.tone === "blue" ? "border-brand-blue/30 bg-brand-blue/[0.05]" : level.tone === "purple" ? "border-brand-purple/30 bg-brand-purple/[0.04]" : "border-slate-300 bg-slate-50";
-                return (
-                  <button
-                    key={level.value}
-                    type="button"
-                    onClick={() => handleSecurityLevelChange(level.value)}
-                    aria-pressed={isSelected}
-                    className={`relative rounded-xl border p-4 text-left transition-all duration-150 hover:-translate-y-0.5 ${isSelected ? selectedBorderClass : "border-transparent bg-slate-50/80 hover:bg-white"}`}
-                  >
-                    {isSelected && (
-                      <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#059669]">
-                        <HiMiniCheckCircle className="h-3.5 w-3.5 text-white" aria-hidden="true" />
-                      </span>
-                    )}
-                    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`}>
-                      <LevelIcon className={`h-4 w-4 ${iconColorClass}`} aria-hidden="true" />
-                    </span>
-                    <span className="mt-2 block text-sm font-semibold text-brand-dark">{level.label}</span>
-                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">{level.description}</span>
-                    {level.protects.length > 0 && (
-                      <ul className="mt-2 space-y-0.5">
-                        {level.protects.map((item) => (
-                          <li key={item} className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                            <span className={`h-1 w-1 shrink-0 rounded-full ${iconColorClass}`} />
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </button>
-                );
-              })}
+              {securityLevels.map((level) => (
+                <SecurityLevelCard
+                  key={level.value}
+                  level={level}
+                  isSelected={draft.security_level === level.value}
+                  onSelect={handleSecurityLevelChange}
+                />
+              ))}
             </div>
 
             <div>
               <SectionLabel>Protection mode</SectionLabel>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <fieldset className="mt-2 grid gap-2 sm:grid-cols-3">
+                <legend className="sr-only">Protection mode</legend>
                 {(["prompt", "enforce", "observe"] as const).map((mode) => (
                   <label
                     key={mode}
@@ -473,37 +592,39 @@ export function SettingsWorkspace() {
                     <span className="text-sm font-semibold capitalize text-brand-dark">{mode}</span>
                   </label>
                 ))}
-              </div>
+              </fieldset>
               <p className="mt-2 text-sm text-slate-500">{modeHelp}</p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="approval-wait" className="block text-sm font-semibold text-brand-dark">Approval wait timeout</label>
-                <p className="text-xs text-slate-500">Seconds to wait before returning to the harness</p>
+                <p className="text-xs text-slate-500">Seconds to wait before returning to the app</p>
                 <input id="approval-wait" type="number" min={0} max={600} value={draft.approval_wait_timeout_seconds} onChange={handleTimeoutChange} className="mt-2 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20" />
               </div>
-              <div className="space-y-2">
-                <SettingToggle label="Telemetry" checked={draft.telemetry} onChange={handleBooleanChange("telemetry")} />
-                <SettingToggle label="Cloud sync" checked={draft.sync} onChange={handleBooleanChange("sync")} />
-                <SettingToggle label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
-              </div>
+              <fieldset className="space-y-2">
+                <legend className="sr-only">Feature toggles</legend>
+                <SettingToggle id="settings-telemetry" label="Telemetry" checked={draft.telemetry} onChange={handleBooleanChange("telemetry")} />
+                <SettingToggle id="settings-cloud-sync" label="Cloud sync" checked={draft.sync} onChange={handleBooleanChange("sync")} />
+                <SettingToggle id="settings-billing" label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
+              </fieldset>
             </div>
-          </div>
+          </fieldset>
         </AccordionSection>
 
-        {/* Advanced toggle */}
         <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4">
           <div>
             <p className="text-sm font-semibold text-brand-dark">Advanced settings</p>
             <p className="text-xs text-slate-500">Fine-tune individual risk controls and diagnostics.</p>
           </div>
-          <label className="relative inline-flex cursor-pointer items-center">
+          <label className="relative inline-flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
+              id="advanced-toggle"
               checked={showAdvanced}
-              onChange={(e) => setShowAdvanced(e.target.checked)}
+              onChange={handleAdvancedToggle}
               className="peer sr-only"
+              aria-label="Show advanced settings"
             />
             <div className="h-6 w-11 rounded-full bg-slate-200 transition-colors peer-checked:bg-brand-blue" />
             <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
@@ -512,32 +633,33 @@ export function SettingsWorkspace() {
 
         {showAdvanced && (
           <>
-        {/* Risk Controls */}
         <AccordionSection
           title="Risk choices"
-          subtitle={draft.security_level !== "custom" ? `Managed by ${draft.security_level}` : "Custom overrides active"}
+          subtitle={draft.security_level !== "custom" ? `Managed by ${securityLevelLabel(draft.security_level)}` : "Custom overrides active"}
           expanded={expandedSections["risk"]}
-          onToggle={() => toggleSection("risk")}
+          onToggle={handleToggleRisk}
+          sectionId="risk"
         >
           <div className="space-y-4">
             {draft.security_level !== "custom" && (
-              <p className="text-sm text-slate-500">All risk behaviors are set by the <span className="font-semibold">{draft.security_level === "gentle" ? "Gentle" : draft.security_level === "balanced" ? "Balanced" : "Strict"}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.</p>
+              <p className="text-sm text-slate-500">All risk behaviors are set by the <span className="font-semibold">{securityLevelLabel(draft.security_level)}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.</p>
             )}
             <div className={`divide-y divide-slate-100 border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
               {riskControls.map((risk) => (
-                <div key={risk.key} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
-                  <div>
-                    <p className="text-sm font-medium text-brand-dark">{risk.label}</p>
-                    <p className="text-xs text-slate-500">{risk.description}</p>
-                  </div>
-                  <SettingSelect label="Guard should" value={draft.risk_actions[risk.key] ?? "require-reapproval"} options={actionOptions} onChange={handleRiskActionChange(risk.key)} disabled={draft.security_level !== "custom"} />
-                </div>
+                <RiskControlRow
+                  key={risk.key}
+                  risk={risk}
+                  value={draft.risk_actions[risk.key] ?? "require-reapproval"}
+                  disabled={draft.security_level !== "custom"}
+                  onChange={handleRiskActionChange(risk.key)}
+                  showConsequence={draft.security_level === "custom"}
+                />
               ))}
             </div>
             <div className={`grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
               <div>
                 <p className="text-sm font-medium text-brand-dark">Codex reading local secret files</p>
-                <p className="text-xs text-slate-500">Use this only for trusted projects where Codex should be allowed to open files such as .env or .npmrc.</p>
+                <p className="text-xs text-slate-500">Use this only for trusted projects where Codex should read files such as .env or .npmrc without Guard asking.</p>
               </div>
               <SettingSelect label="Codex should" value={draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval"} options={actionOptions} onChange={handleCodexSecretReadChange} disabled={draft.security_level !== "custom"} />
             </div>
@@ -555,12 +677,12 @@ export function SettingsWorkspace() {
           </div>
         </AccordionSection>
 
-        {/* Diagnostics */}
         <AccordionSection
           title="Diagnostics & data"
           subtitle="Clear approvals, export logs, repair"
           expanded={expandedSections["diagnostics"]}
-          onToggle={() => toggleSection("diagnostics")}
+          onToggle={handleToggleDiagnostics}
+          sectionId="diagnostics"
         >
           <div className="space-y-4">
             {perfSnapshot !== null && <DiagnosticsPerfCard snapshot={perfSnapshot} />}
@@ -568,14 +690,14 @@ export function SettingsWorkspace() {
               <div className="space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-brand-dark">Clear saved approvals</p>
-                  <p className="text-xs text-slate-500">Removes all stored allow/block decisions. Guard will ask again for previously approved actions.</p>
+                  <p className="text-xs text-slate-500">Removes all stored allow and block decisions. Guard will ask again for every action that was previously approved.</p>
                   <div className="mt-2">
                     <ActionButton onClick={handleClearApprovals} disabled={clearingApprovals} variant="outline">{clearingApprovals ? "Clearing…" : "Clear approvals"}</ActionButton>
                   </div>
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-brand-dark">Clear evidence log</p>
-                  <p className="text-xs text-slate-500">Permanently removes all recorded evidence. This cannot be undone.</p>
+                  <p className="text-xs text-slate-500">Permanently removes all recorded evidence. This action cannot be undone and removes the local audit history.</p>
                   <div className="mt-2">
                     <ActionButton onClick={handleClearEvidence} disabled={clearingEvidence} variant="outline">{clearingEvidence ? "Clearing…" : "Clear evidence"}</ActionButton>
                   </div>
@@ -584,14 +706,14 @@ export function SettingsWorkspace() {
               <div className="space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-brand-dark">Export diagnostics</p>
-                  <p className="text-xs text-slate-500">Downloads a JSON file with local Guard evidence for debugging or support.</p>
+                  <p className="text-xs text-slate-500">Downloads a JSON file with local Guard evidence for debugging or support requests.</p>
                   <div className="mt-2">
                     <ActionButton onClick={handleExportDiagnostics} disabled={exporting} variant="secondary">{exporting ? "Exporting…" : "Export"}</ActionButton>
                   </div>
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-brand-dark">Repair approval center</p>
-                  <p className="text-xs text-slate-500">Resets the approval center locator when the approval link returns an API error.</p>
+                  <p className="text-xs text-slate-500">Resets the approval center locator. Use this when the approval link returns an API error after Guard restarts.</p>
                   <div className="mt-2">
                     <ActionButton onClick={handleRepairApprovalCenter} disabled={repairing} variant="secondary">{repairing ? "Repairing…" : "Repair"}</ActionButton>
                   </div>
@@ -605,8 +727,11 @@ export function SettingsWorkspace() {
         )}
       </div>
 
-      {/* Sticky save bar */}
-      <div className="sticky bottom-4 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
+      <div
+        className="sticky bottom-4 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur"
+        role="region"
+        aria-label="Save settings"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <ActionButton onClick={handleSave} disabled={saving || saveSuccess}>
@@ -631,10 +756,12 @@ export function SettingsWorkspace() {
           ) : (
             <p className="text-xs text-slate-500">Use this for local tuning. Team policy from Guard Cloud may still override some decisions.</p>
           )}
+          <div aria-live="polite" aria-atomic="true" className="sr-only">
+            {saveStatusText(saveSuccess, saveError)}
+          </div>
         </div>
       </div>
 
-      {/* Mode change confirmation */}
       {pendingMode === "observe" && (
         <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-brand-attention/15 bg-white p-6 shadow-xl">
@@ -658,19 +785,26 @@ export function SettingsWorkspace() {
   );
 }
 
-function AccordionSection(props: {
+type AccordionSectionProps = {
   title: string;
   subtitle: string;
   expanded: boolean;
   onToggle: () => void;
+  sectionId: string;
   children: React.ReactNode;
-}) {
+};
+
+function AccordionSection(props: AccordionSectionProps) {
+  const panelId = `accordion-panel-${props.sectionId}`;
+  const buttonId = `accordion-btn-${props.sectionId}`;
   return (
-    <div className="rounded-xl border border-slate-100 overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-slate-100">
       <button
+        id={buttonId}
         onClick={props.onToggle}
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50/60"
         aria-expanded={props.expanded}
+        aria-controls={panelId}
       >
         <div>
           <p className="text-sm font-semibold text-brand-dark">{props.title}</p>
@@ -683,7 +817,7 @@ function AccordionSection(props: {
         )}
       </button>
       {props.expanded && (
-        <div className="border-t border-slate-100 px-4 py-4">
+        <div id={panelId} role="region" aria-labelledby={buttonId} className="border-t border-slate-100 px-4 py-4">
           {props.children}
         </div>
       )}
@@ -732,14 +866,89 @@ function SettingSelect(props: {
 }
 
 function SettingToggle(props: {
+  id: string;
   label: string;
   checked: boolean;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <label className="flex min-h-10 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 transition-colors hover:bg-slate-100/60">
+    <label htmlFor={props.id} className="flex min-h-10 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 transition-colors hover:bg-slate-100/60">
       <span className="text-sm text-brand-dark">{props.label}</span>
-      <input type="checkbox" checked={props.checked} onChange={props.onChange} className="h-4 w-4 accent-brand-blue" />
+      <input id={props.id} name={props.id} type="checkbox" checked={props.checked} onChange={props.onChange} className="h-4 w-4 accent-brand-blue" />
     </label>
+  );
+}
+
+type SecurityLevelCardProps = {
+  level: (typeof securityLevels)[number];
+  isSelected: boolean;
+  onSelect: (value: "relaxed" | "balanced" | "strict" | "custom") => void;
+};
+
+function SecurityLevelCard({ level, isSelected, onSelect }: SecurityLevelCardProps) {
+  const LevelIcon = level.icon;
+  const toneClasses = getSecurityToneClasses(level.tone);
+  const iconColorClass = toneClasses.icon;
+  const iconBgClass = toneClasses.iconBg;
+  const selectedBorderClass = toneClasses.selected;
+
+  const handleClick = useCallback(() => onSelect(level.value), [onSelect, level.value]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-pressed={isSelected}
+      className={`relative rounded-xl border p-4 text-left transition-all duration-150 hover:-translate-y-0.5 ${isSelected ? selectedBorderClass : "border-transparent bg-slate-50/80 hover:bg-white"}`}
+    >
+      {isSelected && (
+        <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600">
+          <HiMiniCheckCircle className="h-3.5 w-3.5 text-white" aria-hidden="true" />
+        </span>
+      )}
+      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`}>
+        <LevelIcon className={`h-4 w-4 ${iconColorClass}`} aria-hidden="true" />
+      </span>
+      <span className="mt-2 block text-sm font-semibold text-brand-dark">{level.label}</span>
+      <span className="mt-1 block text-xs leading-relaxed text-slate-500">{level.description}</span>
+      {level.protects.length > 0 && (
+        <ul className="mt-2 space-y-0.5">
+          {level.protects.map((item) => (
+            <li key={item} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span className={`h-1 w-1 shrink-0 rounded-full ${iconColorClass}`} />
+              {item}
+            </li>
+          ))}
+        </ul>
+      )}
+    </button>
+  );
+}
+
+type RiskControlRowProps = {
+  risk: { key: string; label: string; description: string; consequence?: { example: string; impact: string } | undefined };
+  value: string;
+  disabled: boolean;
+  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  showConsequence?: boolean;
+};
+
+function RiskControlRow({ risk, value, disabled, onChange, showConsequence }: RiskControlRowProps) {
+  return (
+    <div className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-start">
+      <div>
+        <p className="text-sm font-medium text-brand-dark">{risk.label}</p>
+        <p className="text-xs text-slate-500">{risk.description}</p>
+        {showConsequence && risk.consequence && (
+          <p className="mt-1 text-xs text-slate-400">
+            <span className="font-medium">Example:</span> {risk.consequence.example}
+          </p>
+        )}
+        {showConsequence && risk.consequence && (
+          <p className="mt-0.5 text-xs text-slate-400">{risk.consequence.impact}</p>
+        )}
+      </div>
+      <SettingSelect label="Guard should" value={value} options={actionOptions} onChange={onChange} disabled={disabled} />
+    </div>
   );
 }
