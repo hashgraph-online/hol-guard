@@ -1,8 +1,8 @@
 import { useMemo, useState, memo, useCallback } from "react";
 import {
   HiMiniChevronRight,
-  HiMiniCheckCircle,
-  HiMiniNoSymbol,
+  HiMiniChevronLeft,
+  HiMiniArrowTopRightOnSquare,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { harnessDisplayName, isDisplayableHarness } from "../approval-center-utils";
@@ -32,6 +32,46 @@ function harnessColor(harness: string): string {
   return `hsl(${hue} 70% 45%)`;
 }
 
+interface AppListRowProps {
+  harness: string;
+  items: GuardReceipt[];
+  onSelect: (harness: string) => void;
+}
+
+function AppListRow({ harness, items, onSelect }: AppListRowProps) {
+  const allowed = items.filter((r) => r.policy_decision === "allow").length;
+  const blocked = items.filter((r) => r.policy_decision === "block").length;
+  const lastActive = items[0]?.timestamp;
+  const color = harnessColor(harness);
+  const handleClick = useCallback(() => onSelect(harness), [harness, onSelect]);
+
+  return (
+    <button
+      onClick={handleClick}
+      className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/50 rounded-lg px-2 -mx-2"
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shrink-0"
+          style={{ backgroundColor: color }}
+        >
+          {harness[0]?.toUpperCase()}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-brand-dark truncate">{harnessDisplayName(harness)}</p>
+          <p className="text-xs text-slate-500">
+            {items.length} actions · {allowed} allowed · {blocked} stopped
+          </p>
+          {lastActive && (
+            <p className="text-xs text-slate-400">Last active {formatRelativeTime(lastActive)}</p>
+          )}
+        </div>
+      </div>
+      <HiMiniChevronRight className="h-4 w-4 text-slate-300 shrink-0" aria-hidden="true" />
+    </button>
+  );
+}
+
 function AppTabRaw({ receipts }: AppTabProps) {
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -59,6 +99,9 @@ function AppTabRaw({ receipts }: AppTabProps) {
     setSearchTerm(e.target.value);
   }, []);
 
+  const handleBack = useCallback(() => setSelectedApp(null), []);
+  const handleSelectApp = useCallback((h: string) => setSelectedApp(h), []);
+
   if (appReceipts.length === 0) {
     return (
       <div className="py-12 text-center">
@@ -78,18 +121,20 @@ function AppTabRaw({ receipts }: AppTabProps) {
       <div className="space-y-5">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setSelectedApp(null)}
+            onClick={handleBack}
             className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100"
           >
-            ← Back
+            <HiMiniChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Back
           </button>
           <a
             href={guardAwareHref(`/apps/${encodeURIComponent(selectedApp)}`)}
-            className="ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+            className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Open app detail →
+            Open app detail
+            <HiMiniArrowTopRightOnSquare className="h-3 w-3" aria-hidden="true" />
           </a>
         </div>
 
@@ -144,41 +189,14 @@ function AppTabRaw({ receipts }: AppTabProps) {
       </label>
 
       <div className="space-y-0 divide-y divide-slate-100/60">
-        {filteredApps.map(([harness, items]) => {
-          const allowed = items.filter((r) => r.policy_decision === "allow").length;
-          const blocked = items.filter((r) => r.policy_decision === "block").length;
-          const lastActive = items[0]?.timestamp;
-          const color = harnessColor(harness);
-
-          return (
-            <button
-              key={harness}
-              onClick={() => {
-                setSelectedApp(harness);
-              }}
-              className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/50 rounded-lg px-2 -mx-2"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shrink-0"
-                  style={{ backgroundColor: color }}
-                >
-                  {harness[0]?.toUpperCase()}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-brand-dark truncate">{harnessDisplayName(harness)}</p>
-                  <p className="text-xs text-slate-500">
-                    {items.length} actions · {allowed} allowed · {blocked} stopped
-                  </p>
-                  {lastActive && (
-                    <p className="text-xs text-slate-400">Last active {formatRelativeTime(lastActive)}</p>
-                  )}
-                </div>
-              </div>
-              <HiMiniChevronRight className="h-4 w-4 text-slate-300 shrink-0" aria-hidden="true" />
-            </button>
-          );
-        })}
+        {filteredApps.map(([harness, items]) => (
+          <AppListRow
+            key={harness}
+            harness={harness}
+            items={items}
+            onSelect={handleSelectApp}
+          />
+        ))}
       </div>
 
       {filteredApps.length === 0 && (
@@ -206,30 +224,19 @@ function AppSparkline({ items }: { items: GuardReceipt[] }) {
   }, [items]);
 
   const max = Math.max(...buckets, 1);
-  const width = 200;
-  const height = 32;
-  const barWidth = width / buckets.length;
 
   return (
     <div className="py-1">
       <p className="text-[11px] font-medium text-slate-400">Last 7 days</p>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-1 h-8 w-full" preserveAspectRatio="none">
-        {buckets.map((count, i) => {
-          const barHeight = (count / max) * height;
-          return (
-            <rect
-              key={i}
-              x={i * barWidth + 1}
-              y={height - barHeight}
-              width={barWidth - 2}
-              height={barHeight}
-              rx={2}
-              fill="currentColor"
-              className="text-brand-blue/30"
-            />
-          );
-        })}
-      </svg>
+      <div className="mt-1 flex h-8 w-full items-end gap-0.5">
+        {buckets.map((count, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-sm bg-brand-blue/30"
+            style={{ height: `${Math.max((count / max) * 100, count > 0 ? 8 : 0)}%` }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
