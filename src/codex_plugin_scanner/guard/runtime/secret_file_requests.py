@@ -3207,6 +3207,8 @@ def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
 
 
 def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
+    if any(_read_only_lookup_arg_is_redirection(arg) for arg in args):
+        return False
     if _find_args_use_write_or_unsafe_exec_action(args):
         return False
     targets = [arg for arg in args if arg and not arg.startswith("-")]
