@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.store_evidence import (
     count_evidence,
     evidence_index_statements,
     evidence_schema_statement,
+    export_evidence_csv,
     export_evidence_json,
     list_evidence,
     search_evidence,
@@ -231,20 +232,21 @@ class TestCountEvidence:
 
 
 class TestExportEvidence:
-    def test_export_returns_list(self, tmp_path: Path) -> None:
+    def test_export_returns_privacy_envelope(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
         for i in range(3):
             store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
         exported = export_evidence_json(conn)
         data = json.loads(exported)
-        assert isinstance(data, list)
-        assert len(data) == 3
+        assert data["privacy_warning"]
+        assert data["total_rows"] == 3
+        assert len(data["items"]) == 3
 
     def test_export_fields_present(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
         store_evidence(conn, _rec(evidence_id="ev-X", category="exfil", summary="found token"))
         data = json.loads(export_evidence_json(conn))
-        record = data[0]
+        record = data["items"][0]
         assert record["evidence_id"] == "ev-X"
         assert record["category"] == "exfil"
         assert record["summary"] == "found token"
@@ -254,7 +256,24 @@ class TestExportEvidence:
         for i in range(20):
             store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
         data = json.loads(export_evidence_json(conn, limit=5))
-        assert len(data) == 5
+        assert data["total_rows"] == 5
+        assert len(data["items"]) == 5
+
+    def test_export_csv_includes_warning_and_redacted_rows(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(
+            conn,
+            _rec(
+                evidence_id="csv-1",
+                workspace="/Users/alice/private/project",
+                summary="token sk-live-secret-value in /Users/alice/private/project/.env",
+            ),
+        )
+        exported = export_evidence_csv(conn)
+        assert "privacy_warning" in exported
+        assert "sk-live-secret-value" not in exported
+        assert "/Users/alice" not in exported
+        assert "csv-1" in exported
 
 
 class TestCompactEvidence:
@@ -312,6 +331,44 @@ class TestActionIdentityField:
 
 
 class TestLargeScalePagination:
+    def test_first_page_reads_bounded_slice_from_100k_records(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        total = 100_000
+        rows = [
+            (
+                f"bulk-{i:06d}",
+                f"action-{i:06d}",
+                f"request-{i:06d}",
+                "codex",
+                "/ws",
+                "signal",
+                "secret",
+                "high",
+                0.9,
+                "secret read stopped",
+                "{}",
+                None,
+                f"2024-01-{(i % 28) + 1:02d}T{(i // 3600) % 24:02d}:{(i // 60) % 60:02d}:{i % 60:02d}.{i:06d}Z",
+            )
+            for i in range(total)
+        ]
+        conn.executemany(
+            """
+            insert into guard_evidence
+              (evidence_id, action_id, request_id, harness, workspace, signal_id, category,
+               severity, confidence, summary, details_json, action_identity, created_at)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.commit()
+
+        page = list_evidence(conn, limit=50)
+
+        assert count_evidence(conn) == total
+        assert len(page) == 50
+        assert page[0].created_at >= page[-1].created_at
+
     def test_cursor_pagination_covers_all_records(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
         total = 250
@@ -347,27 +404,45 @@ class TestExportRedaction:
         conn = _db(tmp_path)
         store_evidence(conn, _rec(evidence_id="ex-1", details={"secret": "password123"}))
         exported = json.loads(export_evidence_json(conn))
-        assert len(exported) == 1
-        assert "details" not in exported[0]
+        assert len(exported["items"]) == 1
+        assert "details" not in exported["items"][0]
         assert "password123" not in json.dumps(exported)
 
     def test_export_includes_details_when_redact_empty(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
         store_evidence(conn, _rec(evidence_id="ex-2", details={"key": "val"}))
         exported = json.loads(export_evidence_json(conn, redact_fields=()))
-        assert len(exported) == 1
-        assert exported[0]["details"] == {"key": "val"}
+        assert len(exported["items"]) == 1
+        assert exported["items"][0]["details"] == {"key": "val"}
 
     def test_export_includes_action_identity(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
         store_evidence(conn, _rec(evidence_id="ex-3", action_identity="tool:bash"))
         exported = json.loads(export_evidence_json(conn))
-        assert exported[0]["action_identity"] == "tool:bash"
+        assert exported["items"][0]["action_identity"] == "tool:bash"
 
     def test_export_fields_include_required_keys(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
         store_evidence(conn, _rec(evidence_id="ex-4"))
         exported = json.loads(export_evidence_json(conn))
-        row = exported[0]
+        row = exported["items"][0]
         for key in ("evidence_id", "action_id", "request_id", "harness", "category", "severity", "summary"):
             assert key in row, f"missing key: {key}"
+
+    def test_export_redacts_paths_and_tokens_from_all_strings(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(
+            conn,
+            _rec(
+                evidence_id="ex-5",
+                workspace="/Users/alice/private/project",
+                summary="Read /Users/alice/private/project/.env with token=secret-value",
+                action_identity="/Users/alice/private/project/.env",
+                details={"path": "/Users/alice/private/project/.env", "token": "sk-test-secret-value"},
+            ),
+        )
+        exported = json.loads(export_evidence_json(conn, redact_fields=()))
+        encoded = json.dumps(exported)
+        assert "/Users/alice" not in encoded
+        assert "secret-value" not in encoded
+        assert "sk-test-secret-value" not in encoded

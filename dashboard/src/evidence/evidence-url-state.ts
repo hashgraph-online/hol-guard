@@ -36,7 +36,7 @@ const VALID_SORT: EvidenceSortKey[] = [
   "category",
   "artifact",
 ];
-const VALID_VIEW: EvidenceView[] = ["actions", "insights", "apps", "export"];
+const VALID_VIEW: EvidenceView[] = ["actions", "insights", "apps", "export", "story", "categories"];
 
 export function parseEvidenceUrlState(
   params: URLSearchParams

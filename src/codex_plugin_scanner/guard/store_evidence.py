@@ -2,10 +2,34 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+
+from .redaction import redact_local_path, redact_sensitive_text, redact_text
+
+EXPORT_PRIVACY_WARNING = (
+    "Evidence exports redact detector details, local user paths, and token-like values. "
+    "Review the file before sharing it outside your team."
+)
+
+_EXPORT_COLUMNS: tuple[str, ...] = (
+    "evidence_id",
+    "action_id",
+    "request_id",
+    "harness",
+    "workspace",
+    "signal_id",
+    "category",
+    "severity",
+    "confidence",
+    "summary",
+    "action_identity",
+    "created_at",
+)
 
 
 def _now_iso() -> str:
@@ -172,6 +196,7 @@ def count_evidence(
     *,
     harness: str | None = None,
     category: str | None = None,
+    severity: str | None = None,
 ) -> int:
     clauses: list[str] = []
     params: list[object] = []
@@ -181,9 +206,68 @@ def count_evidence(
     if category is not None:
         clauses.append("category = ?")
         params.append(category)
+    if severity is not None:
+        clauses.append("severity = ?")
+        params.append(severity)
     where = f"where {' and '.join(clauses)}" if clauses else ""
     row = conn.execute(f"select count(*) from guard_evidence {where}", params).fetchone()
     return int(row[0])
+
+
+def _redact_export_value(value: object) -> object:
+    if isinstance(value, str):
+        redacted = redact_text(value).text
+        return redact_sensitive_text(redact_local_path(redacted))
+    if isinstance(value, list):
+        return [_redact_export_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_export_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _redact_export_value(item) for key, item in value.items()}
+    return value
+
+
+def evidence_record_to_dict(record: EvidenceRecord, *, redact_fields: set[str] | None = None) -> dict[str, object]:
+    active_redact_fields = {"details"} if redact_fields is None else redact_fields
+    row: dict[str, object] = {
+        "evidence_id": record.evidence_id,
+        "action_id": record.action_id,
+        "request_id": record.request_id,
+        "harness": record.harness,
+        "workspace": record.workspace,
+        "signal_id": record.signal_id,
+        "category": record.category,
+        "severity": record.severity,
+        "confidence": record.confidence,
+        "summary": record.summary,
+        "action_identity": record.action_identity,
+        "created_at": record.created_at,
+    }
+    if "details" not in active_redact_fields:
+        row["details"] = record.details
+    return {key: _redact_export_value(value) for key, value in row.items()}
+
+
+def export_evidence_payload(
+    conn: sqlite3.Connection,
+    *,
+    limit: int = 10_000,
+    redact_fields: tuple[str, ...] | None = None,
+) -> dict[str, object]:
+    redact_set = {"details"} if redact_fields is None else set(redact_fields)
+    records = list_evidence(conn, limit=limit)
+    rows = [evidence_record_to_dict(record, redact_fields=redact_set) for record in records]
+    return {
+        "exported_at": _now_iso(),
+        "privacy_warning": EXPORT_PRIVACY_WARNING,
+        "redaction": {
+            "details": "omitted" if "details" in redact_set else "redacted",
+            "local_paths": "redacted",
+            "token_like_values": "redacted",
+        },
+        "total_rows": len(rows),
+        "items": rows,
+    }
 
 
 def export_evidence_json(
@@ -192,33 +276,30 @@ def export_evidence_json(
     limit: int = 10_000,
     redact_fields: tuple[str, ...] | None = None,
 ) -> str:
-    """Export evidence records as JSON, omitting sensitive fields by default.
+    """Export evidence records as redacted JSON with sharing guidance."""
 
-    Pass ``redact_fields=()`` to include all fields including ``details``.
-    By default ``details`` is redacted (excluded from export).
-    """
-    _redact = {"details"} if redact_fields is None else set(redact_fields)
-    records = list_evidence(conn, limit=limit)
-    rows: list[dict[str, object]] = []
-    for r in records:
-        row: dict[str, object] = {
-            "evidence_id": r.evidence_id,
-            "action_id": r.action_id,
-            "request_id": r.request_id,
-            "harness": r.harness,
-            "workspace": r.workspace,
-            "signal_id": r.signal_id,
-            "category": r.category,
-            "severity": r.severity,
-            "confidence": r.confidence,
-            "summary": r.summary,
-            "action_identity": r.action_identity,
-            "created_at": r.created_at,
-        }
-        if "details" not in _redact:
-            row["details"] = r.details
-        rows.append(row)
-    return json.dumps(rows, indent=2)
+    return json.dumps(export_evidence_payload(conn, limit=limit, redact_fields=redact_fields), indent=2)
+
+
+def export_evidence_csv(
+    conn: sqlite3.Connection,
+    *,
+    limit: int = 10_000,
+    redact_fields: tuple[str, ...] | None = None,
+) -> str:
+    payload = export_evidence_payload(conn, limit=limit, redact_fields=redact_fields)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(("privacy_warning", payload["privacy_warning"]))
+    writer.writerow(("exported_at", payload["exported_at"]))
+    writer.writerow(("total_rows", payload["total_rows"]))
+    writer.writerow(())
+    writer.writerow(_EXPORT_COLUMNS)
+    for item in payload["items"]:
+        if not isinstance(item, dict):
+            continue
+        writer.writerow([item.get(column, "") for column in _EXPORT_COLUMNS])
+    return output.getvalue()
 
 
 def clear_evidence(conn: sqlite3.Connection) -> int:
