@@ -6321,24 +6321,33 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     if any(char in stripped for char in ("*", "?", "{", "}")):
         return False
     target_path = Path(stripped)
-    if target_path.is_absolute():
-        return _codex_absolute_search_target_is_source_like(target_path)
     base_dir = (cwd or Path.cwd()).resolve()
-    unresolved_candidate = base_dir / target_path
-    if _path_contains_symlink(unresolved_candidate, base_dir=base_dir):
-        return False
-    try:
-        candidate = unresolved_candidate.resolve(strict=False)
-    except RuntimeError:
-        return False
-    if candidate.exists():
+    if target_path.is_absolute():
+        unresolved_candidate = target_path
         try:
+            candidate = unresolved_candidate.resolve(strict=False)
             relative_candidate = candidate.relative_to(base_dir)
-        except ValueError:
+        except (RuntimeError, ValueError):
+            return False
+        if _path_contains_symlink(candidate, base_dir=base_dir):
             return False
         parts = [part for part in relative_candidate.parts if part not in {"", "."}]
     else:
-        parts = [part for part in target_path.parts if part not in {"", "."}]
+        unresolved_candidate = base_dir / target_path
+        if _path_contains_symlink(unresolved_candidate, base_dir=base_dir):
+            return False
+        try:
+            candidate = unresolved_candidate.resolve(strict=False)
+        except RuntimeError:
+            return False
+        if candidate.exists():
+            try:
+                relative_candidate = candidate.relative_to(base_dir)
+            except ValueError:
+                return False
+            parts = [part for part in relative_candidate.parts if part not in {"", "."}]
+        else:
+            parts = [part for part in target_path.parts if part not in {"", "."}]
     if not parts:
         return False
     lowered_parts = [part.lower() for part in parts]
