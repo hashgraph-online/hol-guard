@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/runtime-overview.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/runtime-overview.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -13244,7 +13244,7 @@ async function fetchSettings() {
         approval_wait_timeout_seconds: 120,
         approval_surface_policy: "auto-open-once",
         telemetry: false,
-        sync: true,
+        sync: false,
         billing: false
       }
     };
@@ -13649,6 +13649,9 @@ function HiMiniHome(props) {
 }
 function HiMiniGlobeAlt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M16.555 5.412a8.028 8.028 0 0 0-3.503-2.81 14.899 14.899 0 0 1 1.663 4.472 8.547 8.547 0 0 0 1.84-1.662ZM13.326 7.825a13.43 13.43 0 0 0-2.413-5.773 8.087 8.087 0 0 0-1.826 0 13.43 13.43 0 0 0-2.413 5.773A8.473 8.473 0 0 0 10 8.5c1.18 0 2.304-.24 3.326-.675ZM6.514 9.376A9.98 9.98 0 0 0 10 10c1.226 0 2.4-.22 3.486-.624a13.54 13.54 0 0 1-.351 3.759A13.54 13.54 0 0 1 10 13.5c-1.079 0-2.128-.127-3.134-.366a13.538 13.538 0 0 1-.352-3.758ZM5.285 7.074a14.9 14.9 0 0 1 1.663-4.471 8.028 8.028 0 0 0-3.503 2.81c.529.638 1.149 1.199 1.84 1.66ZM17.334 6.798a7.973 7.973 0 0 1 .614 4.115 13.47 13.47 0 0 1-3.178 1.72 15.093 15.093 0 0 0 .174-3.939 10.043 10.043 0 0 0 2.39-1.896ZM2.666 6.798a10.042 10.042 0 0 0 2.39 1.896 15.196 15.196 0 0 0 .174 3.94 13.472 13.472 0 0 1-3.178-1.72 7.973 7.973 0 0 1 .615-4.115ZM10 15c.898 0 1.778-.079 2.633-.23a13.473 13.473 0 0 1-1.72 3.178 8.099 8.099 0 0 1-1.826 0 13.47 13.47 0 0 1-1.72-3.178c.855.151 1.735.23 2.633.23ZM14.357 14.357a14.912 14.912 0 0 1-1.305 3.04 8.027 8.027 0 0 0 4.345-4.345c-.953.542-1.971.981-3.04 1.305ZM6.948 17.397a8.027 8.027 0 0 1-4.345-4.345c.953.542 1.971.981 3.04 1.305a14.912 14.912 0 0 0 1.305 3.04Z" }, "child": [] }] })(props);
+}
+function HiMiniEye(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniEyeSlash(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.28 2.22a.75.75 0 0 0-1.06 1.06l14.5 14.5a.75.75 0 1 0 1.06-1.06l-1.745-1.745a10.029 10.029 0 0 0 3.3-4.38 1.651 1.651 0 0 0 0-1.185A10.004 10.004 0 0 0 9.999 3a9.956 9.956 0 0 0-4.744 1.194L3.28 2.22ZM7.752 6.69l1.092 1.092a2.5 2.5 0 0 1 3.374 3.373l1.091 1.092a4 4 0 0 0-5.557-5.557Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "m10.748 13.93 2.523 2.523a9.987 9.987 0 0 1-3.27.547c-4.258 0-7.894-2.66-9.337-6.41a1.651 1.651 0 0 1 0-1.186A10.007 10.007 0 0 1 2.839 6.02L6.07 9.252a4 4 0 0 0 4.678 4.678Z" }, "child": [] }] })(props);
@@ -20699,10 +20702,10 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
   }, [view, mainSelector]);
 }
 const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([3,2]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([4,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([5,1]) : void 0).then((m) => ({ default: m.HelpModal })));
+const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,2,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([6,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([7,1]) : void 0).then((m) => ({ default: m.HelpModal })));
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
@@ -21222,37 +21225,39 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  clearLabelForScope as $,
+  HiMiniArrowPath as $,
   ActionButton as A,
   Badge as B,
-  clearEvidence as C,
-  exportDiagnostics as D,
+  clearPolicy as C,
+  clearEvidence as D,
   EmptyState as E,
-  repairApprovalCenter as F,
+  exportDiagnostics as F,
   GuardHero as G,
   HiMiniCheckCircle as H,
-  HiMiniLockClosed as I,
-  HiMiniCog6Tooth as J,
-  fetchApprovalPage as K,
-  fetchPolicy as L,
-  HiMiniArrowLeft as M,
-  HiMiniHome as N,
-  HiMiniAdjustmentsHorizontal as O,
+  repairApprovalCenter as I,
+  HiMiniMagnifyingGlass as J,
+  HiMiniLockClosed as K,
+  HiMiniCog6Tooth as L,
+  fetchApprovalPage as M,
+  fetchPolicy as N,
+  HiMiniArrowLeft as O,
   ProofStrip as P,
-  detectCategory as Q,
-  CATEGORIES as R,
+  HiMiniHome as Q,
+  HiMiniAdjustmentsHorizontal as R,
   SectionLabel as S,
   Tag as T,
-  policyIdentityKey as U,
-  HiMiniChartBar as V,
-  runHarnessAction as W,
-  GuardHarnessActionError as X,
-  HiMiniRocketLaunch as Y,
-  HiMiniArrowPath as Z,
-  HiMiniTrash as _,
+  detectCategory as U,
+  CATEGORIES as V,
+  policyIdentityKey as W,
+  HiMiniChartBar as X,
+  runHarnessAction as Y,
+  GuardHarnessActionError as Z,
+  HiMiniRocketLaunch as _,
   HiMiniShieldCheck as a,
-  formatHarnessCommand as a0,
-  HiMiniCommandLine as a1,
+  HiMiniTrash as a0,
+  clearLabelForScope as a1,
+  formatHarnessCommand as a2,
+  HiMiniCommandLine as a3,
   formatRelativeTime as b,
   HiMiniSparkles as c,
   HiMiniXMark as d,
@@ -21268,14 +21273,14 @@ export {
   HiMiniBolt as n,
   HiMiniChevronRight as o,
   HiMiniMinusCircle as p,
-  HiMiniExclamationCircle as q,
+  HiMiniEye as q,
   reactExports as r,
   HiMiniWrenchScrewdriver as s,
   HiMiniXCircle as t,
-  HiMiniClipboardDocumentCheck as u,
-  HiMiniClipboard as v,
-  fetchSettings as w,
-  fetchRuntimeSnapshot as x,
-  updateSettings as y,
-  clearPolicy as z
+  HiMiniExclamationCircle as u,
+  HiMiniClipboardDocumentCheck as v,
+  HiMiniClipboard as w,
+  fetchSettings as x,
+  fetchRuntimeSnapshot as y,
+  updateSettings as z
 };

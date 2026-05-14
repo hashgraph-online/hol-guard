@@ -1,5 +1,6 @@
-import { i as isDisplayableHarness, j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, o as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, q as HiMiniExclamationCircle, s as HiMiniWrenchScrewdriver, t as HiMiniXCircle, r as reactExports, u as HiMiniClipboardDocumentCheck, v as HiMiniClipboard } from "../guard-dashboard.js";
-const SUPPORTED_APPS_COPY = "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.";
+import { i as isDisplayableHarness, j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, E as EmptyState, r as reactExports, h as harnessDisplayName, o as HiMiniChevronRight, H as HiMiniCheckCircle, q as HiMiniEye, s as HiMiniWrenchScrewdriver, t as HiMiniXCircle, u as HiMiniExclamationCircle, v as HiMiniClipboardDocumentCheck, w as HiMiniClipboard } from "../guard-dashboard.js";
+import { S as SUPPORTED_APPS_BRIEF, A as APP_STATUS_LABELS } from "./app-catalog.js";
+const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
   const hasApps = activeInstallCount > 0;
   if (cloudState === "local_only") {
@@ -55,17 +56,69 @@ function resolveAppStatus(install, hasInventory, hasReceipts) {
   if (!hasInventory && !hasReceipts) return "not_found";
   return "found_unprotected";
 }
+function toInstallStatus(status) {
+  if (status === "protected") return "active";
+  if (status === "needs_repair") return "partial";
+  if (status === "found_unprotected") return "observed";
+  return "not_installed";
+}
 function StatusIcon({ status }) {
   if (status === "protected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-emerald-500", "aria-hidden": "true" });
-  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-4 w-4 text-brand-attention", "aria-hidden": "true" });
+  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" });
   if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4 text-brand-purple", "aria-hidden": "true" });
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" });
+  if (status === "not_found") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-4 w-4 text-brand-attention", "aria-hidden": "true" });
 }
 function StatusBadge({ status }) {
-  if (status === "protected") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: "Active" });
-  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Needs setup" });
-  if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Needs setup" });
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Inactive" });
+  const installStatus = toInstallStatus(status);
+  const label = APP_STATUS_LABELS[installStatus];
+  if (installStatus === "active") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: label });
+  if (installStatus === "partial") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-purple", children: label });
+  if (installStatus === "observed") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: label });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: label });
+}
+function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail }) {
+  const isClickable = onOpenAppDetail !== void 0;
+  const handleClick = reactExports.useCallback(() => {
+    onOpenAppDetail?.(harness);
+  }, [onOpenAppDetail, harness]);
+  const handleKeyDown = reactExports.useCallback(
+    (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onOpenAppDetail?.(harness);
+      }
+    },
+    [onOpenAppDetail, harness]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `flex items-center justify-between gap-3 py-3 transition-colors ${isClickable ? "cursor-pointer hover:bg-slate-50/60" : ""}`,
+      onClick: isClickable ? handleClick : void 0,
+      role: isClickable ? "button" : void 0,
+      tabIndex: isClickable ? 0 : void 0,
+      onKeyDown: isClickable ? handleKeyDown : void 0,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(StatusIcon, { status }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400", children: [
+              inventoryCount,
+              " actions · ",
+              policyCount,
+              " decisions"
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(StatusBadge, { status }),
+          isClickable && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
+        ] })
+      ]
+    }
+  );
 }
 function FleetWorkspace(props) {
   const harnesses = collectHarnesses(props.runtime);
@@ -125,38 +178,14 @@ function FleetWorkspace(props) {
           const harnessPolicies = props.policies.filter((p) => p.harness === harness);
           const hasReceipts = receiptHarnesses.has(harness);
           const status = resolveAppStatus(install, harnessInventory.length > 0, hasReceipts);
-          const isClickable = props.onOpenAppDetail !== void 0;
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "div",
+          return /* @__PURE__ */ jsxRuntimeExports.jsx(
+            AppRow,
             {
-              className: `flex items-center justify-between gap-3 py-3 transition-colors ${isClickable ? "cursor-pointer hover:bg-slate-50/60" : ""}`,
-              onClick: isClickable ? () => props.onOpenAppDetail?.(harness) : void 0,
-              role: isClickable ? "button" : void 0,
-              tabIndex: isClickable ? 0 : void 0,
-              onKeyDown: isClickable ? (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  props.onOpenAppDetail?.(harness);
-                }
-              } : void 0,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-3", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(StatusIcon, { status }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400", children: [
-                      harnessInventory.length,
-                      " actions · ",
-                      harnessPolicies.length,
-                      " decisions"
-                    ] })
-                  ] })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(StatusBadge, { status }),
-                  isClickable && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
-                ] })
-              ]
+              harness,
+              status,
+              inventoryCount: harnessInventory.length,
+              policyCount: harnessPolicies.length,
+              onOpenAppDetail: props.onOpenAppDetail
             },
             harness
           );
@@ -164,7 +193,7 @@ function FleetWorkspace(props) {
           EmptyState,
           {
             title: "No watched apps yet",
-            body: "Run HOL Guard once with Codex, Claude Code, Cursor, Hermes, or another supported app and this machine will show coverage here.",
+            body: "Run HOL Guard once with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, or another supported app and this machine will show coverage here.",
             tone: "teach"
           }
         ),

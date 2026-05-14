@@ -61,7 +61,7 @@ _PRESET_SENTINEL: dict[str, dict[str, str]] = {
 class TestPresetRiskActionMaps:
     """L288 — each named preset maps every risk key to the expected action."""
 
-    @pytest.mark.parametrize("preset", ["gentle", "balanced", "strict", "paranoid"])
+    @pytest.mark.parametrize("preset", ["relaxed", "gentle", "balanced", "strict", "paranoid"])
     def test_preset_covers_all_risk_keys(self, preset: str) -> None:
         assert set(SECURITY_LEVEL_RISK_ACTIONS[preset].keys()) == VALID_RISK_ACTION_KEYS
 
@@ -96,7 +96,7 @@ class TestPresetRiskActionMaps:
 class TestPresetCliCommands:
     """L289 — CLI preset commands write correct config that resolve_risk_action honors."""
 
-    @pytest.mark.parametrize("preset", ["gentle", "balanced", "strict", "paranoid"])
+    @pytest.mark.parametrize("preset", ["relaxed", "gentle", "balanced", "strict", "paranoid"])
     def test_settings_preset_command_sets_level(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str], preset: str
     ) -> None:

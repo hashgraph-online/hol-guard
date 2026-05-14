@@ -1,6 +1,11 @@
-import { r as reactExports, K as fetchApprovalPage, L as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, M as HiMiniArrowLeft, o as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, N as HiMiniHome, n as HiMiniBolt, O as HiMiniAdjustmentsHorizontal, S as SectionLabel, b as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, Q as detectCategory, R as CATEGORIES, B as Badge, E as EmptyState, U as policyIdentityKey, k as HiMiniCloud, V as HiMiniChartBar, W as runHarnessAction, X as GuardHarnessActionError, Y as HiMiniRocketLaunch, a as HiMiniShieldCheck, Z as HiMiniArrowPath, H as HiMiniCheckCircle, _ as HiMiniTrash, $ as clearLabelForScope, g as HiMiniChevronDown, a0 as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, M as fetchApprovalPage, N as fetchPolicy, j as jsxRuntimeExports, O as HiMiniArrowLeft, o as HiMiniChevronRight, h as harnessDisplayName, G as GuardHero, P as ProofStrip, Q as HiMiniHome, n as HiMiniBolt, R as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, b as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, U as detectCategory, V as CATEGORIES, B as Badge, E as EmptyState, W as policyIdentityKey, k as HiMiniCloud, X as HiMiniChartBar, Y as runHarnessAction, Z as GuardHarnessActionError, _ as HiMiniRocketLaunch, a as HiMiniShieldCheck, $ as HiMiniArrowPath, H as HiMiniCheckCircle, a0 as HiMiniTrash, a1 as clearLabelForScope, g as HiMiniChevronDown, a2 as formatHarnessCommand } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 const tabOrder = ["overview", "activity", "settings"];
+const TAB_DEFINITIONS = [
+  { key: "overview", label: "Overview", icon: HiMiniHome },
+  { key: "activity", label: "Activity", icon: HiMiniBolt },
+  { key: "settings", label: "Settings", icon: HiMiniAdjustmentsHorizontal }
+];
 function readTabFromUrl() {
   const queryTab = new URLSearchParams(window.location.search).get("tab");
   if (queryTab === "overview" || queryTab === "activity" || queryTab === "settings") return queryTab;
@@ -19,6 +24,61 @@ function writeTabToUrl(tab) {
     url.searchParams.set("tab", tab);
   }
   window.history.replaceState({}, "", url.toString());
+}
+function resolveHeroStatus(status) {
+  if (status === "active") return "clear";
+  if (status === "needs_setup") return "setup_gap";
+  return "needs_review";
+}
+function resolveHeroHeadline(status, harness, isObserved) {
+  if (status === "active") return `${harnessDisplayName(harness)} is protected`;
+  if (status === "needs_setup") return `${harnessDisplayName(harness)} needs setup`;
+  if (isObserved) return `${harnessDisplayName(harness)} is observed`;
+  return harnessDisplayName(harness);
+}
+function resolveHeroSubheadline(status, isObserved) {
+  if (status === "active") return "Guard is watching this app. Review its activity and settings below.";
+  if (status === "needs_setup") return "Finish setup so Guard can protect this app.";
+  if (isObserved) return "Guard has seen activity but install is not active.";
+  return "This app has not been seen yet.";
+}
+function resolveHeroCta(opts) {
+  if (opts.pendingCount > 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: opts.onGoActivity, "data-primary": "true", children: [
+      "Review ",
+      opts.pendingCount,
+      " pending"
+    ] });
+  }
+  if (opts.status === "needs_setup") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: opts.onGoSettings, "data-primary": "true", children: "Open Settings" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: opts.onGoActivity, "data-primary": "true", children: "View Activity" });
+}
+function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }) {
+  const handleClick = reactExports.useCallback(() => onSelect(tabKey), [onSelect, tabKey]);
+  const setRef = reactExports.useCallback((el) => {
+    if (el) tabRefs.current[tabKey] = el;
+  }, [tabRefs, tabKey]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      ref: setRef,
+      role: "tab",
+      "aria-selected": isActive,
+      "aria-label": label,
+      "aria-controls": `tabpanel-${tabKey}`,
+      id: `tab-${tabKey}`,
+      tabIndex: isActive ? 0 : -1,
+      onClick: handleClick,
+      className: `group relative flex min-w-[44px] items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${isActive ? "text-brand-blue" : "text-brand-dark hover:text-brand-blue"}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": true }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: label }),
+        isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue" })
+      ]
+    }
+  );
 }
 function AppDetailWorkspace(props) {
   const [activeTab, setActiveTab] = reactExports.useState(readTabFromUrl);
@@ -96,9 +156,36 @@ function AppDetailWorkspace(props) {
   const queueError = harnessQueue.kind === "error" ? harnessQueue.message : null;
   const policyError = harnessPolicy.kind === "error" ? harnessPolicy.message : null;
   const status = isActive ? "active" : install !== void 0 ? "needs_setup" : isObserved ? "observed" : "unknown";
-  const heroStatus = status === "active" ? "clear" : status === "needs_setup" ? "setup_gap" : "needs_review";
-  const heroHeadline = status === "active" ? `${harnessDisplayName(harness)} is protected` : status === "needs_setup" ? `${harnessDisplayName(harness)} needs setup` : isObserved ? `${harnessDisplayName(harness)} is observed` : `${harnessDisplayName(harness)}`;
-  const heroSub = status === "active" ? "Guard is watching this app. Review its activity and settings below." : status === "needs_setup" ? "Finish setup so Guard can protect this app." : isObserved ? "Guard has seen activity but install is not active." : "This app has not been seen yet.";
+  const heroStatus = resolveHeroStatus(status);
+  const heroHeadline = resolveHeroHeadline(status, harness, isObserved);
+  const heroSub = resolveHeroSubheadline(status, isObserved);
+  const handleTabChange = reactExports.useCallback((next) => {
+    const currentIndex = tabOrder.indexOf(activeTab);
+    const nextIndex = tabOrder.indexOf(next);
+    setTabDirection(nextIndex > currentIndex ? "right" : "left");
+    setActiveTab(next);
+    writeTabToUrl(next);
+  }, [activeTab]);
+  const handleTabKeyDown = reactExports.useCallback((e) => {
+    const focused = document.activeElement;
+    const focusedTab = focused?.getAttribute("role") === "tab" ? focused.id.replace("tab-", "") : activeTab;
+    const currentIndex = tabOrder.indexOf(focusedTab);
+    let nextIndex = -1;
+    if (e.key === "ArrowRight") nextIndex = Math.min(currentIndex + 1, tabOrder.length - 1);
+    else if (e.key === "ArrowLeft") nextIndex = Math.max(currentIndex - 1, 0);
+    else if (e.key === "Home") nextIndex = 0;
+    else if (e.key === "End") nextIndex = tabOrder.length - 1;
+    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
+      e.preventDefault();
+      const nextTab = tabOrder[nextIndex];
+      handleTabChange(nextTab);
+      const nextEl = tabRefs.current[nextTab];
+      if (nextEl) nextEl.focus();
+    }
+  }, [activeTab, handleTabChange]);
+  const handleGoActivity = reactExports.useCallback(() => handleTabChange("activity"), [handleTabChange]);
+  const handleGoSettings = reactExports.useCallback(() => handleTabChange("settings"), [handleTabChange]);
+  const heroCta = resolveHeroCta({ pendingCount: pendingItems.length, status, onGoActivity: handleGoActivity, onGoSettings: handleGoSettings });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -123,18 +210,7 @@ function AppDetailWorkspace(props) {
         status: heroStatus,
         headline: heroHeadline,
         subheadline: heroSub,
-        cta: pendingItems.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          ActionButton,
-          {
-            onClick: () => setActiveTab("activity"),
-            "data-primary": "true",
-            children: [
-              "Review ",
-              pendingItems.length,
-              " pending"
-            ]
-          }
-        ) : status === "needs_setup" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: () => setActiveTab("settings"), "data-primary": "true", children: "Open Settings" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: () => setActiveTab("activity"), "data-primary": "true", children: "View Activity" })
+        cta: heroCta
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -155,36 +231,18 @@ function AppDetailWorkspace(props) {
         role: "tablist",
         "aria-label": "App detail tabs",
         onKeyDown: handleTabKeyDown,
-        children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 border-b border-slate-200/70", children: [
-          { key: "overview", label: "Overview", icon: HiMiniHome },
-          { key: "activity", label: "Activity", icon: HiMiniBolt },
-          { key: "settings", label: "Settings", icon: HiMiniAdjustmentsHorizontal }
-        ].map((t) => {
-          const Icon = t.icon;
-          const isActiveTab = activeTab === t.key;
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              ref: (el) => {
-                if (el) tabRefs.current[t.key] = el;
-              },
-              role: "tab",
-              "aria-selected": isActiveTab,
-              "aria-label": t.label,
-              "aria-controls": `tabpanel-${t.key}`,
-              id: `tab-${t.key}`,
-              tabIndex: isActiveTab ? 0 : -1,
-              onClick: () => handleTabChange(t.key),
-              className: `group relative flex min-w-[44px] items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${isActiveTab ? "text-brand-blue" : "text-brand-dark hover:text-brand-blue"}`,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: t.label }),
-                isActiveTab && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue" })
-              ]
-            },
-            t.key
-          );
-        }) })
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 border-b border-slate-200/70", children: TAB_DEFINITIONS.map((t) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          TabButton,
+          {
+            tabKey: t.key,
+            label: t.label,
+            icon: t.icon,
+            isActive: activeTab === t.key,
+            tabRefs,
+            onSelect: handleTabChange
+          },
+          t.key
+        )) })
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -249,30 +307,6 @@ function AppDetailWorkspace(props) {
       }
     )
   ] });
-  function handleTabChange(next) {
-    const currentIndex = tabOrder.indexOf(activeTab);
-    const nextIndex = tabOrder.indexOf(next);
-    setTabDirection(nextIndex > currentIndex ? "right" : "left");
-    setActiveTab(next);
-    writeTabToUrl(next);
-  }
-  function handleTabKeyDown(e) {
-    const focused = document.activeElement;
-    const focusedTab = focused?.getAttribute("role") === "tab" ? focused.id.replace("tab-", "") : activeTab;
-    const currentIndex = tabOrder.indexOf(focusedTab);
-    let nextIndex = -1;
-    if (e.key === "ArrowRight") nextIndex = Math.min(currentIndex + 1, tabOrder.length - 1);
-    else if (e.key === "ArrowLeft") nextIndex = Math.max(currentIndex - 1, 0);
-    else if (e.key === "Home") nextIndex = 0;
-    else if (e.key === "End") nextIndex = tabOrder.length - 1;
-    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
-      e.preventDefault();
-      const nextTab = tabOrder[nextIndex];
-      handleTabChange(nextTab);
-      const nextEl = tabRefs.current[nextTab];
-      if (nextEl) nextEl.focus();
-    }
-  }
 }
 function AppStatusBadge({ status }) {
   if (status === "active") return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Active" });
