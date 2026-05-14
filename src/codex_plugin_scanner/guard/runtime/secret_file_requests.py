@@ -834,10 +834,14 @@ def _search_args_use_quiet_mode(args: list[str]) -> bool:
 
 
 def _ssh_segment_consumes_stdin(args: list[str]) -> bool:
+    if not args:
+        return False
     for arg in args:
-        if arg in {"-n", "-f", "-Q"}:
+        if arg in {"-n", "-f", "-G", "-Q", "-V"}:
             return False
-        if arg.startswith("-Q") and len(arg) > 2:
+        if arg.startswith(("-G", "-Q")) and len(arg) > 2:
+            return False
+        if arg.startswith("-") and not arg.startswith("--") and any(flag in arg[1:] for flag in ("G", "V")):
             return False
         if arg.startswith("-") and not arg.startswith("--") and any(flag in arg[1:] for flag in ("n", "f")):
             return False
