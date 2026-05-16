@@ -22,8 +22,10 @@ import {
   buildRetryAfterApprovalCopy,
   deriveDataFlowEvidence,
   formatRelativeTime,
+  hasReviewEvidence,
   harnessDisplayName,
   primaryReviewActionToggleLabel,
+  resolveSecondaryRiskSummary,
   resolveStoppedCommandText,
 } from "./approval-center-utils";
 import {
@@ -498,6 +500,133 @@ assert(
   "GR211-05: primary review card includes user-facing detail without opening technical details"
 );
 
+const DUPLICATE_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "ph09-duplicate-prompt-risk",
+  artifact_type: "prompt_request",
+  risk_summary: "Codex prompt for `.env`: Open the private setup guide and paste the secret.",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: "Open the private setup guide and paste the secret.",
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(DUPLICATE_PROMPT_RISK_REQUEST) === null,
+  "GR211-06: secondary risk summary hides duplicate prompt text already shown in primary card"
+);
+
+const EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-extra-context-prompt-risk",
+  risk_summary: "Prompt asks the harness to read local secrets before continuing: Open the private setup guide and paste the secret.",
+};
+assert(
+  resolveSecondaryRiskSummary(EXTRA_CONTEXT_PROMPT_RISK_REQUEST) === EXTRA_CONTEXT_PROMPT_RISK_REQUEST.risk_summary,
+  "GR211-07: secondary risk summary keeps stopped text when it adds safety context"
+);
+
+const CONCISE_CONTEXT_COMMAND_RISK_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "ph09-concise-context-command-risk",
+  risk_summary: "Secret exfiltration: node send-key.js",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "node send-key.js",
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(CONCISE_CONTEXT_COMMAND_RISK_REQUEST) === CONCISE_CONTEXT_COMMAND_RISK_REQUEST.risk_summary,
+  "GR211-08: secondary risk summary keeps concise safety context around stopped command"
+);
+
+const SHORT_DUPLICATE_COMMAND_RISK_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "ph09-short-duplicate-command-risk",
+  risk_summary: "npm install",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "npm install",
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(SHORT_DUPLICATE_COMMAND_RISK_REQUEST) === null,
+  "GR211-09: secondary risk summary hides exact short duplicate command text"
+);
+
+const DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-duplicate-summary-with-signal",
+  decision_v2_json: {
+    action: "ask",
+    reason: "Prompt risk",
+    user_title: "Prompt risk",
+    user_body: "Prompt risk",
+    harness_message: "Paused",
+    dashboard_primary_detail: "Prompt risk",
+    approval_scopes: ["artifact"],
+    retry_instruction: null,
+    confidence: "likely",
+    signals: [SIGNAL_HIGH],
+  },
+};
+assert(
+  hasReviewEvidence(DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST),
+  "GR211-10: duplicate summary does not hide evidence section when renderable decision_v2 signals exist"
+);
+
+const DUPLICATE_SUMMARY_WITH_UNRENDERED_SIGNAL_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-duplicate-summary-with-unrendered-signal",
+  decision_v2_json: {
+    action: "ask",
+    reason: "Prompt risk",
+    user_title: "Prompt risk",
+    user_body: "Prompt risk",
+    harness_message: "Paused",
+    dashboard_primary_detail: "Prompt risk",
+    approval_scopes: ["artifact"],
+    retry_instruction: null,
+    confidence: "likely",
+    signals: [
+      {
+        ...SIGNAL_HIGH,
+        signal_id: "sig-unrendered",
+        category: "policy",
+        detector: "guard-risk-v2",
+      },
+    ],
+  },
+};
+assert(
+  !hasReviewEvidence(DUPLICATE_SUMMARY_WITH_UNRENDERED_SIGNAL_REQUEST),
+  "GR211-11: duplicate summary does not show empty evidence section for unrendered decision_v2 signals"
+);
+
+const DUPLICATE_SUMMARY_SUPPLY_CHAIN_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-duplicate-summary-supply-chain",
+  artifact_type: "package_request",
+  decision_v2_json: null,
+};
+assert(
+  hasReviewEvidence(DUPLICATE_SUMMARY_SUPPLY_CHAIN_REQUEST),
+  "GR211-12: duplicate summary still shows supply-chain fallback evidence for package artifacts"
+);
+
+const DISTINCT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-distinct-prompt-risk",
+  risk_summary: "Prompt asks the harness to read a local .env file directly.",
+};
+assert(
+  resolveSecondaryRiskSummary(DISTINCT_PROMPT_RISK_REQUEST) === "Prompt asks the harness to read a local .env file directly.",
+  "GR211-13: secondary risk summary keeps non-duplicate safety reason"
+);
+
 const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
   ...BASE_REQUEST,
   request_id: "ph09-primary-command",
@@ -505,11 +634,11 @@ const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
 });
 assert(
   PRIMARY_COMMAND_ACTION.label === "Command",
-  "GR211-06: primary review card labels shell commands without opening technical details"
+  "GR211-14: primary review card labels shell commands without opening technical details"
 );
 assert(
   PRIMARY_COMMAND_ACTION.text === "git diff -- app/guard/_components/home.tsx",
-  "GR211-07: primary review card exposes shell command without opening technical details"
+  "GR211-15: primary review card exposes shell command without opening technical details"
 );
 
 const PRIMARY_MCP_ACTION = buildPrimaryReviewAction({

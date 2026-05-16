@@ -322,12 +322,88 @@ export type PrimaryReviewAction = {
   detail: string | null;
 };
 
+const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
+const GENERIC_DUPLICATE_CONTEXT_PATTERNS = [
+  /^(codex|claude|claudecode|copilot|opencode|gemini)?promptfor[a-z0-9]*$/,
+  /^(codex|claude|claudecode|copilot|opencode|gemini)?commandfor[a-z0-9]*$/,
+  /^(codex|claude|claudecode|copilot|opencode|gemini)?toolfor[a-z0-9]*$/,
+];
+
 export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
   return {
     label: resolveTerminalLabel(item),
     text: resolvePrimaryReviewText(item),
     detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null,
   };
+}
+
+export function resolveSecondaryRiskSummary(item: GuardApprovalRequest): string | null {
+  const summary = item.risk_summary?.trim();
+  if (!summary) {
+    return null;
+  }
+  if (duplicatesStoppedActionText(item, summary)) {
+    return null;
+  }
+  return summary;
+}
+
+export function hasReviewEvidence(item: GuardApprovalRequest): boolean {
+  return (
+    (item.risk_signals?.length ?? 0) > 0 ||
+    hasRenderableDecisionEvidence(item) ||
+    resolveSecondaryRiskSummary(item) !== null ||
+    !!item.why_now
+  );
+}
+
+function hasRenderableDecisionEvidence(item: GuardApprovalRequest): boolean {
+  const signals = item.decision_v2_json?.signals ?? [];
+  return (
+    signals.some((signal) => signal.category === "skill" || signal.category === "mcp") ||
+    deriveDataFlowEvidence(item) !== null ||
+    deriveSkillRiskSignals(item).length > 0 ||
+    deriveSupplyChainRiskSignals(item).length > 0 ||
+    deriveEncodedLayerSignals(item).length > 0 ||
+    hasSupplyChainArtifactEvidence(item)
+  );
+}
+
+function hasSupplyChainArtifactEvidence(item: GuardApprovalRequest): boolean {
+  return (
+    item.artifact_type === "supply_chain" ||
+    item.artifact_type === "package_request" ||
+    (typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package"))
+  );
+}
+
+function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string): boolean {
+  const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
+  const candidateText = normalizeDuplicateReviewText(value);
+  if (stoppedText.length === 0 || candidateText.length === 0) {
+    return false;
+  }
+  if (stoppedText === candidateText) {
+    return true;
+  }
+  if (
+    stoppedText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH ||
+    candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH
+  ) {
+    return false;
+  }
+  if (!candidateText.includes(stoppedText)) {
+    return false;
+  }
+  const remainingContext = candidateText.replace(stoppedText, "");
+  return GENERIC_DUPLICATE_CONTEXT_PATTERNS.some((pattern) => pattern.test(remainingContext));
+}
+
+function normalizeDuplicateReviewText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[`"'\s:.,;!?()[\]{}_-]+/g, "")
+    .trim();
 }
 
 export function primaryReviewActionToggleLabel(isVisible: boolean): string {
