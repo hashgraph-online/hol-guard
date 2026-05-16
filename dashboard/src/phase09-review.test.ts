@@ -18,6 +18,7 @@ import {
   type SemanticGroupId,
 } from "./queue-state";
 import {
+  buildPrimaryReviewAction,
   buildRetryAfterApprovalCopy,
   deriveDataFlowEvidence,
   formatRelativeTime,
@@ -467,6 +468,44 @@ const SHOW_TECHNICAL_DEFAULT = false;
 assert(
   SHOW_TECHNICAL_DEFAULT === false,
   "GR211-01: showTechnical default value is false (technical details hidden by default)"
+);
+
+const PRIMARY_PROMPT_ACTION = buildPrimaryReviewAction({
+  ...BASE_REQUEST,
+  request_id: "ph09-primary-prompt",
+  trigger_summary: "Codex prompt was paused before the next tool call.",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: "Open the private setup guide and paste the secret.",
+  },
+});
+assert(
+  PRIMARY_PROMPT_ACTION.label === "Prompt excerpt",
+  "GR211-02: primary review card labels prompt requests without opening technical details"
+);
+assert(
+  PRIMARY_PROMPT_ACTION.text === "Open the private setup guide and paste the secret.",
+  "GR211-03: primary review card exposes prompt text without opening technical details"
+);
+assert(
+  PRIMARY_PROMPT_ACTION.detail === "Codex prompt was paused before the next tool call.",
+  "GR211-04: primary review card includes user-facing detail without opening technical details"
+);
+
+const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
+  ...BASE_REQUEST,
+  request_id: "ph09-primary-command",
+  action_envelope_json: { ...BASE_ENVELOPE, command: "git diff -- app/guard/_components/home.tsx" },
+});
+assert(
+  PRIMARY_COMMAND_ACTION.label === "Command",
+  "GR211-05: primary review card labels shell commands without opening technical details"
+);
+assert(
+  PRIMARY_COMMAND_ACTION.text === "git diff -- app/guard/_components/home.tsx",
+  "GR211-06: primary review card exposes shell command without opening technical details"
 );
 
 const RESOLVED_ITEM: GuardApprovalRequest = {
