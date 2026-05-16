@@ -36,6 +36,7 @@ import {
 } from "./approval-center-primitives";
 import {
   buildRetryAfterApprovalCopy,
+  buildPrimaryReviewAction,
   harnessDisplayName,
   resolveStoppedCommandText,
   resolveTerminalLabel,
@@ -848,6 +849,8 @@ function ReviewDecisionCard(props: {
           </Badge>
         </div>
 
+        <PrimaryActionCard item={item} />
+
         <div className="mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.04] p-4">
           <p className="text-sm text-brand-dark">{pauseReason}</p>
         </div>
@@ -1163,6 +1166,44 @@ function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntim
             ))}
           </ul>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
+  const action = buildPrimaryReviewAction(item);
+
+  return (
+    <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <SectionLabel>What was stopped</SectionLabel>
+          {action.detail !== null && (
+            <p className="mt-1 text-sm text-brand-dark/70">
+              {action.detail}
+            </p>
+          )}
+        </div>
+        <span className="rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue">
+          {action.label}
+        </span>
+      </div>
+      <div className="mt-3 overflow-hidden rounded-xl bg-[#0f172a]">
+        <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
+          <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45">
+            {action.label}
+          </span>
+          <span className="ml-auto">
+            <CopyButton text={action.text} />
+          </span>
+        </div>
+        <pre className="max-h-[36vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]">
+          {action.text}
+        </pre>
       </div>
     </div>
   );
