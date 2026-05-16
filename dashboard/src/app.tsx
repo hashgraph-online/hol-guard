@@ -474,7 +474,11 @@ export function App() {
         setResolutionMessage(null);
         navigate(`/requests/${nextId}`);
       } else {
-        setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
+        const fallbackMessage =
+          result.codex_resume?.status === "sent"
+            ? "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
+            : "Decision saved. Return to your chat and retry the command.";
+        setResolutionMessage(result.resolution_summary || fallbackMessage);
         navigate("/inbox");
       }
       await refreshStateAfterAction();

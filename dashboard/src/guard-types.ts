@@ -168,6 +168,12 @@ export type GuardQueueResolutionCopy = {
   body: string;
 };
 
+export type GuardCodexResumeResult = {
+  status: "sent" | "skipped" | "failed";
+  reason: string;
+  thread_id: string;
+};
+
 export type GuardQueueResolutionResult = {
   resolved: boolean;
   item: GuardApprovalRequest | null;
@@ -180,6 +186,7 @@ export type GuardQueueResolutionResult = {
   resolution_summary: string;
   retry_hint: string | null;
   copy: GuardQueueResolutionCopy | null;
+  codex_resume?: GuardCodexResumeResult | null;
 };
 
 export type GuardRuntimeState = {

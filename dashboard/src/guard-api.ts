@@ -20,6 +20,7 @@ import type {
   GuardHarnessActionErrorPayload,
   GuardHarnessActionResult,
   GuardPolicyDecision,
+  GuardCodexResumeResult,
   GuardQueueResolutionCopy,
   GuardQueueResolutionResult,
   GuardQueueSummary,
@@ -68,7 +69,13 @@ type RuntimeSnapshotPayload = Omit<GuardRuntimeSnapshot, "items"> & {
 
 type QueueResolutionPayload = Omit<
   GuardQueueResolutionResult,
-  "item" | "resolved_request" | "remaining_pending_summaries" | "resolved_duplicate_ids" | "resolved_scope_ids" | "copy"
+  | "item"
+  | "resolved_request"
+  | "remaining_pending_summaries"
+  | "resolved_duplicate_ids"
+  | "resolved_scope_ids"
+  | "copy"
+  | "codex_resume"
 > & {
   item?: RawGuardApprovalRequest | null;
   resolved_request?: RawGuardApprovalRequest | null;
@@ -76,6 +83,7 @@ type QueueResolutionPayload = Omit<
   resolved_duplicate_ids?: unknown;
   resolved_scope_ids?: unknown;
   copy?: unknown;
+  codex_resume?: unknown;
 };
 
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -506,6 +514,23 @@ function normalizeQueueCopy(raw: unknown): GuardQueueResolutionCopy | null {
   return { title, body };
 }
 
+function normalizeCodexResume(raw: unknown): GuardCodexResumeResult | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const status = raw["status"];
+  const reason = raw["reason"];
+  const threadId = raw["thread_id"];
+  if (
+    (status !== "sent" && status !== "skipped" && status !== "failed") ||
+    typeof reason !== "string" ||
+    typeof threadId !== "string"
+  ) {
+    return null;
+  }
+  return { status, reason, thread_id: threadId };
+}
+
 function normalizeQueueResolution(payload: QueueResolutionPayload): GuardQueueResolutionResult {
   return {
     resolved: payload.resolved === true,
@@ -520,7 +545,8 @@ function normalizeQueueResolution(payload: QueueResolutionPayload): GuardQueueRe
     resolved_scope_ids: isStringArray(payload.resolved_scope_ids) ? payload.resolved_scope_ids : undefined,
     resolution_summary: typeof payload.resolution_summary === "string" ? payload.resolution_summary : "",
     retry_hint: isStringOrNull(payload.retry_hint) ? payload.retry_hint : null,
-    copy: normalizeQueueCopy(payload.copy)
+    copy: normalizeQueueCopy(payload.copy),
+    codex_resume: normalizeCodexResume(payload.codex_resume)
   };
 }
 
@@ -993,7 +1019,8 @@ export async function resolveRequestWithQueueResult(input: {
       resolved_duplicate_ids: [],
       resolution_summary: "Decision saved.",
       retry_hint: null,
-      copy: null
+      copy: null,
+      codex_resume: null
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
