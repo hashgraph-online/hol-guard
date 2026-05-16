@@ -7,7 +7,6 @@ import {
   HiMiniDocumentText,
   HiMiniHome,
   HiMiniInbox,
-  HiMiniServerStack,
   HiMiniAdjustmentsHorizontal,
   HiMiniShieldCheck,
   HiMiniInformationCircle,
@@ -129,9 +128,9 @@ export function ShellHeader(props: {
 
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
-  { href: "/inbox", label: "Review", view: "inbox", icon: HiMiniInbox },
-  { href: "/fleet", label: "Apps", view: "fleet", icon: HiMiniServerStack },
-  { href: "/evidence", label: "History", view: "evidence", icon: HiMiniDocumentText },
+  { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
+  { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
+  { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
 ] as const;
 
@@ -174,7 +173,7 @@ export function ShellSidebar(props: {
       <div className="flex flex-1 flex-col overflow-y-auto px-3 py-5">
         {!collapsed && (
           <p className="mb-2 px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-            Dashboard
+            Guard
           </p>
         )}
         <nav className="flex flex-col gap-0.5" aria-label="Guard dashboard">
@@ -634,7 +633,7 @@ export function WelcomeState(props: {
               ) : null}
               {props.fleetUrl ? (
                 <ActionButton href={props.fleetUrl} variant="outline">
-                  Watched Apps
+                  Protect
                 </ActionButton>
               ) : null}
             </div>

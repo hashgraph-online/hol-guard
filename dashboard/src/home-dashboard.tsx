@@ -69,7 +69,7 @@ export function buildEmptyStateCopy(): { title: string; body: string; installHin
   return {
     title: "No apps connected",
     body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Hermes, and more.",
-    installHint: "hol-guard install",
+    installHint: "hol-guard apps connect <app>",
   };
 }
 
@@ -425,7 +425,7 @@ export function deriveHomeState(input: {
       heroStatus: "setup_gap",
       headline: "Guard is ready",
       subheadline: "Connect your first AI app so Guard can start protecting it.",
-      ctaLabel: "Open Apps",
+      ctaLabel: "Open Protect",
       ctaTarget: "fleet",
     };
   }
@@ -435,7 +435,7 @@ export function deriveHomeState(input: {
       heroStatus: "setup_gap",
       headline: "Finish setup",
       subheadline: "Guard detected apps but they need setup to be fully protected.",
-      ctaLabel: "Open Apps",
+      ctaLabel: "Open Protect",
       ctaTarget: "fleet",
     };
   }
@@ -681,7 +681,7 @@ function CloudStatusCard(props: {
           <HiMiniCloud className="h-5 w-5" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <SectionLabel>Cloud backup</SectionLabel>
+          <SectionLabel>Cloud sync</SectionLabel>
           <p className="mt-2 text-sm font-medium text-brand-dark">{copy.label}</p>
           <p className="mt-1 text-sm text-muted-foreground">{copy.detail}</p>
           {props.showUpsell && (

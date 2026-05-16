@@ -17,11 +17,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.models import GuardReceipt
-from codex_plugin_scanner.guard.receipts.manager import build_receipt, _auto_diff_summary
-from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.consumer.service import _build_diff_summary
 from codex_plugin_scanner.guard.mcp_tool_calls import _map_approval_source
+from codex_plugin_scanner.guard.models import GuardReceipt
+from codex_plugin_scanner.guard.receipts.manager import _auto_diff_summary, build_receipt
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _make_store(tmp_path: Path) -> GuardStore:
@@ -85,7 +85,11 @@ class TestBuildDiffSummary:
         assert _build_diff_summary(diff) == "artifact changed"
 
     def test_changed_with_fields(self) -> None:
-        diff: dict[str, object] = {"changed": True, "changed_fields": ["hash", "capability_delta"], "current_hash": "abc"}
+        diff: dict[str, object] = {
+            "changed": True,
+            "changed_fields": ["hash", "capability_delta"],
+            "current_hash": "abc",
+        }
         result = _build_diff_summary(diff)
         assert result == "2 change(s): hash, capability_delta"
 

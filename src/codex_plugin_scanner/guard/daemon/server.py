@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import mimetypes
 import os
+import platform
 import secrets
 import threading
 import time
@@ -40,7 +42,8 @@ from ..config import (
     reset_guard_settings,
     update_guard_settings,
 )
-from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
+from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
+from ..receipts.manager import build_receipt
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
@@ -86,6 +89,24 @@ _DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 30 * 60
 _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
 _GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
 _HOSTED_GUARD_DASHBOARD_ORIGINS = frozenset({"https://hol.org", "https://www.hol.org"})
+_HEADLESS_APP_ACTIONS = {
+    "connect": ("install", "install"),
+    "repair": ("repair", "repair"),
+    "disconnect": ("remove", "uninstall"),
+    "status": ("status", "verify"),
+    "test": ("scan", "verify"),
+}
+_HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")
+
+
+def _headless_safe_failure_reasons() -> dict[str, str]:
+    return {
+        "offline": "Local Guard daemon is unavailable.",
+        "timeout": "Local Guard daemon did not answer before the browser timeout.",
+        "unauthorized": "Dashboard session is missing or stale.",
+        "unsupported": "Harness is not supported by this daemon.",
+        "confirmation_required": "Remove actions need the harness confirmation phrase.",
+    }
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
@@ -98,7 +119,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         headers = self._cors_headers_for_request(
             allow_methods="GET, POST, DELETE, OPTIONS",
-            allow_headers="Content-Type, X-Guard-Token",
+            allow_headers="Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token",
         )
         if headers is None:
             self._write_empty(status=403)
@@ -135,6 +156,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "package_version": __version__,
                 }
             )
+            return
+        if parsed.path == "/v1/capabilities":
+            self._handle_capabilities()
             return
         if parsed.path == "/v1/sessions":
             self._write_json({"items": store.list_guard_sessions(limit=200)})
@@ -440,6 +464,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/policy/clear":
             self._handle_policy_clear(payload)
             return
+        if parsed.path == "/v1/policy/sync":
+            self._handle_headless_policy_sync(payload)
+            return
         if parsed.path == "/v1/settings":
             self._handle_settings_update(payload)
             return
@@ -455,6 +482,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
+            return
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"]:
+            self._handle_headless_app_action(path_parts[2], payload)
             return
         request_id, action, matched = self._resolve_request_action(path_parts, payload)
         if not matched:
@@ -554,6 +584,222 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return (payload if isinstance(payload, dict) else {}), None
         form_payload = parse_qs(raw_body)
         return {key: values[-1] for key, values in form_payload.items() if values}, None
+
+    def _handle_capabilities(self) -> None:
+        context = self._harness_context({})
+        items = list_harness_setup_items(context, self.server.store)  # type: ignore[attr-defined]
+        supported = []
+        for item in items:
+            harness = item.get("harness")
+            if not isinstance(harness, str):
+                continue
+            supported.append(
+                {
+                    "harness": harness,
+                    "status": item.get("status"),
+                    "command_available": bool(item.get("command_available")),
+                    "headless_actions": list(_HEADLESS_OPERATIONS[:-1]),
+                    "safe_failure_reasons": _headless_safe_failure_reasons(),
+                }
+            )
+        self._write_json(
+            {
+                "auth_state": "dashboard_session" if self._dashboard_session_token_is_present() else "local_token",
+                "command_available": any(bool(item.get("command_available")) for item in items),
+                "daemon": {
+                    "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+                    "package_version": __version__,
+                    "platform": platform.system().lower() or "unknown",
+                },
+                "headless_api": {
+                    "operations": list(_HEADLESS_OPERATIONS),
+                    "routes": {
+                        "install": "/v1/apps/connect",
+                        "repair": "/v1/apps/repair",
+                        "remove": "/v1/apps/disconnect",
+                        "status": "/v1/apps/status",
+                        "scan": "/v1/apps/test",
+                        "policy_sync": "/v1/policy/sync",
+                    },
+                },
+                "safe_failure_reasons": _headless_safe_failure_reasons(),
+                "supported_harnesses": sorted(item["harness"] for item in supported),
+                "items": supported,
+            }
+        )
+
+    def _handle_headless_app_action(self, action_path: str, payload: dict[str, object]) -> None:
+        mapping = _HEADLESS_APP_ACTIONS.get(action_path)
+        if mapping is None:
+            self._write_json({"error": "not_found"}, status=404)
+            return
+        operation, harness_action = mapping
+        harness = self._optional_string(payload.get("harness"))
+        if harness is None:
+            self._write_json({"error": "missing_harness"}, status=400)
+            return
+        try:
+            adapter = get_adapter(harness)
+        except ValueError:
+            self._write_json({"error": "unknown_harness"}, status=404)
+            return
+
+        context = self._harness_context(payload)
+        try:
+            if harness_action == "verify":
+                result = build_harness_verification(adapter.harness, context, self.server.store)  # type: ignore[attr-defined]
+            else:
+                result = self._run_headless_managed_action(adapter.harness, harness_action, payload, context)
+        except ValueError as error:
+            self._write_json({"error": str(error)}, status=400)
+            return
+
+        receipt = self._record_headless_receipt(
+            harness=adapter.harness,
+            operation=operation,
+            payload=payload,
+            result=result,
+            workspace_id=self._optional_string(payload.get("workspace_id")),
+        )
+        self._write_json(
+            {
+                "harness": adapter.harness,
+                "operation": operation,
+                "result": result,
+                "receipt": receipt,
+                "status": "completed",
+            }
+        )
+
+    def _run_headless_managed_action(
+        self,
+        harness: str,
+        action: str,
+        payload: dict[str, object],
+        context: HarnessContext,
+    ) -> dict[str, object]:
+        if action == "uninstall":
+            expected_confirmation = uninstall_confirmation_token(harness)
+            confirmation = self._optional_string(payload.get("confirmation_phrase")) or self._optional_string(
+                payload.get("confirmation_token")
+            )
+            if confirmation != expected_confirmation:
+                raise ValueError("confirmation_required")
+        install_command = "uninstall" if action == "uninstall" else "install"
+        return apply_managed_install(
+            install_command,
+            harness,
+            False,
+            context,
+            self.server.store,  # type: ignore[attr-defined]
+            self._optional_string(payload.get("workspace_id")),
+            _now(),
+        )
+
+    def _handle_headless_policy_sync(self, payload: dict[str, object]) -> None:
+        harness = self._optional_string(payload.get("harness"))
+        if harness is None:
+            self._write_json({"error": "missing_harness"}, status=400)
+            return
+        try:
+            adapter = get_adapter(harness)
+        except ValueError:
+            self._write_json({"error": "unknown_harness"}, status=404)
+            return
+        policy_memory = self._policy_memory_payload(payload.get("policy_memory"))
+        scope = self._optional_string(policy_memory.get("scope")) or "harness"
+        action = self._optional_string(policy_memory.get("action")) or "review"
+        if scope not in DECISION_SCOPE_VALUES or action not in GUARD_ACTION_VALUES:
+            self._write_json({"error": "unsupported_policy_value"}, status=400)
+            return
+        decision = PolicyDecision(
+            harness=adapter.harness,
+            scope=scope,  # type: ignore[arg-type]
+            action=action,  # type: ignore[arg-type]
+            artifact_id=self._optional_string(policy_memory.get("artifact_id")),
+            artifact_hash=self._optional_string(policy_memory.get("artifact_hash")),
+            workspace=self._optional_string(policy_memory.get("workspace"))
+            or self._optional_string(payload.get("workspace_id")),
+            publisher=self._optional_string(policy_memory.get("publisher")),
+            reason=self._optional_string(policy_memory.get("reason")) or "Guard Cloud policy memory sync",
+            source="cloud-sync",
+            expires_at=self._optional_string(policy_memory.get("expires_at")),
+        )
+        self.server.store.upsert_policy(decision, _now())  # type: ignore[attr-defined]
+        receipt = self._record_headless_receipt(
+            harness=adapter.harness,
+            operation="policy_sync",
+            payload=payload,
+            result={"decision": decision.to_dict()},
+            workspace_id=decision.workspace,
+        )
+        self._write_json(
+            {
+                "harness": adapter.harness,
+                "operation": "policy_sync",
+                "receipt": receipt,
+                "status": "completed",
+            }
+        )
+
+    @staticmethod
+    def _policy_memory_payload(value: object) -> dict[str, object]:
+        if isinstance(value, dict):
+            return dict(value)
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
+
+    def _record_headless_receipt(
+        self,
+        *,
+        harness: str,
+        operation: str,
+        payload: dict[str, object],
+        result: dict[str, object],
+        workspace_id: str | None,
+    ) -> dict[str, object]:
+        material = json.dumps(
+            {
+                "harness": harness,
+                "operation": operation,
+                "result_keys": sorted(result.keys()),
+                "workspace_id": workspace_id,
+            },
+            sort_keys=True,
+        )
+        artifact_hash = hashlib.sha256(material.encode("utf-8")).hexdigest()
+        changed_capabilities = [] if operation in {"status", "scan"} else [operation]
+        receipt = build_receipt(
+            harness=harness,
+            artifact_id=f"headless:{harness}:{operation}",
+            artifact_hash=artifact_hash,
+            policy_decision="allow",
+            capabilities_summary=f"Guard local daemon completed headless {operation}.",
+            changed_capabilities=changed_capabilities,
+            provenance_summary="Guard Cloud local daemon API",
+            artifact_name=f"Headless {operation}",
+            source_scope="local-daemon",
+            scanner_evidence=(
+                {
+                    "operation": operation,
+                    "workspace_id": workspace_id,
+                    "status": "completed",
+                },
+            ),
+            approval_source="guard-cloud-headless",
+        )
+        self.server.store.add_receipt(receipt)  # type: ignore[attr-defined]
+        return {
+            "id": receipt.receipt_id,
+            "operation": operation,
+            "status": "completed",
+            "timestamp": receipt.timestamp,
+        }
 
     def _handle_policy_clear(self, payload: dict[str, object]) -> None:
         harness = self._optional_string(payload.get("harness"))
@@ -1123,7 +1369,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _header_token_is_valid(self) -> bool:
         token = self.headers.get("X-Guard-Token")
-        return self._tokens_match(token)
+        path = urlparse(self.path).path
+        path_parts = [part for part in path.split("/") if part]
+        return self._tokens_match(token) or (
+            self._is_hosted_dashboard_api_path(path, path_parts) and self._dashboard_session_token_is_present()
+        )
+
+    def _dashboard_session_token_is_present(self) -> bool:
+        session_token = self.headers.get("X-Guard-Dashboard-Session")
+        authorization = self.headers.get("Authorization")
+        bearer_token = None
+        if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+            bearer_token = authorization[7:].strip()
+        token = session_token if isinstance(session_token, str) and session_token.strip() else bearer_token
+        if not isinstance(token, str) or not token.startswith("gld1."):
+            return False
+        parts = token.split(".")
+        return len(parts) == 3 and all(len(part) >= 8 for part in parts[1:])
 
     def _tokens_match(self, token: object) -> bool:
         if not isinstance(token, str):
@@ -1205,6 +1467,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _is_hosted_dashboard_api_path(path: str, path_parts: list[str]) -> bool:
         if path in {
+            "/v1/capabilities",
             "/v1/inventory",
             "/v1/connect/state",
             "/v1/daemon/repair",
@@ -1213,6 +1476,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/harnesses",
             "/v1/policy",
             "/v1/policy/clear",
+            "/v1/policy/sync",
             "/v1/receipts",
             "/v1/receipts/latest",
             "/v1/requests",
@@ -1240,6 +1504,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "uninstall",
             }
         ):
+            return True
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
 
@@ -1279,7 +1545,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         origin: str,
         *,
         allow_methods: str = "POST, OPTIONS",
-        allow_headers: str = "Content-Type, X-Guard-Token",
+        allow_headers: str = "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token",
     ) -> dict[str, str]:
         return {
             "Access-Control-Allow-Origin": origin,
@@ -1292,7 +1558,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self,
         *,
         allow_methods: str = "POST, OPTIONS",
-        allow_headers: str = "Content-Type, X-Guard-Token",
+        allow_headers: str = "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token",
     ) -> dict[str, str] | None:
         parsed = urlparse(self.path)
         path_parts = [part for part in parsed.path.split("/") if part]
@@ -1424,11 +1690,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/operations/block",
             "/v1/policy/decisions",
             "/v1/policy/clear",
+            "/v1/policy/sync",
             "/v1/settings",
             "/v1/settings/import",
             "/v1/settings/reset",
             "/v1/daemon/repair",
         }:
+            return True
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
             return True
