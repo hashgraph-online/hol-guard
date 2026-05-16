@@ -37,6 +37,9 @@ args = ["-m", "http.server", "9000"]
         """
 approval_policy = "never"
 
+[features]
+codex_hooks = true
+
 [mcp_servers.workspace_skill]
 command = "node"
 args = ["workspace-skill.js"]
@@ -80,7 +83,8 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "guard" in config_text
     assert "codex-mcp-proxy" in config_text
     assert 'approval_policy = "never"' in config_text
-    assert "codex_hooks = true" in config_text
+    assert "hooks = true" in config_text
+    assert "codex_hooks" not in config_text
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
     assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
