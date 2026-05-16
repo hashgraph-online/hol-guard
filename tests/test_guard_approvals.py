@@ -1741,7 +1741,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 200
-        assert allow_headers == "Content-Type, X-Guard-Token"
+        assert allow_headers == "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token"
 
     def test_guard_daemon_allows_hosted_guard_dashboard_to_resolve_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

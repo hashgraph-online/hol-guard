@@ -13,15 +13,11 @@ These tests verify that:
 
 from __future__ import annotations
 
-import pytest
-
 from codex_plugin_scanner.guard.consumer.service import (
     build_provenance_bundle,
     score_verdict,
 )
 from codex_plugin_scanner.guard.types import ProvenanceBundle
-from codex_plugin_scanner.guard.store import GuardStore
-
 
 _HOL_REGISTRY_PUBLISHER = "@hol-org/registry"
 _HOL_REGISTRY_ADVISORY_CLEAN = {
@@ -46,7 +42,7 @@ class _FakeStore:
     def __init__(self, advisories: list[dict]) -> None:
         self._advisories = advisories
 
-    def list_cached_advisories(self, *, limit: int = 200) -> list[dict]:  # noqa: D401
+    def list_cached_advisories(self, *, limit: int = 200) -> list[dict]:
         return self._advisories[:limit]
 
 
@@ -72,8 +68,6 @@ class TestRegistryBrokerSkillsAttested:
 
     def test_verdict_action_is_allow_for_clean_artifact(self) -> None:
         from codex_plugin_scanner.guard.types import (
-            GuardSignal,
-            CapabilityDelta,
             HistoryContext,
         )
 
