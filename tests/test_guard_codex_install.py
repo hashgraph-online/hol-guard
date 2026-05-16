@@ -1074,7 +1074,7 @@ args = [{str(canary_path)!r}, "--marker-path", {str(marker_path)!r}]
     assert json.loads(result.stdout)["result"]["serverInfo"]["name"] == "danger-lab"
 
 
-def test_guard_install_codex_preserves_server_relative_pythonpath_entries(tmp_path, capsys, monkeypatch):
+def test_guard_install_codex_strips_server_python_injection_env_entries(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     source_root = Path(__file__).resolve().parents[1] / "src"
@@ -1110,12 +1110,14 @@ env = { PYTHONPATH = "app/src", API_BASE = "https://hol.org" }
     proxy_env = payload["mcp_servers"]["danger_lab"]["env"]
 
     assert rc == 0
-    assert proxy_env["PYTHONPATH"] == os.pathsep.join((str(source_root), "app/src"))
+    assert proxy_env["PYTHONPATH"] == str(source_root)
+    assert proxy_env["API_BASE"] == "https://hol.org"
 
 
-def test_guard_install_codex_allows_server_to_clear_launcher_pythonpath(tmp_path, capsys, monkeypatch):
+def test_guard_install_codex_ignores_server_attempt_to_clear_launcher_pythonpath(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
+    source_root = Path(__file__).resolve().parents[1] / "src"
     monkeypatch.chdir(Path(__file__).resolve().parents[1])
     monkeypatch.setenv("PYTHONPATH", "src")
     _write_text(
@@ -1148,4 +1150,4 @@ env = { PYTHONPATH = "" }
     proxy_env = payload["mcp_servers"]["danger_lab"]["env"]
 
     assert rc == 0
-    assert proxy_env["PYTHONPATH"] == ""
+    assert proxy_env["PYTHONPATH"] == str(source_root)

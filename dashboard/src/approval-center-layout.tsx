@@ -52,6 +52,7 @@ import {
   resolveStoppedCommandText,
   displayArtifactName,
   resolveTerminalLabel,
+  resolveFileReadPath,
   scopeLabel,
   STALE_REQUEST_COPY,
   QUEUE_CONNECTION_ERROR_HEADLINE,
@@ -75,6 +76,7 @@ import {
   bulkApprovePrimaryIds,
   bulkBlockEligibleGroups,
   bulkBlockPrimaryIds,
+  countSensitiveFileReadGroups,
   type QueueSortDirection,
 } from "./queue-state";
 import {
@@ -515,6 +517,16 @@ function QueueBrowser(props: {
     setPage(1);
   }, [harnessFilter, searchTerm, sortDirection, props.items.length]);
 
+  useEffect(() => {
+    if (props.activeRequestId === null) return;
+    const groupIndex = groups.findIndex(
+      (g) => g.primary.request_id === props.activeRequestId
+    );
+    if (groupIndex < 0) return;
+    const targetPage = Math.floor(groupIndex / queuePageSize) + 1;
+    setPage((prev) => (prev === targetPage ? prev : targetPage));
+  }, [props.activeRequestId, groups]);
+
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   }, []);
@@ -531,6 +543,14 @@ function QueueBrowser(props: {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
 
+  const handleToggleFilters = useCallback(() => setShowFilters((v) => !v), []);
+
+  const handleClearFilters = useCallback(() => {
+    setSearchTerm("");
+    setHarnessFilter("all");
+    setSortDirection("newest");
+  }, []);
+
   const isReadOnlyGroup = useCallback(
     (group: ReturnType<typeof groupDuplicates>[number]) => isReadOnlyQueueGroup(group),
     []
@@ -544,6 +564,11 @@ function QueueBrowser(props: {
   const bulkEligibleActionCount = useMemo(
     () => bulkApproveActionCount(bulkEligibleGroups),
     [bulkEligibleGroups]
+  );
+
+  const sensitiveFileReadCount = useMemo(
+    () => countSensitiveFileReadGroups(groups),
+    [groups]
   );
 
   const showBulkApprove =
@@ -567,7 +592,7 @@ function QueueBrowser(props: {
   return (
     <section>
       {showBulkApprove && (
-        <div className="mb-4">
+        <div className="mb-4 space-y-2">
           <button
             type="button"
             onClick={handleBulkApprove}
@@ -575,6 +600,18 @@ function QueueBrowser(props: {
           >
             Approve all read-only actions ({bulkEligibleActionCount})
           </button>
+          {sensitiveFileReadCount > 0 && (
+            <p className="text-xs text-brand-attention">
+              {sensitiveFileReadCount} sensitive file {sensitiveFileReadCount === 1 ? "read" : "reads"} excluded — review individually for informed consent.
+            </p>
+          )}
+        </div>
+      )}
+      {!showBulkApprove && sensitiveFileReadCount > 0 && (
+        <div className="mb-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2">
+          <p className="text-xs text-brand-attention">
+            {sensitiveFileReadCount} sensitive file {sensitiveFileReadCount === 1 ? "read" : "reads"} in queue — review each path before approving.
+          </p>
         </div>
       )}
       {showBulkBlock && (
@@ -595,7 +632,8 @@ function QueueBrowser(props: {
           />
         </label>
         <button
-          onClick={() => setShowFilters((v) => !v)}
+          type="button"
+          onClick={handleToggleFilters}
           className="flex items-center gap-1 text-xs font-medium text-brand-blue transition-colors hover:text-brand-dark"
         >
           {showFilters ? "Hide filters" : "Show filters"}
@@ -625,7 +663,8 @@ function QueueBrowser(props: {
             </label>
             {(searchTerm || harnessFilter !== "all" || sortDirection !== "newest") && (
               <button
-                onClick={() => { setSearchTerm(""); setHarnessFilter("all"); setSortDirection("newest"); }}
+                type="button"
+                onClick={handleClearFilters}
                 className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
               >
                 Clear all filters
@@ -684,6 +723,7 @@ function QueueCardRow(props: {
 
 function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; active: boolean; onClick: () => void }) {
   const summary = buildQueueSummary(props.item);
+  const fileReadPath = resolveFileReadPath(props.item);
   const isBlocked = props.item.policy_action === "block";
   const statusDotClass = queueCardStatusDotClass(props.active, isBlocked);
   return (
@@ -709,6 +749,11 @@ function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; 
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
               {harnessDisplayName(props.item.harness)} · {summary}
             </p>
+            {fileReadPath !== null && (
+              <p className="mt-0.5 truncate font-mono text-[11px] text-brand-dark/50">
+                {fileReadPath}
+              </p>
+            )}
           </div>
         </div>
         {props.duplicateCount > 0 && (

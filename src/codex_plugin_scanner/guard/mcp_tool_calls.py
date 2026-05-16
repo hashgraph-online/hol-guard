@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import PurePath
 
-from .config import GuardConfig
+from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
 from .runtime.mcp_protection import (
@@ -135,21 +135,41 @@ def evaluate_tool_call(
             summary="Guard did not detect a high-risk signal in this tool call.",
             risk_categories=(),
         )
-    if config.mode == "prompt":
+    explicit_risk_action = _configured_risk_action(config, "mcp_dangerous_tool", harness=artifact.harness)
+    configured_risk_action = explicit_risk_action or resolve_risk_action(
+        config,
+        "mcp_dangerous_tool",
+        harness=artifact.harness,
+    )
+    if configured_risk_action is not None:
+        source = "policy"
+        if explicit_risk_action is None and config.mode == "prompt" and config.security_level == DEFAULT_SECURITY_LEVEL:
+            configured_risk_action = "review"
+            source = "risk-policy"
         return ToolCallDecision(
-            action="review",
-            source="heuristic",
+            action=configured_risk_action,
+            source=source,
             signals=signals,
             summary=tool_call_risk_summary(artifact, arguments),
             risk_categories=risk_categories,
         )
     return ToolCallDecision(
-        action="block",
+        action="review" if config.mode == "prompt" else "block",
         source="heuristic",
         signals=signals,
         summary=tool_call_risk_summary(artifact, arguments),
         risk_categories=risk_categories,
     )
+
+
+def _configured_risk_action(config: GuardConfig, risk_class: str, *, harness: str) -> GuardAction | None:
+    if config.harness_risk_actions is not None:
+        harness_actions = config.harness_risk_actions.get(harness)
+        if harness_actions is not None and risk_class in harness_actions:
+            return harness_actions[risk_class]
+    if config.risk_actions is not None and risk_class in config.risk_actions:
+        return config.risk_actions[risk_class]
+    return None
 
 
 def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:

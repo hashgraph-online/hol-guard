@@ -328,12 +328,27 @@ export type HomePrimaryState = {
   ctaLabel: string;
 };
 
+export function isSensitiveFileReadItem(item: GuardApprovalRequest): boolean {
+  return resolveQueueCategory(item).id === "secret_file_read";
+}
+
 export function isReadOnlyQueueGroup(group: QueueGroup): boolean {
-  return (
-    group.primary.policy_action !== "block" &&
-    (group.primary.action_envelope_json?.action_type === "file_read" ||
-      group.primary.artifact_type === "file_read_request")
-  );
+  if (group.primary.policy_action === "block") return false;
+  const isFileRead =
+    group.primary.action_envelope_json?.action_type === "file_read" ||
+    group.primary.artifact_type === "file_read_request";
+  if (!isFileRead) return false;
+  return !isSensitiveFileReadItem(group.primary);
+}
+
+export function countSensitiveFileReadGroups(groups: QueueGroup[]): number {
+  return groups.filter((g) => {
+    if (g.primary.policy_action === "block") return false;
+    const isFileRead =
+      g.primary.action_envelope_json?.action_type === "file_read" ||
+      g.primary.artifact_type === "file_read_request";
+    return isFileRead && isSensitiveFileReadItem(g.primary);
+  }).length;
 }
 
 export function bulkApproveActionCount(groups: QueueGroup[]): number {

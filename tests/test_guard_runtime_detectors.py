@@ -583,6 +583,54 @@ def test_guard_run_keeps_detector_results_after_blocked_resolver_reevaluation(tm
     assert result["approval_delivery"] == "queued"
 
 
+def test_detector_composition_can_block_unblocked_evaluation(tmp_path):
+    bypass_signal = RiskSignalV2(
+        signal_id="bypass:guard-uninstall",
+        category="bypass",
+        severity="high",
+        confidence="strong",
+        detector="guard.bypass",
+        title="Guard bypass attempt",
+        plain_reason="Detector found Guard bypass intent.",
+        technical_detail=None,
+        evidence_ref=None,
+        redaction_level="summary",
+        false_positive_hint=None,
+        advisory_id=None,
+    )
+    registry = DetectorRegistry(
+        (RecordingDetector("guard.bypass", ("bypass",), [], bypass_signal),),
+        clock=StepClock([0.0, 0.001]),
+    )
+    evaluation = {"blocked": False, "artifacts": [], "receipts_recorded": 0}
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        runtime_detector_registry=True,
+    )
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+
+    original_registry = guard_runner_module._DEFAULT_DETECTOR_REGISTRY
+    guard_runner_module._DEFAULT_DETECTOR_REGISTRY = (guard_runner_module.register_default_detectors, registry)
+    try:
+        result = guard_runner_module._evaluation_with_detector_registry(
+            evaluation,
+            _action(),
+            context,
+            config,
+        )
+    finally:
+        guard_runner_module._DEFAULT_DETECTOR_REGISTRY = original_registry
+
+    assert result["blocked"] is True
+    assert result["blocked_by_detector"] == "bypass signal 'guard.bypass' forces block"
+    assert result["runtime_detector_composition"]["action"] == "block"
+
+
 def test_guard_run_writes_detector_debug_trace_only_when_enabled(tmp_path, monkeypatch):
     calls: list[str] = []
     detector = RecordingDetector("secret.local", ("secret",), calls, _signal("secret:local", "secret"))

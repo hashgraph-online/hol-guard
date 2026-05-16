@@ -22,6 +22,7 @@ from .mcp_servers import (
     is_guard_proxy_command,
     managed_stdio_servers,
     proxy_cli_args,
+    proxy_process_env,
     skipped_stdio_server_names,
 )
 
@@ -742,7 +743,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
             "command": sys.executable,
             "args": args,
         }
-        env = merge_guard_launcher_env(getattr(server, "env", {}))
+        env = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
         if env:
             entry["env"] = env
         if target_path.name in {".mcp.json", "mcp-config.json"}:

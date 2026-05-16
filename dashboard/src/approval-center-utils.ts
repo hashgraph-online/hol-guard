@@ -530,6 +530,18 @@ export function formatRelativeTime(timestamp: string): string {
   }
 }
 
+export function resolveFileReadPath(item: GuardApprovalRequest): string | null {
+  const actionType = item.action_envelope_json?.action_type;
+  const isFileRead =
+    actionType === "file_read" ||
+    actionType === "file_write" ||
+    item.artifact_type === "file_read_request";
+  if (!isFileRead) return null;
+  const paths = item.action_envelope_json?.target_paths ?? [];
+  if (paths.length > 0) return paths[0];
+  return item.launch_target ?? null;
+}
+
 export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   const actionType = item.action_envelope_json?.action_type;
   if (actionType === "shell_command") return "Command";
