@@ -13976,7 +13976,7 @@ function resolveDecisionV2Detail(item) {
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
-    text: resolveStoppedCommandText(item),
+    text: resolvePrimaryReviewText(item),
     detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null
   };
 }
@@ -14001,6 +14001,36 @@ function resolveStoppedCommandText(item) {
     return item.launch_summary;
   }
   return item.artifact_name.trim() || item.artifact_id;
+}
+function resolvePrimaryReviewText(item) {
+  const baseText = resolveStoppedCommandText(item);
+  const envelope = item.action_envelope_json;
+  if (envelope?.action_type !== "mcp_tool") {
+    return baseText;
+  }
+  const inputSummary = serializeMcpInput(envelope.raw_payload_redacted);
+  if (inputSummary === null) {
+    return baseText;
+  }
+  return `${baseText}
+
+Input:
+${inputSummary}`;
+}
+function serializeMcpInput(payload) {
+  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
+  if (input === null || input === void 0) {
+    return null;
+  }
+  try {
+    const serialized = typeof input === "string" ? input : JSON.stringify(input, null, 2);
+    if (serialized === void 0 || serialized.trim().length === 0 || serialized === "{}") {
+      return null;
+    }
+    return serialized.length > 4e3 ? `${serialized.slice(0, 4e3)}...` : serialized;
+  } catch {
+    return null;
+  }
 }
 function harnessDisplayName(harness) {
   const normalized = normalizeHarnessSlug(harness);

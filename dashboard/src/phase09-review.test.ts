@@ -512,6 +512,31 @@ assert(
   "GR211-07: primary review card exposes shell command without opening technical details"
 );
 
+const PRIMARY_MCP_ACTION = buildPrimaryReviewAction({
+  ...BASE_REQUEST,
+  request_id: "ph09-primary-mcp",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "mcp_tool",
+    command: null,
+    mcp_server: "danger_lab",
+    mcp_tool: "dangerous_delete",
+    raw_payload_redacted: {
+      arguments: {
+        target: "dangerous-marker.json",
+      },
+    },
+  },
+});
+assert(
+  PRIMARY_MCP_ACTION.text.includes("danger_lab / dangerous_delete"),
+  "GR211-08: primary review card exposes MCP server and tool without opening technical details"
+);
+assert(
+  PRIMARY_MCP_ACTION.text.includes('"target": "dangerous-marker.json"'),
+  "GR211-09: primary review card exposes redacted MCP arguments without opening technical details"
+);
+
 const RESOLVED_ITEM: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "ph09-resolved",
