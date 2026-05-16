@@ -810,7 +810,7 @@ function StickyMobileActions(props: {
   const allowText = resolveAllowButtonText(props.submitting, props.isBlocked, props.allowLabel);
   const blockText = resolveBlockButtonText(props.submitting, props.isBlocked);
   return (
-    <div className="sticky bottom-0 z-20 -mx-6 border-t border-slate-200/70 bg-white/95 px-4 py-3 shadow-[0_-4px_16px_rgba(63,65,116,0.08)] backdrop-blur lg:hidden">
+    <div className="sticky bottom-0 z-20 -mx-4 border-t border-slate-200/70 bg-white/95 px-4 py-3 shadow-[0_-4px_16px_rgba(63,65,116,0.08)] backdrop-blur sm:-mx-6 sm:px-6 lg:hidden">
       <div className="grid grid-cols-2 gap-2">
         <ActionButton variant="success" onClick={props.onAllow} disabled={props.submitting !== null}>
           {allowText}
@@ -1472,7 +1472,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
-      <div className={`flex items-center gap-2 px-4 py-2.5 ${bannerBg}`}>
+      <div className={`flex flex-wrap items-center gap-2 px-4 py-2.5 ${bannerBg}`}>
         <BannerIcon className="h-3.5 w-3.5 shrink-0 text-white" aria-hidden="true" />
         <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
           {bannerLabel}
