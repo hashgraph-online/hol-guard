@@ -84,7 +84,7 @@ export function ShellHeader(props: {
           className="flex min-h-11 min-w-0 items-center gap-2.5 text-white no-underline transition-opacity duration-150 hover:opacity-85"
         >
           <img src="/brand/Logo_Icon_Dark.png" alt="HOL" className="h-9 w-9 shrink-0 rounded-none bg-transparent object-contain" />
-          <span className="font-mono text-base font-semibold tracking-tight text-white">HOL Guard</span>
+          <span className="font-mono text-base font-semibold tracking-tight text-white hidden sm:inline">HOL Guard</span>
         </a>
         <div className="min-w-0 flex-1">
           <select
@@ -554,7 +554,7 @@ function tagToneClass(tone: "blue" | "green" | "purple" | "slate" | "red" | "att
 
 function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success" | "quiet" | undefined): string {
   const base = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-w-0";
-  const sizeDefault = "min-h-11 h-auto px-4 py-2";
+  const sizeDefault = "min-h-11 h-auto px-3 py-1.5 sm:px-4 sm:py-2";
   if (variant === "outline") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "secondary") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "ghost") return `${base} ${sizeDefault} hover:bg-slate-100 hover:text-slate-900`;
