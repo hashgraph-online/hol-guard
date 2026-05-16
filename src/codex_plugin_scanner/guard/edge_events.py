@@ -6,7 +6,7 @@ import hashlib
 from typing import cast
 
 from .models import GuardReceipt
-from .schemas.guard_event_v1 import GuardEventType, GuardEventV1
+from .schemas.guard_event_v1 import HARNESS_USAGE_EVENT_TYPES, GuardEventType, GuardEventV1
 
 
 def build_receipt_event(
@@ -165,7 +165,7 @@ def build_harness_usage_event(
     device_id: str | None = None,
     workspace_id: str | None = None,
 ) -> GuardEventV1:
-    if event_type not in {"harness.mcp.used", "harness.skill.activated"}:
+    if event_type not in HARNESS_USAGE_EVENT_TYPES:
         raise ValueError("Harness usage event type must be harness.mcp.used or harness.skill.activated")
     return _build_edge_event(
         event_type=event_type,

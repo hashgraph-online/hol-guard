@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import sqlite3
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import PurePosixPath, PureWindowsPath
@@ -16,22 +17,24 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 UsageStatus = Literal["observed", "allowed", "blocked", "failed", "unknown"]
+HarnessUsageEventKind = Literal["harness.mcp.used", "harness.skill.activated"]
+HarnessUsageEventTuple = tuple[HarnessUsageEventKind, str, dict[str, object]]
 
-_SKILL_KEYS = frozenset(
+_SKILL_ACTIVATION_KEYS = frozenset(
     {
-        "skill",
-        "skillname",
-        "skillid",
-        "skilltitle",
         "activeskill",
+        "activeskillid",
+        "activeskillname",
+        "activeskillpath",
         "activatedskill",
+        "activatedskillid",
+        "activatedskillname",
         "skillpath",
-        "skilluri",
-        "skillurl",
     }
 )
 _REQUEST_ID_KEYS = ("request_id", "requestId", "tool_call_id", "toolCallId", "call_id", "callId")
 _SESSION_ID_KEYS = ("session_id", "sessionId", "conversation_id", "conversationId", "thread_id", "threadId")
+_MAX_SKILL_SEARCH_DEPTH = 6
 
 
 def record_harness_usage_events(
@@ -48,7 +51,7 @@ def record_harness_usage_events(
     events = _usage_events(action=action, raw_payload=raw_payload, occurred_at=occurred_at)
     if not events:
         return 0
-    with suppress(Exception):
+    try:
         device_id = store.get_or_create_installation_id()
         workspace_id = store.get_cloud_workspace_id()
         for event_type, subject_id, payload in events:
@@ -63,6 +66,13 @@ def record_harness_usage_events(
                 )
             )
         return len(events)
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        with suppress(OSError, RuntimeError, ValueError, sqlite3.Error):
+            store.add_event(
+                "harness_usage_event_failed",
+                {"error_type": type(error).__name__},
+                occurred_at,
+            )
     return 0
 
 
@@ -71,8 +81,8 @@ def _usage_events(
     action: GuardActionEnvelope,
     raw_payload: Mapping[str, object],
     occurred_at: str,
-) -> list[tuple[Literal["harness.mcp.used", "harness.skill.activated"], str, dict[str, object]]]:
-    events: list[tuple[Literal["harness.mcp.used", "harness.skill.activated"], str, dict[str, object]]] = []
+) -> list[HarnessUsageEventTuple]:
+    events: list[HarnessUsageEventTuple] = []
     request_id = _string_from_keys(raw_payload, _REQUEST_ID_KEYS)
     session_id = _string_from_keys(raw_payload, _SESSION_ID_KEYS)
     base_payload = {
@@ -162,16 +172,26 @@ def _skill_details(payload: Mapping[str, object]) -> dict[str, object] | None:
     return details or None
 
 
-def _find_skill_value(payload: Mapping[str, object]) -> tuple[str, object] | None:
+def _find_skill_value(payload: object, *, depth: int = 0) -> tuple[str, object] | None:
+    if depth > _MAX_SKILL_SEARCH_DEPTH:
+        return None
+    if isinstance(payload, list):
+        for item in payload:
+            nested = _find_skill_value(item, depth=depth + 1)
+            if nested is not None:
+                return nested
+        return None
+    if not isinstance(payload, Mapping):
+        return None
     for key, value in payload.items():
         if not isinstance(key, str):
             continue
-        if _normalized_key(key) in _SKILL_KEYS and isinstance(value, (str, Mapping)):
+        if _normalized_key(key) in _SKILL_ACTIVATION_KEYS and isinstance(value, (str, Mapping)):
             if isinstance(value, str) and not value.strip():
                 continue
             return key, value
-        if isinstance(value, Mapping):
-            nested = _find_skill_value(value)
+        if isinstance(value, (Mapping, list)):
+            nested = _find_skill_value(value, depth=depth + 1)
             if nested is not None:
                 return nested
     return None
@@ -208,7 +228,7 @@ def _path_hash(value: str | None) -> str | None:
 
 
 def _looks_like_path(value: str) -> bool:
-    return value.startswith(("~", "/", "file:")) or "\\" in value
+    return value.startswith(("~", "/", "file:")) or "/" in value or "\\" in value
 
 
 def _normalized_key(value: str) -> str:
