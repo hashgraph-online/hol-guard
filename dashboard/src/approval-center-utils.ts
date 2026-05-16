@@ -331,7 +331,7 @@ export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryRev
 }
 
 export function primaryReviewActionToggleLabel(isVisible: boolean): string {
-  return isVisible ? "Hide stopped action" : "Show stopped action";
+  return isVisible ? "Hide" : "Show";
 }
 
 export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
