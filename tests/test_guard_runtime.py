@@ -3050,6 +3050,198 @@ clearer UX and an implementation plan with technical references.
         assert receipts[0]["artifact_id"] == "claude-code:workspace-tools"
         assert receipts[0]["user_override"] is None
 
+    def test_guard_hook_records_mcp_usage_event(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="codex",
+            event={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "mcp__danger_lab__dangerous_delete",
+                "tool_input": {"target": "fixture.txt"},
+                "tool_call_id": "call-123",
+                "session_id": "session-123",
+                "policy_action": "allow",
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
+        payload = usage_events[0]["payload"]
+        usage_payload = payload["payload"]
+
+        assert rc == 0
+        assert usage_payload["harness"] == "codex"
+        assert usage_payload["eventName"] == "PostToolUse"
+        assert usage_payload["mcpServer"] == "danger_lab"
+        assert usage_payload["mcpTool"] == "dangerous_delete"
+        assert usage_payload["status"] == "allowed"
+        assert usage_payload["requestId"] == "call-123"
+        assert "target" not in json.dumps(usage_payload)
+
+    def test_guard_hook_records_blocked_mcp_usage_after_policy_decision(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="codex",
+            event={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "mcp__danger_lab__dangerous_delete",
+                "tool_input": {"target": "fixture.txt"},
+                "tool_call_id": "call-456",
+                "policy_action": "require-reapproval",
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
+        payload = usage_events[0]["payload"]
+        usage_payload = payload["payload"]
+
+        assert rc == 1
+        assert usage_payload["eventName"] == "PreToolUse"
+        assert usage_payload["status"] == "blocked"
+
+    def test_guard_hook_records_failed_mcp_usage_even_with_allow_policy(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="codex",
+            event={
+                "hook_event_name": "PostToolUseFailure",
+                "tool_name": "mcp__danger_lab__dangerous_delete",
+                "tool_input": {"target": "fixture.txt"},
+                "tool_call_id": "call-789",
+                "policy_action": "allow",
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
+        payload = usage_events[0]["payload"]
+        usage_payload = payload["payload"]
+
+        assert rc == 0
+        assert usage_payload["eventName"] == "PostToolUseFailure"
+        assert usage_payload["status"] == "failed"
+
+    def test_guard_hook_records_skill_activation_event(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="claude-code",
+            event={
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Use the project skill.",
+                "activated_skill": {
+                    "id": "project-review",
+                    "name": "Project Review",
+                    "source": "workspace",
+                    "path": str(workspace_dir / ".claude" / "skills" / "project-review" / "SKILL.md"),
+                },
+                "session_id": "session-456",
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.skill.activated"]
+        payload = usage_events[0]["payload"]
+        usage_payload = payload["payload"]
+
+        assert rc == 0
+        assert usage_payload["harness"] == "claude-code"
+        assert usage_payload["eventName"] == "UserPromptSubmit"
+        assert usage_payload["skillName"] == "Project Review"
+        assert usage_payload["skillId"] == "project-review"
+        assert usage_payload["skillSource"] == "workspace"
+        assert "skillPathHash" in usage_payload
+        assert str(workspace_dir) not in json.dumps(usage_payload)
+
+    def test_guard_hook_hashes_active_skill_path_activation(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="codex",
+            event={
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Use a project skill.",
+                "active_skill_path": ".codex/skills/project-review/SKILL.md",
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.skill.activated"]
+        payload = usage_events[0]["payload"]
+        usage_payload = payload["payload"]
+
+        assert rc == 0
+        assert str(usage_payload["skillId"]).startswith("path:")
+        assert "skillPathHash" in usage_payload
+        assert "SKILL.md" not in json.dumps(usage_payload)
+
+    def test_guard_hook_ignores_tool_argument_skill_path(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="codex",
+            event={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "node build-skill-index.js",
+                    "active_skill_path": ".codex/skills/project-review/SKILL.md",
+                },
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.skill.activated"]
+
+        assert rc == 0
+        assert usage_events == []
+
     def test_guard_hook_blocks_require_reapproval(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -6201,6 +6393,10 @@ def test_guard_hook_emits_copilot_permission_request_allow_for_safe_mcp_tool(
 
     assert rc == 0
     assert output == {"behavior": "allow"}
+    events = GuardStore(home_dir).list_guard_events_v1(uploaded=False)
+    usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
+    assert len(usage_events) == 1
+    assert usage_events[0]["payload"]["payload"]["status"] == "allowed"
 
 
 def test_guard_hook_emits_copilot_permission_request_allow_for_hook_event_name_variant(
@@ -6274,6 +6470,10 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     assert "HOL Guard blocked" in output["message"]
     assert "danger_lab:dangerous_delete" in output["message"]
     assert "http://127.0.0.1:4455/approvals/" in output["message"]
+    events = GuardStore(home_dir).list_guard_events_v1(uploaded=False)
+    usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
+    assert len(usage_events) == 1
+    assert usage_events[0]["payload"]["payload"]["status"] == "blocked"
 
 
 def test_guard_hook_emits_copilot_permission_request_deny_from_tool_calls_payload(
