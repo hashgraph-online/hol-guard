@@ -96,11 +96,14 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "uv sync --extra dev --extra cisco" in contributing
 
 
-def test_publish_workflow_builds_only_guard_and_scanner_packages() -> None:
+def test_publish_workflow_builds_only_guard_package() -> None:
     publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
 
     assert "Build Guard package (hol-guard)" in publish_workflow
-    assert "Build scanner package (plugin-scanner)" in publish_workflow
+    assert "Build scanner package (plugin-scanner)" not in publish_workflow
+    assert 'name = "plugin-scanner"' not in publish_workflow
+    assert "uv tool install plugin-scanner==" not in publish_workflow
+    assert 'uv tool install "plugin-scanner[cisco]==' not in publish_workflow
     assert "Build codex compatibility alias" not in publish_workflow
     assert 'name = "codex-plugin-scanner"' not in publish_workflow
     assert 'codex-plugin-scanner = "codex_plugin_scanner.cli:main"' not in publish_workflow
