@@ -142,11 +142,13 @@ def evaluate_tool_call(
         harness=artifact.harness,
     )
     if configured_risk_action is not None:
+        source = "policy"
         if explicit_risk_action is None and config.mode == "prompt" and config.security_level == DEFAULT_SECURITY_LEVEL:
             configured_risk_action = "review"
+            source = "risk-policy"
         return ToolCallDecision(
             action=configured_risk_action,
-            source="policy",
+            source=source,
             signals=signals,
             summary=tool_call_risk_summary(artifact, arguments),
             risk_categories=risk_categories,
