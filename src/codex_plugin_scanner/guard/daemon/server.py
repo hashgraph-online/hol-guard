@@ -1408,9 +1408,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
             bearer_token = authorization[7:].strip()
         candidates = [
-            candidate
-            for candidate in (session_token, bearer_token)
-            if isinstance(candidate, str) and candidate.strip()
+            candidate for candidate in (session_token, bearer_token) if isinstance(candidate, str) and candidate.strip()
         ]
         return any(self._dashboard_session_token_matches(candidate) for candidate in candidates)
 
