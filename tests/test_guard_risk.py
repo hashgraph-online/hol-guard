@@ -796,7 +796,7 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
         "bash",
         {
             "command": (
-                "cd /tmp/hol-guard-fixtures/hashgraph-online/ai-plugin-scanner && "
+                "cd hol-guard && "
                 "git add src/codex_plugin_scanner/guard/runtime/runner.py "
                 "src/codex_plugin_scanner/guard/runtime/__init__.py "
                 "src/codex_plugin_scanner/guard/cli/connect_flow.py && "

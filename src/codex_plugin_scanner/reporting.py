@@ -355,7 +355,7 @@ def format_sarif(result: ScanResult) -> str:
                 "tool": {
                     "driver": {
                         "name": "plugin-scanner",
-                        "informationUri": "https://github.com/hashgraph-online/ai-plugin-scanner",
+                        "informationUri": "https://github.com/hashgraph-online/hol-guard",
                         "version": __version__,
                         "rules": rules,
                     }

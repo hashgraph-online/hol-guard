@@ -5848,7 +5848,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_git_commit_with_coau
         "toolArgs": json.dumps(
             {
                 "command": (
-                    "cd /tmp/hol-guard-fixtures/hashgraph-online/ai-plugin-scanner && "
+                    f"cd {workspace_dir} && "
                     "git add src/codex_plugin_scanner/guard/runtime/runner.py "
                     "src/codex_plugin_scanner/guard/runtime/__init__.py "
                     "src/codex_plugin_scanner/guard/cli/connect_flow.py && "
@@ -13883,7 +13883,7 @@ def test_codex_read_only_source_inspection_rejects_git_include_if_hasconfig(
         workspace_dir / ".git" / "config",
         """
 [remote "origin"]
-    url = https://github.com/hashgraph-online/ai-plugin-scanner
+    url = https://github.com/hashgraph-online/hol-guard
 """.strip(),
     )
     global_config = tmp_path / "global-gitconfig"
@@ -13917,7 +13917,7 @@ def test_codex_read_only_source_inspection_rejects_git_include_if_hasconfig_nest
         remote_config,
         """
 [remote "origin"]
-    url = https://github.com/hashgraph-online/ai-plugin-scanner
+    url = https://github.com/hashgraph-online/hol-guard
 """.strip(),
     )
     workspace_dir = tmp_path / "workspace"

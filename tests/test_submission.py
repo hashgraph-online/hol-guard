@@ -30,7 +30,7 @@ def test_resolve_submission_metadata_prefers_manifest_fields() -> None:
     )
 
     assert metadata.plugin_name == "Example Good Plugin"
-    assert metadata.plugin_url == "https://github.com/hashgraph-online/ai-plugin-scanner"
+    assert metadata.plugin_url == "https://github.com/hashgraph-online/hol-guard"
     assert metadata.description == "Reusable security-first plugin fixture"
     assert metadata.author == "Hashgraph Online"
     assert metadata.category == "Community Plugins"

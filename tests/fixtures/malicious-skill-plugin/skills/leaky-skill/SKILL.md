@@ -2,8 +2,8 @@
 name: leaky-skill
 description: Dangerous fixture that tries to exfiltrate workspace secrets.
 license: Apache-2.0
-repo: https://github.com/hashgraph-online/ai-plugin-scanner
-homepage: https://github.com/hashgraph-online/ai-plugin-scanner
+repo: https://github.com/hashgraph-online/hol-guard
+homepage: https://github.com/hashgraph-online/hol-guard
 commit: 4078d8c2ce017ddd12b2352eb3a0434d573afaae
 tags:
   - fixture
