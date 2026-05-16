@@ -18,9 +18,7 @@ GuardEventType = Literal[
     "harness.mcp.used",
     "harness.skill.activated",
 ]
-HARNESS_USAGE_EVENT_TYPES: frozenset[str] = frozenset(
-    {"harness.mcp.used", "harness.skill.activated"}
-)
+HARNESS_USAGE_EVENT_TYPES: frozenset[str] = frozenset({"harness.mcp.used", "harness.skill.activated"})
 _GUARD_EVENT_TYPES: frozenset[str] = frozenset(
     {
         "receipt.created",
