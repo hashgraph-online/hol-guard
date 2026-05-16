@@ -1463,6 +1463,9 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
   const decisionDetail = resolveDecisionV2Detail(props.item);
   const [showCommand, setShowCommand] = useState(true);
   const [shareState, setShareState] = useState<"idle" | "copied" | "failed">("idle");
+  useEffect(() => {
+    setShowCommand(true);
+  }, [props.item.request_id]);
   const isBlocked = props.item.policy_action === "block";
   const bannerBg = isBlocked
     ? "bg-gradient-to-r from-brand-purple/90 to-brand-purple/75"

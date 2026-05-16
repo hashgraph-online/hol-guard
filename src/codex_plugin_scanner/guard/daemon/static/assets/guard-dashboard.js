@@ -20488,6 +20488,9 @@ function BlockedActionCard(props) {
   const decisionDetail = resolveDecisionV2Detail(props.item);
   const [showCommand, setShowCommand] = reactExports.useState(true);
   const [shareState, setShareState] = reactExports.useState("idle");
+  reactExports.useEffect(() => {
+    setShowCommand(true);
+  }, [props.item.request_id]);
   const isBlocked = props.item.policy_action === "block";
   const bannerBg = isBlocked ? "bg-gradient-to-r from-brand-purple/90 to-brand-purple/75" : "bg-gradient-to-r from-brand-blue/85 to-brand-dark/80";
   const bannerLabel = isBlocked ? "Blocked" : "Paused for review";
