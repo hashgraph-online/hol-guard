@@ -606,6 +606,17 @@ assert(
   "GR211-11: duplicate summary does not show empty evidence section for unrendered decision_v2 signals"
 );
 
+const DUPLICATE_SUMMARY_SUPPLY_CHAIN_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-duplicate-summary-supply-chain",
+  artifact_type: "package_request",
+  decision_v2_json: null,
+};
+assert(
+  hasReviewEvidence(DUPLICATE_SUMMARY_SUPPLY_CHAIN_REQUEST),
+  "GR211-12: duplicate summary still shows supply-chain fallback evidence for package artifacts"
+);
+
 const DISTINCT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-distinct-prompt-risk",
@@ -613,7 +624,7 @@ const DISTINCT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
 };
 assert(
   resolveSecondaryRiskSummary(DISTINCT_PROMPT_RISK_REQUEST) === "Prompt asks the harness to read a local .env file directly.",
-  "GR211-12: secondary risk summary keeps non-duplicate safety reason"
+  "GR211-13: secondary risk summary keeps non-duplicate safety reason"
 );
 
 const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
@@ -623,11 +634,11 @@ const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
 });
 assert(
   PRIMARY_COMMAND_ACTION.label === "Command",
-  "GR211-13: primary review card labels shell commands without opening technical details"
+  "GR211-14: primary review card labels shell commands without opening technical details"
 );
 assert(
   PRIMARY_COMMAND_ACTION.text === "git diff -- app/guard/_components/home.tsx",
-  "GR211-14: primary review card exposes shell command without opening technical details"
+  "GR211-15: primary review card exposes shell command without opening technical details"
 );
 
 const PRIMARY_MCP_ACTION = buildPrimaryReviewAction({

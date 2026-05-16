@@ -364,7 +364,16 @@ function hasRenderableDecisionEvidence(item: GuardApprovalRequest): boolean {
     deriveDataFlowEvidence(item) !== null ||
     deriveSkillRiskSignals(item).length > 0 ||
     deriveSupplyChainRiskSignals(item).length > 0 ||
-    deriveEncodedLayerSignals(item).length > 0
+    deriveEncodedLayerSignals(item).length > 0 ||
+    hasSupplyChainArtifactEvidence(item)
+  );
+}
+
+function hasSupplyChainArtifactEvidence(item: GuardApprovalRequest): boolean {
+  return (
+    item.artifact_type === "supply_chain" ||
+    item.artifact_type === "package_request" ||
+    (typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package"))
   );
 }
 

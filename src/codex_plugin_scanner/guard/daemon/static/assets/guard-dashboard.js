@@ -14001,7 +14001,10 @@ function hasReviewEvidence(item) {
 }
 function hasRenderableDecisionEvidence(item) {
   const signals = item.decision_v2_json?.signals ?? [];
-  return signals.some((signal) => signal.category === "skill" || signal.category === "mcp") || deriveDataFlowEvidence(item) !== null || deriveSkillRiskSignals(item).length > 0 || deriveSupplyChainRiskSignals(item).length > 0 || deriveEncodedLayerSignals(item).length > 0;
+  return signals.some((signal) => signal.category === "skill" || signal.category === "mcp") || deriveDataFlowEvidence(item) !== null || deriveSkillRiskSignals(item).length > 0 || deriveSupplyChainRiskSignals(item).length > 0 || deriveEncodedLayerSignals(item).length > 0 || hasSupplyChainArtifactEvidence(item);
+}
+function hasSupplyChainArtifactEvidence(item) {
+  return item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package");
 }
 function duplicatesStoppedActionText(item, value) {
   const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
