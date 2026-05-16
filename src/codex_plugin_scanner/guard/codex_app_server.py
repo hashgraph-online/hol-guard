@@ -17,6 +17,8 @@ from typing import Protocol
 class _OperationStore(Protocol):
     def list_guard_operations(self, session_id: str | None = None, limit: int = 100) -> list[dict[str, object]]: ...
 
+    def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object] | None: ...
+
 
 _DEFAULT_PROXY_TIMEOUT_SECONDS = 5.0
 _DEFAULT_SOCKET_PATH = Path.home() / ".codex" / "app-server-control" / "app-server-control.sock"
@@ -169,7 +171,10 @@ def resume_codex_thread_for_request(
 
 
 def _find_codex_operation_for_request(store: _OperationStore, request_id: str) -> dict[str, object] | None:
-    for operation in store.list_guard_operations(limit=200):
+    operation = store.get_guard_operation_for_approval_request(request_id)
+    if operation is not None and str(operation.get("harness")) == "codex":
+        return operation
+    for operation in store.list_guard_operations(limit=1000):
         if str(operation.get("harness")) != "codex":
             continue
         request_ids = operation.get("approval_request_ids")
@@ -200,11 +205,11 @@ def _send_app_server_websocket_messages(
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(timeout_seconds)
         client.connect(str(Path(socket_path).expanduser()))
-        _send_websocket_handshake(client)
+        pending = bytearray(_send_websocket_handshake(client))
         for payload in payloads:
             _send_websocket_text(client, json.dumps(payload, separators=(",", ":")))
         while True:
-            opcode, payload = _read_websocket_frame(client)
+            opcode, payload = _read_websocket_frame(client, pending)
             if opcode == 0x8:
                 return None
             if opcode == 0x9:
@@ -221,7 +226,7 @@ def _send_app_server_websocket_messages(
     return None
 
 
-def _send_websocket_handshake(client: socket.socket) -> None:
+def _send_websocket_handshake(client: socket.socket) -> bytes:
     key = base64.b64encode(os.urandom(16)).decode("ascii")
     request = (
         "GET / HTTP/1.1\r\n"
@@ -233,7 +238,7 @@ def _send_websocket_handshake(client: socket.socket) -> None:
         "\r\n"
     )
     client.sendall(request.encode("ascii"))
-    response = _recv_until(client, b"\r\n\r\n")
+    response, leftover = _recv_until(client, b"\r\n\r\n")
     header_text = response.decode("iso-8859-1", errors="replace")
     if not header_text.startswith("HTTP/1.1 101"):
         raise ValueError("websocket_upgrade_failed")
@@ -241,6 +246,7 @@ def _send_websocket_handshake(client: socket.socket) -> None:
     headers = _parse_http_headers(header_text)
     if headers.get("sec-websocket-accept") != expected_accept:
         raise ValueError("websocket_accept_mismatch")
+    return leftover
 
 
 def _send_websocket_text(client: socket.socket, text: str) -> None:
@@ -260,34 +266,39 @@ def _send_websocket_frame(client: socket.socket, opcode: int, payload: bytes) ->
     client.sendall(header + mask + masked)
 
 
-def _read_websocket_frame(client: socket.socket) -> tuple[int, bytes]:
-    header = _recv_exact(client, 2)
+def _read_websocket_frame(client: socket.socket, pending: bytearray) -> tuple[int, bytes]:
+    header = _recv_exact(client, 2, pending)
     first, second = header
     opcode = first & 0x0F
     length = second & 0x7F
     if length == 126:
-        length = struct.unpack("!H", _recv_exact(client, 2))[0]
+        length = struct.unpack("!H", _recv_exact(client, 2, pending))[0]
     elif length == 127:
-        length = struct.unpack("!Q", _recv_exact(client, 8))[0]
-    mask = _recv_exact(client, 4) if second & 0x80 else None
-    payload = _recv_exact(client, length) if length else b""
+        length = struct.unpack("!Q", _recv_exact(client, 8, pending))[0]
+    mask = _recv_exact(client, 4, pending) if second & 0x80 else None
+    payload = _recv_exact(client, length, pending) if length else b""
     if mask is not None:
         payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
     return opcode, payload
 
 
-def _recv_until(client: socket.socket, marker: bytes) -> bytes:
+def _recv_until(client: socket.socket, marker: bytes) -> tuple[bytes, bytes]:
     data = b""
     while marker not in data:
         chunk = client.recv(4096)
         if not chunk:
             raise TimeoutError("socket_closed")
         data += chunk
-    return data
+    boundary = data.index(marker) + len(marker)
+    return data[:boundary], data[boundary:]
 
 
-def _recv_exact(client: socket.socket, length: int) -> bytes:
+def _recv_exact(client: socket.socket, length: int, pending: bytearray) -> bytes:
     data = b""
+    if pending:
+        take = min(length, len(pending))
+        data += bytes(pending[:take])
+        del pending[:take]
     while len(data) < length:
         chunk = client.recv(length - len(data))
         if not chunk:
