@@ -330,6 +330,10 @@ export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryRev
   };
 }
 
+export function primaryReviewActionToggleLabel(isVisible: boolean): string {
+  return isVisible ? "Hide stopped action" : "Show stopped action";
+}
+
 export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
   if (item.action_envelope_json) {
     const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
