@@ -172,6 +172,7 @@ def test_headless_policy_sync_persists_policy_and_receipt(tmp_path: Path) -> Non
                         {
                             "scope": "harness",
                             "action": "review",
+                            "expires_at": "2099-01-01T00:00:00Z",
                             "reason": "Cloud policy memory",
                         }
                     ),
@@ -186,6 +187,7 @@ def test_headless_policy_sync_persists_policy_and_receipt(tmp_path: Path) -> Non
     decisions = store.list_policy_decisions(harness="codex")
     assert decisions[0]["scope"] == "harness"
     assert decisions[0]["action"] == "review"
+    assert decisions[0]["expires_at"] == "2099-01-01T00:00:00+00:00"
     assert store.list_receipts(limit=5, harness="codex")
 
 
@@ -294,6 +296,38 @@ def test_headless_policy_sync_requires_explicit_scope_and_action(tmp_path: Path)
 
     assert status == 400
     assert payload["error"] == "missing_policy_fields"
+    assert store.list_policy_decisions(harness="codex") == []
+
+
+def test_headless_policy_sync_rejects_malformed_expiry(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_memory": json.dumps(
+                        {
+                            "scope": "harness",
+                            "action": "review",
+                            "expires_at": "9",
+                        }
+                    ),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "invalid_policy_expiry"
     assert store.list_policy_decisions(harness="codex") == []
 
 

@@ -735,6 +735,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ):
             self._write_json({"error": "missing_scope_target"}, status=400)
             return
+        expires_at = _normalized_iso_timestamp_string(policy_memory.get("expires_at"))
+        if policy_memory.get("expires_at") is not None and expires_at is None:
+            self._write_json({"error": "invalid_policy_expiry"}, status=400)
+            return
         decision = PolicyDecision(
             harness=adapter.harness,
             scope=scope,  # type: ignore[arg-type]
@@ -745,7 +749,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             publisher=publisher,
             reason=self._optional_string(policy_memory.get("reason")) or "Guard Cloud policy memory sync",
             source="cloud-sync",
-            expires_at=self._optional_string(policy_memory.get("expires_at")),
+            expires_at=expires_at,
         )
         self.server.store.upsert_policy(decision, _now())  # type: ignore[attr-defined]
         receipt = self._record_headless_receipt(
@@ -2037,6 +2041,20 @@ def _parse_iso_timestamp(value: str) -> float:
 
     normalized = value.replace("Z", "+00:00")
     return datetime.fromisoformat(normalized).timestamp()
+
+
+def _normalized_iso_timestamp_string(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    from datetime import datetime, timezone
+
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _now() -> str:
