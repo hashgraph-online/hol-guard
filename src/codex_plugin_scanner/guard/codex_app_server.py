@@ -103,6 +103,7 @@ def resume_codex_thread_for_request(
     prompt = _continuation_prompt(action)
     request_payloads = [
         {
+            "jsonrpc": "2.0",
             "id": 1,
             "method": "initialize",
             "params": {
@@ -121,8 +122,9 @@ def resume_codex_thread_for_request(
                 },
             },
         },
-        {"method": "initialized", "params": {}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
         {
+            "jsonrpc": "2.0",
             "id": 2,
             "method": "turn/start",
             "params": {
