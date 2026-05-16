@@ -521,11 +521,8 @@ function normalizeCodexResume(raw: unknown): GuardCodexResumeResult | null {
   const status = raw["status"];
   const reason = raw["reason"];
   const threadId = raw["thread_id"];
-  if (
-    (status !== "sent" && status !== "skipped" && status !== "failed") ||
-    typeof reason !== "string" ||
-    typeof threadId !== "string"
-  ) {
+  const isKnownStatus = status === "sent" || status === "skipped" || status === "failed";
+  if (!isKnownStatus || typeof reason !== "string" || typeof threadId !== "string") {
     return null;
   }
   return { status, reason, thread_id: threadId };
