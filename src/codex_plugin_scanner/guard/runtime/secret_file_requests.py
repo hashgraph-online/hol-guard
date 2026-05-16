@@ -103,6 +103,7 @@ _READ_ONLY_LOOKUP_COMMANDS = frozenset(
     {"cat", "fd", "find", "grep", "egrep", "fgrep", "head", "ls", "rg", "sed", "tail"}
 )
 _READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", "tail"})
+_FIND_EXEC_PLACEHOLDER_TARGET = "guard-find-placeholder.py"
 _NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
 _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
     {
@@ -3447,16 +3448,24 @@ def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
             if index + 1 >= len(args):
                 return True
             command_name = Path(args[index + 1]).name.lower()
-            if command_name not in {"echo", "printf", "true", "false", "test", "["}:
+            exec_args: list[str] = []
+            exec_index = index + 2
+            while exec_index < len(args) and args[exec_index] not in {";", r"\;", "+"}:
+                exec_args.append(args[exec_index])
+                exec_index += 1
+            is_safe_builtin = command_name in {"echo", "printf", "true", "false", "test", "["}
+            is_read_only_sed = command_name == "sed" and _find_exec_sed_args_are_read_only(exec_args)
+            if not is_safe_builtin and not is_read_only_sed:
                 return True
-            index += 2
-            while index < len(args) and args[index] not in {";", r"\;", "+"}:
-                index += 1
-            if index < len(args):
-                index += 1
+            index = exec_index + 1 if exec_index < len(args) else exec_index
             continue
         index += 1
     return False
+
+
+def _find_exec_sed_args_are_read_only(args: list[str]) -> bool:
+    normalized_args = [_FIND_EXEC_PLACEHOLDER_TARGET if arg == "{}" else arg for arg in args]
+    return _read_only_lookup_sed_args_are_safe(normalized_args, require_target=True)
 
 
 def _contains_destructive_node_inline_script(script: str) -> bool:
