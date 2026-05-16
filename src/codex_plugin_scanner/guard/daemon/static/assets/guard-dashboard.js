@@ -13055,7 +13055,8 @@ function normalizeCodexResume(raw) {
   const status = raw["status"];
   const reason = raw["reason"];
   const threadId = raw["thread_id"];
-  if (status !== "sent" && status !== "skipped" && status !== "failed" || typeof reason !== "string" || typeof threadId !== "string") {
+  const isKnownStatus = status === "sent" || status === "skipped" || status === "failed";
+  if (!isKnownStatus || typeof reason !== "string" || typeof threadId !== "string") {
     return null;
   }
   return { status, reason, thread_id: threadId };
@@ -21183,8 +21184,7 @@ function App() {
         setResolutionMessage(null);
         navigate(`/requests/${nextId}`);
       } else {
-        const fallbackMessage = result.codex_resume?.status === "sent" ? "Decision saved. HOL Guard sent Codex a continue prompt in the original thread." : "Decision saved. Return to your chat and retry the command.";
-        setResolutionMessage(result.resolution_summary || fallbackMessage);
+        setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
         navigate("/inbox");
       }
       await refreshStateAfterAction();
