@@ -306,20 +306,22 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     managed_hook_installed = (
         pre_tool_hook_installed and permission_hook_installed and prompt_hook_installed and post_tool_hook_installed
     )
+    hooks_feature_enabled = isinstance(features, dict) and features.get("hooks") is True
+    legacy_codex_hooks_enabled = isinstance(features, dict) and features.get("codex_hooks") is True
     return {
         "config_path": str(config_path),
         "config_present": config_path.is_file(),
         "hooks_path": str(hooks_path),
         "hooks_present": hooks_path.is_file(),
-        "codex_hooks_enabled": isinstance(features, dict) and features.get("codex_hooks") is True,
+        "hooks_enabled": hooks_feature_enabled,
+        "codex_hooks_enabled": hooks_feature_enabled,
+        "legacy_codex_hooks_enabled": legacy_codex_hooks_enabled,
         "managed_pre_tool_hook_installed": pre_tool_hook_installed,
         "managed_permission_request_hook_installed": permission_hook_installed,
         "managed_prompt_hook_installed": prompt_hook_installed,
         "managed_post_tool_hook_installed": post_tool_hook_installed,
         "managed_hook_installed": managed_hook_installed,
-        "protection_active": isinstance(features, dict)
-        and features.get("codex_hooks") is True
-        and managed_hook_installed,
+        "protection_active": hooks_feature_enabled and managed_hook_installed,
     }
 
 
@@ -473,7 +475,8 @@ class CodexHarnessAdapter(HarnessAdapter):
         features = payload.get("features")
         if not isinstance(features, dict):
             features = {}
-        features["codex_hooks"] = True
+        features.pop("codex_hooks", None)
+        features["hooks"] = True
         payload["features"] = features
         existing_workspace_server_names = {
             name for name, value in mcp_servers.items() if isinstance(name, str) and isinstance(value, dict)

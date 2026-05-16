@@ -220,7 +220,7 @@ def test_codex_doctor_marks_partial_native_hook_install_as_broken(tmp_path: Path
     config_path = context.workspace_dir / ".codex" / "config.toml"
     hooks_path = context.workspace_dir / ".codex" / "hooks.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
+    config_path.write_text("[features]\nhooks = true\n", encoding="utf-8")
     hooks_path.write_text(
         json.dumps(
             {
