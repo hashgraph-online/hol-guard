@@ -9,28 +9,29 @@ export const REVIEW_SEMANTIC_GROUPS: { id: SemanticGroupId; label: string; match
   { id: "all", label: "All", matches: [] },
   {
     id: "files",
-    label: "Files",
+    label: "File read / write",
     matches: ["file_read", "source_edit", "docs_edit", "generated_inventory_edit"],
   },
   {
     id: "shell",
-    label: "Shell",
+    label: "Shell execution",
     matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control"],
   },
   {
     id: "network",
-    label: "Network & Data",
+    label: "Network / data egress",
     matches: ["network", "secret_exfiltration", "secret_file_read", "credential_output", "file_upload"],
   },
   {
     id: "tools",
-    label: "Tools & Apps",
-    matches: ["mcp_tool", "package_script", "harness_start", "browser_action", "package_install"],
+    label: "MCP, skill & packages",
+    matches: ["mcp_tool", "package_script", "browser_action", "package_install"],
   },
   {
     id: "other",
-    label: "Other",
+    label: "Agent autonomy & other",
     matches: [
+      "harness_start",
       "prompt_injection",
       "system_prompt_access",
       "guard_bypass",
@@ -81,15 +82,15 @@ export type QueueCategory = {
 export const QUEUE_CATEGORIES: QueueCategory[] = [
   {
     id: "credential_output",
-    label: "Credential-looking output",
-    shortLabel: "Credential output",
-    description: "Command output appears to expose tokens, keys, passwords, or secret-looking values.",
+    label: "Secret-looking output",
+    shortLabel: "Secret output",
+    description: "Command output contains patterns that resemble tokens, keys, passwords, or other secret-looking values. Review before allowing if this output will leave the local machine.",
   },
   {
     id: "secret_file_read",
-    label: "Secret file read",
+    label: "Secret file access",
     shortLabel: "Secret read",
-    description: "Reads local credential stores, environment files, tokens, keys, or other secret paths.",
+    description: "Reads paths known to store secrets: env files, credential stores, token files, SSH keys, or cloud config. Normal source reads are classified as file read instead.",
   },
   {
     id: "file_read",
@@ -225,9 +226,9 @@ export const QUEUE_CATEGORIES: QueueCategory[] = [
   },
   {
     id: "harness_start",
-    label: "Harness launch",
-    shortLabel: "Launch",
-    description: "Starts or reconnects an AI app under Guard control.",
+    label: "Agent launch",
+    shortLabel: "Agent launch",
+    description: "Starts or reconnects an AI agent or harness under Guard control. Review when unexpected autonomy or a new session begins.",
   },
   {
     id: "shell_command",

@@ -14172,9 +14172,9 @@ function ShellHeader(props) {
 }
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
-  { href: "/inbox", label: "Review", view: "inbox", icon: HiMiniInbox },
-  { href: "/fleet", label: "Apps", view: "fleet", icon: HiMiniServerStack },
-  { href: "/evidence", label: "History", view: "evidence", icon: HiMiniDocumentText },
+  { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
+  { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
+  { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
 ];
 function ShellSidebar(props) {
@@ -14207,7 +14207,7 @@ function ShellSidebar(props) {
       )
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-1 flex-col overflow-y-auto px-3 py-5", children: [
-      !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: "Dashboard" }),
+      !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: "Guard" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "flex flex-col gap-0.5", "aria-label": "Guard dashboard", children: sidebarLinks.map((item) => {
         const Icon = item.icon;
         return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -14421,7 +14421,7 @@ function WelcomeState(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, children: "Open pairing flow" }),
           props.dashboardUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.dashboardUrl, variant: "outline", children: "Open Home" }) : null,
           props.inboxUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.inboxUrl, variant: "outline", children: "Review Queue" }) : null,
-          props.fleetUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.fleetUrl, variant: "outline", children: "Watched Apps" }) : null
+          props.fleetUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.fleetUrl, variant: "outline", children: "Protect" }) : null
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 rounded-lg bg-surface-1 px-5 py-3 font-mono text-sm", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-muted-foreground", children: "$" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark", children: "hol-guard connect" })
@@ -17581,28 +17581,29 @@ const REVIEW_SEMANTIC_GROUPS = [
   { id: "all", label: "All", matches: [] },
   {
     id: "files",
-    label: "Files",
+    label: "File read / write",
     matches: ["file_read", "source_edit", "docs_edit", "generated_inventory_edit"]
   },
   {
     id: "shell",
-    label: "Shell",
+    label: "Shell execution",
     matches: ["shell_command", "destructive_shell", "encoded_shell", "git_operation", "process_control"]
   },
   {
     id: "network",
-    label: "Network & Data",
+    label: "Network / data egress",
     matches: ["network", "secret_exfiltration", "secret_file_read", "credential_output", "file_upload"]
   },
   {
     id: "tools",
-    label: "Tools & Apps",
-    matches: ["mcp_tool", "package_script", "harness_start", "browser_action", "package_install"]
+    label: "MCP, skill & packages",
+    matches: ["mcp_tool", "package_script", "browser_action", "package_install"]
   },
   {
     id: "other",
-    label: "Other",
+    label: "Agent autonomy & other",
     matches: [
+      "harness_start",
       "prompt_injection",
       "system_prompt_access",
       "guard_bypass",
@@ -17616,15 +17617,15 @@ const REVIEW_SEMANTIC_GROUPS = [
 const QUEUE_CATEGORIES = [
   {
     id: "credential_output",
-    label: "Credential-looking output",
-    shortLabel: "Credential output",
-    description: "Command output appears to expose tokens, keys, passwords, or secret-looking values."
+    label: "Secret-looking output",
+    shortLabel: "Secret output",
+    description: "Command output contains patterns that resemble tokens, keys, passwords, or other secret-looking values. Review before allowing if this output will leave the local machine."
   },
   {
     id: "secret_file_read",
-    label: "Secret file read",
+    label: "Secret file access",
     shortLabel: "Secret read",
-    description: "Reads local credential stores, environment files, tokens, keys, or other secret paths."
+    description: "Reads paths known to store secrets: env files, credential stores, token files, SSH keys, or cloud config. Normal source reads are classified as file read instead."
   },
   {
     id: "file_read",
@@ -17760,9 +17761,9 @@ const QUEUE_CATEGORIES = [
   },
   {
     id: "harness_start",
-    label: "Harness launch",
-    shortLabel: "Launch",
-    description: "Starts or reconnects an AI app under Guard control."
+    label: "Agent launch",
+    shortLabel: "Agent launch",
+    description: "Starts or reconnects an AI agent or harness under Guard control. Review when unexpected autonomy or a new session begins."
   },
   {
     id: "shell_command",
@@ -21180,7 +21181,7 @@ function App() {
         children: "Skip to content"
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Review" : view === "fleet" ? "Apps" : view === "evidence" ? "History" : view === "settings" ? "Settings" : "App detail" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : "App detail" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalCenterLayout,
       {

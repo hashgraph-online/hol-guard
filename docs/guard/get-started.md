@@ -99,6 +99,18 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | I need an exportable evidence artifact | `hol-guard abom` | What local AI-BOM can I attach to an audit or handoff? |
 | I need the chronological log | `hol-guard events` | What happened over time on this machine? |
 
+## One continuity model
+
+Guard uses the same product loop across the local daemon, the CLI, and Guard Cloud:
+
+1. **Home** answers whether this machine is protected right now. `hol-guard status` and the local Home view show the same next action, latest proof, and cloud sync state.
+2. **Protect** owns install, repair, remove, status, and first protected action proof. The daemon handles these actions directly when available; the CLI commands stay visible as a fallback when the daemon is offline, unsupported, or missing a local session token.
+3. **Inbox** owns decisions that need judgment. Local approvals use the same categories and policy memory scopes that cloud review uses, so a scoped decision can be synced without changing meaning.
+4. **Evidence** owns durable proof. Receipts from daemon actions, CLI actions, and cloud sync use the same local store before any optional upload.
+5. **Settings** owns policy. Local config remains the source of truth for offline protection, while cloud sync can distribute shared policy memory when you connect a workspace.
+
+The important handoff is that local protection does not depend on Guard Cloud being online. Cloud adds shared history and team policy, but the daemon and CLI still block risky actions, write receipts, and preserve approval continuity on this machine.
+
 ## Troubleshooting
 
 | Symptom | Start here | Then try |
