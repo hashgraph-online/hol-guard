@@ -23,6 +23,7 @@ import {
   deriveDataFlowEvidence,
   formatRelativeTime,
   harnessDisplayName,
+  primaryReviewActionToggleLabel,
   resolveStoppedCommandText,
 } from "./approval-center-utils";
 import {
@@ -464,10 +465,13 @@ assert(
   "GR210-06: groupDuplicates exposes all collapsed duplicate IDs for expand functionality"
 );
 
-const SHOW_TECHNICAL_DEFAULT = false;
 assert(
-  SHOW_TECHNICAL_DEFAULT === false,
-  "GR211-01: showTechnical default value is false (technical details hidden by default)"
+  primaryReviewActionToggleLabel(true) === "Hide stopped action",
+  "GR211-01: primary review card can hide the stopped prompt or command"
+);
+assert(
+  primaryReviewActionToggleLabel(false) === "Show stopped action",
+  "GR211-02: primary review card can restore the stopped prompt or command"
 );
 
 const PRIMARY_PROMPT_ACTION = buildPrimaryReviewAction({
@@ -483,15 +487,15 @@ const PRIMARY_PROMPT_ACTION = buildPrimaryReviewAction({
 });
 assert(
   PRIMARY_PROMPT_ACTION.label === "Prompt excerpt",
-  "GR211-02: primary review card labels prompt requests without opening technical details"
+  "GR211-03: primary review card labels prompt requests without opening technical details"
 );
 assert(
   PRIMARY_PROMPT_ACTION.text === "Open the private setup guide and paste the secret.",
-  "GR211-03: primary review card exposes prompt text without opening technical details"
+  "GR211-04: primary review card exposes prompt text without opening technical details"
 );
 assert(
   PRIMARY_PROMPT_ACTION.detail === "Codex prompt was paused before the next tool call.",
-  "GR211-04: primary review card includes user-facing detail without opening technical details"
+  "GR211-05: primary review card includes user-facing detail without opening technical details"
 );
 
 const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
@@ -501,11 +505,36 @@ const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
 });
 assert(
   PRIMARY_COMMAND_ACTION.label === "Command",
-  "GR211-05: primary review card labels shell commands without opening technical details"
+  "GR211-06: primary review card labels shell commands without opening technical details"
 );
 assert(
   PRIMARY_COMMAND_ACTION.text === "git diff -- app/guard/_components/home.tsx",
-  "GR211-06: primary review card exposes shell command without opening technical details"
+  "GR211-07: primary review card exposes shell command without opening technical details"
+);
+
+const PRIMARY_MCP_ACTION = buildPrimaryReviewAction({
+  ...BASE_REQUEST,
+  request_id: "ph09-primary-mcp",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "mcp_tool",
+    command: null,
+    mcp_server: "danger_lab",
+    mcp_tool: "dangerous_delete",
+    raw_payload_redacted: {
+      arguments: {
+        target: "dangerous-marker.json",
+      },
+    },
+  },
+});
+assert(
+  PRIMARY_MCP_ACTION.text.includes("danger_lab / dangerous_delete"),
+  "GR211-08: primary review card exposes MCP server and tool without opening technical details"
+);
+assert(
+  PRIMARY_MCP_ACTION.text.includes('"target": "dangerous-marker.json"'),
+  "GR211-09: primary review card exposes redacted MCP arguments without opening technical details"
 );
 
 const RESOLVED_ITEM: GuardApprovalRequest = {

@@ -13976,9 +13976,12 @@ function resolveDecisionV2Detail(item) {
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
-    text: resolveStoppedCommandText(item),
+    text: resolvePrimaryReviewText(item),
     detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null
   };
+}
+function primaryReviewActionToggleLabel(isVisible) {
+  return isVisible ? "Hide stopped action" : "Show stopped action";
 }
 function resolveStoppedCommandText(item) {
   if (item.action_envelope_json) {
@@ -13998,6 +14001,36 @@ function resolveStoppedCommandText(item) {
     return item.launch_summary;
   }
   return item.artifact_name.trim() || item.artifact_id;
+}
+function resolvePrimaryReviewText(item) {
+  const baseText = resolveStoppedCommandText(item);
+  const envelope = item.action_envelope_json;
+  if (envelope?.action_type !== "mcp_tool") {
+    return baseText;
+  }
+  const inputSummary = serializeMcpInput(envelope.raw_payload_redacted);
+  if (inputSummary === null) {
+    return baseText;
+  }
+  return `${baseText}
+
+Input:
+${inputSummary}`;
+}
+function serializeMcpInput(payload) {
+  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
+  if (input === null || input === void 0) {
+    return null;
+  }
+  try {
+    const serialized = typeof input === "string" ? input : JSON.stringify(input, null, 2);
+    if (serialized === void 0 || serialized.trim().length === 0 || serialized === "{}") {
+      return null;
+    }
+    return serialized.length > 4e3 ? `${serialized.slice(0, 4e3)}...` : serialized;
+  } catch {
+    return null;
+  }
 }
 function harnessDisplayName(harness) {
   const normalized = normalizeHarnessSlug(harness);
@@ -18800,7 +18833,6 @@ function ReviewDecisionCard(props) {
   const [resolved, setResolved] = reactExports.useState(null);
   const [showConsequences, setShowConsequences] = reactExports.useState(false);
   const [showEvidence, setShowEvidence] = reactExports.useState(false);
-  const [showTechnical, setShowTechnical] = reactExports.useState(false);
   const [lastAction, setLastAction] = reactExports.useState(null);
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
   const timerRef = reactExports.useRef(null);
@@ -18892,9 +18924,6 @@ function ReviewDecisionCard(props) {
   const handleBlock = reactExports.useCallback(() => {
     handleRequestResolve("block");
   }, [handleRequestResolve]);
-  const handleToggleTechnical = reactExports.useCallback(() => {
-    setShowTechnical((visible) => !visible);
-  }, []);
   const handleToggleConsequences = reactExports.useCallback(() => {
     setShowConsequences((visible) => !visible);
   }, []);
@@ -18959,22 +18988,6 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: item.risk_summary })
       ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            type: "button",
-            onClick: handleToggleTechnical,
-            className: "flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-brand-dark transition-colors",
-            "aria-expanded": showTechnical,
-            children: [
-              showTechnical ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-              showTechnical ? "Hide technical details" : "Show technical details"
-            ]
-          }
-        ),
-        showTechnical && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionContentCard, { item })
-      ] }),
       whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
@@ -19199,6 +19212,13 @@ function ReviewEmptyState({ runtime, resolutionMessage }) {
 }
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
+  const [isVisible, setIsVisible] = reactExports.useState(true);
+  reactExports.useEffect(() => {
+    setIsVisible(true);
+  }, [item.request_id]);
+  const handleToggleVisibility = reactExports.useCallback(() => {
+    setIsVisible((visible) => !visible);
+  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -19213,55 +19233,24 @@ function PrimaryActionCard({ item }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-blue" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-green" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45", children: action.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: action.text }) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[36vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]", children: action.text })
-    ] })
-  ] });
-}
-function ActionContentCard({ item }) {
-  const launchText = resolveStoppedCommandText(item);
-  const detailText = resolveDecisionV2Detail(item);
-  const pauseReason = buildPauseLine(item);
-  const envelope = item.action_envelope_json;
-  const isMcpTool = envelope?.action_type === "mcp_tool";
-  const mcpServer = isMcpTool ? envelope?.mcp_server ?? null : null;
-  const mcpTool = isMcpTool ? envelope?.mcp_tool ?? null : null;
-  const mcpInputSummary = isMcpTool && envelope !== null && envelope.raw_payload_redacted ? (() => {
-    const inputs = envelope.raw_payload_redacted.arguments ?? envelope.raw_payload_redacted.input ?? envelope.raw_payload_redacted.params ?? null;
-    if (inputs === null) return null;
-    try {
-      const serialized = JSON.stringify(inputs);
-      if (serialized.length <= 2) return null;
-      return serialized.length > 140 ? `${serialized.slice(0, 140)}...` : serialized;
-    } catch {
-      return null;
-    }
-  })() : null;
-  const terminalLabel = resolveTerminalLabel(item);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
-    isMcpTool && mcpServer !== null && mcpTool !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-blue", children: "MCP" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-sm font-medium text-brand-dark", children: [
-          mcpServer,
-          " → ",
-          mcpTool
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto flex items-center gap-2", children: [
+          isVisible && /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: action.text }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: handleToggleVisibility,
+              className: "inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors hover:bg-white/20 hover:text-white",
+              "aria-expanded": isVisible,
+              children: [
+                isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" }),
+                primaryReviewActionToggleLabel(isVisible)
+              ]
+            }
+          )
         ] })
       ] }),
-      mcpInputSummary !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 truncate font-mono text-xs text-brand-dark/60", children: mcpInputSummary })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: pauseReason }),
-    detailText && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: detailText }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl bg-[#0f172a]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 border-b border-white/10 px-3 py-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-purple" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-blue" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-green" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45", children: terminalLabel }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: launchText }) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]", children: launchText })
+      isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[36vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]", children: action.text }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-4 text-sm text-white/65", children: "Stopped action hidden. Show it before approving if you need to re-check the exact request." })
     ] })
   ] });
 }

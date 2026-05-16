@@ -905,10 +905,6 @@
     max-height: 36vh;
   }
 
-  .max-h-\[50vh\] {
-    max-height: 50vh;
-  }
-
   .min-h-8 {
     min-height: calc(var(--spacing) * 8);
   }
@@ -3246,6 +3242,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .text-white\/60 {
       color: color-mix(in oklab, var(--color-white) 60%, transparent);
+    }
+  }
+
+  .text-white\/65 {
+    color: #ffffffa6;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-white\/65 {
+      color: color-mix(in oklab, var(--color-white) 65%, transparent);
     }
   }
 

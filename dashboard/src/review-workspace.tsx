@@ -37,13 +37,10 @@ import {
 import {
   buildRetryAfterApprovalCopy,
   buildPrimaryReviewAction,
+  primaryReviewActionToggleLabel,
   harnessDisplayName,
-  resolveStoppedCommandText,
-  resolveTerminalLabel,
-  resolveDecisionV2Detail,
   resolveDecisionV2Title,
   displayArtifactName,
-  buildPauseLine,
   resolveEnvelopeDisplayText,
   formatRelativeTime,
 } from "./approval-center-utils";
@@ -683,7 +680,6 @@ function ReviewDecisionCard(props: {
   const [resolved, setResolved] = useState<"allow" | "block" | null>(null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
-  const [showTechnical, setShowTechnical] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -781,9 +777,6 @@ function ReviewDecisionCard(props: {
   const handleBlock = useCallback(() => {
     handleRequestResolve("block");
   }, [handleRequestResolve]);
-  const handleToggleTechnical = useCallback(() => {
-    setShowTechnical((visible) => !visible);
-  }, []);
   const handleToggleConsequences = useCallback(() => {
     setShowConsequences((visible) => !visible);
   }, []);
@@ -863,23 +856,6 @@ function ReviewDecisionCard(props: {
             </div>
           </div>
         )}
-
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={handleToggleTechnical}
-            className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-brand-dark transition-colors"
-            aria-expanded={showTechnical}
-          >
-            {showTechnical ? (
-              <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-            ) : (
-              <HiMiniChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            {showTechnical ? "Hide technical details" : "Show technical details"}
-          </button>
-          {showTechnical && <ActionContentCard item={item} />}
-        </div>
 
         {whatWouldHappen && (
           <div className="mt-5">
@@ -1173,6 +1149,13 @@ function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntim
 
 function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
+  const [isVisible, setIsVisible] = useState(true);
+  useEffect(() => {
+    setIsVisible(true);
+  }, [item.request_id]);
+  const handleToggleVisibility = useCallback(() => {
+    setIsVisible((visible) => !visible);
+  }, []);
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1197,86 +1180,32 @@ function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
           <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45">
             {action.label}
           </span>
-          <span className="ml-auto">
-            <CopyButton text={action.text} />
+          <span className="ml-auto flex items-center gap-2">
+            {isVisible && <CopyButton text={action.text} />}
+            <button
+              type="button"
+              onClick={handleToggleVisibility}
+              className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+              aria-expanded={isVisible}
+            >
+              {isVisible ? (
+                <HiMiniChevronUp className="h-3 w-3" aria-hidden="true" />
+              ) : (
+                <HiMiniChevronDown className="h-3 w-3" aria-hidden="true" />
+              )}
+              {primaryReviewActionToggleLabel(isVisible)}
+            </button>
           </span>
         </div>
-        <pre className="max-h-[36vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]">
-          {action.text}
-        </pre>
-      </div>
-    </div>
-  );
-}
-
-function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
-  const launchText = resolveStoppedCommandText(item);
-  const detailText = resolveDecisionV2Detail(item);
-  const pauseReason = buildPauseLine(item);
-  const envelope = item.action_envelope_json;
-  const isMcpTool = envelope?.action_type === "mcp_tool";
-  const mcpServer = isMcpTool ? (envelope?.mcp_server ?? null) : null;
-  const mcpTool = isMcpTool ? (envelope?.mcp_tool ?? null) : null;
-  const mcpInputSummary =
-    isMcpTool && envelope !== null && envelope.raw_payload_redacted
-      ? (() => {
-          const inputs = envelope.raw_payload_redacted.arguments ?? envelope.raw_payload_redacted.input ?? envelope.raw_payload_redacted.params ?? null;
-          if (inputs === null) return null;
-          try {
-            const serialized = JSON.stringify(inputs);
-            if (serialized.length <= 2) return null;
-            return serialized.length > 140 ? `${serialized.slice(0, 140)}...` : serialized;
-          } catch {
-            return null;
-          }
-        })()
-      : null;
-  const terminalLabel = resolveTerminalLabel(item);
-
-  return (
-    <div className="mt-5 space-y-3">
-      {isMcpTool && mcpServer !== null && mcpTool !== null && (
-        <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-blue">
-              MCP
-            </span>
-            <span className="font-mono text-sm font-medium text-brand-dark">
-              {mcpServer} → {mcpTool}
-            </span>
+        {isVisible ? (
+          <pre className="max-h-[36vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]">
+            {action.text}
+          </pre>
+        ) : (
+          <div className="px-3 py-4 text-sm text-white/65">
+            Stopped action hidden. Show it before approving if you need to re-check the exact request.
           </div>
-          {mcpInputSummary !== null && (
-            <p className="mt-1 truncate font-mono text-xs text-brand-dark/60">
-              {mcpInputSummary}
-            </p>
-          )}
-        </div>
-      )}
-
-      <p className="text-sm leading-relaxed text-brand-dark/80">
-        {pauseReason}
-      </p>
-      {detailText && (
-        <p className="text-sm leading-relaxed text-brand-dark/80">
-          {detailText}
-        </p>
-      )}
-
-      <div className="overflow-hidden rounded-xl bg-[#0f172a]">
-        <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
-          <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45">
-            {terminalLabel}
-          </span>
-          <span className="ml-auto">
-            <CopyButton text={launchText} />
-          </span>
-        </div>
-        <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]">
-          {launchText}
-        </pre>
+        )}
       </div>
     </div>
   );
