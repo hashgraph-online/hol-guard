@@ -3853,7 +3853,8 @@ args = ["-lc", "echo hi"]
         assert output["status"] == "current"
         assert output["managed_install"]["harness"] == "codex"
         assert output["managed_install"]["active"] is True
-        assert "codex_hooks = true" in config_text
+        assert "hooks = true" in config_text
+        assert "codex_hooks" not in config_text
         assert hooks_payload["hooks"]["PreToolUse"]
 
     def test_guard_update_repairs_missing_codex_config_for_managed_install(self, tmp_path, monkeypatch, capsys):
@@ -3889,7 +3890,8 @@ args = ["-lc", "echo hi"]
         assert output["status"] == "current"
         assert output["managed_install"]["harness"] == "codex"
         assert output["managed_install"]["active"] is True
-        assert "codex_hooks = true" in config_text
+        assert "hooks = true" in config_text
+        assert "codex_hooks" not in config_text
         assert hooks_payload["hooks"]["PreToolUse"]
 
     def test_guard_update_repairs_workspace_codex_install_in_recorded_workspace(self, tmp_path, monkeypatch, capsys):
@@ -3925,7 +3927,8 @@ args = ["-lc", "echo hi"]
         assert rc == 0
         assert output["status"] == "current"
         assert output["managed_install"]["workspace"] == str(workspace_dir)
-        assert "codex_hooks = true" in config_text
+        assert "hooks = true" in config_text
+        assert "codex_hooks" not in config_text
         assert hooks_payload["hooks"]["PreToolUse"]
         assert (home_dir / ".codex" / "config.toml").exists() is False
 
