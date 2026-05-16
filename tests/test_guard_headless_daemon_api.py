@@ -225,6 +225,31 @@ def test_headless_policy_sync_rejects_global_allow_and_missing_scope_targets(
     assert store.list_policy_decisions(harness="codex") == []
 
 
+def test_headless_policy_sync_rejects_empty_policy_memory(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "missing_policy_memory"
+    assert store.list_policy_decisions(harness="codex") == []
+
+
 def test_headless_api_rejects_missing_auth_and_bad_harness(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

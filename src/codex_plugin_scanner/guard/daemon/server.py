@@ -710,6 +710,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "unknown_harness"}, status=404)
             return
         policy_memory = self._policy_memory_payload(payload.get("policy_memory"))
+        if not policy_memory:
+            self._write_json({"error": "missing_policy_memory"}, status=400)
+            return
         scope = self._optional_string(policy_memory.get("scope")) or "harness"
         action = self._optional_string(policy_memory.get("action")) or "review"
         if scope not in DECISION_SCOPE_VALUES or action not in GUARD_ACTION_VALUES:
