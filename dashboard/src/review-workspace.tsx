@@ -38,6 +38,8 @@ import {
   buildRetryAfterApprovalCopy,
   buildPrimaryReviewAction,
   primaryReviewActionToggleLabel,
+  resolveSecondaryRiskSummary,
+  hasReviewEvidence,
   harnessDisplayName,
   resolveDecisionV2Title,
   displayArtifactName,
@@ -803,7 +805,8 @@ function ReviewDecisionCard(props: {
   const plainTitle = plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = buildWhatWouldHappen(item);
-  const hasEvidence = (item.risk_signals?.length ?? 0) > 0 || item.risk_summary || item.why_now;
+  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  const hasEvidence = hasReviewEvidence(item);
   const pauseReason = whyPaused(item);
 
   return (
@@ -848,11 +851,11 @@ function ReviewDecisionCard(props: {
           <p className="text-sm text-brand-dark">{pauseReason}</p>
         </div>
 
-        {item.risk_summary && (
+        {secondaryRiskSummary && (
           <div className="mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4">
             <div className="flex items-start gap-2.5">
               <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
-              <p className="text-sm text-brand-dark">{item.risk_summary}</p>
+              <p className="text-sm text-brand-dark">{secondaryRiskSummary}</p>
             </div>
           </div>
         )}
