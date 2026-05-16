@@ -713,8 +713,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not policy_memory:
             self._write_json({"error": "missing_policy_memory"}, status=400)
             return
-        scope = self._optional_string(policy_memory.get("scope")) or "harness"
-        action = self._optional_string(policy_memory.get("action")) or "review"
+        scope = self._optional_string(policy_memory.get("scope"))
+        action = self._optional_string(policy_memory.get("action"))
+        if scope is None or action is None:
+            self._write_json({"error": "missing_policy_fields"}, status=400)
+            return
         if scope not in DECISION_SCOPE_VALUES or action not in GUARD_ACTION_VALUES:
             self._write_json({"error": "unsupported_policy_value"}, status=400)
             return
@@ -1402,8 +1405,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         bearer_token = None
         if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
             bearer_token = authorization[7:].strip()
-        token = session_token if isinstance(session_token, str) and session_token.strip() else bearer_token
-        if not isinstance(token, str) or not token.startswith("gld1."):
+        candidates = [
+            candidate
+            for candidate in (session_token, bearer_token)
+            if isinstance(candidate, str) and candidate.strip()
+        ]
+        return any(self._dashboard_session_token_matches(candidate) for candidate in candidates)
+
+    def _dashboard_session_token_matches(self, token: str) -> bool:
+        if not token.startswith("gld1."):
             return False
         parts = token.split(".")
         if len(parts) != 3:
