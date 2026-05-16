@@ -305,13 +305,15 @@ class TestGuardProductFlow:
         output = capsys.readouterr().out
 
         assert excinfo.value.code == 0
-        assert "Everyday protection:" in output
+        assert "HOL Guard AI Antivirus command center:" in output
         assert "Team and cloud coordination:" in output
         assert "Advanced and diagnostics:" in output
-        assert "start        First-run setup and the Guard operating loop" in output
+        assert "start        First-run protection setup for one local AI harness" in output
         assert "connect      Pair this machine to Guard Cloud" in output
         assert "doctor       Run local diagnostics" in output
-        assert "Use status for current posture" in output
+        assert "Use status for Home posture" in output
+        assert "Use apps for Protect install, repair, status, and first protected action proof" in output
+        assert "Use approvals for Inbox decisions and receipts for Evidence" in output
         assert "Use doctor for setup and runtime probes" in output
         assert "Use diff for changed artifacts" in output
         assert "Use explain for detailed artifact evidence" in output

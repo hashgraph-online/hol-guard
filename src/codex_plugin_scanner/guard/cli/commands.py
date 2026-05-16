@@ -178,19 +178,19 @@ _HOOK_DAEMON_PRESERVED_DENY_REASON = (
     "HOL Guard daemon was unreachable; preserving the existing deny decision for this action."
 )
 _GUARD_HELP_GROUPS = (
-    "Everyday protection:\n"
-    "  start        First-run setup and the Guard operating loop\n"
-    "  status       Current local protection state and next actions\n"
-    "  dashboard    Open the local Guard dashboard in your browser\n"
-    "  apps         Connect, test, repair, or disconnect protected apps\n"
+    "HOL Guard AI Antivirus command center:\n"
+    "  start        First-run protection setup for one local AI harness\n"
+    "  status       Home: current protection state, proof, and next action\n"
+    "  dashboard    Open local Home, Protect, Inbox, Evidence, and Settings\n"
+    "  apps         Protect: connect, test, repair, or disconnect AI tools\n"
     "  run          Enforce Guard before a harness launch\n"
-    "  approvals    Resolve the current request queue\n"
-    "  receipts     Review recent local decisions\n"
+    "  approvals    Inbox: approve, block, or scope requests needing judgment\n"
+    "  receipts     Evidence: review local decisions and proof receipts\n"
     "\n"
     "Team and cloud coordination:\n"
     "  connect      Pair this machine to Guard Cloud\n"
     "  login        Compatibility alias for browser pairing\n"
-    "  sync         Send local decisions to Guard Cloud\n"
+    "  sync         Send local decisions, receipts, and policy memory to Guard Cloud\n"
     "  service      Manage hosted-runtime Guard Cloud login and sync\n"
     "  device       Inspect or rotate this machine identity\n"
     "  bridge       Forward Guard signals to external channels\n"
@@ -205,7 +205,7 @@ _GUARD_HELP_GROUPS = (
     "  abom         Export the local AI-BOM\n"
     "  explain      Show evidence for one artifact\n"
     "  policies     Inspect local Guard policy state\n"
-    "  settings     Show or update local Guard settings\n"
+    "  settings     Settings: show or update local Guard rules\n"
     "  exceptions   Inspect active exception windows\n"
     "  advisories   Inspect cached Guard Cloud advisories\n"
     "  events       Review Guard lifecycle events\n"
@@ -216,11 +216,12 @@ _GUARD_HELP_GROUPS = (
     "  update       Update hol-guard in the current environment\n"
     "\n"
     "Command selection:\n"
-    "  Use status for current posture and the next safe step\n"
+    "  Use status for Home posture and the next safe step\n"
+    "  Use apps for Protect install, repair, status, and first protected action proof\n"
+    "  Use approvals for Inbox decisions and receipts for Evidence\n"
     "  Use doctor for setup and runtime probes\n"
     "  Use diff for changed artifacts after a blocked launch\n"
     "  Use explain for detailed artifact evidence\n"
-    "  Use approvals for queued decisions and receipts for audit history\n"
     "  Use events for the local timeline"
 )
 
@@ -250,10 +251,10 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
     guard_parser = subparsers.add_parser(
         "guard",
-        help="Run local harness protection workflows",
+        help="Run HOL Guard AI Antivirus workflows",
         description=(
-            "HOL Guard watches local harness config, records approval receipts, and keeps "
-            "Home, Inbox, and Fleet aligned with what this machine is doing."
+            "HOL Guard is AI Antivirus for local harnesses. It keeps Home, Protect, "
+            "Inbox, Evidence, and Settings aligned with this machine."
         ),
         epilog=(
             "Examples:\n"
@@ -271,7 +272,7 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
 def add_guard_root_parser(parser: argparse.ArgumentParser) -> None:
     """Register Guard as the top-level CLI surface."""
 
-    parser.description = "Protect local harnesses before new or changed tools run."
+    parser.description = "HOL Guard AI Antivirus protects local harnesses before new or changed tools run."
     parser.epilog = _GUARD_HELP_GROUPS
     parser.set_defaults(command="guard")
     _configure_guard_parser(parser)
