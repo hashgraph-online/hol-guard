@@ -3044,6 +3044,36 @@ class GuardStore:
             for row in rows
         ]
 
+    def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select operation_id, session_id, harness, operation_type, status, approval_request_ids_json,
+                       resume_token, metadata_json, created_at, updated_at
+                from guard_operations
+                where approval_request_ids_json like ?
+                order by updated_at desc, operation_id desc
+                """,
+                (f"%{request_id}%",),
+            ).fetchall()
+        for row in rows:
+            approval_request_ids = json.loads(str(row["approval_request_ids_json"]))
+            if request_id not in {str(item) for item in approval_request_ids}:
+                continue
+            return {
+                "operation_id": str(row["operation_id"]),
+                "session_id": str(row["session_id"]),
+                "harness": str(row["harness"]),
+                "operation_type": str(row["operation_type"]),
+                "status": str(row["status"]),
+                "approval_request_ids": approval_request_ids,
+                "resume_token": str(row["resume_token"]) if row["resume_token"] is not None else None,
+                "metadata": json.loads(str(row["metadata_json"])),
+                "created_at": str(row["created_at"]),
+                "updated_at": str(row["updated_at"]),
+            }
+        return None
+
     def add_guard_operation_item(
         self,
         *,
