@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import socket
 import sqlite3
+import struct
+import tempfile
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+
+_WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 
 def _request(
@@ -135,6 +145,103 @@ def _post_error(port: int, token: str, path: str, payload: dict[str, object]) ->
     raise AssertionError("expected HTTPError")
 
 
+def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, object]]) -> threading.Thread:
+    def server() -> None:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+            listener.bind(str(socket_path))
+            listener.listen(1)
+            connection, _ = listener.accept()
+            with connection:
+                headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
+                key = ""
+                for line in headers.split("\r\n"):
+                    if line.lower().startswith("sec-websocket-key:"):
+                        key = line.split(":", 1)[1].strip()
+                        break
+                accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode(
+                    "ascii"
+                )
+                connection.sendall(
+                    (
+                        "HTTP/1.1 101 Switching Protocols\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Upgrade: websocket\r\n"
+                        f"Sec-WebSocket-Accept: {accept}\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                while True:
+                    opcode, payload = _recv_websocket_frame(connection)
+                    if opcode != 0x1:
+                        continue
+                    message = json.loads(payload.decode("utf-8"))
+                    received.append(message)
+                    if message.get("id") == 1:
+                        _send_websocket_text(
+                            connection,
+                            {
+                                "id": 1,
+                                "result": {
+                                    "userAgent": "test",
+                                    "codexHome": "/tmp",
+                                    "platformFamily": "unix",
+                                    "platformOs": "macos",
+                                },
+                            },
+                        )
+                    if message.get("id") == 2:
+                        _send_websocket_text(connection, {"id": 2, "result": {"turnId": "turn-next"}})
+                        break
+
+    thread = threading.Thread(target=server, daemon=True)
+    thread.start()
+    for _ in range(50):
+        if socket_path.exists():
+            break
+        time.sleep(0.01)
+    return thread
+
+
+def _recv_until(connection: socket.socket, marker: bytes) -> bytes:
+    data = b""
+    while marker not in data:
+        data += connection.recv(4096)
+    return data
+
+
+def _recv_exact(connection: socket.socket, length: int) -> bytes:
+    data = b""
+    while len(data) < length:
+        data += connection.recv(length - len(data))
+    return data
+
+
+def _recv_websocket_frame(connection: socket.socket) -> tuple[int, bytes]:
+    first, second = _recv_exact(connection, 2)
+    length = second & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", _recv_exact(connection, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", _recv_exact(connection, 8))[0]
+    mask = _recv_exact(connection, 4) if second & 0x80 else None
+    payload = _recv_exact(connection, length) if length else b""
+    if mask is not None:
+        payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return first & 0x0F, payload
+
+
+def _send_websocket_text(connection: socket.socket, payload: dict[str, object]) -> None:
+    data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    length = len(data)
+    if length < 126:
+        header = bytes([0x81, length])
+    elif length < 65_536:
+        header = bytes([0x81, 126]) + struct.pack("!H", length)
+    else:
+        header = bytes([0x81, 127]) + struct.pack("!Q", length)
+    connection.sendall(header + data)
+
+
 def test_resolving_active_item_with_two_remaining_returns_next_hint(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _populate(
@@ -165,37 +272,12 @@ def test_resolving_active_item_with_two_remaining_returns_next_hint(tmp_path: Pa
     assert store.get_approval_request("req-active")["resolution_action"] == "allow"
 
 
-def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Path, monkeypatch) -> None:
+def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _populate(store, [_request("req-active")])
-    socket_path = tmp_path / "codex.sock"
-    socket_path.write_text("", encoding="utf-8")
-    proxy_input = tmp_path / "proxy-input.jsonl"
-    proxy_script = tmp_path / "codex-proxy.py"
-    proxy_script.write_text(
-        """
-#!/usr/bin/env python3
-import json
-import pathlib
-import sys
-
-raw = sys.stdin.read()
-pathlib.Path(sys.argv[-1]).with_name("proxy-input.jsonl").write_text(raw, encoding="utf-8")
-print(json.dumps({
-    "id": 1,
-    "result": {
-        "userAgent": "test",
-        "codexHome": "/tmp",
-        "platformFamily": "unix",
-        "platformOs": "macos",
-    },
-}))
-print(json.dumps({"id": 2, "result": {"turnId": "turn-next"}}))
-""".lstrip(),
-        encoding="utf-8",
-    )
-    proxy_script.chmod(0o755)
-    monkeypatch.setenv("HOL_GUARD_CODEX_COMMAND", str(proxy_script))
+    _populate(store, [_request("req-active", command="echo guard resume")])
+    socket_path = Path(tempfile.gettempdir()) / f"hol-guard-codex-{uuid.uuid4().hex}.sock"
+    received_messages: list[dict[str, object]] = []
+    codex_server = _start_fake_codex_app_server(socket_path, received_messages)
     session = store.upsert_guard_session(
         session_id="guard-session-1",
         harness="codex",
@@ -235,9 +317,10 @@ print(json.dumps({"id": 2, "result": {"turnId": "turn-next"}}))
         )
     finally:
         daemon.stop()
+        codex_server.join(timeout=2)
+        socket_path.unlink(missing_ok=True)
 
-    sent_lines = [json.loads(line) for line in proxy_input.read_text(encoding="utf-8").splitlines() if line.strip()]
-    turn_start = sent_lines[-1]
+    turn_start = received_messages[-1]
     assert payload["codex_resume"]["status"] == "sent"
     assert payload["resolution_summary"] == (
         "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
