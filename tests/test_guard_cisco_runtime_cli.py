@@ -135,6 +135,30 @@ def _absolute_file_write_action(path: Path) -> GuardActionEnvelope:
     )
 
 
+def _relative_target_write_action(target: str) -> GuardActionEnvelope:
+    return GuardActionEnvelope(
+        schema_version=1,
+        action_id="",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="file_write",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="Write",
+        command=None,
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(target,),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={"file_path": target},
+    )
+
+
 def test_default_detector_registry_includes_cisco_sources() -> None:
     detector_ids = {detector.detector_id for detector in register_default_detectors()}
 
@@ -302,6 +326,58 @@ def test_cisco_preflight_scans_explicit_absolute_skill_targets_outside_workspace
 
     assert [signal.source for signal in signals] == ["cisco_skill"]
     assert called == [external_skill.parent]
+
+
+def test_cisco_preflight_scans_explicit_relative_traversal_skill_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+
+    external_skill = tmp_path.parent / f"{tmp_path.name}-external-skills" / "evil" / "SKILL.md"
+    external_skill.parent.mkdir(parents=True)
+    external_skill.write_text("# Evil\n", encoding="utf-8")
+    called: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        called.append(path)
+        return _skill_summary(CiscoIntegrationStatus.ENABLED, (_skill_finding(),))
+
+    monkeypatch.setattr(cisco_skill_scanner, "run_cisco_skill_scan", fake_scan)
+
+    signals = scan_action_for_cisco_evidence(
+        _relative_target_write_action(f"../{external_skill.parent.parent.name}/evil/SKILL.md"),
+        workspace=tmp_path,
+    )
+
+    assert [signal.source for signal in signals] == ["cisco_skill"]
+    assert called == [external_skill.parent]
+
+
+def test_cisco_preflight_scans_explicit_relative_traversal_mcp_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+
+    external_mcp = tmp_path.parent / f"{tmp_path.name}-external-mcp" / ".mcp.json"
+    external_mcp.parent.mkdir(parents=True)
+    external_mcp.write_text("{}", encoding="utf-8")
+    called: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        called.append(path)
+        return _mcp_summary(CiscoIntegrationStatus.ENABLED, (_mcp_finding(),))
+
+    monkeypatch.setattr(cisco_mcp_scanner, "run_cisco_mcp_scan", fake_scan)
+
+    signals = scan_action_for_cisco_evidence(
+        _relative_target_write_action(f"../{external_mcp.parent.name}/.mcp.json"),
+        workspace=tmp_path,
+    )
+
+    assert [signal.source for signal in signals] == ["cisco_mcp"]
+    assert called == [external_mcp.parent]
 
 
 def test_cisco_preflight_changed_mcp_config_produces_normalized_signal(
