@@ -7,6 +7,12 @@ Update this file for every release that touches a Guard integration path.
 
 ## Unreleased
 
+### Publishing
+
+- **Force refreshed PyPI release** — Trigger the next automated publish so both
+  `hol-guard` and `plugin-scanner` advance beyond `2.0.250` after the successful
+  republish verification.
+
 ### Legacy code cleanup
 
 - **Removed unused CSS classes** — `guard-delay-1`, `guard-delay-2`, `guard-delay-3`, and
