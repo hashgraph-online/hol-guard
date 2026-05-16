@@ -57,7 +57,7 @@ override-dependencies = [
     "cisco-ai-skill-scanner==2.0.9",
     "importlib-metadata==9.0.0",
     "jsonschema==4.26.0",
-    "litellm==1.83.0",
+    "litellm==1.83.10",
     "openai==2.36.0",
     "python-dotenv==1.2.2",
     "python-multipart==0.0.28",
