@@ -33,6 +33,17 @@ _SKILL_ACTIVATION_KEYS = frozenset(
     }
 )
 _SKILL_PATH_KEYS = frozenset({"activeskillpath", "activatedskillpath"})
+_TOOL_ARGUMENT_CONTAINER_KEYS = frozenset(
+    {
+        "args",
+        "arguments",
+        "input",
+        "parameters",
+        "toolarguments",
+        "toolcalls",
+        "toolinput",
+    }
+)
 _REQUEST_ID_KEYS = ("request_id", "requestId", "tool_call_id", "toolCallId", "call_id", "callId")
 _SESSION_ID_KEYS = ("session_id", "sessionId", "conversation_id", "conversationId", "thread_id", "threadId")
 _MAX_SKILL_SEARCH_DEPTH = 6
@@ -195,6 +206,8 @@ def _find_skill_value(payload: object, *, depth: int = 0) -> tuple[str, object] 
                 continue
             return key, value
         if isinstance(value, (Mapping, list)):
+            if _normalized_key(key) in _TOOL_ARGUMENT_CONTAINER_KEYS:
+                continue
             nested = _find_skill_value(value, depth=depth + 1)
             if nested is not None:
                 return nested

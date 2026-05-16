@@ -3228,7 +3228,7 @@ clearer UX and an implementation plan with technical references.
                 "tool_name": "Bash",
                 "tool_input": {
                     "command": "node build-skill-index.js",
-                    "skill_path": ".codex/skills/project-review/SKILL.md",
+                    "active_skill_path": ".codex/skills/project-review/SKILL.md",
                 },
             },
             capsys=capsys,
