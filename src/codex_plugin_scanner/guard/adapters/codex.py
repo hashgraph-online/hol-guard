@@ -306,8 +306,9 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     managed_hook_installed = (
         pre_tool_hook_installed and permission_hook_installed and prompt_hook_installed and post_tool_hook_installed
     )
-    hooks_feature_enabled = isinstance(features, dict) and features.get("hooks") is True
-    legacy_codex_hooks_enabled = isinstance(features, dict) and features.get("codex_hooks") is True
+    features_is_table = isinstance(features, dict)
+    hooks_feature_enabled = features_is_table and features.get("hooks") is True
+    legacy_codex_hooks_enabled = features_is_table and features.get("codex_hooks") is True
     return {
         "config_path": str(config_path),
         "config_present": config_path.is_file(),
