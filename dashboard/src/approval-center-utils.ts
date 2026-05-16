@@ -316,6 +316,20 @@ export function resolveDecisionV2Detail(item: GuardApprovalRequest): string | nu
   return detail !== undefined && detail.trim().length > 0 ? detail : null;
 }
 
+export type PrimaryReviewAction = {
+  label: string;
+  text: string;
+  detail: string | null;
+};
+
+export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
+  return {
+    label: resolveTerminalLabel(item),
+    text: resolveStoppedCommandText(item),
+    detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null,
+  };
+}
+
 export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
   if (item.action_envelope_json) {
     const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
