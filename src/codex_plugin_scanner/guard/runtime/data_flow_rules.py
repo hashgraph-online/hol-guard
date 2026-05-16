@@ -67,6 +67,37 @@ _CLIPBOARD_COMMANDS = frozenset({"pbcopy", "xclip", "xsel", "wl-copy", "clip", "
 _WEBHOOK_HOST_PATTERN = re.compile(
     r"webhook\.site|hooks\.slack\.com|discord\.com|pastebin\.com|gist\.github\.com|transfer\.sh|requestbin"
 )
+_CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
+    {
+        "A",
+        "b",
+        "C",
+        "c",
+        "d",
+        "D",
+        "e",
+        "E",
+        "F",
+        "H",
+        "h",
+        "K",
+        "m",
+        "o",
+        "P",
+        "Q",
+        "r",
+        "t",
+        "T",
+        "u",
+        "U",
+        "w",
+        "x",
+        "X",
+        "y",
+        "Y",
+        "z",
+    }
+)
 
 
 def detect_data_flow_exfiltration(
@@ -220,11 +251,102 @@ def _secret_path_matches_in_command(command: str, *, workspace: Path | None) -> 
 def _curl_data_file_paths(command: str) -> tuple[str, ...]:
     paths: list[str] = []
     for segment in command_execution_segments(command):
-        if not segment_executes_command(segment, {"curl", "curl.exe"}):
+        tokens = command_tokens_after_env_assignments(segment)
+        if not tokens or tokens[0].lower() not in {"curl", "curl.exe"}:
             continue
-        for match in _CURL_DATA_FILE_PATTERN.finditer(segment):
-            paths.append(strip_shell_token(match.group("path")))
+        paths.extend(_curl_segment_data_file_paths(tokens[1:]))
     return tuple(paths)
+
+
+def _curl_segment_data_file_paths(args: Sequence[str]) -> tuple[str, ...]:
+    paths: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            break
+        long_flag_path = _curl_long_flag_data_path(token, args, index)
+        if long_flag_path is not None:
+            path, consumed = long_flag_path
+            if path is not None:
+                paths.append(path)
+            index += consumed
+            continue
+        short_flag_path = _curl_short_flag_data_path(token, args, index)
+        if short_flag_path is not None:
+            path, consumed = short_flag_path
+            if path is not None:
+                paths.append(path)
+            index += consumed
+            continue
+        index += 1
+    return tuple(paths)
+
+
+def _curl_long_flag_data_path(token: str, args: Sequence[str], index: int) -> tuple[str | None, int] | None:
+    long_flags = {
+        "--data",
+        "--data-ascii",
+        "--data-binary",
+        "--data-raw",
+        "--data-urlencode",
+        "--upload-file",
+        "--form",
+    }
+    if token in long_flags:
+        value = args[index + 1] if index + 1 < len(args) else ""
+        return _curl_option_data_path(token, value), 2
+    for flag in long_flags:
+        prefix = f"{flag}="
+        if token.startswith(prefix):
+            return _curl_option_data_path(flag, token[len(prefix) :]), 1
+    return None
+
+
+def _curl_short_flag_data_path(token: str, args: Sequence[str], index: int) -> tuple[str | None, int] | None:
+    if token in {"-d", "-T", "-F"}:
+        value = args[index + 1] if index + 1 < len(args) else ""
+        return _curl_option_data_path(token, value), 2
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    cluster = token[1:]
+    for flag_index, flag in enumerate(cluster):
+        attached_value = cluster[flag_index + 1 :]
+        if flag not in {"d", "T", "F"}:
+            if flag in _CURL_SHORT_FLAGS_WITH_VALUES:
+                return None
+            continue
+        option = f"-{flag}"
+        if attached_value:
+            return _curl_option_data_path(option, attached_value), 1
+        value = args[index + 1] if index + 1 < len(args) else ""
+        return _curl_option_data_path(option, value), 2
+    return None
+
+
+def _curl_option_data_path(flag: str, value: str) -> str | None:
+    normalized_value = strip_shell_token(value)
+    if not normalized_value or normalized_value.startswith("-"):
+        return None
+    if flag in {"--upload-file", "-T"}:
+        return normalized_value
+    if flag in {"--form", "-F"}:
+        field_value = normalized_value.split("=", 1)[1] if "=" in normalized_value else normalized_value
+        if field_value and field_value[0] in {"@", "<"}:
+            return field_value[1:].split(";", 1)[0].split(",", 1)[0]
+        return None
+    if flag == "--data-urlencode":
+        if normalized_value.startswith("@"):
+            return normalized_value[1:]
+        if "@" not in normalized_value:
+            return None
+        name, file_candidate = normalized_value.split("@", 1)
+        if "=" in name:
+            return None
+        return file_candidate
+    if normalized_value.startswith("@"):
+        return normalized_value[1:]
+    return None
 
 
 def _has_secret_pipe_to_http_upload(pipes: Sequence[ShellPipe], command: str, *, workspace: Path | None) -> bool:

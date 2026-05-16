@@ -417,6 +417,9 @@ def _evaluation_with_detector_registry(
         "downgraded": composition.downgraded,
         "upgraded": composition.upgraded,
     }
+    if composition.action == "block" and not bool(evaluation.get("blocked")):
+        next_evaluation["blocked"] = True
+        next_evaluation["blocked_by_detector"] = composition.reason
     if trace_error is not None:
         next_evaluation["runtime_detector_trace_error"] = trace_error
     return next_evaluation

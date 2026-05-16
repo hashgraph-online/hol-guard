@@ -36,8 +36,8 @@ _GUARD_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
 _REPORTED_PHRASE_PREFIX_WORDS = frozenset(
     {"say", "says", "said", "called", "named", "phrase", "phrases", "string", "strings"}
 )
-_NON_ACTIONABLE_FIXTURE_PATTERN = re.compile(r"\b(?:do\s+not|don't)\s+actually\s+run\s+this\b", re.IGNORECASE)
-_TEST_PROMPT_CONTEXT_PATTERN = re.compile(r"\b(?:test\s+prompt|test\s+fixture)\b", re.IGNORECASE)
+_DOCUMENTATION_CONTEXT_LOOKBACK_CHARS = 320
+_DOCUMENTATION_CONTEXT_LOOKAHEAD_CHARS = 80
 _UNTRUSTED_CONTEXT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bquoted\s+log\b", re.IGNORECASE), "quoted log"),
     (re.compile(r"\b(?:PR|Pull\s+Request)\s+comment(?:\s+text)?\b", re.IGNORECASE), "PR comment"),
@@ -326,8 +326,6 @@ def _first_actionable_match(
 def _first_override_detection(text: str) -> tuple[re.Match[str], str | None] | None:
     for pattern in _INSTRUCTION_OVERRIDE_PATTERNS:
         for match in pattern.finditer(text):
-            if _is_non_actionable_fixture(text, match):
-                continue
             embedded_context = _embedded_context_label(text, match.start())
             if embedded_context is not None or not _is_documentation_context_override(text, match):
                 return match, embedded_context
@@ -335,29 +333,11 @@ def _first_override_detection(text: str) -> tuple[re.Match[str], str | None] | N
 
 
 def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
-    boundary = max(
-        text.rfind(".", 0, match.start()),
-        text.rfind("!", 0, match.start()),
-        text.rfind("?", 0, match.start()),
-        text.rfind(";", 0, match.start()),
-        text.rfind("\n", 0, match.start()),
-    )
-    context_start = boundary + 1
-    prefix = text[context_start : match.start()]
-    local_context = text[context_start : min(len(text), match.end() + 80)]
+    prefix, local_context = _documentation_context_window(text, match)
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
         and _DOCUMENTATION_SUBJECT_PATTERN.search(local_context) is not None
         and _has_reported_phrase_prefix(prefix)
-    )
-
-
-def _is_non_actionable_fixture(text: str, match: re.Match[str]) -> bool:
-    context = text[max(0, match.start() - 120) : min(len(text), match.end() + 120)]
-    prefix = text[max(0, match.start() - 120) : match.start()]
-    return (
-        _TEST_PROMPT_CONTEXT_PATTERN.search(prefix) is not None
-        and _NON_ACTIONABLE_FIXTURE_PATTERN.search(context) is not None
     )
 
 
@@ -366,16 +346,8 @@ def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
 
 
 def _is_documentation_context_guard(text: str, match: re.Match[str]) -> bool:
-    boundary = max(
-        text.rfind(".", 0, match.start()),
-        text.rfind("!", 0, match.start()),
-        text.rfind("?", 0, match.start()),
-        text.rfind(";", 0, match.start()),
-        text.rfind("\n", 0, match.start()),
-    )
-    context_start = boundary + 1
-    prefix = text[context_start : match.start()]
-    subject_context = _reported_phrase_subject_context(text, prefix, match)
+    prefix, _ = _documentation_context_window(text, match)
+    subject_context = _documentation_subject_context(text, prefix, match)
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
         and _GUARD_DOCUMENTATION_SUBJECT_PATTERN.search(subject_context) is not None
@@ -388,16 +360,8 @@ def _is_documentation_context_with_subject(
     match: re.Match[str],
     subject_pattern: re.Pattern[str],
 ) -> bool:
-    boundary = max(
-        text.rfind(".", 0, match.start()),
-        text.rfind("!", 0, match.start()),
-        text.rfind("?", 0, match.start()),
-        text.rfind(";", 0, match.start()),
-        text.rfind("\n", 0, match.start()),
-    )
-    context_start = boundary + 1
-    prefix = text[context_start : match.start()]
-    subject_context = _reported_phrase_subject_context(text, prefix, match)
+    prefix, _ = _documentation_context_window(text, match)
+    subject_context = _documentation_subject_context(text, prefix, match)
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
         and subject_pattern.search(subject_context) is not None
@@ -405,8 +369,23 @@ def _is_documentation_context_with_subject(
     )
 
 
-def _reported_phrase_subject_context(text: str, prefix: str, match: re.Match[str]) -> str:
-    suffix = text[match.end() : min(len(text), match.end() + 80)]
+def _documentation_context_window(text: str, match: re.Match[str]) -> tuple[str, str]:
+    search_start = max(0, match.start() - _DOCUMENTATION_CONTEXT_LOOKBACK_CHARS)
+    boundary = max(
+        text.rfind(".", search_start, match.start()),
+        text.rfind("!", search_start, match.start()),
+        text.rfind("?", search_start, match.start()),
+        text.rfind(";", search_start, match.start()),
+        text.rfind("\n", search_start, match.start()),
+    )
+    context_start = boundary + 1 if boundary >= search_start else search_start
+    prefix = text[context_start : match.start()]
+    local_context = text[context_start : min(len(text), match.end() + _DOCUMENTATION_CONTEXT_LOOKAHEAD_CHARS)]
+    return prefix, local_context
+
+
+def _documentation_subject_context(text: str, prefix: str, match: re.Match[str]) -> str:
+    suffix = text[match.end() : min(len(text), match.end() + _DOCUMENTATION_CONTEXT_LOOKAHEAD_CHARS)]
     return f"{prefix} {suffix}"
 
 
