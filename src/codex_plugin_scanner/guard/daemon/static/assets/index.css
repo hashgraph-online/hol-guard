@@ -901,8 +901,8 @@
     height: 100%;
   }
 
-  .max-h-\[36vh\] {
-    max-height: 36vh;
+  .max-h-\[min\(34rem\,48vh\)\] {
+    max-height: min(34rem, 48vh);
   }
 
   .min-h-8 {
@@ -1355,6 +1355,10 @@
     overflow: hidden;
   }
 
+  .overflow-auto {
+    overflow: auto;
+  }
+
   .overflow-hidden {
     overflow: hidden;
   }
@@ -1769,13 +1773,13 @@
     }
   }
 
-  .border-white\/20 {
-    border-color: #fff3;
+  .border-white\/15 {
+    border-color: #ffffff26;
   }
 
   @supports (color: color-mix(in lab, red, red)) {
-    .border-white\/20 {
-      border-color: color-mix(in oklab, var(--color-white) 20%, transparent);
+    .border-white\/15 {
+      border-color: color-mix(in oklab, var(--color-white) 15%, transparent);
     }
   }
 
@@ -2461,6 +2465,16 @@
     }
   }
 
+  .bg-white\/\[0\.08\] {
+    background-color: #ffffff14;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-white\/\[0\.08\] {
+      background-color: color-mix(in oklab, var(--color-white) 8%, transparent);
+    }
+  }
+
   .bg-gradient-to-b {
     --tw-gradient-position: to bottom in oklab;
     background-image: linear-gradient(var(--tw-gradient-stops));
@@ -2993,6 +3007,11 @@
   .tracking-\[0\.2em\] {
     --tw-tracking: .2em;
     letter-spacing: .2em;
+  }
+
+  .tracking-\[0\.12em\] {
+    --tw-tracking: .12em;
+    letter-spacing: .12em;
   }
 
   .tracking-\[0\.15em\] {
@@ -3612,6 +3631,16 @@
       border-color: var(--color-slate-300);
     }
 
+    .hover\:border-white\/25:hover {
+      border-color: #ffffff40;
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:border-white\/25:hover {
+        border-color: color-mix(in oklab, var(--color-white) 25%, transparent);
+      }
+    }
+
     .hover\:bg-\[\#047857\]:hover {
       background-color: #047857;
     }
@@ -3785,16 +3814,6 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:bg-white\/15:hover {
         background-color: color-mix(in oklab, var(--color-white) 15%, transparent);
-      }
-    }
-
-    .hover\:bg-white\/20:hover {
-      background-color: #fff3;
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:bg-white\/20:hover {
-        background-color: color-mix(in oklab, var(--color-white) 20%, transparent);
       }
     }
 
@@ -4035,6 +4054,16 @@
     --tw-ring-offset-shadow: var(--tw-ring-inset, ) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
   }
 
+  .focus-visible\:outline-white\/50:focus-visible {
+    outline-color: #ffffff80;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus-visible\:outline-white\/50:focus-visible {
+      outline-color: color-mix(in oklab, var(--color-white) 50%, transparent);
+    }
+  }
+
   .focus-visible\:outline-none:focus-visible {
     --tw-outline-style: none;
     outline-style: none;
@@ -4101,6 +4130,10 @@
 
     .sm\:flex-row {
       flex-direction: row;
+    }
+
+    .sm\:flex-nowrap {
+      flex-wrap: nowrap;
     }
 
     .sm\:items-center {
@@ -4176,6 +4209,11 @@
     .sm\:text-3xl {
       font-size: var(--text-3xl);
       line-height: var(--tw-leading, var(--text-3xl--line-height));
+    }
+
+    .sm\:text-sm {
+      font-size: var(--text-sm);
+      line-height: var(--tw-leading, var(--text-sm--line-height));
     }
   }
 
