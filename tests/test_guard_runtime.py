@@ -3185,6 +3185,35 @@ clearer UX and an implementation plan with technical references.
         assert "skillPathHash" in usage_payload
         assert str(workspace_dir) not in json.dumps(usage_payload)
 
+    def test_guard_hook_hashes_active_skill_path_activation(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="codex",
+            event={
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Use a project skill.",
+                "active_skill_path": ".codex/skills/project-review/SKILL.md",
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.skill.activated"]
+        payload = usage_events[0]["payload"]
+        usage_payload = payload["payload"]
+
+        assert rc == 0
+        assert str(usage_payload["skillId"]).startswith("path:")
+        assert "skillPathHash" in usage_payload
+        assert "SKILL.md" not in json.dumps(usage_payload)
+
     def test_guard_hook_blocks_require_reapproval(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

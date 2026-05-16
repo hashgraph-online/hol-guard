@@ -32,6 +32,7 @@ _SKILL_ACTIVATION_KEYS = frozenset(
         "skillpath",
     }
 )
+_SKILL_PATH_KEYS = frozenset({"activeskillpath", "skillpath"})
 _REQUEST_ID_KEYS = ("request_id", "requestId", "tool_call_id", "toolCallId", "call_id", "callId")
 _SESSION_ID_KEYS = ("session_id", "sessionId", "conversation_id", "conversationId", "thread_id", "threadId")
 _MAX_SKILL_SEARCH_DEPTH = 6
@@ -149,17 +150,20 @@ def _skill_details(payload: Mapping[str, object]) -> dict[str, object] | None:
     if found is None:
         return None
     key, value = found
+    normalized_key = _normalized_key(key)
     if isinstance(value, Mapping):
         name = _safe_label(_string_from_keys(value, ("name", "title", "slug", "id")))
         identifier = _safe_label(_string_from_keys(value, ("id", "skill_id", "skillId", "slug")))
         source = _safe_label(_string_from_keys(value, ("source", "provider", "runtime")))
         path_hash = _path_hash(_string_from_keys(value, ("path", "skill_path", "skillPath", "uri", "url")))
+        if identifier is None and name is None and path_hash is not None:
+            identifier = f"path:{path_hash[:16]}"
     else:
-        label = _safe_label(str(value))
+        path_hash = _path_hash(str(value)) if normalized_key in _SKILL_PATH_KEYS else None
+        label = None if path_hash is not None else _safe_label(str(value))
         name = label
-        identifier = None if _normalized_key(key) in {"skillpath", "skilluri", "skillurl"} else label
+        identifier = f"path:{path_hash[:16]}" if path_hash is not None else label
         source = None
-        path_hash = _path_hash(str(value)) if _normalized_key(key) in {"skillpath", "skilluri", "skillurl"} else None
     details: dict[str, object] = {}
     if name is not None:
         details["skillName"] = name
