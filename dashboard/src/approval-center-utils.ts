@@ -323,7 +323,11 @@ export type PrimaryReviewAction = {
 };
 
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
-const DUPLICATE_REVIEW_CONTEXT_MAX_LENGTH = 32;
+const GENERIC_DUPLICATE_CONTEXT_PATTERNS = [
+  /^(codex|claude|claudecode|copilot|opencode|gemini)?promptfor[a-z0-9]*$/,
+  /^(codex|claude|claudecode|copilot|opencode|gemini)?commandfor[a-z0-9]*$/,
+  /^(codex|claude|claudecode|copilot|opencode|gemini)?toolfor[a-z0-9]*$/,
+];
 
 export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
   return {
@@ -383,7 +387,7 @@ function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string):
     return false;
   }
   const remainingContext = candidateText.replace(stoppedText, "");
-  return remainingContext.length <= DUPLICATE_REVIEW_CONTEXT_MAX_LENGTH;
+  return GENERIC_DUPLICATE_CONTEXT_PATTERNS.some((pattern) => pattern.test(remainingContext));
 }
 
 function normalizeDuplicateReviewText(value: string): string {
