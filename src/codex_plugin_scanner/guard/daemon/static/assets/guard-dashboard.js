@@ -13048,6 +13048,19 @@ function normalizeQueueCopy(raw) {
   }
   return { title, body };
 }
+function normalizeCodexResume(raw) {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const status = raw["status"];
+  const reason = raw["reason"];
+  const threadId = raw["thread_id"];
+  const isKnownStatus = status === "sent" || status === "skipped" || status === "failed";
+  if (!isKnownStatus || typeof reason !== "string" || typeof threadId !== "string") {
+    return null;
+  }
+  return { status, reason, thread_id: threadId };
+}
 function normalizeQueueResolution(payload) {
   return {
     resolved: payload.resolved === true,
@@ -13060,7 +13073,8 @@ function normalizeQueueResolution(payload) {
     resolved_scope_ids: isStringArray(payload.resolved_scope_ids) ? payload.resolved_scope_ids : void 0,
     resolution_summary: typeof payload.resolution_summary === "string" ? payload.resolution_summary : "",
     retry_hint: isStringOrNull(payload.retry_hint) ? payload.retry_hint : null,
-    copy: normalizeQueueCopy(payload.copy)
+    copy: normalizeQueueCopy(payload.copy),
+    codex_resume: normalizeCodexResume(payload.codex_resume)
   };
 }
 function queueSearchParams(input) {
@@ -13407,7 +13421,8 @@ async function resolveRequestWithQueueResult(input) {
       resolved_duplicate_ids: [],
       resolution_summary: "Decision saved.",
       retry_hint: null,
-      copy: null
+      copy: null,
+      codex_resume: null
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
