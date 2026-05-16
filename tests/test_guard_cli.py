@@ -303,6 +303,35 @@ def test_guard_settings_set_encoded_payloads(tmp_path, capsys):
     assert loaded.risk_actions.get("encoded_exfiltration") == "block"
 
 
+@pytest.mark.parametrize(
+    ("command", "policy", "risk_key", "expected_action"),
+    [
+        ("mcp", "ask-all", "mcp_dangerous_tool", "require-reapproval"),
+        ("skills", "ask-dangerous", "malicious_skill", "require-reapproval"),
+        ("packages", "ask-lifecycle", "package_script", "require-reapproval"),
+        ("output-scanning", "ask", "encoded_exfiltration", "require-reapproval"),
+    ],
+)
+def test_guard_settings_specialized_policy_commands_update_risk_actions(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+    policy: str,
+    risk_key: str,
+    expected_action: str,
+):
+    home_dir = tmp_path / "home"
+    _write_text(home_dir / "config.toml", 'security_level = "gentle"\n')
+
+    rc = main(["guard", "settings", "set", command, policy, "--home", str(home_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert payload["settings"]["risk_actions"][risk_key] == expected_action
+    assert resolve_risk_action(loaded, risk_key, harness="codex") == expected_action
+
+
 def test_guard_config_migration_old_config_lacking_new_risk_keys(tmp_path):
     home_dir = tmp_path / "home"
     _write_text(
@@ -4699,7 +4728,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert rc == 0
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    def test_guard_codex_hook_allows_wget_post_file_dash_without_stdin_upload(self, tmp_path, capsys):
+    def test_guard_codex_hook_blocks_wget_post_file_dash_with_sensitive_stdin_upload(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         payload_path = workspace_dir / "hook-event.json"
@@ -4726,7 +4755,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         output = capsys.readouterr().out
 
         assert rc == 0
-        assert output == ""
+        assert json.loads(output)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_guard_codex_hook_blocks_curl_data_urlencode_file(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

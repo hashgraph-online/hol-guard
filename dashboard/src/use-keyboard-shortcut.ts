@@ -15,6 +15,7 @@ export function useKeyboardShortcut(
         return;
       }
       if (event.key !== key) return;
+      if (options.requireModifier && !event.ctrlKey && !event.metaKey) return;
       if (options.preventDefault) {
         event.preventDefault();
       }
@@ -22,5 +23,5 @@ export function useKeyboardShortcut(
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [key, options.preventDefault]);
+  }, [key, options.preventDefault, options.requireModifier]);
 }

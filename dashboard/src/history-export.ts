@@ -83,12 +83,22 @@ export function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function escapeCsvCell(value: string): string {
-  const needsQuotes = /[",\n\r]/.test(value);
-  if (needsQuotes) {
-    return `"${value.replaceAll("\"", "\"\"")}"`;
+const FORMULA_TRIGGER_PATTERN = /^[=+\-@\t\r]/;
+
+function sanitizeCsvFormula(value: string): string {
+  if (FORMULA_TRIGGER_PATTERN.test(value)) {
+    return `'${value}`;
   }
   return value;
+}
+
+function escapeCsvCell(value: string): string {
+  const sanitized = sanitizeCsvFormula(value);
+  const needsQuotes = /[",\n\r]/.test(sanitized);
+  if (needsQuotes) {
+    return `"${sanitized.replaceAll("\"", "\"\"")}"`;
+  }
+  return sanitized;
 }
 
 function formatDateIso(date: Date): string {

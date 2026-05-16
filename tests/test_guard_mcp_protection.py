@@ -5,16 +5,19 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
+from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     _argument_key_names,
     _resolve_local_schema_ref,
     _schema_property_key_names,
     build_tool_call_artifact,
+    evaluate_tool_call,
     tool_call_risk_categories,
     tool_call_risk_signals,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity, build_mcp_tool_identity
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def test_mcp_server_identity_hashes_args_and_sorts_env_keys() -> None:
@@ -241,6 +244,58 @@ def test_mcp_server_identity_keeps_pnpm_package_named_x() -> None:
     )
 
     assert identity.package_name == "x"
+
+
+def test_evaluate_tool_call_honors_strict_mcp_risk_action(tmp_path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="shell_exec",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    decision = evaluate_tool_call(
+        store=GuardStore(tmp_path / "guard-home"),
+        config=GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+            security_level="strict",
+            mode="prompt",
+        ),
+        artifact=artifact,
+        artifact_hash="tool-hash",
+        arguments={"command": "rm -rf /tmp/test"},
+    )
+
+    assert decision.action == "block"
+    assert decision.source == "policy"
+
+
+def test_evaluate_tool_call_honors_gentle_mcp_risk_action(tmp_path) -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="shell",
+        tool_name="shell_exec",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+    decision = evaluate_tool_call(
+        store=GuardStore(tmp_path / "guard-home"),
+        config=GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+            security_level="gentle",
+            mode="prompt",
+        ),
+        artifact=artifact,
+        artifact_hash="tool-hash",
+        arguments={"command": "rm -rf /tmp/test"},
+    )
+
+    assert decision.action == "warn"
+    assert decision.source == "policy"
 
 
 def test_mcp_server_identity_reads_pnpm_package_selector_flag() -> None:

@@ -2,6 +2,12 @@ import { r as reactExports, x as fetchSettings, y as fetchRuntimeSnapshot, z as 
 import { a as resolveProtectionLevelCopy } from "./runtime-overview.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+function resolveSecurityLevelCardDescription(level) {
+  if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
+  if (level === "balanced") return "Ask before secret access, hidden execution, exfiltration, and destructive actions.";
+  if (level === "strict") return "Ask more often, including new network destinations.";
+  return "Use the exact choices below for this machine and connected apps.";
+}
 function buildClearPolicyPayload(all) {
   return { all };
 }
@@ -22,7 +28,7 @@ const securityLevels = [
   {
     value: "relaxed",
     label: "Relaxed",
-    description: "Ask before dangerous actions. Allow most safe ones.",
+    description: "Warn on dangerous actions. Most safe actions run without a prompt.",
     icon: HiMiniShieldCheck,
     protects: ["Destructive commands", "Credential sharing"],
     tone: "green"
@@ -182,7 +188,7 @@ function buildConsequenceSummary(settings) {
   const level = settings.security_level;
   const mode = settings.mode;
   if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
-  if (level === "relaxed") return "Guard will ask before destructive commands and credential sharing. Most safe actions are allowed automatically. Good for trusted environments.";
+  if (level === "relaxed") return "Guard will warn about destructive commands and credential sharing but will not pause for approval. Most safe actions run automatically. Good for trusted environments.";
   if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
   if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
   if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
@@ -798,5 +804,6 @@ function RiskControlRow({ risk, value, disabled, onChange, showConsequence }) {
 export {
   SettingsWorkspace,
   buildClearPolicyPayload,
+  resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription
 };

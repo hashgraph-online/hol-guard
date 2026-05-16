@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import sqlite3
 
 from .models import GuardApprovalRequest
@@ -13,6 +14,19 @@ from .runtime.action_identity import normalize_command_identity
 MAX_APPROVAL_PAGE_LIMIT = 200
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 _QUEUE_IDENTITY_VERSION = "v1"
+_VOLATILE_PAYLOAD_KEY_TOKENS = frozenset(
+    {
+        "callid",
+        "conversationid",
+        "messageid",
+        "requestid",
+        "sessionid",
+        "threadid",
+        "toolcallid",
+        "traceid",
+        "turnid",
+    }
+)
 
 
 class InvalidApprovalCursorError(ValueError):
@@ -63,6 +77,7 @@ def _build_action_identity(
         "package_manager": _optional_text(envelope.get("package_manager")),
         "package_name": _optional_text(envelope.get("package_name")),
         "script_name": _optional_text(envelope.get("script_name")),
+        "raw_payload_redacted": _stable_identity_payload(envelope.get("raw_payload_redacted")),
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
@@ -99,6 +114,27 @@ def _string_sequence(value: object) -> list[str]:
     if not isinstance(value, list | tuple):
         return []
     return sorted(str(item) for item in value if isinstance(item, str) and item.strip())
+
+
+def _stable_identity_payload(value: object) -> object:
+    if isinstance(value, dict):
+        normalized: dict[str, object] = {}
+        for key, item in sorted(value.items()):
+            if not isinstance(key, str):
+                continue
+            if _identity_payload_key_token(key) in _VOLATILE_PAYLOAD_KEY_TOKENS:
+                continue
+            normalized[key] = _stable_identity_payload(item)
+        return normalized
+    if isinstance(value, list | tuple):
+        return [_stable_identity_payload(item) for item in value]
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    return str(value)
+
+
+def _identity_payload_key_token(key: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", key.lower())
 
 
 def approval_schema_statement() -> str:
