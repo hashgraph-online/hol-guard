@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from "react";
 import {
+  HiMiniChevronDown,
+  HiMiniChevronUp,
   HiMiniClipboard,
   HiMiniClipboardDocumentCheck,
   HiMiniExclamationTriangle,
@@ -1396,6 +1398,27 @@ function DecisionSteps(props: { activeStep: number }) {
   );
 }
 
+function CommandHeaderButton(props: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  ariaLabel: string;
+  expanded?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      aria-label={props.ariaLabel}
+      aria-expanded={props.expanded}
+      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/[0.08] px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 transition-colors hover:border-white/25 hover:bg-white/15 hover:text-white focus-visible:outline-white/50"
+    >
+      {props.icon}
+      <span className="hidden sm:inline">{props.label}</span>
+    </button>
+  );
+}
+
 function CopyCommandButton(props: { command: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -1408,19 +1431,18 @@ function CopyCommandButton(props: { command: string }) {
   }, [props.command]);
 
   return (
-    <button
-      type="button"
+    <CommandHeaderButton
+      label={copied ? "Copied" : "Copy"}
+      ariaLabel="Copy command to clipboard"
       onClick={handleCopy}
-      aria-label="Copy command to clipboard"
-      className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors hover:bg-white/20 hover:text-white"
-    >
-      {copied ? (
-        <HiMiniClipboardDocumentCheck className="h-3.5 w-3.5" aria-hidden="true" />
-      ) : (
-        <HiMiniClipboard className="h-3.5 w-3.5" aria-hidden="true" />
-      )}
-      {copied ? "Copied" : "Copy"}
-    </button>
+      icon={
+        copied ? (
+          <HiMiniClipboardDocumentCheck className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <HiMiniClipboard className="h-3.5 w-3.5" aria-hidden="true" />
+        )
+      }
+    />
   );
 }
 
@@ -1439,6 +1461,7 @@ function resolveMcpInputSummary(payload: Record<string, unknown>): string | null
 function BlockedActionCard(props: { item: GuardApprovalRequest }) {
   const launchText = actionLaunchText(props.item);
   const decisionDetail = resolveDecisionV2Detail(props.item);
+  const [showCommand, setShowCommand] = useState(true);
   const [shareState, setShareState] = useState<"idle" | "copied" | "failed">("idle");
   const isBlocked = props.item.policy_action === "block";
   const bannerBg = isBlocked
@@ -1456,6 +1479,9 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
       ? resolveMcpInputSummary(envelope.raw_payload_redacted)
       : null;
   const approvalUrl = props.item.approval_url ? guardAwareHref(props.item.approval_url) : null;
+  const toggleCommand = useCallback(() => {
+    setShowCommand((visible) => !visible);
+  }, []);
 
   const handleCopyApprovalUrl = useCallback(async () => {
     if (approvalUrl === null) return;
@@ -1531,21 +1557,36 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
             {decisionDetail}
           </p>
         ) : null}
-        <div className="mt-4 rounded-xl bg-[#090d1a] p-1 shadow-[0_14px_35px_rgba(9,13,26,0.18)]">
-          <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
+        <div className="mt-4 overflow-hidden rounded-xl bg-[#090d1a] shadow-[0_14px_35px_rgba(9,13,26,0.18)]">
+          <div className="flex min-h-11 flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2 sm:flex-nowrap">
             <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
             <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
             <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
-            <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45">
+            <span className="ml-2 min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-[0.2em] text-white/45">
               {resolveTerminalLabel(props.item)}
             </span>
-            <span className="ml-auto">
+            <span className="ml-auto flex shrink-0 items-center gap-1.5">
               <CopyCommandButton command={launchText} />
+              <CommandHeaderButton
+                label={showCommand ? "Hide" : "Show"}
+                ariaLabel={showCommand ? "Hide stopped command" : "Show stopped command"}
+                expanded={showCommand}
+                onClick={toggleCommand}
+                icon={
+                  showCommand ? (
+                    <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <HiMiniChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  )
+                }
+              />
             </span>
           </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white">
-            {launchText}
-          </pre>
+          {showCommand ? (
+            <pre className="max-h-[min(34rem,48vh)] overflow-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-[13px] leading-6 text-white sm:text-sm">
+              {launchText}
+            </pre>
+          ) : null}
         </div>
         <WhyThisPaused item={props.item} />
         {isBlocked && (

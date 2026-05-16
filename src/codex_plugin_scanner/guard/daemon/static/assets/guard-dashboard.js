@@ -19279,31 +19279,50 @@ function PrimaryActionCard({ item }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 overflow-hidden rounded-xl bg-[#0f172a]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-11 flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2 sm:flex-nowrap", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-purple" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-blue" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-green" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45", children: action.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto flex items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-[0.2em] text-white/45", children: action.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto flex shrink-0 items-center gap-1.5", children: [
           isVisible && /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: action.text }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ReviewCommandButton,
             {
-              type: "button",
               onClick: handleToggleVisibility,
-              className: "inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors hover:bg-white/20 hover:text-white",
-              "aria-expanded": isVisible,
-              children: [
-                isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" }),
-                primaryReviewActionToggleLabel(isVisible)
-              ]
+              label: primaryReviewActionToggleLabel(isVisible),
+              ariaLabel: isVisible ? "Hide stopped action" : "Show stopped action",
+              expanded: isVisible,
+              icon: isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
             }
           )
         ] })
       ] }),
-      isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[36vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]", children: action.text }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-4 text-sm text-white/65", children: "Stopped action hidden. Show it before approving if you need to re-check the exact request." })
+      isVisible ? /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[min(34rem,48vh)] overflow-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-[13px] leading-6 text-white/90 [scrollbar-gutter:stable] sm:text-sm", children: action.text }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-4 text-sm text-white/65", children: "Stopped action hidden. Show it before approving if you need to re-check the exact request." })
     ] })
   ] });
+}
+function ReviewCommandButton({
+  label,
+  icon,
+  onClick,
+  ariaLabel,
+  expanded
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick,
+      "aria-label": ariaLabel,
+      "aria-expanded": expanded,
+      className: "inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/[0.08] px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 transition-colors hover:border-white/25 hover:bg-white/15 hover:text-white focus-visible:outline-white/50",
+      children: [
+        icon,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: label })
+      ]
+    }
+  );
 }
 function CopyButton({ text }) {
   const [copied, setCopied] = reactExports.useState(false);
@@ -19313,17 +19332,13 @@ function CopyButton({ text }) {
       setTimeout(() => setCopied(false), 2e3);
     });
   }, [text]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ReviewCommandButton,
     {
-      type: "button",
+      label: copied ? "Copied" : "Copy",
+      ariaLabel: "Copy to clipboard",
       onClick: handleCopy,
-      "aria-label": "Copy to clipboard",
-      className: "inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors hover:bg-white/20 hover:text-white",
-      children: [
-        copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "h-3 w-3", "aria-hidden": "true" }),
-        copied ? "Copied" : "Copy"
-      ]
+      icon: copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
     }
   );
 }
@@ -20422,6 +20437,22 @@ function copyApprovalUrlLabel(shareState) {
   }
   return "Copy link";
 }
+function CommandHeaderButton(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: props.onClick,
+      "aria-label": props.ariaLabel,
+      "aria-expanded": props.expanded,
+      className: "inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-white/15 bg-white/[0.08] px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white/70 transition-colors hover:border-white/25 hover:bg-white/15 hover:text-white focus-visible:outline-white/50",
+      children: [
+        props.icon,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: props.label })
+      ]
+    }
+  );
+}
 function CopyCommandButton(props) {
   const [copied, setCopied] = reactExports.useState(false);
   const handleCopy = reactExports.useCallback(() => {
@@ -20431,17 +20462,13 @@ function CopyCommandButton(props) {
       return timer;
     });
   }, [props.command]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CommandHeaderButton,
     {
-      type: "button",
+      label: copied ? "Copied" : "Copy",
+      ariaLabel: "Copy command to clipboard",
       onClick: handleCopy,
-      "aria-label": "Copy command to clipboard",
-      className: "inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors hover:bg-white/20 hover:text-white",
-      children: [
-        copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-        copied ? "Copied" : "Copy"
-      ]
+      icon: copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
     }
   );
 }
@@ -20459,6 +20486,7 @@ function resolveMcpInputSummary(payload) {
 function BlockedActionCard(props) {
   const launchText = actionLaunchText(props.item);
   const decisionDetail = resolveDecisionV2Detail(props.item);
+  const [showCommand, setShowCommand] = reactExports.useState(true);
   const [shareState, setShareState] = reactExports.useState("idle");
   const isBlocked = props.item.policy_action === "block";
   const bannerBg = isBlocked ? "bg-gradient-to-r from-brand-purple/90 to-brand-purple/75" : "bg-gradient-to-r from-brand-blue/85 to-brand-dark/80";
@@ -20471,6 +20499,9 @@ function BlockedActionCard(props) {
   const mcpTool = isMcpTool ? envelope?.mcp_tool ?? null : null;
   const mcpInputSummary = isMcpTool && envelope !== null ? resolveMcpInputSummary(envelope.raw_payload_redacted) : null;
   const approvalUrl = props.item.approval_url ? guardAwareHref(props.item.approval_url) : null;
+  const toggleCommand = reactExports.useCallback(() => {
+    setShowCommand((visible) => !visible);
+  }, []);
   const handleCopyApprovalUrl = reactExports.useCallback(async () => {
     if (approvalUrl === null) return;
     try {
@@ -20536,15 +20567,27 @@ function BlockedActionCard(props) {
         "."
       ] }),
       decisionDetail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: decisionDetail }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl bg-[#090d1a] p-1 shadow-[0_14px_35px_rgba(9,13,26,0.18)]", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 border-b border-white/10 px-3 py-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 overflow-hidden rounded-xl bg-[#090d1a] shadow-[0_14px_35px_rgba(9,13,26,0.18)]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-11 flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2 sm:flex-nowrap", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-purple" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-blue" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-green" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45", children: resolveTerminalLabel(props.item) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommandButton, { command: launchText }) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-[0.2em] text-white/45", children: resolveTerminalLabel(props.item) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto flex shrink-0 items-center gap-1.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommandButton, { command: launchText }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              CommandHeaderButton,
+              {
+                label: showCommand ? "Hide" : "Show",
+                ariaLabel: showCommand ? "Hide stopped command" : "Show stopped command",
+                expanded: showCommand,
+                onClick: toggleCommand,
+                icon: showCommand ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+              }
+            )
+          ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white", children: launchText })
+        showCommand ? /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[min(34rem,48vh)] overflow-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-[13px] leading-6 text-white sm:text-sm", children: launchText }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(WhyThisPaused, { item: props.item }),
       isBlocked && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-brand-purple/20 bg-brand-purple/[0.05] px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-6 text-brand-purple", children: [
