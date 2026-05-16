@@ -3214,6 +3214,34 @@ clearer UX and an implementation plan with technical references.
         assert "skillPathHash" in usage_payload
         assert "SKILL.md" not in json.dumps(usage_payload)
 
+    def test_guard_hook_ignores_tool_argument_skill_path(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="codex",
+            event={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": "node build-skill-index.js",
+                    "skill_path": ".codex/skills/project-review/SKILL.md",
+                },
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.skill.activated"]
+
+        assert rc == 0
+        assert usage_events == []
+
     def test_guard_hook_blocks_require_reapproval(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

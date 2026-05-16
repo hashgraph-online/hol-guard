@@ -29,10 +29,10 @@ _SKILL_ACTIVATION_KEYS = frozenset(
         "activatedskill",
         "activatedskillid",
         "activatedskillname",
-        "skillpath",
+        "activatedskillpath",
     }
 )
-_SKILL_PATH_KEYS = frozenset({"activeskillpath", "skillpath"})
+_SKILL_PATH_KEYS = frozenset({"activeskillpath", "activatedskillpath"})
 _REQUEST_ID_KEYS = ("request_id", "requestId", "tool_call_id", "toolCallId", "call_id", "callId")
 _SESSION_ID_KEYS = ("session_id", "sessionId", "conversation_id", "conversationId", "thread_id", "threadId")
 _MAX_SKILL_SEARCH_DEPTH = 6
