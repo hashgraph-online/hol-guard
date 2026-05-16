@@ -1150,6 +1150,9 @@ function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntim
 function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const action = buildPrimaryReviewAction(item);
   const [isVisible, setIsVisible] = useState(true);
+  useEffect(() => {
+    setIsVisible(true);
+  }, [item.request_id]);
   const handleToggleVisibility = useCallback(() => {
     setIsVisible((visible) => !visible);
   }, []);
