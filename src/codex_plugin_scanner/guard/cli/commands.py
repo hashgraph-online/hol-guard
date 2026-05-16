@@ -76,6 +76,7 @@ from ..daemon.manager import (
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
 )
+from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
 from ..mcp_tool_calls import (
     allow_tool_call,
@@ -1651,6 +1652,12 @@ def run_guard_command(
             payload=payload,
             home_dir=context.home_dir,
             workspace=runtime_workspace,
+        )
+        record_harness_usage_events(
+            store=store,
+            action=action_envelope,
+            raw_payload=payload,
+            occurred_at=_now(),
         )
         copilot_hook_stage = _copilot_hook_stage(payload) if args.harness == "copilot" else None
         copilot_runtime_tool_call = (

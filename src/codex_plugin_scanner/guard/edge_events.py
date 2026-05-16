@@ -156,6 +156,27 @@ def build_notification_delivery_event(
     )
 
 
+def build_harness_usage_event(
+    *,
+    event_type: GuardEventType,
+    subject_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    if event_type not in {"harness.mcp.used", "harness.skill.activated"}:
+        raise ValueError("Harness usage event type must be harness.mcp.used or harness.skill.activated")
+    return _build_edge_event(
+        event_type=event_type,
+        subject_id=subject_id,
+        occurred_at=occurred_at,
+        payload=payload,
+        device_id=device_id,
+        workspace_id=workspace_id,
+    )
+
+
 def _build_edge_event(
     *,
     event_type: GuardEventType,

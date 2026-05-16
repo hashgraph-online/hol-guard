@@ -15,6 +15,8 @@ GuardEventType = Literal[
     "access_graph.snapshot",
     "agent.handshake",
     "notification.delivery",
+    "harness.mcp.used",
+    "harness.skill.activated",
 ]
 _GUARD_EVENT_TYPES: frozenset[str] = frozenset(
     {
@@ -26,6 +28,8 @@ _GUARD_EVENT_TYPES: frozenset[str] = frozenset(
         "access_graph.snapshot",
         "agent.handshake",
         "notification.delivery",
+        "harness.mcp.used",
+        "harness.skill.activated",
     }
 )
 _GUARD_EVENT_SOURCES: frozenset[str] = frozenset({"edge", "approval-center", "policy", "protect-api"})
