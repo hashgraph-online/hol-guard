@@ -5,15 +5,15 @@
 [![HOL Guard Downloads](https://img.shields.io/pypi/dm/hol-guard?logo=pypi&logoColor=white)](https://pypi.org/project/hol-guard/)
 [![Plugin Scanner Downloads](https://img.shields.io/pypi/dm/plugin-scanner?logo=pypi&logoColor=white)](https://pypi.org/project/plugin-scanner/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](#install-the-package-you-need)
-[![CI](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/ci.yml)
-[![Publish](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/publish.yml)
-[![Container Image](https://img.shields.io/badge/ghcr-ai--plugin--scanner-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/ai-plugin-scanner/pkgs/container/ai-plugin-scanner)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/ai-plugin-scanner/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/ai-plugin-scanner)
+[![CI](https://github.com/hashgraph-online/hol-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/hol-guard/actions/workflows/ci.yml)
+[![Publish](https://github.com/hashgraph-online/hol-guard/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/hol-guard/actions/workflows/publish.yml)
+[![Container Image](https://img.shields.io/badge/ghcr-hol--guard-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/hol-guard/pkgs/container/hol-guard)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/hol-guard/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/hol-guard)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/ai-plugin-scanner?style=social)](https://github.com/hashgraph-online/ai-plugin-scanner/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/hol-guard?style=social)](https://github.com/hashgraph-online/hol-guard/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Protect your harness locally with `hol-guard`.** Use `plugin-scanner` when you need maintainer and CI checks for plugins, skills, MCP servers, and marketplace packages.<br><br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
+| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Protect your harness locally with `hol-guard`.** Use `plugin-scanner` when you need maintainer and CI checks for plugins, skills, MCP servers, and marketplace packages.<br><br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
 | :--- | :--- |
 
 ## Start Here
@@ -199,8 +199,8 @@ This keeps the quality grade and the trust score separate. Signals like `SECURIT
 ## Quick Start For Contributors
 
 ```bash
-git clone https://github.com/hashgraph-online/ai-plugin-scanner.git
-cd ai-plugin-scanner
+git clone https://github.com/hashgraph-online/hol-guard.git
+cd hol-guard
 uv sync --extra dev --extra cisco
 pytest -q
 ```
@@ -268,7 +268,7 @@ Container-first environments can use the published image instead. The repo-contr
 ```bash
 docker run --rm \
   -v "$PWD:/workspace" \
-  ghcr.io/hashgraph-online/ai-plugin-scanner:<version> \
+  ghcr.io/hashgraph-online/hol-guard:<version> \
   scan /workspace --format text
 ```
 

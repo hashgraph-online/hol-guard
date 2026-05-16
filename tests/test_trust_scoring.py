@@ -24,7 +24,7 @@ def write_minimal_plugin(plugin_dir: Path) -> None:
                 "description": "Trust scoring demo plugin",
                 "author": {"name": "Hashgraph Online"},
                 "homepage": "https://example.com/plugin",
-                "repository": "https://github.com/hashgraph-online/ai-plugin-scanner",
+                "repository": "https://github.com/hashgraph-online/hol-guard",
             }
         ),
         encoding="utf-8",
@@ -103,7 +103,7 @@ def test_invalid_skill_frontmatter_reduces_manifest_integrity(tmp_path: Path):
                 "skills": "skills",
                 "author": {"name": "Hashgraph Online"},
                 "homepage": "https://example.com/plugin",
-                "repository": "https://github.com/hashgraph-online/ai-plugin-scanner",
+                "repository": "https://github.com/hashgraph-online/hol-guard",
                 "interface": {"category": "developer-tools"},
             }
         ),
@@ -201,7 +201,7 @@ def test_declared_invalid_interface_keeps_interface_integrity_applicable(tmp_pat
                 "interface": "invalid",
                 "author": {"name": "Hashgraph Online"},
                 "homepage": "https://example.com/plugin",
-                "repository": "https://github.com/hashgraph-online/ai-plugin-scanner",
+                "repository": "https://github.com/hashgraph-online/hol-guard",
             }
         ),
         encoding="utf-8",
@@ -243,7 +243,7 @@ def test_unsafe_skill_path_does_not_emit_skill_trust_domain(tmp_path: Path):
                 "skills": "../shared-skills",
                 "author": {"name": "Hashgraph Online"},
                 "homepage": "https://example.com/plugin",
-                "repository": "https://github.com/hashgraph-online/ai-plugin-scanner",
+                "repository": "https://github.com/hashgraph-online/hol-guard",
             }
         ),
         encoding="utf-8",

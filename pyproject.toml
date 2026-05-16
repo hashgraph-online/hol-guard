@@ -72,9 +72,9 @@ plugin-guard = "codex_plugin_scanner.cli:main"
 plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/hashgraph-online/ai-plugin-scanner"
-Repository = "https://github.com/hashgraph-online/ai-plugin-scanner"
-Issues = "https://github.com/hashgraph-online/ai-plugin-scanner/issues"
+Homepage = "https://github.com/hashgraph-online/hol-guard"
+Repository = "https://github.com/hashgraph-online/hol-guard"
+Issues = "https://github.com/hashgraph-online/hol-guard/issues"
 
 [tool.ruff]
 target-version = "py310"

@@ -254,10 +254,10 @@ jobs:
           \`\`\`
 
           \`\`\`bash
-          docker pull ghcr.io/hashgraph-online/ai-plugin-scanner:${VERSION}
+          docker pull ghcr.io/hashgraph-online/hol-guard:${VERSION}
           \`\`\`
 
-          **Full Changelog**: https://github.com/hashgraph-online/ai-plugin-scanner/compare/${LAST_TAG}...v${VERSION}
+          **Full Changelog**: https://github.com/hashgraph-online/hol-guard/compare/${LAST_TAG}...v${VERSION}
           EOF
 
           echo "notes_path=release-notes.md" >> $GITHUB_OUTPUT
