@@ -71,6 +71,8 @@ export function ShellHeader(props: {
     props.onNavigate(event.target.value);
   }
 
+  const countDisplay = props.queuedCount > 99 ? "99+" : String(props.queuedCount);
+
   return (
     <header
       className="sticky top-0 z-30 flex min-h-16 items-center border-b border-brand-blue/20 bg-gradient-to-r from-brand-blue to-brand-dark px-4 text-white shadow-sm lg:hidden"
@@ -108,9 +110,12 @@ export function ShellHeader(props: {
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15"
           >
             <HiBars3 className="h-4 w-4" aria-hidden="true" />
-            {props.queuedCount > 1
-              ? `${props.queuedCount > 99 ? "99+" : props.queuedCount} decisions waiting`
-              : props.queuedCount}
+            <span className="hidden sm:inline">
+              {props.queuedCount > 1
+                ? `${countDisplay} decisions waiting`
+                : countDisplay}
+            </span>
+            <span className="sm:hidden">{countDisplay}</span>
           </button>
         )}
         {(!props.onOpenMobileQueue || props.view !== "inbox" || props.queuedCount === 0) && (

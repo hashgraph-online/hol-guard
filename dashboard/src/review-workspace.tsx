@@ -1173,7 +1173,7 @@ function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
         </span>
       </div>
       <div className="mt-3 overflow-hidden rounded-xl bg-[#0f172a]">
-        <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-white/10 px-3 py-2">
           <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
           <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
           <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
