@@ -466,11 +466,11 @@ assert(
 );
 
 assert(
-  primaryReviewActionToggleLabel(true) === "Hide stopped action",
+  primaryReviewActionToggleLabel(true) === "Hide",
   "GR211-01: primary review card can hide the stopped prompt or command"
 );
 assert(
-  primaryReviewActionToggleLabel(false) === "Show stopped action",
+  primaryReviewActionToggleLabel(false) === "Show",
   "GR211-02: primary review card can restore the stopped prompt or command"
 );
 

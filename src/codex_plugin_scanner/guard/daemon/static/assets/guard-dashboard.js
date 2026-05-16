@@ -13981,7 +13981,7 @@ function buildPrimaryReviewAction(item) {
   };
 }
 function primaryReviewActionToggleLabel(isVisible) {
-  return isVisible ? "Hide stopped action" : "Show stopped action";
+  return isVisible ? "Hide" : "Show";
 }
 function resolveStoppedCommandText(item) {
   if (item.action_envelope_json) {
@@ -14127,7 +14127,7 @@ function ShellHeader(props) {
             className: "flex min-h-11 min-w-0 items-center gap-2.5 text-white no-underline transition-opacity duration-150 hover:opacity-85",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "/brand/Logo_Icon_Dark.png", alt: "HOL", className: "h-9 w-9 shrink-0 rounded-none bg-transparent object-contain" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-base font-semibold tracking-tight text-white", children: "HOL Guard" })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-base font-semibold tracking-tight text-white hidden sm:inline", children: "HOL Guard" })
             ]
           }
         ),
@@ -14399,7 +14399,7 @@ function tagToneClass(tone) {
 }
 function actionButtonClass(variant) {
   const base = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-w-0";
-  const sizeDefault = "min-h-11 h-auto px-4 py-2";
+  const sizeDefault = "min-h-11 h-auto px-3 py-1.5 sm:px-4 sm:py-2";
   if (variant === "outline") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "secondary") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "ghost") return `${base} ${sizeDefault} hover:bg-slate-100 hover:text-slate-900`;
@@ -18499,7 +18499,7 @@ function ReviewHeader({
   const isFiltered = filteredCount !== count;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-[-0.02em] text-brand-dark", children: "Review" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold tracking-[-0.02em] text-brand-dark sm:text-2xl", children: "Review" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground", children: "Guard paused these actions before they ran. Review each one and decide what should happen." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
