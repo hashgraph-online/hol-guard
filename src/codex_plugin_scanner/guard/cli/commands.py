@@ -5103,9 +5103,12 @@ def _codex_url_like_local_path_tokens(text: str) -> tuple[str, ...]:
 def _codex_existing_local_path_match(token: str, *, cwd: Path | None) -> SecretPathMatch | None:
     if cwd is None:
         return None
-    candidate = Path(token)
-    if not candidate.is_absolute():
-        candidate = cwd / candidate
+    base_dir = cwd.resolve()
+    candidate = (base_dir / token).resolve(strict=False)
+    try:
+        candidate.relative_to(base_dir)
+    except ValueError:
+        return None
     if not candidate.exists():
         return None
     return classify_secret_path(token, cwd=cwd)

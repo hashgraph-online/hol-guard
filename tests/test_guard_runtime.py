@@ -1554,6 +1554,18 @@ clearer UX and an implementation plan with technical references.
         assert output["continue"] is False
         assert "credential-looking output" in output["stopReason"]
 
+    def test_codex_url_looking_local_path_does_not_escape_workspace(self, tmp_path) -> None:
+        outside_secret = tmp_path.parent / f"{tmp_path.name}-outside" / ".env"
+        outside_secret.parent.mkdir(parents=True)
+        outside_secret.write_text("OPENAI_API_KEY=token=definitely-invalid\n", encoding="utf-8")
+
+        matches = guard_commands_module._codex_sensitive_path_matches_in_text(
+            f"python -c \"print(open('https://example.test/../../{outside_secret.parent.name}/.env').read())\"",
+            cwd=tmp_path,
+        )
+
+        assert matches == []
+
     def test_codex_post_tool_use_allows_short_option_value_payloads(
         self,
         monkeypatch,

@@ -67,6 +67,7 @@ _CLIPBOARD_COMMANDS = frozenset({"pbcopy", "xclip", "xsel", "wl-copy", "clip", "
 _WEBHOOK_HOST_PATTERN = re.compile(
     r"webhook\.site|hooks\.slack\.com|discord\.com|pastebin\.com|gist\.github\.com|transfer\.sh|requestbin"
 )
+_CURL_SHORT_FLAGS_WITH_VALUES = frozenset({"A", "b", "c", "d", "e", "E", "F", "H", "K", "o", "T", "u", "x", "X"})
 
 
 def detect_data_flow_exfiltration(
@@ -280,9 +281,11 @@ def _curl_short_flag_data_path(token: str, args: Sequence[str], index: int) -> t
         return None
     cluster = token[1:]
     for flag_index, flag in enumerate(cluster):
-        if flag not in {"d", "T", "F"}:
-            continue
         attached_value = cluster[flag_index + 1 :]
+        if flag not in {"d", "T", "F"}:
+            if flag in _CURL_SHORT_FLAGS_WITH_VALUES:
+                return None
+            continue
         option = f"-{flag}"
         if attached_value:
             return _curl_option_data_path(option, attached_value), 1
