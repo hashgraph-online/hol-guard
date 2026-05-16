@@ -250,10 +250,7 @@ def _resolve_target_path(target: str, workspace: Path) -> Path | None:
     candidate = Path(target).expanduser()
     if candidate.is_absolute():
         return candidate.resolve()
-    resolved = (workspace / candidate).resolve()
-    if not resolved.is_relative_to(workspace) and ".." not in candidate.parts:
-        return None
-    return resolved
+    return (workspace / candidate).resolve()
 
 
 def _is_skill_file(path: Path) -> bool:

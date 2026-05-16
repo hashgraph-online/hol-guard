@@ -273,7 +273,7 @@ def test_cisco_preflight_changed_skill_file_produces_normalized_signal(
     assert signals[0].scanner_rule_id == "CISCO-SKILL-EXFIL"
 
 
-def test_cisco_preflight_skips_skill_targets_that_resolve_outside_workspace(
+def test_cisco_preflight_scans_skill_targets_that_resolve_outside_workspace_via_symlink(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -301,8 +301,8 @@ def test_cisco_preflight_skips_skill_targets_that_resolve_outside_workspace(
         workspace=tmp_path,
     )
 
-    assert signals == ()
-    assert called == []
+    assert [signal.source for signal in signals] == ["cisco_skill"]
+    assert called == [external_skill.parent]
 
 
 def test_cisco_preflight_scans_explicit_absolute_skill_targets_outside_workspace(
@@ -378,6 +378,35 @@ def test_cisco_preflight_scans_explicit_relative_traversal_mcp_targets(
 
     assert [signal.source for signal in signals] == ["cisco_mcp"]
     assert called == [external_mcp.parent]
+
+
+def test_cisco_preflight_scans_mcp_targets_that_resolve_outside_workspace_via_symlink(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+
+    external_root = tmp_path.parent / f"{tmp_path.name}-external-mcp"
+    external_mcp = external_root / ".mcp.json"
+    external_root.mkdir(parents=True)
+    external_mcp.write_text("{}", encoding="utf-8")
+    workspace_mcp = tmp_path / ".mcp.json"
+    try:
+        workspace_mcp.symlink_to(external_mcp)
+    except OSError:
+        pytest.skip("symlinks are not supported in this environment")
+    called: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        called.append(path)
+        return _mcp_summary(CiscoIntegrationStatus.ENABLED, (_mcp_finding(),))
+
+    monkeypatch.setattr(cisco_mcp_scanner, "run_cisco_mcp_scan", fake_scan)
+
+    signals = scan_action_for_cisco_evidence(_file_write_action(workspace_mcp, tmp_path), workspace=tmp_path)
+
+    assert [signal.source for signal in signals] == ["cisco_mcp"]
+    assert called == [external_root]
 
 
 def test_cisco_preflight_changed_mcp_config_produces_normalized_signal(

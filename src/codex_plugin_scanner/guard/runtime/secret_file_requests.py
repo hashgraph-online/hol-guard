@@ -879,10 +879,13 @@ def _ssh_segment_consumes_stdin(args: list[str]) -> bool:
             return False
         if arg.startswith("-") and not arg.startswith("--"):
             cluster_flags = arg[1:]
-            if any(flag in cluster_flags for flag in {"n", "f", "N"}) and not any(
-                f"-{flag}" in flags_with_values for flag in cluster_flags
-            ):
-                return False
+            for index, flag in enumerate(cluster_flags):
+                if flag in {"n", "f", "N"}:
+                    return False
+                if f"-{flag}" in flags_with_values:
+                    if index == len(cluster_flags) - 1:
+                        break
+                    break
     return True
 
 
