@@ -325,9 +325,13 @@ export type PrimaryReviewAction = {
 export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
   return {
     label: resolveTerminalLabel(item),
-    text: resolveStoppedCommandText(item),
+    text: resolvePrimaryReviewText(item),
     detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null,
   };
+}
+
+export function primaryReviewActionToggleLabel(isVisible: boolean): string {
+  return isVisible ? "Hide stopped action" : "Show stopped action";
 }
 
 export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
@@ -348,6 +352,37 @@ export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
     return item.launch_summary;
   }
   return item.artifact_name.trim() || item.artifact_id;
+}
+
+function resolvePrimaryReviewText(item: GuardApprovalRequest): string {
+  const baseText = resolveStoppedCommandText(item);
+  const envelope = item.action_envelope_json;
+  if (envelope?.action_type !== "mcp_tool") {
+    return baseText;
+  }
+
+  const inputSummary = serializeMcpInput(envelope.raw_payload_redacted);
+  if (inputSummary === null) {
+    return baseText;
+  }
+  return `${baseText}\n\nInput:\n${inputSummary}`;
+}
+
+function serializeMcpInput(payload: Record<string, unknown>): string | null {
+  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
+  if (input === null || input === undefined) {
+    return null;
+  }
+
+  try {
+    const serialized = typeof input === "string" ? input : JSON.stringify(input, null, 2);
+    if (serialized === undefined || serialized.trim().length === 0 || serialized === "{}") {
+      return null;
+    }
+    return serialized.length > 4000 ? `${serialized.slice(0, 4000)}...` : serialized;
+  } catch {
+    return null;
+  }
 }
 
 export function harnessDisplayName(harness: string): string {
