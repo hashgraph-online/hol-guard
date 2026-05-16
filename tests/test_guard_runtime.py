@@ -13444,6 +13444,21 @@ def test_codex_read_only_source_inspection_allows_safe_sed_chains(tmp_path: Path
     assert artifact is None
 
 
+def test_codex_read_only_source_inspection_rejects_unbounded_sed_ranges(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "sed -n '9999999p' src/safe.ts",
+        cwd=workspace_dir,
+    )
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        f"sed -n '{'9' * 10000}p' src/safe.ts",
+        cwd=workspace_dir,
+    )
+
+
 def test_codex_read_only_source_inspection_rejects_sed_chain_with_secret_file(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     route_file = workspace_dir / "src" / "api" / "routes" / "skill-registry.ts"
