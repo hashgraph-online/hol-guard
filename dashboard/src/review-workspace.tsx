@@ -301,7 +301,7 @@ function ReviewHeader({
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-brand-dark">Review</h1>
+        <h1 className="text-xl font-semibold tracking-[-0.02em] text-brand-dark sm:text-2xl">Review</h1>
         <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
           Guard paused these actions before they ran. Review each one and decide what should happen.
         </p>
