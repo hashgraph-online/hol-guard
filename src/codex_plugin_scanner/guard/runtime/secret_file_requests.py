@@ -877,8 +877,12 @@ def _ssh_segment_consumes_stdin(args: list[str]) -> bool:
             return False
         if any(arg.startswith(flag) and len(arg) > 2 for flag in ("-G", "-N", "-Q")):
             return False
-        if arg.startswith("-") and not arg.startswith("--") and set(arg[1:]).issubset({"n", "f", "N"}):
-            return False
+        if arg.startswith("-") and not arg.startswith("--"):
+            cluster_flags = arg[1:]
+            if any(flag in cluster_flags for flag in {"n", "f", "N"}) and not any(
+                f"-{flag}" in flags_with_values for flag in cluster_flags
+            ):
+                return False
     return True
 
 

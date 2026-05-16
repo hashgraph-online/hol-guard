@@ -67,7 +67,37 @@ _CLIPBOARD_COMMANDS = frozenset({"pbcopy", "xclip", "xsel", "wl-copy", "clip", "
 _WEBHOOK_HOST_PATTERN = re.compile(
     r"webhook\.site|hooks\.slack\.com|discord\.com|pastebin\.com|gist\.github\.com|transfer\.sh|requestbin"
 )
-_CURL_SHORT_FLAGS_WITH_VALUES = frozenset({"A", "b", "c", "d", "e", "E", "F", "H", "K", "o", "T", "u", "x", "X"})
+_CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
+    {
+        "A",
+        "b",
+        "C",
+        "c",
+        "d",
+        "D",
+        "e",
+        "E",
+        "F",
+        "H",
+        "h",
+        "K",
+        "m",
+        "o",
+        "P",
+        "Q",
+        "r",
+        "t",
+        "T",
+        "u",
+        "U",
+        "w",
+        "x",
+        "X",
+        "y",
+        "Y",
+        "z",
+    }
+)
 
 
 def detect_data_flow_exfiltration(
