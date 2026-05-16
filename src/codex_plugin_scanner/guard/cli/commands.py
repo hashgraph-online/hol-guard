@@ -22,7 +22,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TextIO
 
 from ...argparse_utils import FriendlyArgumentParser
@@ -5104,14 +5104,21 @@ def _codex_existing_local_path_match(token: str, *, cwd: Path | None) -> SecretP
     if cwd is None:
         return None
     base_dir = cwd.resolve()
-    candidate = (base_dir / token).resolve(strict=False)
-    try:
-        candidate.relative_to(base_dir)
-    except ValueError:
+    parsed = urllib.parse.urlparse(token)
+    if not parsed.scheme or not parsed.netloc:
         return None
+    relative_parts = [f"{parsed.scheme}:", parsed.netloc]
+    for part in PurePosixPath(parsed.path).parts:
+        if part in {"", "/", ".", ".."}:
+            continue
+        relative_parts.append(part)
+    if len(relative_parts) <= 2 and not parsed.path.strip("/"):
+        return None
+    candidate = base_dir.joinpath(*relative_parts)
     if not candidate.exists():
         return None
-    return classify_secret_path(token, cwd=cwd)
+    relative_candidate = candidate.relative_to(base_dir)
+    return classify_secret_path(str(relative_candidate), cwd=cwd)
 
 
 def _codex_path_token_is_url_path(text: str, start: int) -> bool:
