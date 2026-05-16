@@ -165,6 +165,89 @@ def test_resolving_active_item_with_two_remaining_returns_next_hint(tmp_path: Pa
     assert store.get_approval_request("req-active")["resolution_action"] == "allow"
 
 
+def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _populate(store, [_request("req-active")])
+    socket_path = tmp_path / "codex.sock"
+    socket_path.write_text("", encoding="utf-8")
+    proxy_input = tmp_path / "proxy-input.jsonl"
+    proxy_script = tmp_path / "codex-proxy.py"
+    proxy_script.write_text(
+        """
+#!/usr/bin/env python3
+import json
+import pathlib
+import sys
+
+raw = sys.stdin.read()
+pathlib.Path(sys.argv[-1]).with_name("proxy-input.jsonl").write_text(raw, encoding="utf-8")
+print(json.dumps({
+    "id": 1,
+    "result": {
+        "userAgent": "test",
+        "codexHome": "/tmp",
+        "platformFamily": "unix",
+        "platformOs": "macos",
+    },
+}))
+print(json.dumps({"id": 2, "result": {"turnId": "turn-next"}}))
+""".lstrip(),
+        encoding="utf-8",
+    )
+    proxy_script.chmod(0o755)
+    monkeypatch.setenv("HOL_GUARD_CODEX_COMMAND", str(proxy_script))
+    session = store.upsert_guard_session(
+        session_id="guard-session-1",
+        harness="codex",
+        surface="harness-adapter",
+        status="waiting_on_approval",
+        client_name="codex-hook",
+        client_title="Codex hook",
+        client_version="1.0.0",
+        workspace=str(tmp_path),
+        capabilities=["approval-resolution"],
+        now="2026-05-08T10:00:00+00:00",
+    )
+    store.upsert_guard_operation(
+        operation_id="operation-1",
+        session_id=str(session["session_id"]),
+        harness="codex",
+        operation_type="tool_call",
+        status="waiting_on_approval",
+        approval_request_ids=["req-active"],
+        resume_token="resume-token",
+        metadata={
+            "codex_thread_id": "thread-1",
+            "codex_turn_id": "turn-1",
+            "codex_app_server_socket": str(socket_path),
+        },
+        now="2026-05-08T10:00:00+00:00",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-active/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    sent_lines = [json.loads(line) for line in proxy_input.read_text(encoding="utf-8").splitlines() if line.strip()]
+    turn_start = sent_lines[-1]
+    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["resolution_summary"] == (
+        "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
+    )
+    assert turn_start["method"] == "turn/start"
+    assert turn_start["params"]["threadId"] == "thread-1"
+    assert "HOL Guard approved" in turn_start["params"]["input"][0]["text"]
+    assert store.list_events(event_name="codex/thread_resume")[0]["payload"]["status"] == "sent"
+
+
 def test_resolving_last_item_returns_empty_queue_hint(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _populate(store, [_request("req-only")])

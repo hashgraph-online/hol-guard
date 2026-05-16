@@ -37,6 +37,7 @@ from ..cli.install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
+from ..codex_app_server import resume_codex_thread_for_request
 from ..config import (
     GuardConfig,
     editable_guard_settings,
@@ -557,6 +558,28 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         harness = str(updated.get("harness", ""))
         copy = _build_resolution_copy(action, harness_str or harness)
+        codex_resume = None
+        if action in {"allow", "block"}:
+            codex_resume = resume_codex_thread_for_request(
+                store=self.server.store,  # type: ignore[attr-defined]
+                request_id=request_id,
+                action=action,
+            )
+        if codex_resume is not None:
+            updated["codex_resume"] = codex_resume
+            self.server.store.add_event(  # type: ignore[attr-defined]
+                "codex/thread_resume",
+                {"request_id": request_id, "action": action, **codex_resume},
+                _now(),
+            )
+            if codex_resume.get("status") == "sent":
+                updated["resolution_summary"] = (
+                    "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
+                )
+                copy = {
+                    "title": "Decision saved. Codex is continuing.",
+                    "body": "HOL Guard sent a continue prompt to the original Codex thread.",
+                }
         updated["copy"] = copy
         updated["retry_hint"] = copy["body"]
         self._write_json(updated)
