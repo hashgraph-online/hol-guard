@@ -725,9 +725,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "broad_allow_requires_narrow_scope"}, status=400)
             return
         artifact_id = self._optional_string(policy_memory.get("artifact_id"))
-        workspace = self._optional_string(policy_memory.get("workspace")) or self._optional_string(
-            payload.get("workspace_id")
-        )
+        workspace = self._optional_string(policy_memory.get("workspace"))
         publisher = self._optional_string(policy_memory.get("publisher"))
         if not self._scope_target_is_valid(
             scope,

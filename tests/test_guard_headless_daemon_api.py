@@ -221,6 +221,19 @@ def test_headless_policy_sync_rejects_global_allow_and_missing_scope_targets(
                 },
             ),
         )
+        cloud_workspace_status, cloud_workspace_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "workspace_id": "cloud-workspace-id",
+                    "policy_memory": json.dumps({"scope": "workspace", "action": "review"}),
+                },
+            ),
+        )
     finally:
         daemon.stop()
 
@@ -228,6 +241,8 @@ def test_headless_policy_sync_rejects_global_allow_and_missing_scope_targets(
     assert global_payload["error"] == "broad_allow_requires_narrow_scope"
     assert workspace_status == 400
     assert workspace_payload["error"] == "missing_scope_target"
+    assert cloud_workspace_status == 400
+    assert cloud_workspace_payload["error"] == "missing_scope_target"
     assert store.list_policy_decisions(harness="codex") == []
 
 
