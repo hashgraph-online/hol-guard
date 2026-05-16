@@ -183,6 +183,48 @@ def test_headless_policy_sync_persists_policy_and_receipt(tmp_path: Path) -> Non
     assert store.list_receipts(limit=5, harness="codex")
 
 
+def test_headless_policy_sync_rejects_global_allow_and_missing_scope_targets(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        global_status, global_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_memory": json.dumps({"scope": "global", "action": "allow"}),
+                },
+            ),
+        )
+        workspace_status, workspace_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_memory": json.dumps({"scope": "workspace", "action": "review"}),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert global_status == 400
+    assert global_payload["error"] == "broad_allow_requires_narrow_scope"
+    assert workspace_status == 400
+    assert workspace_payload["error"] == "missing_scope_target"
+    assert store.list_policy_decisions(harness="codex") == []
+
+
 def test_headless_api_rejects_missing_auth_and_bad_harness(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

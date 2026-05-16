@@ -715,15 +715,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if scope not in DECISION_SCOPE_VALUES or action not in GUARD_ACTION_VALUES:
             self._write_json({"error": "unsupported_policy_value"}, status=400)
             return
+        if scope == "global" and action == "allow":
+            self._write_json({"error": "broad_allow_requires_narrow_scope"}, status=400)
+            return
+        artifact_id = self._optional_string(policy_memory.get("artifact_id"))
+        workspace = self._optional_string(policy_memory.get("workspace")) or self._optional_string(
+            payload.get("workspace_id")
+        )
+        publisher = self._optional_string(policy_memory.get("publisher"))
+        if not self._scope_target_is_valid(
+            scope,
+            artifact_id=artifact_id,
+            workspace=workspace,
+            publisher=publisher,
+        ):
+            self._write_json({"error": "missing_scope_target"}, status=400)
+            return
         decision = PolicyDecision(
             harness=adapter.harness,
             scope=scope,  # type: ignore[arg-type]
             action=action,  # type: ignore[arg-type]
-            artifact_id=self._optional_string(policy_memory.get("artifact_id")),
+            artifact_id=artifact_id,
             artifact_hash=self._optional_string(policy_memory.get("artifact_hash")),
-            workspace=self._optional_string(policy_memory.get("workspace"))
-            or self._optional_string(payload.get("workspace_id")),
-            publisher=self._optional_string(policy_memory.get("publisher")),
+            workspace=workspace,
+            publisher=publisher,
             reason=self._optional_string(policy_memory.get("reason")) or "Guard Cloud policy memory sync",
             source="cloud-sync",
             expires_at=self._optional_string(policy_memory.get("expires_at")),
