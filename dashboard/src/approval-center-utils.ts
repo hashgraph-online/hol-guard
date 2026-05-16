@@ -323,6 +323,7 @@ export type PrimaryReviewAction = {
 };
 
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
+const DUPLICATE_REVIEW_CONTEXT_MAX_LENGTH = 32;
 
 export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
   return {
@@ -346,9 +347,20 @@ export function resolveSecondaryRiskSummary(item: GuardApprovalRequest): string 
 export function hasReviewEvidence(item: GuardApprovalRequest): boolean {
   return (
     (item.risk_signals?.length ?? 0) > 0 ||
-    (item.decision_v2_json?.signals?.length ?? 0) > 0 ||
+    hasRenderableDecisionEvidence(item) ||
     resolveSecondaryRiskSummary(item) !== null ||
     !!item.why_now
+  );
+}
+
+function hasRenderableDecisionEvidence(item: GuardApprovalRequest): boolean {
+  const signals = item.decision_v2_json?.signals ?? [];
+  return (
+    signals.some((signal) => signal.category === "skill" || signal.category === "mcp") ||
+    deriveDataFlowEvidence(item) !== null ||
+    deriveSkillRiskSignals(item).length > 0 ||
+    deriveSupplyChainRiskSignals(item).length > 0 ||
+    deriveEncodedLayerSignals(item).length > 0
   );
 }
 
@@ -367,7 +379,11 @@ function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string):
   ) {
     return false;
   }
-  return candidateText.includes(stoppedText) || stoppedText.includes(candidateText);
+  if (!candidateText.includes(stoppedText)) {
+    return false;
+  }
+  const remainingContext = candidateText.replace(stoppedText, "");
+  return remainingContext.length <= DUPLICATE_REVIEW_CONTEXT_MAX_LENGTH;
 }
 
 function normalizeDuplicateReviewText(value: string): string {

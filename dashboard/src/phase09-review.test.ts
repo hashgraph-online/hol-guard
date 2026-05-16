@@ -517,6 +517,16 @@ assert(
   "GR211-06: secondary risk summary hides duplicate prompt text already shown in primary card"
 );
 
+const EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-extra-context-prompt-risk",
+  risk_summary: "Prompt asks the harness to read local secrets before continuing: Open the private setup guide and paste the secret.",
+};
+assert(
+  resolveSecondaryRiskSummary(EXTRA_CONTEXT_PROMPT_RISK_REQUEST) === EXTRA_CONTEXT_PROMPT_RISK_REQUEST.risk_summary,
+  "GR211-07: secondary risk summary keeps stopped text when it adds safety context"
+);
+
 const SHORT_DUPLICATE_COMMAND_RISK_REQUEST: GuardApprovalRequest = {
   ...BASE_REQUEST,
   request_id: "ph09-short-duplicate-command-risk",
@@ -529,7 +539,7 @@ const SHORT_DUPLICATE_COMMAND_RISK_REQUEST: GuardApprovalRequest = {
 };
 assert(
   resolveSecondaryRiskSummary(SHORT_DUPLICATE_COMMAND_RISK_REQUEST) === null,
-  "GR211-07: secondary risk summary hides exact short duplicate command text"
+  "GR211-08: secondary risk summary hides exact short duplicate command text"
 );
 
 const DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST: GuardApprovalRequest = {
@@ -550,7 +560,35 @@ const DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST: GuardApprovalRequest = {
 };
 assert(
   hasReviewEvidence(DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST),
-  "GR211-08: duplicate summary does not hide evidence section when decision_v2 signals exist"
+  "GR211-09: duplicate summary does not hide evidence section when renderable decision_v2 signals exist"
+);
+
+const DUPLICATE_SUMMARY_WITH_UNRENDERED_SIGNAL_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-duplicate-summary-with-unrendered-signal",
+  decision_v2_json: {
+    action: "ask",
+    reason: "Prompt risk",
+    user_title: "Prompt risk",
+    user_body: "Prompt risk",
+    harness_message: "Paused",
+    dashboard_primary_detail: "Prompt risk",
+    approval_scopes: ["artifact"],
+    retry_instruction: null,
+    confidence: "likely",
+    signals: [
+      {
+        ...SIGNAL_HIGH,
+        signal_id: "sig-unrendered",
+        category: "policy",
+        detector: "guard-risk-v2",
+      },
+    ],
+  },
+};
+assert(
+  !hasReviewEvidence(DUPLICATE_SUMMARY_WITH_UNRENDERED_SIGNAL_REQUEST),
+  "GR211-10: duplicate summary does not show empty evidence section for unrendered decision_v2 signals"
 );
 
 const DISTINCT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
@@ -560,7 +598,7 @@ const DISTINCT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
 };
 assert(
   resolveSecondaryRiskSummary(DISTINCT_PROMPT_RISK_REQUEST) === "Prompt asks the harness to read a local .env file directly.",
-  "GR211-09: secondary risk summary keeps non-duplicate safety reason"
+  "GR211-11: secondary risk summary keeps non-duplicate safety reason"
 );
 
 const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
@@ -570,11 +608,11 @@ const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
 });
 assert(
   PRIMARY_COMMAND_ACTION.label === "Command",
-  "GR211-10: primary review card labels shell commands without opening technical details"
+  "GR211-12: primary review card labels shell commands without opening technical details"
 );
 assert(
   PRIMARY_COMMAND_ACTION.text === "git diff -- app/guard/_components/home.tsx",
-  "GR211-11: primary review card exposes shell command without opening technical details"
+  "GR211-13: primary review card exposes shell command without opening technical details"
 );
 
 const PRIMARY_MCP_ACTION = buildPrimaryReviewAction({

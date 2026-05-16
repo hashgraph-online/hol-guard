@@ -13974,6 +13974,7 @@ function resolveDecisionV2Detail(item) {
   return detail !== void 0 && detail.trim().length > 0 ? detail : null;
 }
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
+const DUPLICATE_REVIEW_CONTEXT_MAX_LENGTH = 32;
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
@@ -13992,7 +13993,11 @@ function resolveSecondaryRiskSummary(item) {
   return summary;
 }
 function hasReviewEvidence(item) {
-  return (item.risk_signals?.length ?? 0) > 0 || (item.decision_v2_json?.signals?.length ?? 0) > 0 || resolveSecondaryRiskSummary(item) !== null || !!item.why_now;
+  return (item.risk_signals?.length ?? 0) > 0 || hasRenderableDecisionEvidence(item) || resolveSecondaryRiskSummary(item) !== null || !!item.why_now;
+}
+function hasRenderableDecisionEvidence(item) {
+  const signals = item.decision_v2_json?.signals ?? [];
+  return signals.some((signal) => signal.category === "skill" || signal.category === "mcp") || deriveDataFlowEvidence(item) !== null || deriveSkillRiskSignals(item).length > 0 || deriveSupplyChainRiskSignals(item).length > 0 || deriveEncodedLayerSignals(item).length > 0;
 }
 function duplicatesStoppedActionText(item, value) {
   const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
@@ -14006,7 +14011,11 @@ function duplicatesStoppedActionText(item, value) {
   if (stoppedText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH || candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH) {
     return false;
   }
-  return candidateText.includes(stoppedText) || stoppedText.includes(candidateText);
+  if (!candidateText.includes(stoppedText)) {
+    return false;
+  }
+  const remainingContext = candidateText.replace(stoppedText, "");
+  return remainingContext.length <= DUPLICATE_REVIEW_CONTEXT_MAX_LENGTH;
 }
 function normalizeDuplicateReviewText(value) {
   return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_-]+/g, "").trim();
