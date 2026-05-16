@@ -330,6 +330,33 @@ export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryRev
   };
 }
 
+export function resolveSecondaryRiskSummary(item: GuardApprovalRequest): string | null {
+  const summary = item.risk_summary?.trim();
+  if (!summary) {
+    return null;
+  }
+  if (duplicatesStoppedActionText(item, summary)) {
+    return null;
+  }
+  return summary;
+}
+
+function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string): boolean {
+  const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
+  const candidateText = normalizeDuplicateReviewText(value);
+  if (stoppedText.length < 24 || candidateText.length < 24) {
+    return false;
+  }
+  return candidateText.includes(stoppedText) || stoppedText.includes(candidateText);
+}
+
+function normalizeDuplicateReviewText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[`"'\s:.,;!?()[\]{}_-]+/g, "")
+    .trim();
+}
+
 export function primaryReviewActionToggleLabel(isVisible: boolean): string {
   return isVisible ? "Hide" : "Show";
 }

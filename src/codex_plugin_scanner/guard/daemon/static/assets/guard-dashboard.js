@@ -13980,6 +13980,27 @@ function buildPrimaryReviewAction(item) {
     detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null
   };
 }
+function resolveSecondaryRiskSummary(item) {
+  const summary = item.risk_summary?.trim();
+  if (!summary) {
+    return null;
+  }
+  if (duplicatesStoppedActionText(item, summary)) {
+    return null;
+  }
+  return summary;
+}
+function duplicatesStoppedActionText(item, value) {
+  const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
+  const candidateText = normalizeDuplicateReviewText(value);
+  if (stoppedText.length < 24 || candidateText.length < 24) {
+    return false;
+  }
+  return candidateText.includes(stoppedText) || stoppedText.includes(candidateText);
+}
+function normalizeDuplicateReviewText(value) {
+  return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_-]+/g, "").trim();
+}
 function primaryReviewActionToggleLabel(isVisible) {
   return isVisible ? "Hide" : "Show";
 }
@@ -18952,7 +18973,8 @@ function ReviewDecisionCard(props) {
   const plainTitle = plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = buildWhatWouldHappen(item);
-  const hasEvidence = (item.risk_signals?.length ?? 0) > 0 || item.risk_summary || item.why_now;
+  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  const hasEvidence = (item.risk_signals?.length ?? 0) > 0 || secondaryRiskSummary || item.why_now;
   const pauseReason = whyPaused(item);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -18987,9 +19009,9 @@ function ReviewDecisionCard(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: pauseReason }) }),
-      item.risk_summary && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
+      secondaryRiskSummary && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: item.risk_summary })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: secondaryRiskSummary })
       ] }) }),
       whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -20133,7 +20155,8 @@ function InlineScannerSection(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection, { signals: allSignals });
 }
 function ScannerEvidenceSectionFull(props) {
-  const hasSignals = (props.item.risk_signals ?? []).length > 0 || !!props.item.risk_summary || !!props.item.why_now;
+  const secondaryRiskSummary = resolveSecondaryRiskSummary(props.item);
+  const hasSignals = (props.item.risk_signals ?? []).length > 0 || secondaryRiskSummary !== null || !!props.item.why_now;
   if (!hasSignals) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(InlineScannerSection, { item: props.item }),
@@ -20174,11 +20197,12 @@ function resolveAllowScopeLabel(scope) {
 function WhyGuardCares(props) {
   const { item } = props;
   const signals = item.risk_signals ?? [];
-  if (signals.length === 0 && !item.risk_summary && !item.why_now) return null;
+  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  if (signals.length === 0 && secondaryRiskSummary === null && !item.why_now) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Why this was paused" }),
     item.why_now ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: item.why_now }) : null,
-    item.risk_summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: item.risk_summary }) : null,
+    secondaryRiskSummary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: secondaryRiskSummary }) : null,
     signals.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: signals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-2 text-sm text-brand-purple", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-brand-purple/70" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[13px]", children: signal })

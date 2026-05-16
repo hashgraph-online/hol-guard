@@ -24,6 +24,7 @@ import {
   formatRelativeTime,
   harnessDisplayName,
   primaryReviewActionToggleLabel,
+  resolveSecondaryRiskSummary,
   resolveStoppedCommandText,
 } from "./approval-center-utils";
 import {
@@ -498,6 +499,33 @@ assert(
   "GR211-05: primary review card includes user-facing detail without opening technical details"
 );
 
+const DUPLICATE_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "ph09-duplicate-prompt-risk",
+  artifact_type: "prompt_request",
+  risk_summary: "Codex prompt for `.env`: Open the private setup guide and paste the secret.",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: "Open the private setup guide and paste the secret.",
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(DUPLICATE_PROMPT_RISK_REQUEST) === null,
+  "GR211-06: secondary risk summary hides duplicate prompt text already shown in primary card"
+);
+
+const DISTINCT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-distinct-prompt-risk",
+  risk_summary: "Prompt asks the harness to read a local .env file directly.",
+};
+assert(
+  resolveSecondaryRiskSummary(DISTINCT_PROMPT_RISK_REQUEST) === "Prompt asks the harness to read a local .env file directly.",
+  "GR211-07: secondary risk summary keeps non-duplicate safety reason"
+);
+
 const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
   ...BASE_REQUEST,
   request_id: "ph09-primary-command",
@@ -505,11 +533,11 @@ const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
 });
 assert(
   PRIMARY_COMMAND_ACTION.label === "Command",
-  "GR211-06: primary review card labels shell commands without opening technical details"
+  "GR211-08: primary review card labels shell commands without opening technical details"
 );
 assert(
   PRIMARY_COMMAND_ACTION.text === "git diff -- app/guard/_components/home.tsx",
-  "GR211-07: primary review card exposes shell command without opening technical details"
+  "GR211-09: primary review card exposes shell command without opening technical details"
 );
 
 const PRIMARY_MCP_ACTION = buildPrimaryReviewAction({
