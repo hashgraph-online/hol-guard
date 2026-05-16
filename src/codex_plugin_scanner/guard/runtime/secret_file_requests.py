@@ -25,6 +25,7 @@ from .false_positive_rules import (
 )
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
+from .sed_scripts import sed_script_is_bounded_print
 
 _FILE_READ_TOOL_NAMES = frozenset(
     {
@@ -3143,7 +3144,7 @@ def _read_only_lookup_sed_args_are_safe(args: list[str], *, require_target: bool
 
 
 def _read_only_lookup_sed_script_is_print_only(script: str) -> bool:
-    return bool(re.fullmatch(r"\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*", script))
+    return sed_script_is_bounded_print(script)
 
 
 def _read_only_lookup_head_tail_args_are_safe(args: list[str], *, require_target: bool) -> bool:

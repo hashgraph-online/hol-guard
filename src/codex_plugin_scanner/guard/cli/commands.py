@@ -132,6 +132,7 @@ from ..runtime.secret_sensitivity import (
     classify_secret_content,
     classify_secret_path,
 )
+from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
@@ -5178,7 +5179,6 @@ _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     \s*"""
 )
 _CODEX_SENSITIVE_SEARCH_BASENAMES = SOURCE_INSPECTION_SENSITIVE_PARTS | frozenset({"id_rsa"})
-_CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
 _CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
     {
         "--diff-filter",
@@ -5645,7 +5645,7 @@ def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path |
     return (
         bool(parsed.targets)
         and parsed.saw_print_suppression
-        and all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in parsed.scripts)
+        and all(sed_script_is_bounded_print(script) for script in parsed.scripts)
         and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in parsed.targets)
     )
 
@@ -5657,7 +5657,7 @@ def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
     return (
         not parsed.targets
         and parsed.saw_print_suppression
-        and all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in parsed.scripts)
+        and all(sed_script_is_bounded_print(script) for script in parsed.scripts)
     )
 
 
