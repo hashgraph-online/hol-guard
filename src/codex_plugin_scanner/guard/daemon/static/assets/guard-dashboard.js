@@ -13973,6 +13973,13 @@ function resolveDecisionV2Detail(item) {
   const detail = item.decision_v2_json?.dashboard_primary_detail;
   return detail !== void 0 && detail.trim().length > 0 ? detail : null;
 }
+function buildPrimaryReviewAction(item) {
+  return {
+    label: resolveTerminalLabel(item),
+    text: resolveStoppedCommandText(item),
+    detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null
+  };
+}
 function resolveStoppedCommandText(item) {
   if (item.action_envelope_json) {
     const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
@@ -18946,6 +18953,7 @@ function ReviewDecisionCard(props) {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.policy_action === "block" ? "attention" : "info", children: item.policy_action === "block" ? "Blocked" : "Needs review" })
       ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: pauseReason }) }),
       item.risk_summary && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
@@ -19186,6 +19194,28 @@ function ReviewEmptyState({ runtime, resolutionMessage }) {
           item
         ] }, item)) })
       ] })
+    ] })
+  ] });
+}
+function PrimaryActionCard({ item }) {
+  const action = buildPrimaryReviewAction(item);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }),
+        action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: action.label })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 overflow-hidden rounded-xl bg-[#0f172a]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 border-b border-white/10 px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-purple" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-blue" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-brand-green" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45", children: action.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: action.text }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[36vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]", children: action.text })
     ] })
   ] });
 }
