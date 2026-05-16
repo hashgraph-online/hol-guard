@@ -600,7 +600,7 @@ export function App() {
         Skip to content
       </a>
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {view === "home" ? "Home" : view === "inbox" ? "Review" : view === "fleet" ? "Apps" : view === "evidence" ? "History" : view === "settings" ? "Settings" : "App detail"}
+        {view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : "App detail"}
       </div>
     <ApprovalCenterLayout
       view={view}

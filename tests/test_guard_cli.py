@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
 import subprocess
@@ -67,6 +68,21 @@ def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str)
             }
         ),
     )
+
+
+def test_guard_help_uses_ai_antivirus_product_language() -> None:
+    parser = argparse.ArgumentParser(prog="hol-guard")
+    guard_commands_module.add_guard_root_parser(parser)
+
+    help_text = parser.format_help()
+
+    assert "AI Antivirus" in help_text
+    assert "Home" in help_text
+    assert "Protect" in help_text
+    assert "Inbox" in help_text
+    assert "Evidence" in help_text
+    assert "Settings" in help_text
+    assert "Watched Apps" not in help_text
 
 
 def test_guard_settings_show_and_update_security_level(tmp_path, capsys):

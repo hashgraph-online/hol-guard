@@ -263,7 +263,7 @@ const credentialOutputItem: GuardApprovalRequest = {
 };
 
 assert(
-  resolveQueueCategory(credentialOutputItem).label === "Credential-looking output",
+  resolveQueueCategory(credentialOutputItem).label === "Secret-looking output",
   "T-QS-28: credential-looking output gets its own review category"
 );
 
@@ -359,7 +359,7 @@ assert(
 
 assert(
   sortQueue([gitPushItem, credentialOutputItem, perlEditItem], "category").map((item) => item.request_id).join(",") ===
-    "req-credential-output,req-perl-edit,req-git-push",
+    "req-perl-edit,req-git-push,req-credential-output",
   "T-QS-36: category sorting uses expanded semantic category names"
 );
 
@@ -571,7 +571,7 @@ const secretReadItem: GuardApprovalRequest = {
 };
 
 assert(
-  resolveQueueCategory(secretReadItem).label === "Secret file read",
+  resolveQueueCategory(secretReadItem).label === "Secret file access",
   "T-QS-63: file reads with secret path evidence get secret file read category"
 );
 

@@ -32,7 +32,7 @@ function buildEmptyStateCopy() {
   return {
     title: "No apps connected",
     body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Hermes, and more.",
-    installHint: "hol-guard install"
+    installHint: "hol-guard apps connect <app>"
   };
 }
 function buildDaemonErrorCopy() {
@@ -297,7 +297,7 @@ function deriveHomeState(input) {
       heroStatus: "setup_gap",
       headline: "Guard is ready",
       subheadline: "Connect your first AI app so Guard can start protecting it.",
-      ctaLabel: "Open Apps",
+      ctaLabel: "Open Protect",
       ctaTarget: "fleet"
     };
   }
@@ -306,7 +306,7 @@ function deriveHomeState(input) {
       heroStatus: "setup_gap",
       headline: "Finish setup",
       subheadline: "Guard detected apps but they need setup to be fully protected.",
-      ctaLabel: "Open Apps",
+      ctaLabel: "Open Protect",
       ctaTarget: "fleet"
     };
   }
@@ -502,7 +502,7 @@ function CloudStatusCard(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-5 w-5", "aria-hidden": "true" }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Cloud backup" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Cloud sync" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-dark", children: copy.label }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: copy.detail }),
       props.showUpsell && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onOpenSettings, children: "Open sync settings" }) })
