@@ -5848,7 +5848,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_git_commit_with_coau
         "toolArgs": json.dumps(
             {
                 "command": (
-                    "cd /Users/michaelkantor/CascadeProjects/hashgraph-online/hol-guard && "
+                    f"cd {workspace_dir} && "
                     "git add src/codex_plugin_scanner/guard/runtime/runner.py "
                     "src/codex_plugin_scanner/guard/runtime/__init__.py "
                     "src/codex_plugin_scanner/guard/cli/connect_flow.py && "
