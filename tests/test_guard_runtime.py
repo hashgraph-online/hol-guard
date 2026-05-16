@@ -6393,6 +6393,10 @@ def test_guard_hook_emits_copilot_permission_request_allow_for_safe_mcp_tool(
 
     assert rc == 0
     assert output == {"behavior": "allow"}
+    events = GuardStore(home_dir).list_guard_events_v1(uploaded=False)
+    usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
+    assert len(usage_events) == 1
+    assert usage_events[0]["payload"]["payload"]["status"] == "allowed"
 
 
 def test_guard_hook_emits_copilot_permission_request_allow_for_hook_event_name_variant(
@@ -6466,6 +6470,10 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     assert "HOL Guard blocked" in output["message"]
     assert "danger_lab:dangerous_delete" in output["message"]
     assert "http://127.0.0.1:4455/approvals/" in output["message"]
+    events = GuardStore(home_dir).list_guard_events_v1(uploaded=False)
+    usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
+    assert len(usage_events) == 1
+    assert usage_events[0]["payload"]["payload"]["status"] == "blocked"
 
 
 def test_guard_hook_emits_copilot_permission_request_deny_from_tool_calls_payload(

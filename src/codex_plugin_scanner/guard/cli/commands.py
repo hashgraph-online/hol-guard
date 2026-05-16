@@ -1800,8 +1800,20 @@ def run_guard_command(
                     remember=False,
                 )
                 if _should_emit_copilot_hook_response(args):
+                    _record_harness_usage_for_hook(
+                        store=store,
+                        action_envelope=action_envelope,
+                        payload=payload,
+                        policy_action=policy_action,
+                    )
                     _emit_copilot_permission_request_response(behavior="allow", output_stream=output_stream)
                     return 0
+                _record_harness_usage_for_hook(
+                    store=store,
+                    action_envelope=action_envelope,
+                    payload=payload,
+                    policy_action=policy_action,
+                )
                 _emit("hook", response_payload, getattr(args, "json", False))
                 return 0
             block_tool_call(
@@ -1865,6 +1877,12 @@ def run_guard_command(
                 approval_center_url=approval_center_url,
                 queued=queued,
                 managed_install=managed_install,
+            )
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
             )
             if _should_emit_copilot_hook_response(args):
                 review_context = _native_approval_center_context(response_payload, harness=args.harness)
