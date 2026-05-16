@@ -6,8 +6,8 @@
     "name": "Hashgraph Online",
     "email": "dev@hol.org"
   },
-  "homepage": "https://github.com/hashgraph-online/ai-plugin-scanner",
-  "repository": "https://github.com/hashgraph-online/ai-plugin-scanner",
+  "homepage": "https://github.com/hashgraph-online/hol-guard",
+  "repository": "https://github.com/hashgraph-online/hol-guard",
   "license": "Apache-2.0",
   "keywords": ["guard", "fixture", "skills"],
   "skills": "./skills"

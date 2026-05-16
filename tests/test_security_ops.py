@@ -35,7 +35,7 @@ def test_sarif_output_contains_results():
 
     assert sarif["version"] == "2.1.0"
     assert sarif["runs"][0]["tool"]["driver"]["name"] == "plugin-scanner"
-    assert sarif["runs"][0]["tool"]["driver"]["informationUri"] == "https://github.com/hashgraph-online/ai-plugin-scanner"
+    assert sarif["runs"][0]["tool"]["driver"]["informationUri"] == "https://github.com/hashgraph-online/hol-guard"
     assert sarif["runs"][0]["results"]
 
 
