@@ -45,6 +45,8 @@ import {
   harnessDisplayName,
   resolveDecisionV2Title,
   resolveDecisionV2Detail,
+  resolveSecondaryRiskSummary,
+  hasReviewEvidence,
   resolveStoppedCommandText,
   displayArtifactName,
   resolveTerminalLabel,
@@ -1035,11 +1037,7 @@ function InlineScannerSection(props: { item: GuardApprovalRequest }) {
 }
 
 function ScannerEvidenceSectionFull(props: { item: GuardApprovalRequest }) {
-  const hasSignals =
-    (props.item.risk_signals ?? []).length > 0 ||
-    !!props.item.risk_summary ||
-    !!props.item.why_now;
-  if (!hasSignals) return null;
+  if (!hasReviewEvidence(props.item)) return null;
   return (
     <div className="space-y-3">
       <InlineScannerSection item={props.item} />
@@ -1085,12 +1083,13 @@ function resolveAllowScopeLabel(scope: DecisionScope): string {
 function WhyGuardCares(props: { item: GuardApprovalRequest }) {
   const { item } = props;
   const signals = item.risk_signals ?? [];
-  if (signals.length === 0 && !item.risk_summary && !item.why_now) return null;
+  const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
+  if (signals.length === 0 && secondaryRiskSummary === null && !item.why_now) return null;
   return (
     <div className="rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] p-4">
       <SectionLabel>Why this was paused</SectionLabel>
       {item.why_now ? <p className="mt-1 text-sm leading-relaxed text-brand-dark/80">{item.why_now}</p> : null}
-      {item.risk_summary ? <p className="mt-1 text-sm leading-relaxed text-brand-dark/80">{item.risk_summary}</p> : null}
+      {secondaryRiskSummary ? <p className="mt-1 text-sm leading-relaxed text-brand-dark/80">{secondaryRiskSummary}</p> : null}
       {signals.length > 0 ? (
         <ul className="mt-2 space-y-1">
           {signals.map((signal) => (
