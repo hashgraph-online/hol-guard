@@ -131,7 +131,7 @@ def _usage_status(action: GuardActionEnvelope, raw_payload: Mapping[str, object]
         raw_payload,
         ("policy_action", "policyAction", "permission_decision", "permissionDecision"),
     )
-    if explicit in {"block", "deny", "sandbox-required"}:
+    if explicit in {"block", "deny", "sandbox-required", "require-reapproval"}:
         return "blocked"
     if explicit in {"allow", "approve", "approved", "warn"}:
         return "allowed"

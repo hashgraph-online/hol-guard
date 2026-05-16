@@ -3086,6 +3086,36 @@ clearer UX and an implementation plan with technical references.
         assert usage_payload["requestId"] == "call-123"
         assert "target" not in json.dumps(usage_payload)
 
+    def test_guard_hook_records_blocked_mcp_usage_after_policy_decision(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc, _output = _run_guard_hook(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            harness="codex",
+            event={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "mcp__danger_lab__dangerous_delete",
+                "tool_input": {"target": "fixture.txt"},
+                "tool_call_id": "call-456",
+                "policy_action": "require-reapproval",
+            },
+            capsys=capsys,
+            monkeypatch=monkeypatch,
+            as_json=True,
+        )
+
+        events = GuardStore(Path(home_dir)).list_guard_events_v1(uploaded=False)
+        usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
+        payload = usage_events[0]["payload"]
+        usage_payload = payload["payload"]
+
+        assert rc == 1
+        assert usage_payload["eventName"] == "PreToolUse"
+        assert usage_payload["status"] == "blocked"
+
     def test_guard_hook_records_skill_activation_event(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

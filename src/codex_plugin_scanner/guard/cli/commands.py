@@ -1653,12 +1653,6 @@ def run_guard_command(
             home_dir=context.home_dir,
             workspace=runtime_workspace,
         )
-        record_harness_usage_events(
-            store=store,
-            action=action_envelope,
-            raw_payload=payload,
-            occurred_at=_now(),
-        )
         copilot_hook_stage = _copilot_hook_stage(payload) if args.harness == "copilot" else None
         copilot_runtime_tool_call = (
             _copilot_runtime_tool_call(
@@ -1700,6 +1694,12 @@ def run_guard_command(
                     remember=False,
                 )
                 if _should_emit_copilot_hook_response(args):
+                    _record_harness_usage_for_hook(
+                        store=store,
+                        action_envelope=action_envelope,
+                        payload=payload,
+                        policy_action=policy_action,
+                    )
                     _emit_copilot_hook_response(policy_action="allow", reason="", output_stream=output_stream)
                     return 0
             else:
@@ -1714,6 +1714,12 @@ def run_guard_command(
                         risk_categories=decision.risk_categories,
                     )
                 if _should_emit_copilot_hook_response(args):
+                    _record_harness_usage_for_hook(
+                        store=store,
+                        action_envelope=action_envelope,
+                        payload=payload,
+                        policy_action=policy_action,
+                    )
                     _emit_copilot_hook_response(
                         policy_action=policy_action,
                         reason=_copilot_hook_reason(decision.summary, runtime_artifact.name),
@@ -2007,6 +2013,12 @@ def run_guard_command(
                         approval_source="inline",
                     )
                     store.add_receipt(receipt)
+                _record_harness_usage_for_hook(
+                    store=store,
+                    action_envelope=action_envelope,
+                    payload=payload,
+                    policy_action="allow",
+                )
                 return 0
             changed_capabilities = [runtime_artifact.artifact_type]
             data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
@@ -2430,6 +2442,12 @@ def run_guard_command(
                 approval_source=("inline" if _optional_string(payload.get("user_override")) is not None else "policy"),
             )
             store.add_receipt(receipt)
+        _record_harness_usage_for_hook(
+            store=store,
+            action_envelope=action_envelope,
+            payload=payload,
+            policy_action=policy_action,
+        )
         if _should_emit_copilot_hook_response(args):
             _emit_copilot_hook_response(
                 policy_action=policy_action,
@@ -2488,6 +2506,24 @@ def run_guard_command(
         return 1 if policy_action in {"block", "require-reapproval"} else 0
 
     return 1
+
+
+def _record_harness_usage_for_hook(
+    *,
+    store: GuardStore,
+    action_envelope: GuardActionEnvelope | None,
+    payload: Mapping[str, object],
+    policy_action: str | None,
+) -> None:
+    usage_payload = dict(payload)
+    if isinstance(policy_action, str) and policy_action:
+        usage_payload["policy_action"] = policy_action
+    record_harness_usage_events(
+        store=store,
+        action=action_envelope,
+        raw_payload=usage_payload,
+        occurred_at=_now(),
+    )
 
 
 def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
