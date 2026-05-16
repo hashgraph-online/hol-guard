@@ -1156,6 +1156,21 @@ def test_tool_action_request_classifier_skips_find_name_delete_literal():
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_find_exec_bounded_sed_read():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "find ~/CascadeProjects/hashgraph-online/hol-points-portal/.git/hooks "
+                "-maxdepth 1 -type f ! -name '*.sample' -print "
+                "-exec sed -n '1,180p' {} \\; 2>/dev/null || true"
+            ),
+        },
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_skips_node_script_argument_named_eval_flag():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -1425,6 +1440,16 @@ def test_tool_action_request_classifier_detects_find_exec_rm_bypass():
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "find . -name dangerous-marker.json -exec rm {} ;"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_find_exec_sed_in_place_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "find . -name '*.txt' -exec sed -i 's/foo/bar/g' {} \\;"},
     )
 
     assert request is not None
