@@ -248,9 +248,9 @@ def policy_action_for_cisco_signals(
 
 def _resolve_target_path(target: str, workspace: Path) -> Path | None:
     candidate = Path(target).expanduser()
-    if not candidate.is_absolute():
-        candidate = workspace / candidate
-    resolved = candidate.resolve()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    resolved = (workspace / candidate).resolve()
     if not resolved.is_relative_to(workspace):
         return None
     return resolved

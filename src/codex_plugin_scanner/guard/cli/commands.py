@@ -5079,11 +5079,25 @@ def _codex_sensitive_path_matches_in_text(text: str, *, cwd: Path | None) -> lis
         path_match = classify_secret_path(token, cwd=cwd)
         if path_match is not None:
             matches.append(path_match)
-    for match in _CODEX_URL_LIKE_LOCAL_PATH_PATTERN.finditer(text):
-        local_match = _codex_existing_local_path_match(match.group(0), cwd=cwd)
+    for token in _codex_url_like_local_path_tokens(text):
+        local_match = _codex_existing_local_path_match(token, cwd=cwd)
         if local_match is not None:
             matches.append(local_match)
     return matches
+
+
+def _codex_url_like_local_path_tokens(text: str) -> tuple[str, ...]:
+    separators = frozenset(" \t\r\n'\"`<>|;(){}[]")
+    tokens: list[str] = []
+    start = 0
+    for index, char in enumerate(f"{text} "):
+        if char not in separators:
+            continue
+        token = text[start:index]
+        start = index + 1
+        if 0 < len(token) <= 255 and _codex_token_is_url(token):
+            tokens.append(token)
+    return tuple(tokens)
 
 
 def _codex_existing_local_path_match(token: str, *, cwd: Path | None) -> SecretPathMatch | None:
@@ -6767,7 +6781,6 @@ _PROMPT_PATH_TOKEN_PATTERN = re.compile(
     r"(?<![\w/.-])\.[A-Za-z0-9][A-Za-z0-9_.-]{0,255}|"
     r"(?:~|\.{1,2}|/)[^\s'\"`<>|;(){}\[\]]{0,255}"
 )
-_CODEX_URL_LIKE_LOCAL_PATH_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"`<>|;(){}\[\]]{1,255}")
 _PROMPT_FILE_READ_VERB_PATTERN = re.compile(r"\b(?:read|open|print|show|dump|cat|head|tail|less|view|display)\b", re.I)
 _PROMPT_CONTENT_SCAN_MAX_BYTES = 64 * 1024
 _PROMPT_CONTENT_SCAN_SKIP_BASENAMES = frozenset(
