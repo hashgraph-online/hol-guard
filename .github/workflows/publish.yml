@@ -65,16 +65,11 @@ jobs:
             GH_RELEASES=$(gh release list --limit 100 --json tagName --jq '.[].tagName' 2>/dev/null | \
               grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V 2>/dev/null || echo "")
             GH_RELEASE_VERSION=$(echo "$GH_RELEASES" | grep -v '^$' | tail -n1)
+            PYPI_VERSION=$(python3 -c 'import json, urllib.request; data=json.load(urllib.request.urlopen("https://pypi.org/pypi/hol-guard/json", timeout=10)); print(str(data.get("info", {}).get("version") or "").strip())' 2>/dev/null || true)
 
-            # Use whichever version is higher
-            if [[ -n "$GH_RELEASE_VERSION" && -n "$LAST_TAG_VERSION" ]]; then
-              COMPARE=$(printf '%s\n%s\n' "$LAST_TAG_VERSION" "$GH_RELEASE_VERSION" | sort -V | tail -n1)
-              HIGHEST="$COMPARE"
-            elif [[ -n "$GH_RELEASE_VERSION" ]]; then
-              HIGHEST="$GH_RELEASE_VERSION"
-            elif [[ -n "$LAST_TAG_VERSION" ]]; then
-              HIGHEST="$LAST_TAG_VERSION"
-            fi
+            # Use whichever version is higher. PyPI can be ahead after a partial publish.
+            HIGHEST=$(printf '%s\n%s\n%s\n' "$LAST_TAG_VERSION" "$GH_RELEASE_VERSION" "$PYPI_VERSION" | \
+              grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
 
             if [[ -n "$HIGHEST" ]]; then
               IFS=. read -r MAJOR MINOR PATCH <<< "$HIGHEST"
@@ -112,30 +107,6 @@ jobs:
           scripts = "[project.scripts]\n" \
               'hol-guard = "codex_plugin_scanner.cli:main"\n' \
               'plugin-guard = "codex_plugin_scanner.cli:main"'
-          text = text[:start] + scripts + text[end:]
-          path.write_text(text, encoding="utf-8")
-          PY
-          uv run --no-sync python -m build
-          mv pyproject.toml.bak pyproject.toml
-      - name: Build scanner package (plugin-scanner)
-        run: |
-          cp pyproject.toml pyproject.toml.bak
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("pyproject.toml")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace('name = "hol-guard"', 'name = "plugin-scanner"', 1)
-          text = text.replace(
-              'description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."',
-              'description = "Lint, verify, and gate plugin ecosystems for maintainers, CI, and publish workflows."',
-              1,
-          )
-          start = text.index("[project.scripts]")
-          end = text.index("\n\n[project.urls]")
-          scripts = "[project.scripts]\n" \
-              'plugin-scanner = "codex_plugin_scanner.cli:main"\n' \
-              'plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"'
           text = text[:start] + scripts + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
@@ -240,17 +211,9 @@ jobs:
           uv tool install hol-guard==${VERSION}
           \`\`\`
 
-          \`\`\`bash
-          uv tool install plugin-scanner==${VERSION}
-          \`\`\`
-
           Full Cisco coverage on Python 3.11+:
           \`\`\`bash
           uv tool install "hol-guard[cisco]==${VERSION}"
-          \`\`\`
-
-          \`\`\`bash
-          uv tool install "plugin-scanner[cisco]==${VERSION}"
           \`\`\`
 
           \`\`\`bash
@@ -273,7 +236,7 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          cp "${{ steps.provenance.outputs.bundle-path }}" "dist/plugin-scanner-v${VERSION}.intoto.jsonl"
+          cp "${{ steps.provenance.outputs.bundle-path }}" "dist/hol-guard-v${VERSION}.intoto.jsonl"
       - name: Collect release asset files
         if: steps.release_exists.outputs.exists == 'false'
         id: release_assets
