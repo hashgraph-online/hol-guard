@@ -97,7 +97,10 @@ def scan_action_for_cisco_evidence(
     scanned_mcp_roots: set[Path] = set()
     skill_via_path = False
     mcp_via_path = False
-    for target_str, target_path in zip(action.target_paths, _resolve_target_paths(action, workspace_path), strict=True):
+    for target_str in action.target_paths:
+        target_path = _resolve_target_path(target_str, workspace_path)
+        if target_path is None:
+            continue
         if "skill" in requested_sources and _is_skill_file(target_path):
             if _is_redacted_path(target_str):
                 skill_via_path = True
@@ -243,14 +246,11 @@ def policy_action_for_cisco_signals(
     return action
 
 
-def _resolve_target_paths(action: GuardActionEnvelope, workspace: Path) -> tuple[Path, ...]:
-    paths: list[Path] = []
-    for target in action.target_paths:
-        candidate = Path(target).expanduser()
-        if not candidate.is_absolute():
-            candidate = workspace / candidate
-        paths.append(candidate.resolve())
-    return tuple(paths)
+def _resolve_target_path(target: str, workspace: Path) -> Path | None:
+    candidate = Path(target).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (workspace / candidate).resolve()
 
 
 def _is_skill_file(path: Path) -> bool:

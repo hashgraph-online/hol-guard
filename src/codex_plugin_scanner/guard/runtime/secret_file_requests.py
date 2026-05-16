@@ -795,7 +795,7 @@ def _shell_segment_network_sink_receives_pipeline(segment: list[str]) -> bool:
     if command_name == "curl":
         return _curl_segment_consumes_stdin(args)
     if command_name == "wget":
-        return False
+        return _wget_segment_consumes_stdin(args)
     if command_name == "ssh":
         return _ssh_segment_consumes_stdin(args)
     return command_name in {"nc", "ncat", "netcat"}
@@ -839,23 +839,53 @@ def _ssh_segment_consumes_stdin(args: list[str]) -> bool:
     if not args:
         return False
     skip_next = False
+    flags_with_values = frozenset(
+        {
+            "-b",
+            "-c",
+            "-D",
+            "-E",
+            "-e",
+            "-F",
+            "-I",
+            "-i",
+            "-J",
+            "-L",
+            "-l",
+            "-m",
+            "-O",
+            "-o",
+            "-p",
+            "-R",
+            "-S",
+            "-W",
+            "-w",
+        }
+    )
     for arg in args:
         if skip_next:
             skip_next = False
             continue
-        if arg == "-o":
+        if arg == "--":
+            break
+        if arg in flags_with_values:
             skip_next = True
             continue
-        if arg.startswith("-o") and len(arg) > 2:
+        if any(arg.startswith(flag) and len(arg) > len(flag) for flag in flags_with_values):
             continue
         if arg in {"-n", "-f", "-G", "-N", "-Q", "-V"}:
             return False
-        if arg.startswith(("-G", "-N", "-Q")) and len(arg) > 2:
+        if any(arg.startswith(flag) and len(arg) > 2 for flag in ("-G", "-N", "-Q")):
             return False
-        if arg.startswith("-") and not arg.startswith("--") and any(flag in arg[1:] for flag in ("G", "N", "V")):
-            return False
-        if arg.startswith("-") and not arg.startswith("--") and any(flag in arg[1:] for flag in ("n", "f")):
-            return False
+        if arg.startswith("-") and not arg.startswith("--"):
+            cluster_flags = arg[1:]
+            for index, flag in enumerate(cluster_flags):
+                if flag in {"n", "f", "N"}:
+                    return False
+                if f"-{flag}" in flags_with_values:
+                    if index == len(cluster_flags) - 1:
+                        break
+                    break
     return True
 
 
@@ -864,13 +894,33 @@ def _shell_segment_file_operand_tokens(segment: list[str]) -> tuple[str, ...]:
         return ()
     command_name = Path(segment[0]).name.lower()
     args = segment[1:]
-    if command_name in {"cat", "head", "tail"}:
+    if command_name == "cat":
+        return _cat_file_operand_tokens(args)
+    if command_name in {"head", "tail"}:
         return _plain_file_operand_tokens(args)
     if command_name == "sed":
         return _sed_file_operand_tokens(args)
     if command_name in {"grep", "egrep", "fgrep", "rg"}:
-        return _search_file_operand_tokens(args)
+        return _search_file_operand_tokens(command_name, args)
     return ()
+
+
+def _cat_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
+    operands: list[str] = []
+    after_options = False
+    for arg in args:
+        if after_options:
+            operands.append(arg)
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg == "-":
+            continue
+        if arg.startswith("-"):
+            continue
+        operands.append(arg)
+    return tuple(operands)
 
 
 def _plain_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
@@ -934,14 +984,18 @@ def _sed_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
     return tuple(operands)
 
 
-def _search_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
+def _search_file_operand_tokens(command_name: str, args: list[str]) -> tuple[str, ...]:
     operands: list[str] = []
     pattern_seen = False
     skip_next = False
+    skip_next_is_operand = False
     after_options = False
     for arg in args:
         if skip_next:
+            if skip_next_is_operand:
+                operands.append(arg)
             skip_next = False
+            skip_next_is_operand = False
             continue
         if after_options:
             operands.append(arg)
@@ -975,6 +1029,9 @@ def _search_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
             "--type-not",
         }:
             skip_next = True
+            skip_next_is_operand = command_name in {"grep", "egrep", "fgrep"} and arg == "--include"
+            if command_name == "rg" and arg in {"-g", "--glob", "--iglob"}:
+                skip_next_is_operand = True
             if arg in {"-e", "--regexp", "-f", "--file"}:
                 pattern_seen = True
             continue
@@ -996,11 +1053,20 @@ def _search_file_operand_tokens(args: list[str]) -> tuple[str, ...]:
             "--type-not",
         )
         if any(arg.startswith(f"{flag}=") for flag in search_value_flags):
+            if command_name in {"grep", "egrep", "fgrep"} and arg.startswith("--include="):
+                operands.append(arg.split("=", 1)[1])
+                continue
+            if command_name == "rg" and any(arg.startswith(f"{flag}=") for flag in ("--glob", "--iglob")):
+                operands.append(arg.split("=", 1)[1])
+                continue
             if arg.startswith(("--regexp=", "--file=")):
                 pattern_seen = True
             continue
         option_value_prefixes = ("-A", "-B", "-C", "-m")
         if any(arg.startswith(prefix) and len(arg) > len(prefix) for prefix in option_value_prefixes):
+            continue
+        if command_name == "rg" and arg.startswith("-g") and len(arg) > 2:
+            operands.append(arg[2:])
             continue
         if arg.startswith("-e") and len(arg) > 2:
             pattern_seen = True
@@ -2979,10 +3045,10 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     lowered = normalized.lower()
     redacted_command_text = _redacted_shell_text_for_command_names(lowered)
-    if _looks_like_safe_read_only_lookup_command(normalized, parts):
-        return False
     if _contains_mutating_shell_redirection(parts):
         return True
+    if _looks_like_safe_read_only_lookup_command(normalized, parts):
+        return False
     raw_command_names = list(_shell_command_names(redacted_command_text))
     parsed_command_names = list(_shell_command_names_from_parts(parts))
     if _looks_like_benign_interpreter_wait(normalized, parts, parsed_command_names):
@@ -3308,7 +3374,7 @@ def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
         rest_without_allowed_query_refs = rest_without_allowed_query_refs.replace(ref, "")
     if "$(" in rest_without_allowed_query_refs or "`" in rest_without_allowed_query_refs:
         return False
-    return _rest_has_exact_graphql_query_file_arg(rest, target_path)
+    return _graphql_workflow_rest_args_are_safe(rest, target_path)
 
 
 def _strip_shell_quotes(value: str) -> str:
@@ -3337,12 +3403,54 @@ def _graphql_query_file_substitution_refs(target_path: str) -> set[str]:
     }
 
 
-def _rest_has_exact_graphql_query_file_arg(rest: str, target_path: str) -> bool:
-    escaped_path = re.escape(target_path)
-    path_value = rf"(?:(?:\"|'){escaped_path}(?:\"|')|{escaped_path})"
-    substitution_pattern = rf"(?:^|\s)(?:-f|--field)\s+query=(?:\"|')?\$\(cat {path_value}\)(?:\"|')?(?:\s|$)"
-    field_pattern = rf"(?:^|\s)(?:-f|--field)\s+query=@{path_value}(?:\s|$)"
-    return re.search(substitution_pattern, rest) is not None or re.search(field_pattern, rest) is not None
+def _graphql_workflow_rest_args_are_safe(rest: str, target_path: str) -> bool:
+    parts = _split_shell_parts(rest)
+    if parts[:3] != ["gh", "api", "graphql"]:
+        return False
+    saw_query_arg = False
+    index = 3
+    while index < len(parts):
+        token = parts[index]
+        if token == "--":
+            return False
+        if token in {"-F", "--field", "-f", "--raw-field"}:
+            if index + 1 >= len(parts):
+                return False
+            if not _graphql_workflow_field_arg_is_safe(parts[index + 1], target_path):
+                return False
+            if parts[index + 1].startswith("query="):
+                saw_query_arg = True
+            index += 2
+            continue
+        if token.startswith("--field=") or token.startswith("--raw-field="):
+            value = token.split("=", 1)[1]
+        elif (token.startswith("-F") and len(token) > 2) or (token.startswith("-f") and len(token) > 2):
+            value = token[2:]
+        else:
+            return False
+        if not _graphql_workflow_field_arg_is_safe(value, target_path):
+            return False
+        if value.startswith("query="):
+            saw_query_arg = True
+        index += 1
+    return saw_query_arg
+
+
+def _graphql_workflow_field_arg_is_safe(argument: str, target_path: str) -> bool:
+    if "=" not in argument:
+        return False
+    name, value = argument.split("=", 1)
+    if not name:
+        return False
+    if name == "query":
+        return value in _graphql_query_file_argument_values(target_path)
+    if not value or value.startswith("@"):
+        return False
+    return not (_contains_shell_expansion(value) or "/" in value or "\\" in value)
+
+
+def _graphql_query_file_argument_values(target_path: str) -> set[str]:
+    return _graphql_query_file_substitution_refs(target_path) | {f"@{target_path}"}
 
 
 def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:

@@ -52,6 +52,9 @@ _STABLE_SLASH_FLAG_TOKENS = frozenset(
         "/verbose",
     }
 )
+_PROXY_ENV_BLOCKLIST = frozenset(
+    {"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONBREAKPOINT", "__PYVENV_LAUNCHER__"}
+)
 
 
 def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
@@ -137,6 +140,18 @@ def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
     }
     digest = sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:20]
     return f"mcp_server:{harness}:{source_scope}:{server_name}:{digest}"
+
+
+def proxy_process_env(server_env: dict[str, str]) -> dict[str, str]:
+    """Return untrusted server env entries that are safe to inject into the Guard proxy."""
+
+    filtered: dict[str, str] = {}
+    for key, value in server_env.items():
+        normalized_key = key.strip()
+        if not normalized_key or normalized_key.upper() in _PROXY_ENV_BLOCKLIST:
+            continue
+        filtered[normalized_key] = value
+    return filtered
 
 
 def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
@@ -244,6 +259,7 @@ __all__ = [
     "is_guard_proxy_command",
     "managed_stdio_servers",
     "proxy_cli_args",
+    "proxy_process_env",
     "skipped_stdio_server_names",
     "stable_mcp_server_identifier",
 ]

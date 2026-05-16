@@ -14143,6 +14143,14 @@ function formatRelativeTime(timestamp) {
     return timestamp;
   }
 }
+function resolveFileReadPath(item) {
+  const actionType = item.action_envelope_json?.action_type;
+  const isFileRead = actionType === "file_read" || actionType === "file_write" || item.artifact_type === "file_read_request";
+  if (!isFileRead) return null;
+  const paths = item.action_envelope_json?.target_paths ?? [];
+  if (paths.length > 0) return paths[0];
+  return item.launch_target ?? null;
+}
 function resolveTerminalLabel(item) {
   const actionType = item.action_envelope_json?.action_type;
   if (actionType === "shell_command") return "Command";
@@ -16452,12 +16460,20 @@ function downloadBlob(blob, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-function escapeCsvCell(value) {
-  const needsQuotes = /[",\n\r]/.test(value);
-  if (needsQuotes) {
-    return `"${value.replaceAll('"', '""')}"`;
+const FORMULA_TRIGGER_PATTERN = /^[=+\-@\t\r]/;
+function sanitizeCsvFormula(value) {
+  if (FORMULA_TRIGGER_PATTERN.test(value)) {
+    return `'${value}`;
   }
   return value;
+}
+function escapeCsvCell(value) {
+  const sanitized = sanitizeCsvFormula(value);
+  const needsQuotes = /[",\n\r]/.test(sanitized);
+  if (needsQuotes) {
+    return `"${sanitized.replaceAll('"', '""')}"`;
+  }
+  return sanitized;
 }
 function formatDateIso(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -17876,8 +17892,21 @@ function riskScore(item) {
   const dedupeBonus = (item.dedupe_count ?? 0) > 0 ? -0.25 : 0;
   return categoryScore + dedupeBonus;
 }
+function isSensitiveFileReadItem(item) {
+  return resolveQueueCategory(item).id === "secret_file_read";
+}
 function isReadOnlyQueueGroup(group) {
-  return group.primary.policy_action !== "block" && (group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request");
+  if (group.primary.policy_action === "block") return false;
+  const isFileRead = group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request";
+  if (!isFileRead) return false;
+  return !isSensitiveFileReadItem(group.primary);
+}
+function countSensitiveFileReadGroups(groups) {
+  return groups.filter((g) => {
+    if (g.primary.policy_action === "block") return false;
+    const isFileRead = g.primary.action_envelope_json?.action_type === "file_read" || g.primary.artifact_type === "file_read_request";
+    return isFileRead && isSensitiveFileReadItem(g.primary);
+  }).length;
 }
 function bulkApproveActionCount(groups) {
   return groups.reduce((sum, g) => sum + 1 + g.duplicateCount, 0);
@@ -19724,6 +19753,15 @@ function QueueBrowser(props) {
   reactExports.useEffect(() => {
     setPage(1);
   }, [harnessFilter, searchTerm, sortDirection, props.items.length]);
+  reactExports.useEffect(() => {
+    if (props.activeRequestId === null) return;
+    const groupIndex = groups.findIndex(
+      (g) => g.primary.request_id === props.activeRequestId
+    );
+    if (groupIndex < 0) return;
+    const targetPage = Math.floor(groupIndex / queuePageSize) + 1;
+    setPage((prev) => prev === targetPage ? prev : targetPage);
+  }, [props.activeRequestId, groups]);
   const handleSearchChange = reactExports.useCallback((event) => {
     setSearchTerm(event.target.value);
   }, []);
@@ -19736,6 +19774,12 @@ function QueueBrowser(props) {
   const handleNextPage = reactExports.useCallback(() => {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
+  const handleToggleFilters = reactExports.useCallback(() => setShowFilters((v) => !v), []);
+  const handleClearFilters = reactExports.useCallback(() => {
+    setSearchTerm("");
+    setHarnessFilter("all");
+    setSortDirection("newest");
+  }, []);
   const isReadOnlyGroup = reactExports.useCallback(
     (group) => isReadOnlyQueueGroup(group),
     []
@@ -19747,6 +19791,10 @@ function QueueBrowser(props) {
   const bulkEligibleActionCount = reactExports.useMemo(
     () => bulkApproveActionCount(bulkEligibleGroups),
     [bulkEligibleGroups]
+  );
+  const sensitiveFileReadCount = reactExports.useMemo(
+    () => countSensitiveFileReadGroups(groups),
+    [groups]
   );
   const showBulkApprove = props.onBulkApprove !== void 0 && bulkEligibleGroups.length > 0;
   const handleBulkApprove = reactExports.useCallback(() => {
@@ -19761,19 +19809,33 @@ function QueueBrowser(props) {
     props.onBulkBlock?.(ids, reason);
   }, [props.onBulkBlock, blockEligibleGroups]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-    showBulkApprove && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        onClick: handleBulkApprove,
-        className: "rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5",
-        children: [
-          "Approve all read-only actions (",
-          bulkEligibleActionCount,
-          ")"
-        ]
-      }
-    ) }),
+    showBulkApprove && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: handleBulkApprove,
+          className: "rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5",
+          children: [
+            "Approve all read-only actions (",
+            bulkEligibleActionCount,
+            ")"
+          ]
+        }
+      ),
+      sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
+        sensitiveFileReadCount,
+        " sensitive file ",
+        sensitiveFileReadCount === 1 ? "read" : "reads",
+        " excluded — review individually for informed consent."
+      ] })
+    ] }),
+    !showBulkApprove && sensitiveFileReadCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-attention", children: [
+      sensitiveFileReadCount,
+      " sensitive file ",
+      sensitiveFileReadCount === 1 ? "read" : "reads",
+      " in queue — review each path before approving."
+    ] }) }),
     showBulkBlock && /* @__PURE__ */ jsxRuntimeExports.jsx(
       QueueBulkBlockForm,
       {
@@ -19798,7 +19860,8 @@ function QueueBrowser(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
-          onClick: () => setShowFilters((v) => !v),
+          type: "button",
+          onClick: handleToggleFilters,
           className: "flex items-center gap-1 text-xs font-medium text-brand-blue transition-colors hover:text-brand-dark",
           children: [
             showFilters ? "Hide filters" : "Show filters",
@@ -19833,11 +19896,8 @@ function QueueBrowser(props) {
         (searchTerm || harnessFilter !== "all" || sortDirection !== "newest") && /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
-            onClick: () => {
-              setSearchTerm("");
-              setHarnessFilter("all");
-              setSortDirection("newest");
-            },
+            type: "button",
+            onClick: handleClearFilters,
             className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
             children: "Clear all filters"
           }
@@ -19883,6 +19943,7 @@ function QueueCardRow(props) {
 }
 function QueueCard(props) {
   const summary = buildQueueSummary(props.item);
+  const fileReadPath = resolveFileReadPath(props.item);
   const isBlocked = props.item.policy_action === "block";
   const statusDotClass = queueCardStatusDotClass(props.active, isBlocked);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19906,7 +19967,8 @@ function QueueCard(props) {
               harnessDisplayName(props.item.harness),
               " · ",
               summary
-            ] })
+            ] }),
+            fileReadPath !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 truncate font-mono text-[11px] text-brand-dark/50", children: fileReadPath })
           ] })
         ] }),
         props.duplicateCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shrink-0 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground", children: [

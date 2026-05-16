@@ -249,12 +249,17 @@ def _artifacts_for_skill(root: Path, skill_md: Path) -> list[GuardArtifact]:
 
 def _skill_roots(context: HarnessContext, payload: dict[str, object]) -> tuple[Path, ...]:
     workspace_path = _workspace_path(context, payload)
-    roots = [
-        workspace_path / "skills",
-        workspace_path / ".agents" / "skills",
-        context.home_dir / ".agents" / "skills",
-        context.home_dir / ".openclaw" / "skills",
-    ]
+    roots: list[Path] = []
+    if context.workspace_dir is not None:
+        roots.extend((context.workspace_dir / "skills", context.workspace_dir / ".agents" / "skills"))
+    roots.extend(
+        (
+            workspace_path / "skills",
+            workspace_path / ".agents" / "skills",
+            context.home_dir / ".agents" / "skills",
+            context.home_dir / ".openclaw" / "skills",
+        )
+    )
     skills = _dict_value(payload.get("skills"))
     load = _dict_value(skills.get("load"))
     for extra_dir in _string_list(load.get("extraDirs")):

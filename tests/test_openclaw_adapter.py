@@ -109,6 +109,20 @@ def test_detects_openclaw_config_channels_mcp_and_skills(tmp_path: Path) -> None
     assert artifacts["openclaw:mcp:local"].to_dict()["metadata"]["env"]["API_TOKEN"] == "*****"
 
 
+def test_detects_workspace_skills_without_explicit_openclaw_workspace_config(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    config_path = context.home_dir / ".openclaw" / "openclaw.json"
+    _write(config_path, json.dumps({"skills": {"load": {}}}))
+    _write(
+        context.workspace_dir / "skills" / "reviewer" / "SKILL.md",
+        "---\nname: reviewer\ndescription: workspace reviewer\n---\nRead repo files.\n",
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+
+    assert any(artifact.name == "reviewer" for artifact in detection.artifacts)
+
+
 def test_inventory_snapshot_redacts_openclaw_channels_mcp_and_skills(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
     config_path = context.home_dir / ".openclaw" / "openclaw.json"

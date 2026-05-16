@@ -36,6 +36,7 @@ def _make_request(
     workspace: str | None = "ws-a",
     artifact_id: str | None = None,
     launch_target: str | None = None,
+    action_envelope_json: dict[str, object] | None = None,
 ) -> GuardApprovalRequest:
     aid = artifact_id or f"codex:project:tool-{uuid.uuid4().hex[:8]}"
     rid = str(uuid.uuid4())
@@ -63,7 +64,7 @@ def _make_request(
         why_now=None,
         launch_summary=None,
         risk_headline=None,
-        action_envelope_json=None,
+        action_envelope_json=action_envelope_json,
         decision_v2_json=None,
         fallback_cli_command=None,
         review_command=f"hol-guard review {rid}",
@@ -156,6 +157,92 @@ class TestDifferentWorkspacesGetSeparateRows:
         assert id_ls != id_rm, "Different commands must not collapse into one approval row"
         total = count_approval_requests(conn, status="pending")
         assert total == 2, f"Expected 2 pending rows for different commands, got {total}"
+
+    def test_different_mcp_arguments_do_not_collapse_into_one_row(self) -> None:
+        conn = _make_conn()
+        artifact_id = "codex:project:mcp-tool"
+        base_envelope = {
+            "action_type": "mcp_tool_call",
+            "tool_name": "github",
+            "mcp_server": "github",
+            "mcp_tool": "get_file_contents",
+        }
+        req_safe = _make_request(
+            artifact_id=artifact_id,
+            workspace="ws-a",
+            launch_target="github get_file_contents",
+            action_envelope_json={
+                **base_envelope,
+                "raw_payload_redacted": {"owner": "hashgraph-online", "repo": "safe-repo", "path": "README.md"},
+            },
+        )
+        req_sensitive = _make_request(
+            artifact_id=artifact_id,
+            workspace="ws-a",
+            launch_target="github get_file_contents",
+            action_envelope_json={
+                **base_envelope,
+                "raw_payload_redacted": {
+                    "owner": "hashgraph-online",
+                    "repo": "safe-repo",
+                    "path": ".github/workflows/release.yml",
+                },
+            },
+        )
+
+        id_safe = add_approval_request(conn, req_safe, "2026-01-01T00:00:00Z")
+        id_sensitive = add_approval_request(conn, req_sensitive, "2026-01-01T00:01:00Z")
+
+        assert id_safe != id_sensitive
+        total = count_approval_requests(conn, status="pending")
+        assert total == 2, f"Expected 2 pending rows for distinct MCP arguments, got {total}"
+
+    def test_identical_mcp_arguments_still_collapse_when_session_metadata_differs(self) -> None:
+        conn = _make_conn()
+        artifact_id = "codex:project:mcp-tool"
+        base_envelope = {
+            "action_type": "mcp_tool_call",
+            "tool_name": "github",
+            "mcp_server": "github",
+            "mcp_tool": "get_file_contents",
+        }
+        req_first = _make_request(
+            artifact_id=artifact_id,
+            workspace="ws-a",
+            launch_target="github get_file_contents",
+            action_envelope_json={
+                **base_envelope,
+                "raw_payload_redacted": {
+                    "owner": "hashgraph-online",
+                    "repo": "safe-repo",
+                    "path": "README.md",
+                    "session_id": "session-1",
+                    "turn_id": "turn-1",
+                },
+            },
+        )
+        req_second = _make_request(
+            artifact_id=artifact_id,
+            workspace="ws-a",
+            launch_target="github get_file_contents",
+            action_envelope_json={
+                **base_envelope,
+                "raw_payload_redacted": {
+                    "owner": "hashgraph-online",
+                    "repo": "safe-repo",
+                    "path": "README.md",
+                    "session_id": "session-2",
+                    "turn_id": "turn-2",
+                },
+            },
+        )
+
+        id_first = add_approval_request(conn, req_first, "2026-01-01T00:00:00Z")
+        id_second = add_approval_request(conn, req_second, "2026-01-01T00:01:00Z")
+
+        assert id_first == id_second
+        total = count_approval_requests(conn, status="pending")
+        assert total == 1, f"Expected identical MCP actions to dedupe across session metadata, got {total}"
 
 
 class TestLegacyNullIdentityKeyUpgradePath:
