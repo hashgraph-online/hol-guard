@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -27,7 +32,7 @@ def _request(
     *,
     method: str = "POST",
     payload: dict[str, object] | None = None,
-    token: str | None = "gld1.abcdefghijklmnop.qrstuvwxyz123456",
+    token: str | None = None,
     origin: str = "https://hol.org",
 ) -> urllib.request.Request:
     data = json.dumps(payload or {}).encode("utf-8") if method != "GET" else None
@@ -46,13 +51,34 @@ def _request(
     )
 
 
+def _dashboard_token(auth_token: str) -> str:
+    payload_json = json.dumps(
+        {
+            "version": "guard-local-daemon-session.v1",
+            "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
+        },
+        separators=(",", ":"),
+    )
+    payload = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("ascii").rstrip("=")
+    signature = hmac.new(auth_token.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).digest()
+    encoded_signature = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+    return f"gld1.{payload}.{encoded_signature}"
+
+
+def _dashboard_token_for(store: GuardStore) -> str:
+    auth_token = load_guard_daemon_auth_token(store.guard_home)
+    assert auth_token is not None
+    return _dashboard_token(auth_token)
+
+
 def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
+        token = _dashboard_token_for(store)
         status, payload = _read_json_response(
-            _request(daemon.port, "/v1/capabilities", method="GET"),
+            _request(daemon.port, "/v1/capabilities", method="GET", token=token),
         )
     finally:
         daemon.stop()
@@ -82,6 +108,7 @@ def test_headless_app_operations_write_receipts_without_cli_copy(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
+        token = _dashboard_token_for(store)
         for path, operation in (
             ("/v1/apps/connect", "install"),
             ("/v1/apps/repair", "repair"),
@@ -93,6 +120,7 @@ def test_headless_app_operations_write_receipts_without_cli_copy(
                 _request(
                     daemon.port,
                     path,
+                    token=token,
                     payload={
                         "harness": "opencode",
                         "operation": operation,
@@ -124,10 +152,12 @@ def test_headless_policy_sync_persists_policy_and_receipt(tmp_path: Path) -> Non
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
+        token = _dashboard_token_for(store)
         status, payload = _read_json_response(
             _request(
                 daemon.port,
                 "/v1/policy/sync",
+                token=token,
                 payload={
                     "harness": "codex",
                     "operation": "policy_sync",
@@ -158,6 +188,7 @@ def test_headless_api_rejects_missing_auth_and_bad_harness(tmp_path: Path) -> No
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
+        token = _dashboard_token_for(store)
         auth_status, auth_payload = _read_json_response(
             _request(
                 daemon.port,
@@ -170,6 +201,7 @@ def test_headless_api_rejects_missing_auth_and_bad_harness(tmp_path: Path) -> No
             _request(
                 daemon.port,
                 "/v1/apps/status",
+                token=token,
                 payload={"harness": "not-real", "operation": "status"},
             ),
         )
@@ -180,6 +212,26 @@ def test_headless_api_rejects_missing_auth_and_bad_harness(tmp_path: Path) -> No
     assert auth_payload["error"] == "unauthorized"
     assert bad_status == 404
     assert bad_payload["error"] == "unknown_harness"
+
+
+def test_headless_api_rejects_forged_dashboard_session_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/status",
+                payload={"harness": "codex", "operation": "status"},
+                token="gld1.abcdefghijklmnop.qrstuvwxyz123456",
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 401
+    assert payload["error"] == "unauthorized"
 
 
 def test_headless_api_does_not_read_env_files(
@@ -203,8 +255,14 @@ def test_headless_api_does_not_read_env_files(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
+        token = _dashboard_token_for(store)
         status, payload = _read_json_response(
-            _request(daemon.port, "/v1/apps/test", payload={"harness": "codex", "operation": "scan"}),
+            _request(
+                daemon.port,
+                "/v1/apps/test",
+                token=token,
+                payload={"harness": "codex", "operation": "scan"},
+            ),
         )
     finally:
         daemon.stop()

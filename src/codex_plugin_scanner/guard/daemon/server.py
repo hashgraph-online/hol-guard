@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
+import hmac
 import io
 import json
 import mimetypes
@@ -589,6 +591,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         context = self._harness_context({})
         items = list_harness_setup_items(context, self.server.store)  # type: ignore[attr-defined]
         supported = []
+        failure_reasons = _headless_safe_failure_reasons()
         for item in items:
             harness = item.get("harness")
             if not isinstance(harness, str):
@@ -599,12 +602,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "status": item.get("status"),
                     "command_available": bool(item.get("command_available")),
                     "headless_actions": list(_HEADLESS_OPERATIONS[:-1]),
-                    "safe_failure_reasons": _headless_safe_failure_reasons(),
+                    "safe_failure_reasons": failure_reasons,
                 }
             )
         self._write_json(
             {
-                "auth_state": "dashboard_session" if self._dashboard_session_token_is_present() else "local_token",
+                "auth_state": "dashboard_session" if self._dashboard_session_token_is_valid() else "local_token",
                 "command_available": any(bool(item.get("command_available")) for item in items),
                 "daemon": {
                     "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
@@ -1372,10 +1375,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         path_parts = [part for part in path.split("/") if part]
         return self._tokens_match(token) or (
-            self._is_hosted_dashboard_api_path(path, path_parts) and self._dashboard_session_token_is_present()
+            self._is_hosted_dashboard_api_path(path, path_parts) and self._dashboard_session_token_is_valid()
         )
 
-    def _dashboard_session_token_is_present(self) -> bool:
+    def _dashboard_session_token_is_valid(self) -> bool:
         session_token = self.headers.get("X-Guard-Dashboard-Session")
         authorization = self.headers.get("Authorization")
         bearer_token = None
@@ -1385,7 +1388,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not isinstance(token, str) or not token.startswith("gld1."):
             return False
         parts = token.split(".")
-        return len(parts) == 3 and all(len(part) >= 8 for part in parts[1:])
+        if len(parts) != 3:
+            return False
+        prefix, payload, signature = parts
+        if prefix != "gld1" or not payload or not signature:
+            return False
+        expected = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
+        if not secrets.compare_digest(signature, expected):
+            return False
+        claims = _decode_dashboard_session_payload(payload)
+        expires_at = claims.get("expires_at")
+        if not isinstance(expires_at, str):
+            return False
+        try:
+            return _parse_iso_timestamp(expires_at) > _parse_iso_timestamp(_now())
+        except ValueError:
+            return False
 
     def _tokens_match(self, token: object) -> bool:
         if not isinstance(token, str):
@@ -1971,6 +1989,28 @@ def _settings_export_payload(config: GuardConfig) -> dict[str, object]:
         "privacy_warning": "Exports include local Guard preferences but not secrets or receipt evidence.",
         "settings": editable_guard_settings(config),
     }
+
+
+def _dashboard_session_signature(payload: str, auth_token: str) -> str:
+    digest = hmac.new(auth_token.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
+def _decode_dashboard_session_payload(payload: str) -> dict[str, object]:
+    padding = "=" * (-len(payload) % 4)
+    try:
+        decoded = base64.urlsafe_b64decode(f"{payload}{padding}".encode("ascii")).decode("utf-8")
+        parsed = json.loads(decoded)
+    except (UnicodeDecodeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _parse_iso_timestamp(value: str) -> float:
+    from datetime import datetime
+
+    normalized = value.replace("Z", "+00:00")
+    return datetime.fromisoformat(normalized).timestamp()
 
 
 def _now() -> str:
