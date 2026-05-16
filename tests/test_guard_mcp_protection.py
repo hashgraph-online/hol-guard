@@ -269,7 +269,7 @@ def test_evaluate_tool_call_honors_strict_mcp_risk_action(tmp_path) -> None:
     )
 
     assert decision.action == "block"
-    assert decision.source == "risk-policy"
+    assert decision.source == "policy"
 
 
 def test_evaluate_tool_call_honors_gentle_mcp_risk_action(tmp_path) -> None:
@@ -295,7 +295,7 @@ def test_evaluate_tool_call_honors_gentle_mcp_risk_action(tmp_path) -> None:
     )
 
     assert decision.action == "warn"
-    assert decision.source == "risk-policy"
+    assert decision.source == "policy"
 
 
 def test_mcp_server_identity_reads_pnpm_package_selector_flag() -> None:

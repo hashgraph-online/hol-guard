@@ -197,6 +197,53 @@ class TestDifferentWorkspacesGetSeparateRows:
         total = count_approval_requests(conn, status="pending")
         assert total == 2, f"Expected 2 pending rows for distinct MCP arguments, got {total}"
 
+    def test_identical_mcp_arguments_still_collapse_when_session_metadata_differs(self) -> None:
+        conn = _make_conn()
+        artifact_id = "codex:project:mcp-tool"
+        base_envelope = {
+            "action_type": "mcp_tool_call",
+            "tool_name": "github",
+            "mcp_server": "github",
+            "mcp_tool": "get_file_contents",
+        }
+        req_first = _make_request(
+            artifact_id=artifact_id,
+            workspace="ws-a",
+            launch_target="github get_file_contents",
+            action_envelope_json={
+                **base_envelope,
+                "raw_payload_redacted": {
+                    "owner": "hashgraph-online",
+                    "repo": "safe-repo",
+                    "path": "README.md",
+                    "session_id": "session-1",
+                    "turn_id": "turn-1",
+                },
+            },
+        )
+        req_second = _make_request(
+            artifact_id=artifact_id,
+            workspace="ws-a",
+            launch_target="github get_file_contents",
+            action_envelope_json={
+                **base_envelope,
+                "raw_payload_redacted": {
+                    "owner": "hashgraph-online",
+                    "repo": "safe-repo",
+                    "path": "README.md",
+                    "session_id": "session-2",
+                    "turn_id": "turn-2",
+                },
+            },
+        )
+
+        id_first = add_approval_request(conn, req_first, "2026-01-01T00:00:00Z")
+        id_second = add_approval_request(conn, req_second, "2026-01-01T00:01:00Z")
+
+        assert id_first == id_second
+        total = count_approval_requests(conn, status="pending")
+        assert total == 1, f"Expected identical MCP actions to dedupe across session metadata, got {total}"
+
 
 class TestLegacyNullIdentityKeyUpgradePath:
     """Regression: existing rows with NULL normalized_identity_key must still be deduped."""

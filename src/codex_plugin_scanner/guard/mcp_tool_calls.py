@@ -146,7 +146,7 @@ def evaluate_tool_call(
             configured_risk_action = "review"
         return ToolCallDecision(
             action=configured_risk_action,
-            source="risk-policy",
+            source="policy",
             signals=signals,
             summary=tool_call_risk_summary(artifact, arguments),
             risk_categories=risk_categories,
