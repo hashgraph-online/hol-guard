@@ -3085,7 +3085,17 @@
     color: var(--brand-blue);
   }
 
-  .text-brand-dark, .text-brand-dark\/60 {
+  .text-brand-dark, .text-brand-dark\/50 {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-dark\/50 {
+      color: color-mix(in oklab, var(--brand-dark) 50%, transparent);
+    }
+  }
+
+  .text-brand-dark\/60 {
     color: var(--brand-dark);
   }
 

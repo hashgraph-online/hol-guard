@@ -225,6 +225,38 @@ def test_cisco_preflight_changed_skill_file_produces_normalized_signal(
     assert signals[0].scanner_rule_id == "CISCO-SKILL-EXFIL"
 
 
+def test_cisco_preflight_skips_skill_targets_that_resolve_outside_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+
+    external_root = tmp_path.parent / f"{tmp_path.name}-external-skills"
+    external_skill = external_root / "evil" / "SKILL.md"
+    external_skill.parent.mkdir(parents=True)
+    external_skill.write_text("# Evil\n", encoding="utf-8")
+    workspace_skills = tmp_path / "skills"
+    try:
+        workspace_skills.symlink_to(external_root, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are not supported in this environment")
+    called: list[Path] = []
+
+    def fake_scan(path: Path, mode: str = "auto", timeout_seconds: float | None = None):
+        called.append(path)
+        return _skill_summary(CiscoIntegrationStatus.ENABLED, (_skill_finding(),))
+
+    monkeypatch.setattr(cisco_skill_scanner, "run_cisco_skill_scan", fake_scan)
+
+    signals = scan_action_for_cisco_evidence(
+        _file_write_action(workspace_skills / "evil" / "SKILL.md", tmp_path),
+        workspace=tmp_path,
+    )
+
+    assert signals == ()
+    assert called == []
+
+
 def test_cisco_preflight_changed_mcp_config_produces_normalized_signal(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

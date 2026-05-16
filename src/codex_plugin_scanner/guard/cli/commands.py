@@ -240,6 +240,39 @@ _CLAUDE_GUARD_APPROVAL_OPTIONS = (
     "Allow during this session",
     "Keep blocked",
 )
+_SETTINGS_POLICY_RISK_ACTIONS: dict[str, dict[str, dict[str, str]]] = {
+    "mcp": {
+        "allow-known": {"mcp_dangerous_tool": "warn"},
+        "ask-new": {"mcp_dangerous_tool": "require-reapproval"},
+        "ask-dangerous": {"mcp_dangerous_tool": "require-reapproval"},
+        "ask-all": {"mcp_dangerous_tool": "require-reapproval"},
+    },
+    "skills": {
+        "allow-known": {"malicious_skill": "warn"},
+        "ask-new": {"malicious_skill": "require-reapproval"},
+        "ask-dangerous": {"malicious_skill": "require-reapproval"},
+        "ask-all": {"malicious_skill": "require-reapproval"},
+    },
+    "packages": {
+        "warn": {"package_script": "warn"},
+        "ask-lifecycle": {"package_script": "require-reapproval"},
+        "ask-all": {"package_script": "require-reapproval"},
+    },
+    "output-scanning": {
+        "off": {
+            "encoded_execution": "allow",
+            "encoded_exfiltration": "allow",
+        },
+        "warn": {
+            "encoded_execution": "warn",
+            "encoded_exfiltration": "warn",
+        },
+        "ask": {
+            "encoded_execution": "require-reapproval",
+            "encoded_exfiltration": "require-reapproval",
+        },
+    },
+}
 
 
 def _now() -> str:
@@ -1898,10 +1931,12 @@ def run_guard_command(
                 return 0
             _emit("hook", response_payload, getattr(args, "json", False))
             return 1
+        data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
         runtime_artifact = _hook_runtime_artifact(
             harness=args.harness,
             payload=payload,
             action_envelope=action_envelope,
+            data_flow_signals=data_flow_signals,
             home_dir=context.home_dir,
             guard_home=context.guard_home,
             workspace=runtime_workspace,
@@ -2039,14 +2074,13 @@ def run_guard_command(
                 )
                 return 0
             changed_capabilities = [runtime_artifact.artifact_type]
-            data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
             scanner_evidence = (
                 scan_action_for_cisco_evidence(action_envelope, workspace=runtime_workspace)
                 if action_envelope is not None
                 else ()
             )
             scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
-            if data_flow_signals and requested_policy_action not in VALID_GUARD_ACTIONS:
+            if data_flow_signals:
                 data_flow_action = resolve_risk_action(
                     config,
                     "data_flow_exfiltration",
@@ -3619,12 +3653,17 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         if resolved_actions:
             return max(resolved_actions, key=_guard_action_severity)
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
-    if guard_default_action is not None:
-        return guard_default_action
     risk_actions = [resolve_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes]
     resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
     if resolved_actions:
-        return max(resolved_actions, key=_guard_action_severity)
+        resolved = max(resolved_actions, key=_guard_action_severity)
+        if guard_default_action is not None and _guard_action_severity(guard_default_action) > _guard_action_severity(
+            resolved
+        ):
+            return guard_default_action
+        return resolved
+    if guard_default_action is not None:
+        return guard_default_action
     return SAFE_CHANGED_HASH_ACTION
 
 
@@ -3910,8 +3949,14 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
         risk_actions_enc["encoded_execution"] = mapped_enc
         risk_actions_enc["encoded_exfiltration"] = mapped_enc
         return update_guard_settings(guard_home, {"risk_actions": risk_actions_enc})
-    if settings_command in {"mcp", "skills", "packages", "output-scanning"}:
-        return config
+    if settings_command in _SETTINGS_POLICY_RISK_ACTIONS:
+        policy = str(getattr(args, "policy", "")).strip().lower()
+        mapped_actions = _SETTINGS_POLICY_RISK_ACTIONS[settings_command].get(policy)
+        if mapped_actions is None:
+            raise ValueError(f"Unsupported Guard settings policy '{policy}' for {settings_command}.")
+        risk_actions = dict(config.risk_actions or {})
+        risk_actions.update(mapped_actions)
+        return update_guard_settings(guard_home, {"risk_actions": risk_actions})
     if settings_command == "risk":
         risk_class = _guard_risk_action_key(str(args.risk_class))
         action = str(args.action)
@@ -4744,6 +4789,7 @@ def _hook_runtime_artifact(
     harness: str,
     payload: dict[str, object],
     action_envelope: GuardActionEnvelope | None,
+    data_flow_signals: tuple[RiskSignalV2, ...] = (),
     home_dir: Path,
     guard_home: Path,
     workspace: Path | None,
@@ -4826,12 +4872,61 @@ def _hook_runtime_artifact(
         home_dir=home_dir,
     )
     if tool_request is None:
-        return None
+        if action_envelope is None or not data_flow_signals:
+            return None
+        return _runtime_data_flow_artifact(
+            harness=harness,
+            action_envelope=action_envelope,
+            data_flow_signals=data_flow_signals,
+            config_path=config_path,
+            source_scope=source_scope,
+        )
     return build_tool_action_request_artifact(
         harness=harness,
         request=tool_request,
         config_path=config_path,
         source_scope=source_scope,
+    )
+
+
+def _runtime_data_flow_artifact(
+    *,
+    harness: str,
+    action_envelope: GuardActionEnvelope,
+    data_flow_signals: tuple[RiskSignalV2, ...],
+    config_path: str,
+    source_scope: str,
+) -> GuardArtifact:
+    command_text = action_envelope.command or action_envelope.tool_name or action_envelope.action_type
+    signal_ids = tuple(signal.signal_id for signal in data_flow_signals)
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "command_text": command_text,
+                "signal_ids": signal_ids,
+                "source_scope": source_scope,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return GuardArtifact(
+        artifact_id=f"{harness}:{source_scope}:data-flow:{fingerprint}",
+        name=f"{action_envelope.tool_name or 'runtime'} data-flow exfiltration",
+        harness=harness,
+        artifact_type="tool_action_request",
+        source_scope=source_scope,
+        config_path=config_path,
+        metadata={
+            "action_class": "credential exfiltration shell command",
+            "command_text": command_text,
+            "guard_default_action": "require-reapproval",
+            "request_summary": _runtime_data_flow_summary(data_flow_signals),
+            "runtime_request_signals": [signal.plain_reason for signal in data_flow_signals],
+            "runtime_request_summary": _runtime_data_flow_summary(data_flow_signals),
+            "runtime_request_reason": (
+                "Guard detected local-secret data flow in the runtime action before the command could send it away."
+            ),
+        },
     )
 
 
@@ -4899,7 +4994,11 @@ def _codex_post_tool_output_artifact(
     metadata: dict[str, object] = {
         "tool_name": tool_name,
         "command_text": command_text,
-        "action_class": "credential exfiltration shell command",
+        "action_class": (
+            "credential exfiltration shell command"
+            if references_local_content
+            else "credential-looking tool output"
+        ),
         "guard_default_action": runtime_default_action,
         "request_summary": request_summary,
         "runtime_request_signals": runtime_request_signals,
@@ -4934,7 +5033,12 @@ def _codex_sensitive_local_source_matches(command_text: str, *, cwd: Path | None
         return matches
     for part in parts:
         stripped = part.strip()
-        if not stripped or stripped.startswith("-") or _codex_token_is_url(stripped):
+        if not stripped or stripped.startswith("-"):
+            continue
+        if _codex_token_is_url(stripped):
+            local_match = _codex_existing_local_path_match(stripped, cwd=cwd)
+            if local_match is not None:
+                matches.append(local_match)
             continue
         path_match = classify_secret_path(stripped, cwd=cwd)
         if path_match is not None:
@@ -4966,12 +5070,31 @@ def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) ->
 def _codex_sensitive_path_matches_in_text(text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
     matches: list[SecretPathMatch] = []
     for match in _PROMPT_PATH_TOKEN_PATTERN.finditer(text):
+        token = match.group(0)
         if _codex_path_token_is_url_path(text, match.start()):
+            local_match = _codex_existing_local_path_match(token, cwd=cwd)
+            if local_match is not None:
+                matches.append(local_match)
             continue
-        path_match = classify_secret_path(match.group(0), cwd=cwd)
+        path_match = classify_secret_path(token, cwd=cwd)
         if path_match is not None:
             matches.append(path_match)
+    for match in _CODEX_URL_LIKE_LOCAL_PATH_PATTERN.finditer(text):
+        local_match = _codex_existing_local_path_match(match.group(0), cwd=cwd)
+        if local_match is not None:
+            matches.append(local_match)
     return matches
+
+
+def _codex_existing_local_path_match(token: str, *, cwd: Path | None) -> SecretPathMatch | None:
+    if cwd is None:
+        return None
+    candidate = Path(token)
+    if not candidate.is_absolute():
+        candidate = cwd / candidate
+    if not candidate.exists():
+        return None
+    return classify_secret_path(token, cwd=cwd)
 
 
 def _codex_path_token_is_url_path(text: str, start: int) -> bool:
@@ -4994,6 +5117,8 @@ def _codex_token_prefix_is_url_scheme(scheme: str) -> bool:
 
 def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
     if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
+        return True
+    if _codex_command_reads_environment_pipeline(command_text):
         return True
     if any(marker in command_text for marker in ("$(", "${", "`")):
         return True
@@ -5079,14 +5204,25 @@ def _codex_command_parts_are_git_grep(parts: list[str]) -> bool:
 
 
 def _codex_command_reads_environment_pipeline(command_text: str) -> bool:
-    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
-    if pipeline_segments is None:
-        return False
     try:
-        first_parts = _codex_shell_split(pipeline_segments[0])
+        parts = _codex_shell_split(command_text)
     except ValueError:
         return False
-    return _codex_command_parts_are_environment_dump(first_parts)
+    if not parts:
+        return False
+    segment_starts = _codex_command_start_indexes(parts)
+    if not segment_starts:
+        return False
+    first_segment = _codex_command_segment_parts(parts, segment_starts[0])
+    if not _codex_command_parts_are_environment_dump(first_segment):
+        return False
+    saw_pipeline = False
+    for start in segment_starts[1:]:
+        separator = parts[start - 1]
+        if separator != "|":
+            return False
+        saw_pipeline = True
+    return saw_pipeline
 
 
 def _codex_command_parts_are_environment_dump(parts: list[str]) -> bool:
@@ -5186,15 +5322,26 @@ def _codex_strip_env_wrapper(parts: list[str]) -> list[str]:
 
 
 def _codex_env_args_clear_environment(parts: list[str]) -> bool:
+    saw_clear_environment = False
     for part in parts:
         if part == "--":
             return False
         if part in {"-i", "--ignore-environment"}:
-            return True
-        if part.startswith("-") or ("=" in part and not part.startswith("=")):
+            saw_clear_environment = True
+            continue
+        if part.startswith("-"):
+            continue
+        if "=" in part and not part.startswith("="):
+            if _codex_env_assignment_uses_shell_expansion(part):
+                return False
             continue
         return False
-    return False
+    return saw_clear_environment
+
+
+def _codex_env_assignment_uses_shell_expansion(part: str) -> bool:
+    _, _, value = part.partition("=")
+    return "$" in value or "`" in value
 
 
 def _codex_shell_split(command_text: str) -> list[str]:
@@ -5374,6 +5521,10 @@ def _codex_source_inspection_can_skip_secret_output(
 ) -> bool:
     if not _codex_command_is_read_only_source_inspection(command_text, cwd=cwd):
         return False
+    if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
+        return False
+    if _codex_command_targets_secret_like_source_name(command_text):
+        return False
     if any(match.sensitivity != "medium" for match in content_matches):
         return False
     if _codex_command_references_benign_source_dotfile(command_text):
@@ -5392,6 +5543,88 @@ def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:
     except ValueError:
         return False
     return any(Path(part).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES for part in parts)
+
+
+def _codex_command_targets_secret_like_source_name(command_text: str) -> bool:
+    dangerous_stems = {
+        "auth",
+        "credential",
+        "credentials",
+        "passwd",
+        "password",
+        "private-key",
+        "private_key",
+        "secret",
+        "secrets",
+        "token",
+    }
+    chained_segments = _split_codex_safe_read_only_chain(command_text)
+    if chained_segments is not None:
+        return any(_codex_command_targets_secret_like_source_name(segment) for segment in chained_segments)
+    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
+    if pipeline_segments:
+        return _codex_command_targets_secret_like_source_name(pipeline_segments[0])
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    for part in _codex_source_inspection_target_tokens(parts):
+        stripped = part.strip().strip("'\"")
+        if not stripped:
+            continue
+        name = Path(stripped).name.lower().lstrip(".")
+        stem = Path(name).stem or name
+        if stem in dangerous_stems or name.startswith("id_"):
+            return True
+    return False
+
+
+def _codex_source_inspection_target_tokens(parts: list[str]) -> tuple[str, ...]:
+    command_parts = _codex_unwrapped_command_parts(parts)
+    if not command_parts:
+        return ()
+    executable = Path(command_parts[0]).name
+    args = command_parts[1:]
+    if executable in _CODEX_READ_ONLY_VIEW_COMMANDS:
+        if executable == "sed":
+            parsed = _parse_codex_sed_read_only_args(args)
+            return parsed.targets if parsed is not None else ()
+        if executable in {"head", "tail"}:
+            targets, valid, skip_next = _parse_codex_head_tail_args(args)
+            return tuple(targets) if valid and not skip_next else ()
+        return tuple(_codex_cat_targets(args))
+    if executable in _CODEX_READ_ONLY_SEARCH_COMMANDS:
+        return _codex_search_targets(args, executable=executable)
+    if executable == "git":
+        git_grep_args = _git_grep_search_args(args)
+        if git_grep_args is not None:
+            return _codex_search_targets(git_grep_args, executable=executable)
+    script_index = (
+        _shell_wrapper_script_index(command_parts) if executable in _CODEX_READ_ONLY_SEARCH_WRAPPERS else None
+    )
+    if script_index is not None and script_index < len(command_parts):
+        try:
+            nested_parts = shlex.split(command_parts[script_index])
+        except ValueError:
+            return ()
+        return _codex_source_inspection_target_tokens(nested_parts)
+    return ()
+
+
+def _codex_cat_targets(args: list[str]) -> list[str]:
+    targets: list[str] = []
+    after_option_terminator = False
+    for arg in args:
+        if after_option_terminator:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_option_terminator = True
+            continue
+        if arg == "-" or arg.startswith("-"):
+            continue
+        targets.append(arg)
+    return targets
 
 
 def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Path | None) -> bool:
@@ -6354,6 +6587,13 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
 
 
 def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, executable: str) -> bool:
+    targets = _codex_search_targets(args, executable=executable)
+    if not targets:
+        return False
+    return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+
+
+def _codex_search_targets(args: list[str], *, executable: str) -> tuple[str, ...]:
     positional: list[str] = []
     skip_next = False
     pattern_from_option = False
@@ -6372,7 +6612,7 @@ def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, 
             after_option_terminator = True
             continue
         if _codex_search_arg_is_unsafe(arg, executable=executable, option_value_flags=option_value_flags):
-            return False
+            return ()
         if arg in _CODEX_SEARCH_PATTERN_VALUE_FLAGS:
             pattern_from_option = True
             skip_next = True
@@ -6392,12 +6632,10 @@ def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, 
             continue
         positional.append(arg)
     if pattern_from_option:
-        targets = positional
-    elif len(positional) >= 2:
-        targets = positional[1:]
-    else:
-        return False
-    return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+        return tuple(positional)
+    if len(positional) >= 2:
+        return tuple(positional[1:])
+    return ()
 
 
 def _codex_search_arg_is_unsafe(arg: str, *, executable: str, option_value_flags: frozenset[str]) -> bool:
@@ -6529,6 +6767,7 @@ _PROMPT_PATH_TOKEN_PATTERN = re.compile(
     r"(?<![\w/.-])\.[A-Za-z0-9][A-Za-z0-9_.-]{0,255}|"
     r"(?:~|\.{1,2}|/)[^\s'\"`<>|;(){}\[\]]{0,255}"
 )
+_CODEX_URL_LIKE_LOCAL_PATH_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"`<>|;(){}\[\]]{1,255}")
 _PROMPT_FILE_READ_VERB_PATTERN = re.compile(r"\b(?:read|open|print|show|dump|cat|head|tail|less|view|display)\b", re.I)
 _PROMPT_CONTENT_SCAN_MAX_BYTES = 64 * 1024
 _PROMPT_CONTENT_SCAN_SKIP_BASENAMES = frozenset(

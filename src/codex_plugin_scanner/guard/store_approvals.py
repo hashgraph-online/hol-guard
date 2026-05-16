@@ -63,6 +63,7 @@ def _build_action_identity(
         "package_manager": _optional_text(envelope.get("package_manager")),
         "package_name": _optional_text(envelope.get("package_name")),
         "script_name": _optional_text(envelope.get("script_name")),
+        "raw_payload_redacted": envelope.get("raw_payload_redacted"),
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 

@@ -13,7 +13,13 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _run_command_probe
-from .mcp_servers import ManagedMcpServer, managed_stdio_servers, proxy_cli_args, skipped_stdio_server_names
+from .mcp_servers import (
+    ManagedMcpServer,
+    managed_stdio_servers,
+    proxy_cli_args,
+    proxy_process_env,
+    skipped_stdio_server_names,
+)
 from .opencode_artifacts import (
     CONFIG_FILENAMES,
     append_config_artifacts,
@@ -324,7 +330,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                 ],
                 "enabled": server.enabled,
             }
-            environment = merge_guard_launcher_env(getattr(server, "env", {}))
+            environment = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
             if environment:
                 entry["environment"] = environment
             overrides[server.name] = entry

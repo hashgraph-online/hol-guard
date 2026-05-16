@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ChangeEvent } from "react";
 import {
   HiOutlineArrowTrendingUp,
   HiOutlineArrowTrendingDown,
@@ -60,6 +60,24 @@ export function CompareTimePeriods({ receipts }: { receipts: GuardReceipt[] }) {
   const metricsA = useMemo(() => computeMetrics(filterByPeriod(receipts, periodA)), [receipts, periodA]);
   const metricsB = useMemo(() => computeMetrics(filterByPeriod(receipts, periodB)), [receipts, periodB]);
 
+  const handlePeriodAChange = useCallback(
+    (p: Period) => {
+      const prevA = periodA;
+      setPeriodA(p);
+      if (p === periodB) setPeriodB(prevA);
+    },
+    [periodA, periodB]
+  );
+
+  const handlePeriodBChange = useCallback(
+    (p: Period) => {
+      const prevB = periodB;
+      setPeriodB(p);
+      if (p === periodA) setPeriodA(prevB);
+    },
+    [periodA, periodB]
+  );
+
   if (receipts.length < 10) {
     return (
       <div className="rounded-xl border border-slate-100 bg-white p-8 text-center">
@@ -78,21 +96,30 @@ export function CompareTimePeriods({ receipts }: { receipts: GuardReceipt[] }) {
   ];
 
   const samePeriod = periodA === periodB;
+  const periodsOverlap = !samePeriod;
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-brand-dark">Compare periods</h3>
         <div className="flex items-center gap-2">
-          <PeriodSelector value={periodA} onChange={(p) => { setPeriodA(p); if (p === periodB) setPeriodB(periodA); }} />
+          <PeriodSelector value={periodA} onChange={handlePeriodAChange} />
           <span className="text-xs text-slate-400">vs</span>
-          <PeriodSelector value={periodB} onChange={(p) => { setPeriodB(p); if (p === periodA) setPeriodA(periodB); }} />
+          <PeriodSelector value={periodB} onChange={handlePeriodBChange} />
         </div>
       </div>
 
       {samePeriod && (
         <div className="rounded-lg border border-brand-attention/15 bg-brand-attention/[0.04] px-3 py-2">
           <p className="text-xs text-brand-attention">Select two different periods to compare.</p>
+        </div>
+      )}
+
+      {periodsOverlap && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+          <p className="text-xs text-slate-500">
+            Both windows end at today and share recent data. The change column shows the difference between window sizes, not period-over-period trends.
+          </p>
         </div>
       )}
 
@@ -147,10 +174,14 @@ export function CompareTimePeriods({ receipts }: { receipts: GuardReceipt[] }) {
 }
 
 function PeriodSelector({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+  const handleChange = useCallback(
+    (e: ChangeEvent<HTMLSelectElement>) => onChange(e.target.value as Period),
+    [onChange]
+  );
   return (
     <select
       value={value}
-      onChange={(e) => onChange(e.target.value as Period)}
+      onChange={handleChange}
       className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
     >
       <option value="7d">Last 7 days</option>
