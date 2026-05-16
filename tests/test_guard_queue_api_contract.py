@@ -305,6 +305,18 @@ def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Pat
         },
         now="2026-05-08T10:00:00+00:00",
     )
+    for index in range(225):
+        store.upsert_guard_operation(
+            operation_id=f"noise-operation-{index:03d}",
+            session_id=str(session["session_id"]),
+            harness="codex",
+            operation_type="tool_call",
+            status="resolved",
+            approval_request_ids=[f"noise-request-{index:03d}"],
+            resume_token=None,
+            metadata={"codex_thread_id": f"noise-thread-{index:03d}"},
+            now=f"2026-05-08T10:01:{index % 60:02d}+00:00",
+        )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
 
