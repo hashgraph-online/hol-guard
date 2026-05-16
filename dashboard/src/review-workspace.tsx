@@ -39,6 +39,7 @@ import {
   buildPrimaryReviewAction,
   primaryReviewActionToggleLabel,
   resolveSecondaryRiskSummary,
+  hasReviewEvidence,
   harnessDisplayName,
   resolveDecisionV2Title,
   displayArtifactName,
@@ -805,7 +806,7 @@ function ReviewDecisionCard(props: {
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = buildWhatWouldHappen(item);
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const hasEvidence = (item.risk_signals?.length ?? 0) > 0 || secondaryRiskSummary || item.why_now;
+  const hasEvidence = hasReviewEvidence(item);
   const pauseReason = whyPaused(item);
 
   return (

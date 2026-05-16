@@ -22,6 +22,7 @@ import {
   buildRetryAfterApprovalCopy,
   deriveDataFlowEvidence,
   formatRelativeTime,
+  hasReviewEvidence,
   harnessDisplayName,
   primaryReviewActionToggleLabel,
   resolveSecondaryRiskSummary,
@@ -516,6 +517,42 @@ assert(
   "GR211-06: secondary risk summary hides duplicate prompt text already shown in primary card"
 );
 
+const SHORT_DUPLICATE_COMMAND_RISK_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "ph09-short-duplicate-command-risk",
+  risk_summary: "npm install",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: "npm install",
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(SHORT_DUPLICATE_COMMAND_RISK_REQUEST) === null,
+  "GR211-07: secondary risk summary hides exact short duplicate command text"
+);
+
+const DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-duplicate-summary-with-signal",
+  decision_v2_json: {
+    action: "ask",
+    reason: "Prompt risk",
+    user_title: "Prompt risk",
+    user_body: "Prompt risk",
+    harness_message: "Paused",
+    dashboard_primary_detail: "Prompt risk",
+    approval_scopes: ["artifact"],
+    retry_instruction: null,
+    confidence: "likely",
+    signals: [SIGNAL_HIGH],
+  },
+};
+assert(
+  hasReviewEvidence(DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST),
+  "GR211-08: duplicate summary does not hide evidence section when decision_v2 signals exist"
+);
+
 const DISTINCT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-distinct-prompt-risk",
@@ -523,7 +560,7 @@ const DISTINCT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
 };
 assert(
   resolveSecondaryRiskSummary(DISTINCT_PROMPT_RISK_REQUEST) === "Prompt asks the harness to read a local .env file directly.",
-  "GR211-07: secondary risk summary keeps non-duplicate safety reason"
+  "GR211-09: secondary risk summary keeps non-duplicate safety reason"
 );
 
 const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
@@ -533,11 +570,11 @@ const PRIMARY_COMMAND_ACTION = buildPrimaryReviewAction({
 });
 assert(
   PRIMARY_COMMAND_ACTION.label === "Command",
-  "GR211-08: primary review card labels shell commands without opening technical details"
+  "GR211-10: primary review card labels shell commands without opening technical details"
 );
 assert(
   PRIMARY_COMMAND_ACTION.text === "git diff -- app/guard/_components/home.tsx",
-  "GR211-09: primary review card exposes shell command without opening technical details"
+  "GR211-11: primary review card exposes shell command without opening technical details"
 );
 
 const PRIMARY_MCP_ACTION = buildPrimaryReviewAction({

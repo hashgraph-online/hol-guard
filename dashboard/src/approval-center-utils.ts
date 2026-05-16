@@ -322,6 +322,8 @@ export type PrimaryReviewAction = {
   detail: string | null;
 };
 
+const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
+
 export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
   return {
     label: resolveTerminalLabel(item),
@@ -341,10 +343,28 @@ export function resolveSecondaryRiskSummary(item: GuardApprovalRequest): string 
   return summary;
 }
 
+export function hasReviewEvidence(item: GuardApprovalRequest): boolean {
+  return (
+    (item.risk_signals?.length ?? 0) > 0 ||
+    (item.decision_v2_json?.signals?.length ?? 0) > 0 ||
+    resolveSecondaryRiskSummary(item) !== null ||
+    !!item.why_now
+  );
+}
+
 function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string): boolean {
   const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
   const candidateText = normalizeDuplicateReviewText(value);
-  if (stoppedText.length < 24 || candidateText.length < 24) {
+  if (stoppedText.length === 0 || candidateText.length === 0) {
+    return false;
+  }
+  if (stoppedText === candidateText) {
+    return true;
+  }
+  if (
+    stoppedText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH ||
+    candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH
+  ) {
     return false;
   }
   return candidateText.includes(stoppedText) || stoppedText.includes(candidateText);

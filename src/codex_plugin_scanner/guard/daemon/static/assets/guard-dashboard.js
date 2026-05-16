@@ -13973,6 +13973,7 @@ function resolveDecisionV2Detail(item) {
   const detail = item.decision_v2_json?.dashboard_primary_detail;
   return detail !== void 0 && detail.trim().length > 0 ? detail : null;
 }
+const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
@@ -13990,10 +13991,19 @@ function resolveSecondaryRiskSummary(item) {
   }
   return summary;
 }
+function hasReviewEvidence(item) {
+  return (item.risk_signals?.length ?? 0) > 0 || (item.decision_v2_json?.signals?.length ?? 0) > 0 || resolveSecondaryRiskSummary(item) !== null || !!item.why_now;
+}
 function duplicatesStoppedActionText(item, value) {
   const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
   const candidateText = normalizeDuplicateReviewText(value);
-  if (stoppedText.length < 24 || candidateText.length < 24) {
+  if (stoppedText.length === 0 || candidateText.length === 0) {
+    return false;
+  }
+  if (stoppedText === candidateText) {
+    return true;
+  }
+  if (stoppedText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH || candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH) {
     return false;
   }
   return candidateText.includes(stoppedText) || stoppedText.includes(candidateText);
@@ -18974,7 +18984,7 @@ function ReviewDecisionCard(props) {
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = buildWhatWouldHappen(item);
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const hasEvidence = (item.risk_signals?.length ?? 0) > 0 || secondaryRiskSummary || item.why_now;
+  const hasEvidence = hasReviewEvidence(item);
   const pauseReason = whyPaused(item);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
     resolved && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -20155,9 +20165,7 @@ function InlineScannerSection(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection, { signals: allSignals });
 }
 function ScannerEvidenceSectionFull(props) {
-  const secondaryRiskSummary = resolveSecondaryRiskSummary(props.item);
-  const hasSignals = (props.item.risk_signals ?? []).length > 0 || secondaryRiskSummary !== null || !!props.item.why_now;
-  if (!hasSignals) return null;
+  if (!hasReviewEvidence(props.item)) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(InlineScannerSection, { item: props.item }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(WhyGuardCares, { item: props.item }),

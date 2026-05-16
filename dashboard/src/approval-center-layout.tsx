@@ -46,6 +46,7 @@ import {
   resolveDecisionV2Title,
   resolveDecisionV2Detail,
   resolveSecondaryRiskSummary,
+  hasReviewEvidence,
   resolveStoppedCommandText,
   displayArtifactName,
   resolveTerminalLabel,
@@ -1036,12 +1037,7 @@ function InlineScannerSection(props: { item: GuardApprovalRequest }) {
 }
 
 function ScannerEvidenceSectionFull(props: { item: GuardApprovalRequest }) {
-  const secondaryRiskSummary = resolveSecondaryRiskSummary(props.item);
-  const hasSignals =
-    (props.item.risk_signals ?? []).length > 0 ||
-    secondaryRiskSummary !== null ||
-    !!props.item.why_now;
-  if (!hasSignals) return null;
+  if (!hasReviewEvidence(props.item)) return null;
   return (
     <div className="space-y-3">
       <InlineScannerSection item={props.item} />
