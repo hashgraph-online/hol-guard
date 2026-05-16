@@ -633,8 +633,8 @@
     margin-inline: calc(var(--spacing) * -2);
   }
 
-  .-mx-6 {
-    margin-inline: calc(var(--spacing) * -6);
+  .-mx-4 {
+    margin-inline: calc(var(--spacing) * -4);
   }
 
   .mx-1 {
@@ -4075,6 +4075,14 @@
   }
 
   @media (min-width: 40rem) {
+    .sm\:-mx-6 {
+      margin-inline: calc(var(--spacing) * -6);
+    }
+
+    .sm\:hidden {
+      display: none;
+    }
+
     .sm\:inline {
       display: inline;
     }
