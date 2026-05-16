@@ -127,6 +127,8 @@ def _usage_events(
 
 
 def _usage_status(action: GuardActionEnvelope, raw_payload: Mapping[str, object]) -> UsageStatus:
+    if action.event_name == "PostToolUseFailure":
+        return "failed"
     explicit = _string_from_keys(
         raw_payload,
         ("policy_action", "policyAction", "permission_decision", "permissionDecision"),
@@ -135,8 +137,6 @@ def _usage_status(action: GuardActionEnvelope, raw_payload: Mapping[str, object]
         return "blocked"
     if explicit in {"allow", "approve", "approved", "warn"}:
         return "allowed"
-    if action.event_name == "PostToolUseFailure":
-        return "failed"
     if action.event_name == "PostToolUse":
         return "allowed"
     if action.event_name == "PreToolUse":

@@ -2138,6 +2138,12 @@ def run_guard_command(
                         artifact_hash=runtime_artifact_hash,
                     )
                 if _should_emit_copilot_hook_response(args):
+                    _record_harness_usage_for_hook(
+                        store=store,
+                        action_envelope=action_envelope,
+                        payload=payload,
+                        policy_action=policy_action,
+                    )
                     _emit_copilot_hook_response(
                         policy_action=policy_action,
                         reason=_copilot_hook_reason(
@@ -2173,6 +2179,12 @@ def run_guard_command(
                         system_message=system_message,
                         additional_context=additional_context,
                         output_stream=output_stream,
+                    )
+                    _record_harness_usage_for_hook(
+                        store=store,
+                        action_envelope=action_envelope,
+                        payload=payload,
+                        policy_action=policy_action,
                     )
                     return 0
                 if not _prompt_requires_hard_block(runtime_artifact):
@@ -2261,6 +2273,12 @@ def run_guard_command(
                         managed_install=managed_install,
                     )
             if _should_emit_copilot_hook_response(args):
+                _record_harness_usage_for_hook(
+                    store=store,
+                    action_envelope=action_envelope,
+                    payload=payload,
+                    policy_action=policy_action,
+                )
                 _emit_copilot_hook_response(
                     policy_action=policy_action,
                     reason=_copilot_hook_reason(
@@ -2289,6 +2307,12 @@ def run_guard_command(
                         reason="",
                         output_stream=output_stream,
                     )
+                _record_harness_usage_for_hook(
+                    store=store,
+                    action_envelope=action_envelope,
+                    payload=payload,
+                    policy_action="allow",
+                )
                 return 0
             if codex_browser_decision == "block":
                 policy_action = "block"
@@ -2299,6 +2323,12 @@ def run_guard_command(
                         _runtime_artifact_native_reason(runtime_artifact, response_payload),
                         _native_approval_center_context(response_payload, harness=args.harness),
                     )
+                )
+                _record_harness_usage_for_hook(
+                    store=store,
+                    action_envelope=action_envelope,
+                    payload=payload,
+                    policy_action=policy_action,
                 )
                 return 2
             raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
@@ -2343,8 +2373,20 @@ def run_guard_command(
                     system_message=system_message,
                     output_stream=output_stream,
                 )
+                _record_harness_usage_for_hook(
+                    store=store,
+                    action_envelope=action_envelope,
+                    payload=payload,
+                    policy_action=policy_action,
+                )
                 return 0
             _emit("hook", response_payload, getattr(args, "json", False))
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
+            )
             return 1 if policy_action in {"block", "require-reapproval"} else 0
         artifact_id = _coalesce_string(
             getattr(args, "artifact_id", None),
