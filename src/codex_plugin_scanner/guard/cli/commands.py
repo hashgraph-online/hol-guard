@@ -44,6 +44,7 @@ from ..bridge import (
     TelegramBackend,
     WebhookBackend,
 )
+from ..codex_app_server import codex_resume_metadata_from_hook_payload
 from ..config import (
     DEFAULT_SECURITY_LEVEL,
     VALID_RISK_ACTION_KEYS,
@@ -1854,6 +1855,7 @@ def run_guard_command(
                     metadata={
                         "tool_name": str(payload.get("tool_name", "")),
                         "hook_name": "permissionRequest",
+                        **codex_resume_metadata_from_hook_payload(payload),
                     },
                     detection=runtime_detection.to_dict(),
                     evaluation=evaluation_payload,
@@ -2256,6 +2258,7 @@ def run_guard_command(
                             metadata={
                                 "tool_name": str(payload.get("tool_name", "")),
                                 "event": str(payload.get("event", "")),
+                                **codex_resume_metadata_from_hook_payload(payload),
                             },
                             detection=runtime_detection.to_dict(),
                             evaluation=evaluation_payload,
