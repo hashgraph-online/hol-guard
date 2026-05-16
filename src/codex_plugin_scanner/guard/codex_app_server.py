@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
-import shutil
-import subprocess
+import socket
+import struct
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -18,7 +20,7 @@ class _OperationStore(Protocol):
 
 _DEFAULT_PROXY_TIMEOUT_SECONDS = 5.0
 _DEFAULT_SOCKET_PATH = Path.home() / ".codex" / "app-server-control" / "app-server-control.sock"
-_APP_BUNDLE_CODEX = Path("/Applications/Codex.app/Contents/Resources/codex")
+_WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 _THREAD_ID_KEYS = (
     "codex_thread_id",
     "thread_id",
@@ -63,8 +65,6 @@ def resume_codex_thread_for_request(
     store: _OperationStore,
     request_id: str,
     action: str,
-    proxy_command: list[str] | None = None,
-    environ: Mapping[str, str] | None = None,
     timeout_seconds: float = _DEFAULT_PROXY_TIMEOUT_SECONDS,
 ) -> dict[str, object] | None:
     """Send a guarded continuation prompt to the Codex thread that queued a request."""
@@ -89,14 +89,6 @@ def resume_codex_thread_for_request(
         return {
             "status": "skipped",
             "reason": "socket_not_available",
-            "thread_id": thread_id,
-            "socket_path": socket_path,
-        }
-    command = proxy_command or _default_proxy_command(socket_path, environ=environ)
-    if command is None:
-        return {
-            "status": "skipped",
-            "reason": "codex_command_not_found",
             "thread_id": thread_id,
             "socket_path": socket_path,
         }
@@ -137,32 +129,19 @@ def resume_codex_thread_for_request(
             },
         },
     ]
-    input_bytes = "".join(json.dumps(payload, separators=(",", ":")) + "\n" for payload in request_payloads).encode(
-        "utf-8"
-    )
     try:
-        completed = subprocess.run(
-            command,
-            input=input_bytes,
-            capture_output=True,
-            timeout=timeout_seconds,
-            check=False,
+        response = _send_app_server_websocket_messages(
+            socket_path=socket_path,
+            payloads=request_payloads,
+            response_id=2,
+            timeout_seconds=timeout_seconds,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except (OSError, TimeoutError, ValueError) as error:
         return {
             "status": "failed",
             "reason": type(error).__name__,
             "thread_id": thread_id,
             "socket_path": socket_path,
-        }
-    response = _parse_jsonrpc_response(completed.stdout.decode("utf-8", errors="replace"))
-    if completed.returncode != 0:
-        return {
-            "status": "failed",
-            "reason": "proxy_failed",
-            "thread_id": thread_id,
-            "socket_path": socket_path,
-            "returncode": completed.returncode,
         }
     if response is None:
         return {
@@ -199,18 +178,6 @@ def _find_codex_operation_for_request(store: _OperationStore, request_id: str) -
     return None
 
 
-def _default_proxy_command(socket_path: str, *, environ: Mapping[str, str] | None) -> list[str] | None:
-    env = environ or os.environ
-    configured = env.get("HOL_GUARD_CODEX_COMMAND")
-    if configured:
-        command_path = configured
-    else:
-        command_path = shutil.which("codex") or (str(_APP_BUNDLE_CODEX) if _APP_BUNDLE_CODEX.exists() else "")
-    if not command_path:
-        return None
-    return [command_path, "app-server", "proxy", "--sock", socket_path]
-
-
 def _continuation_prompt(action: str) -> str:
     if action == "allow":
         return (
@@ -223,18 +190,120 @@ def _continuation_prompt(action: str) -> str:
     )
 
 
-def _parse_jsonrpc_response(stdout: str) -> dict[str, object] | None:
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict) and payload.get("id") == 2:
-            return payload
+def _send_app_server_websocket_messages(
+    *,
+    socket_path: str,
+    payloads: list[dict[str, object]],
+    response_id: int,
+    timeout_seconds: float,
+) -> dict[str, object] | None:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(timeout_seconds)
+        client.connect(str(Path(socket_path).expanduser()))
+        _send_websocket_handshake(client)
+        for payload in payloads:
+            _send_websocket_text(client, json.dumps(payload, separators=(",", ":")))
+        while True:
+            opcode, payload = _read_websocket_frame(client)
+            if opcode == 0x8:
+                return None
+            if opcode == 0x9:
+                _send_websocket_frame(client, 0xA, payload)
+                continue
+            if opcode != 0x1:
+                continue
+            try:
+                message = json.loads(payload.decode("utf-8"))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(message, dict) and message.get("id") == response_id:
+                return message
     return None
+
+
+def _send_websocket_handshake(client: socket.socket) -> None:
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    request = (
+        "GET / HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {key}\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+    client.sendall(request.encode("ascii"))
+    response = _recv_until(client, b"\r\n\r\n")
+    header_text = response.decode("iso-8859-1", errors="replace")
+    if not header_text.startswith("HTTP/1.1 101"):
+        raise ValueError("websocket_upgrade_failed")
+    expected_accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode("ascii")
+    headers = _parse_http_headers(header_text)
+    if headers.get("sec-websocket-accept") != expected_accept:
+        raise ValueError("websocket_accept_mismatch")
+
+
+def _send_websocket_text(client: socket.socket, text: str) -> None:
+    _send_websocket_frame(client, 0x1, text.encode("utf-8"))
+
+
+def _send_websocket_frame(client: socket.socket, opcode: int, payload: bytes) -> None:
+    mask = os.urandom(4)
+    length = len(payload)
+    if length < 126:
+        header = bytes([0x80 | opcode, 0x80 | length])
+    elif length < 65_536:
+        header = bytes([0x80 | opcode, 0x80 | 126]) + struct.pack("!H", length)
+    else:
+        header = bytes([0x80 | opcode, 0x80 | 127]) + struct.pack("!Q", length)
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    client.sendall(header + mask + masked)
+
+
+def _read_websocket_frame(client: socket.socket) -> tuple[int, bytes]:
+    header = _recv_exact(client, 2)
+    first, second = header
+    opcode = first & 0x0F
+    length = second & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", _recv_exact(client, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", _recv_exact(client, 8))[0]
+    mask = _recv_exact(client, 4) if second & 0x80 else None
+    payload = _recv_exact(client, length) if length else b""
+    if mask is not None:
+        payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return opcode, payload
+
+
+def _recv_until(client: socket.socket, marker: bytes) -> bytes:
+    data = b""
+    while marker not in data:
+        chunk = client.recv(4096)
+        if not chunk:
+            raise TimeoutError("socket_closed")
+        data += chunk
+    return data
+
+
+def _recv_exact(client: socket.socket, length: int) -> bytes:
+    data = b""
+    while len(data) < length:
+        chunk = client.recv(length - len(data))
+        if not chunk:
+            raise TimeoutError("socket_closed")
+        data += chunk
+    return data
+
+
+def _parse_http_headers(header_text: str) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for line in header_text.split("\r\n")[1:]:
+        if ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        headers[name.strip().lower()] = value.strip()
+    return headers
 
 
 def _is_safe_local_socket_path(socket_path: str) -> bool:
