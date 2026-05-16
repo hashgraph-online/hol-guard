@@ -19183,6 +19183,9 @@ function ReviewEmptyState({ runtime, resolutionMessage }) {
 function PrimaryActionCard({ item }) {
   const action = buildPrimaryReviewAction(item);
   const [isVisible, setIsVisible] = reactExports.useState(true);
+  reactExports.useEffect(() => {
+    setIsVisible(true);
+  }, [item.request_id]);
   const handleToggleVisibility = reactExports.useCallback(() => {
     setIsVisible((visible) => !visible);
   }, []);
