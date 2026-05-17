@@ -101,7 +101,7 @@ _NEGATED_SECRET_READ_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _FOLLOWING_SECRET_REFERENCE_PATTERN = re.compile(
-    r"\b(?:it|file|secret|secrets|contents?|credentials?|token|tokens?|key|keys)\b",
+    r"\b(?:it|them|these|those|file|files|secret|secrets|contents?|credentials?|token|tokens?|key|keys)\b",
     re.IGNORECASE,
 )
 _EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"
@@ -255,7 +255,11 @@ def _following_sentence_has_secret_read_intent(prompt_text: str, sentence_end: i
         return False
     next_end = _prompt_sentence_end(prompt_text, sentence_end)
     following = prompt_text[sentence_end:next_end]
-    if _SECRET_READ_INTENT_PATTERN.search(following) is None:
+    has_positive_intent = any(
+        not _secret_read_intent_is_negated(following, match.start(), match.end())
+        for match in _SECRET_READ_INTENT_PATTERN.finditer(following)
+    )
+    if not has_positive_intent:
         return False
     return _FOLLOWING_SECRET_REFERENCE_PATTERN.search(following) is not None
 

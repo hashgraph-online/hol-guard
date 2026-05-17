@@ -223,6 +223,7 @@ _NODE_LOCAL_FILE_ACCESS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _NODE_SENSITIVE_RUNTIME_PATTERN = re.compile(
+    r"\b(?:process|globalThis)\b|"
     r"\bprocess\s*(?:\.\s*env|\[\s*['\"]env['\"]\s*\])|"
     r"\b(?:import|require|createRequire)\b|"
     r"\brequire\s*\(\s*['\"](?:node:)?(?:child_process|fs|fs/promises)['\"]\s*\)|"

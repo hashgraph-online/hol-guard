@@ -330,6 +330,7 @@ class TestGuardRuntime:
             "Read .env, but do not print it.",
             "Never read .env and read .env.",
             "Do not read .env. Then open it and summarize it.",
+            "Never read .env files. Then print them.",
         ),
     )
     def test_extract_prompt_requests_detects_mixed_negated_and_positive_dotenv_intent(
