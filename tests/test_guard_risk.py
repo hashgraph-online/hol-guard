@@ -1138,6 +1138,7 @@ def test_tool_action_request_classifier_ignores_single_quoted_body_when_other_co
         'command -p gh pr create --body "Verification: `python -m build`"',
         'sudo -u builder gh pr create --body "Verification: `python -m build`"',
         'sudo -D /tmp gh pr create --body "Verification: `python -m build`"',
+        'sudo --chroot /tmp gh pr create --body "Verification: `python -m build`"',
     ],
 )
 def test_tool_action_request_classifier_explains_wrapped_or_multiline_gh_pr_create_body_substitution(command):

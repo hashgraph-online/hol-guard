@@ -51,7 +51,19 @@ _PATH_LIST_KEYS = ("paths", "file_paths", "filePaths")
 _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _SUDO_OPTION_VALUE_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-r", "-T", "-t"})
 _SUDO_OPTION_VALUE_LONG_FLAGS = frozenset(
-    {"--chdir", "--group", "--host", "--login-class", "--prompt", "--role", "--type", "--user"}
+    {
+        "--chdir",
+        "--chroot",
+        "--close-from",
+        "--command-timeout",
+        "--group",
+        "--host",
+        "--login-class",
+        "--prompt",
+        "--role",
+        "--type",
+        "--user",
+    }
 )
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
