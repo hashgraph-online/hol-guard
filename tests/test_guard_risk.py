@@ -787,6 +787,137 @@ def test_tool_action_request_classifier_detects_grep_include_secret_pipeline_upl
     assert request.action_class == "credential exfiltration shell command"
 
 
+def test_tool_action_request_classifier_allows_simple_project_deploy_script():
+    request = extract_sensitive_tool_action_request("bash", {"command": "./deploy.sh production"})
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
+    build_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker build --platform linux/amd64 -t registry.example.com/app:v1 ."},
+    )
+    buildx_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker buildx build --platform linux/amd64 -t registry.example.com/app:v1 ."},
+    )
+    push_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker push registry.example.com/app:v1"},
+    )
+    build_arg_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker build --build-arg FOO=disk-space -t registry.example.com/app:v1 ."},
+    )
+
+    assert build_request is None
+    assert buildx_request is None
+    assert push_request is None
+    assert build_arg_request is None
+
+
+def test_tool_action_request_classifier_blocks_python_test_module_invocation():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -m pytest tests/test_guard_risk.py -q"},
+    )
+    interpreter_option_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -W ignore -m pytest tests/test_guard_risk.py -q"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+    assert interpreter_option_request is not None
+    assert interpreter_option_request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_blocks_python_test_module_with_read_only_followup():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -m pytest tests/test_guard_risk.py -q | grep passed && echo success"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "docker build --build-arg FOO .",
+        "docker build --build-arg FOO=$(cat ~/.npmrc) .",
+        "docker build --build-arg FOO=`cat ~/.aws/credentials` .",
+        "docker build --label leak=$(cat ~/.aws/credentials) .",
+        "docker build --annotation leak=$(cat ~/.aws/credentials) .",
+        "docker build --label $NPM_TOKEN=1 .",
+        "docker build --annotation $(cat ~/.aws/credentials)=x .",
+        "docker buildx --debug build --secret id=npm,src=.npmrc .",
+        "docker buildx --debug=false build --secret id=npm,src=.npmrc .",
+        "docker buildx build --allow security.insecure .",
+        "docker buildx b --secret id=npm,src=.npmrc .",
+        "docker buildx build --cache-to type=local,dest=/tmp/cache .",
+        "docker buildx build --load .",
+        "docker buildx build -otype=local,dest=/tmp/out .",
+        "docker buildx build --output type=local,dest=/tmp/out .",
+        "docker build --iidfile /tmp/image-id .",
+        "docker build --metadata-file=/tmp/metadata.json .",
+        "docker --debug login registry.example.com",
+        "docker --tlsverify run alpine",
+        "docker --debug=true login registry.example.com",
+        "docker --tlsverify=false run alpine",
+        "docker login registry.example.com",
+        "docker --context prod login registry.example.com",
+        "docker run -v ~/.ssh:/root/.ssh ubuntu:latest",
+        "docker compose up --build",
+        "docker build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker --context prod build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker -H tcp://docker.example build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker buildx build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker buildx --builder ci build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker build --ssh default -t registry.example.com/app:v1 .",
+        "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
+        "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",
+        "docker build --build-arg FOO=$SECRETTOKEN -t registry.example.com/app:v1 .",
+        "docker build --build-arg FOO=${NPM_TOKEN:-fallback} -t registry.example.com/app:v1 .",
+        "docker build --build-arg FOO=sk-test -t registry.example.com/app:v1 .",
+    ],
+)
+def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "docker-sensitive command"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python -m ruff check --fix .",
+        "python -m ruff check --add-noqa .",
+        "python -m ruff format .",
+        "python -m ruff --config ruff.toml format .",
+        "python -m ruff --color always format .",
+        "python -m mypy --install-types package",
+        "python -m pytest --basetemp=/tmp/guard-pytest",
+        "python -m pytest --junitxml=/tmp/guard-pytest.xml",
+        "python -m pytest --junit-xml=/tmp/guard-pytest.xml",
+        "python -m pytest --debug=/tmp/guard-pytest.log",
+        "python -m pytest --log-file=/tmp/guard-pytest.log",
+        "python -m pytest -c attacker.ini",
+        "PYTEST_ADDOPTS=--basetemp=/tmp/guard-pytest python -m pytest -q",
+        "python dangerous.py -m pytest",
+        "python -m unittest discover",
+    ],
+)
+def test_tool_action_request_classifier_blocks_mutating_python_module_invocations(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_read_only_filter_redirection_write():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -2477,6 +2608,12 @@ def test_tool_action_request_classifier_allows_python_time_sleep_one_liner():
         "bash",
         {"command": "python3 -c 'import time; time.sleep(310)'"},
     )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_allows_python_c_argument_named_like_module_flag():
+    request = extract_sensitive_tool_action_request("bash", {"command": "python -c 'print(1)' -m"})
 
     assert request is None
 
