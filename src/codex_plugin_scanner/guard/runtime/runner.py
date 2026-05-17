@@ -224,32 +224,38 @@ def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
 
 
 def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
-    if _secret_match_sentence_is_negated(prompt_text, start=start, end=end):
+    sentence = _secret_match_sentence(prompt_text, start=start, end=end)
+    sentence_intents = tuple(_SECRET_READ_INTENT_PATTERN.finditer(sentence))
+    if sentence_intents:
+        return any(
+            not _secret_read_intent_is_negated(sentence, match.start(), match.end()) for match in sentence_intents
+        )
+    if _NEGATED_SECRET_READ_PATTERN.search(sentence) is not None:
         return False
     region = _prompt_secret_intent_region(prompt_text, start=start, end=end)
     for match in _SECRET_READ_INTENT_PATTERN.finditer(region):
-        if not _secret_read_intent_is_negated(region, match.start()):
+        if not _secret_read_intent_is_negated(region, match.start(), match.end()):
             return True
     return False
 
 
-def _secret_match_sentence_is_negated(prompt_text: str, *, start: int, end: int) -> bool:
+def _secret_match_sentence(prompt_text: str, *, start: int, end: int) -> str:
     sentence_start = _prompt_sentence_start(prompt_text, start)
     sentence_end = _prompt_sentence_end(prompt_text, end)
-    sentence = prompt_text[sentence_start:sentence_end]
-    if _NEGATED_SECRET_READ_PATTERN.search(sentence) is None:
-        return False
-    relative_end = max(0, end - sentence_start)
-    suffix = sentence[relative_end:]
-    for match in _SECRET_READ_INTENT_PATTERN.finditer(suffix):
-        if not _secret_read_intent_is_negated(sentence, relative_end + match.start()):
-            return False
-    return True
+    return prompt_text[sentence_start:sentence_end]
 
 
-def _secret_read_intent_is_negated(region: str, intent_start: int) -> bool:
-    prefix = region[max(0, intent_start - 90) : intent_start + 40]
-    return _NEGATED_SECRET_READ_PATTERN.search(prefix) is not None
+def _secret_read_intent_is_negated(region: str, intent_start: int, intent_end: int) -> bool:
+    window_start = max(0, intent_start - 90)
+    prefix = region[window_start:intent_start]
+    clause_start = window_start
+    for boundary in (".", "!", "?", ";", ",", " and ", " but ", " then "):
+        boundary_index = prefix.rfind(boundary)
+        if boundary_index >= 0:
+            clause_start = max(clause_start, window_start + boundary_index + len(boundary))
+    scoped_start = clause_start
+    scoped_region = region[scoped_start:intent_end]
+    return _NEGATED_SECRET_READ_PATTERN.search(scoped_region) is not None
 
 
 def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[str] | None:
