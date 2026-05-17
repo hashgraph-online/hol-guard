@@ -151,7 +151,16 @@ $Template = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
 $Xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($Template)
 $TextNodes = $Xml.GetElementsByTagName('text')
 $TextNodes.Item(0).AppendChild($Xml.CreateTextNode($Title)) > $null
-$TextNodes.Item(1).AppendChild($Xml.CreateTextNode($Message + ' Open: ' + $Url)) > $null
+$TextNodes.Item(1).AppendChild($Xml.CreateTextNode($Message)) > $null
+$ToastNode = $Xml.GetElementsByTagName('toast').Item(0)
+$ToastNode.SetAttribute('launch', $Url)
+$Actions = $Xml.CreateElement('actions')
+$OpenAction = $Xml.CreateElement('action')
+$OpenAction.SetAttribute('content', 'Open approval')
+$OpenAction.SetAttribute('arguments', $Url)
+$OpenAction.SetAttribute('activationType', 'protocol')
+$Actions.AppendChild($OpenAction) > $null
+$ToastNode.AppendChild($Actions) > $null
 $Toast = [Windows.UI.Notifications.ToastNotification]::new($Xml)
 $Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('HOL Guard')
 $Notifier.Show($Toast)

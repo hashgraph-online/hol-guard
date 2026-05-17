@@ -85,6 +85,8 @@ def test_windows_notification_uses_powershell_toast() -> None:
     assert sent is True
     assert calls[0][:4] == ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass"]
     assert "ToastNotificationManager" in calls[0][-1]
+    assert "$OpenAction.SetAttribute('activationType', 'protocol')" in calls[0][-1]
+    assert "$OpenAction.SetAttribute('arguments', $Url)" in calls[0][-1]
     assert "http://127.0.0.1:5474/approvals/req-native" in calls[0][-1]
 
 
