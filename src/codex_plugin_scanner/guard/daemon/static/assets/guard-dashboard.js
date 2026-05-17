@@ -13989,11 +13989,6 @@ function resolveDecisionV2Detail(item) {
   return detail !== void 0 && detail.trim().length > 0 ? detail : null;
 }
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
-const GENERIC_DUPLICATE_CONTEXT_PATTERNS = [
-  /^(codex|claude|claudecode|copilot|opencode|gemini)?promptfor[a-z0-9]*$/,
-  /^(codex|claude|claudecode|copilot|opencode|gemini)?commandfor[a-z0-9]*$/,
-  /^(codex|claude|claudecode|copilot|opencode|gemini)?toolfor[a-z0-9]*$/
-];
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
@@ -14024,23 +14019,31 @@ function hasSupplyChainArtifactEvidence(item) {
 function duplicatesStoppedActionText(item, value) {
   const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
   const candidateText = normalizeDuplicateReviewText(value);
+  const contextStrippedValue = stripDuplicateReviewContextPrefix(value);
+  const candidateWithoutContext = contextStrippedValue === null ? "" : normalizeDuplicateReviewText(contextStrippedValue);
   if (stoppedText.length === 0 || candidateText.length === 0) {
     return false;
   }
-  if (stoppedText === candidateText) {
+  if (stoppedText === candidateText || stoppedText === candidateWithoutContext) {
     return true;
   }
   if (stoppedText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH || candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH) {
     return false;
   }
-  if (!candidateText.includes(stoppedText)) {
-    return false;
+  if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && stoppedText.includes(candidateWithoutContext)) {
+    return true;
   }
-  const remainingContext = candidateText.replace(stoppedText, "");
-  return GENERIC_DUPLICATE_CONTEXT_PATTERNS.some((pattern) => pattern.test(remainingContext));
+  return false;
 }
 function normalizeDuplicateReviewText(value) {
-  return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_-]+/g, "").trim();
+  return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_\-…]+/g, "").trim();
+}
+function stripDuplicateReviewContextPrefix(value) {
+  const stripped = value.replace(
+    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
+    ""
+  );
+  return stripped === value ? null : stripped;
 }
 function primaryReviewActionToggleLabel(isVisible) {
   return isVisible ? "Hide" : "Show";

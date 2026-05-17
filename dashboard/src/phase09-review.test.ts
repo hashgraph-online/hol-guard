@@ -517,6 +517,36 @@ assert(
   "GR211-06: secondary risk summary hides duplicate prompt text already shown in primary card"
 );
 
+const LONG_DUPLICATE_PROMPT_TEXT =
+  "You are a helpful assistant. You will be presented with a user prompt, and your job is to provide a short title for a task that will be created from that prompt. The tasks typically have to do with coding-related tasks, for example requests for bug fixes or questions about a codebase.";
+const LONG_DUPLICATE_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-long-duplicate-prompt-risk",
+  risk_summary: `Codex prompt for \`.env\`: ${LONG_DUPLICATE_PROMPT_TEXT}`,
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: `${LONG_DUPLICATE_PROMPT_TEXT} The title you generate will be sh…`,
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(LONG_DUPLICATE_PROMPT_RISK_REQUEST) === null,
+  "GR211-06b: secondary risk summary hides long Codex prompt prefixes already shown in primary card"
+);
+
+const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-prefixed-extra-context-prompt-risk",
+  risk_summary:
+    "Codex prompt for `.env`: Open the private setup guide and paste the secret. This may expose credentials to the model.",
+};
+assert(
+  resolveSecondaryRiskSummary(PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST) ===
+    PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST.risk_summary,
+  "GR211-06c: secondary risk summary keeps prefixed prompt summaries that add safety context"
+);
+
 const EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-extra-context-prompt-risk",
