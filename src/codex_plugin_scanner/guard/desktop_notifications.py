@@ -23,6 +23,7 @@ class DesktopApprovalNotification:
 
 
 _NOTIFIED_APPROVAL_IDS: set[str] = set()
+_NOTIFICATION_ATTEMPTS_IN_FLIGHT: set[str] = set()
 _NOTIFIED_APPROVAL_IDS_LOCK = threading.Lock()
 
 
@@ -32,13 +33,24 @@ def notify_pending_approval_once(notification: DesktopApprovalNotification) -> b
     if _desktop_notifications_disabled_by_env():
         return False
     with _NOTIFIED_APPROVAL_IDS_LOCK:
-        if notification.request_id in _NOTIFIED_APPROVAL_IDS:
+        if (
+            notification.request_id in _NOTIFIED_APPROVAL_IDS
+            or notification.request_id in _NOTIFICATION_ATTEMPTS_IN_FLIGHT
+        ):
             return False
-        _NOTIFIED_APPROVAL_IDS.add(notification.request_id)
+        _NOTIFICATION_ATTEMPTS_IN_FLIGHT.add(notification.request_id)
     try:
-        return send_desktop_approval_notification(notification)
+        sent = send_desktop_approval_notification(notification)
     except Exception:
         return False
+    finally:
+        with _NOTIFIED_APPROVAL_IDS_LOCK:
+            _NOTIFICATION_ATTEMPTS_IN_FLIGHT.discard(notification.request_id)
+    if not sent:
+        return False
+    with _NOTIFIED_APPROVAL_IDS_LOCK:
+        _NOTIFIED_APPROVAL_IDS.add(notification.request_id)
+    return True
 
 
 def send_desktop_approval_notification(

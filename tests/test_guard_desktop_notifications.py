@@ -6,7 +6,11 @@ import subprocess
 from typing import Any
 
 from codex_plugin_scanner.guard.desktop_notifications import (
+    _NOTIFICATION_ATTEMPTS_IN_FLIGHT,
+    _NOTIFIED_APPROVAL_IDS,
+    _NOTIFIED_APPROVAL_IDS_LOCK,
     DesktopApprovalNotification,
+    notify_pending_approval_once,
     send_desktop_approval_notification,
 )
 
@@ -98,3 +102,22 @@ def test_unsupported_platform_is_noop() -> None:
 
     assert sent is False
     assert calls == []
+
+
+def test_failed_notification_attempt_can_retry(monkeypatch) -> None:
+    with _NOTIFIED_APPROVAL_IDS_LOCK:
+        _NOTIFIED_APPROVAL_IDS.clear()
+        _NOTIFICATION_ATTEMPTS_IN_FLIGHT.clear()
+    outcomes = [False, True]
+
+    def fake_send(_notification: DesktopApprovalNotification) -> bool:
+        return outcomes.pop(0)
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.desktop_notifications.send_desktop_approval_notification",
+        fake_send,
+    )
+
+    assert notify_pending_approval_once(_notification()) is False
+    assert notify_pending_approval_once(_notification()) is True
+    assert notify_pending_approval_once(_notification()) is False
