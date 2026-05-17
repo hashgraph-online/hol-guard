@@ -764,6 +764,7 @@ class GuardStore:
             self._ensure_approval_column(connection, "last_seen_at", "text")
             self._ensure_approval_column(connection, "fallback_cli_command", "text")
             self._ensure_approval_column(connection, "scanner_evidence_json", "text not null default '[]'")
+            self._ensure_approval_column(connection, "desktop_notified_at", "text")
             if not self._schema_version_applied(connection, version=3):
                 backfill_approval_queue_columns(connection)
                 self._record_schema_version(connection, version=3)
@@ -1780,6 +1781,33 @@ class GuardStore:
     def get_approval_request(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
             return load_approval_request(connection, request_id)
+
+    def approval_desktop_notified_at(self, request_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select desktop_notified_at
+                from approval_requests
+                where request_id = ?
+                """,
+                (request_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        value = row["desktop_notified_at"]
+        return str(value) if isinstance(value, str) and value else None
+
+    def mark_approval_desktop_notified(self, request_id: str, notified_at: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                update approval_requests
+                set desktop_notified_at = ?
+                where request_id = ?
+                  and desktop_notified_at is null
+                """,
+                (notified_at, request_id),
+            )
 
     def get_next_pending_request(self, *, exclude_ids: set[str] | None = None) -> dict[str, object] | None:
         with self._connect() as connection:

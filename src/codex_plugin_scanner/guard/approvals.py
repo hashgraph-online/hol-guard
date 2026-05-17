@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
+from .config import load_guard_config
+from .desktop_notifications import DesktopApprovalNotification, notify_pending_approval_once
 from .incident import build_incident_context
 from .models import GuardApprovalRequest, HarnessDetection, PolicyDecision
 from .risk import artifact_risk_signals, artifact_risk_summary
@@ -115,6 +117,7 @@ def queue_blocked_approvals(
                 review_command=f"{GUARD_COMMAND} approvals approve {persisted_request_id}",
                 approval_url=f"{approval_center_url.rstrip('/')}/approvals/{persisted_request_id}",
             )
+        _notify_pending_approval(store=store, request=request)
         queued.append(request.to_dict())
     return queued
 
@@ -235,6 +238,41 @@ def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -
     if not isinstance(artifact_hash, str) or not artifact_hash:
         return artifact_id, None
     return artifact_id, artifact_hash
+
+
+def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest) -> None:
+    try:
+        config = load_guard_config(
+            store.guard_home,
+            Path(request.workspace) if request.workspace is not None else None,
+        )
+    except Exception:
+        config = None
+    if config is not None and not config.desktop_notifications:
+        return
+    if store.approval_desktop_notified_at(request.request_id) is not None:
+        return
+    notify_pending_approval_once(
+        DesktopApprovalNotification(
+            request_id=request.request_id,
+            title="HOL Guard needs approval",
+            message=_approval_notification_message(request),
+            approval_url=request.approval_url,
+        ),
+        on_success=lambda: store.mark_approval_desktop_notified(
+            request.request_id,
+            _now(),
+        ),
+    )
+
+
+def _approval_notification_message(request: GuardApprovalRequest) -> str:
+    subject = request.risk_headline or request.trigger_summary or request.artifact_name
+    harness = request.harness.replace("-", " ").title()
+    message = f"{harness} wants approval: {subject}"
+    if len(message) <= 180:
+        return message
+    return f"{message[:177].rstrip()}..."
 
 
 def _string_or_none(value: object) -> str | None:
