@@ -52,7 +52,7 @@ _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
-_DOCKER_BUILD_SECRET_FLAGS = frozenset({"--secret", "--ssh"})
+_DOCKER_BUILD_SECRET_FLAGS = frozenset({"--allow", "--secret", "--ssh"})
 _DOCKER_BUILD_METADATA_FLAGS = frozenset({"--annotation", "--label"})
 _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {

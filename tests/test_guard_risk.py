@@ -841,6 +841,7 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker build --label $NPM_TOKEN=1 .",
         "docker build --annotation $(cat ~/.aws/credentials)=x .",
         "docker buildx --debug build --secret id=npm,src=.npmrc .",
+        "docker buildx build --allow security.insecure .",
         "docker --debug login registry.example.com",
         "docker --tlsverify run alpine",
         "docker --debug=true login registry.example.com",
