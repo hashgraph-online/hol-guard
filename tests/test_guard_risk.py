@@ -911,6 +911,30 @@ NODE"""
     assert request is None
 
 
+def test_tool_action_request_classifier_allows_read_only_node_fetch_probe():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": """node - <<'NODE'
+const res = await fetch('https://hol.org/guard/apps/codex', { redirect: 'manual' });
+const text = await res.text();
+const checks = {
+  status: res.status,
+  hasBrowserPermissionFix: text.includes('Browser permission fix'),
+  hasChromeLocalNetwork: text.includes('chrome://settings/content/localNetworkAccess'),
+  hasEdgeLocalNetwork: text.includes('edge://settings/content/localNetworkAccess'),
+  hasBraveLocalhost: text.includes('brave://settings/content/localhostAccess'),
+  hasServiceLogin: text.includes('hol-guard service login'),
+  hasSupportedCodexCommand: text.includes('hol-guard apps connect codex'),
+};
+console.log(JSON.stringify(checks, null, 2));
+NODE"""
+        },
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_node_heredoc_delete_operation():
     request = extract_sensitive_tool_action_request(
         "bash",

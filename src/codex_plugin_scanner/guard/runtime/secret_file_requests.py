@@ -208,6 +208,23 @@ _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
         "writeFileSync",
     }
 )
+_NODE_READ_ONLY_HTTP_PATTERN = re.compile(r"\b(?:fetch|https?\.get)\s*\(", re.IGNORECASE)
+_NODE_MUTATING_HTTP_PATTERN = re.compile(
+    r"\b(?:POST|PUT|PATCH|DELETE)\b|"
+    r"\bmethod\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]|"
+    r"\b(?:body|data)\s*:",
+    re.IGNORECASE,
+)
+_NODE_LOCAL_FILE_ACCESS_PATTERN = re.compile(
+    r"\b(?:readFile|readFileSync|writeFile|writeFileSync|appendFile|appendFileSync|"
+    r"createReadStream|createWriteStream)\s*\(",
+    re.IGNORECASE,
+)
+_NODE_SENSITIVE_RUNTIME_PATTERN = re.compile(
+    r"\bprocess\s*\.\s*env\b|\brequire\s*\(\s*['\"](?:child_process|fs|fs/promises)['\"]\s*\)|"
+    r"\b(?:exec|execFile|execFileSync|execSync|spawn|spawnSync|fork|eval|Function)\s*\(",
+    re.IGNORECASE,
+)
 _SAFE_NODE_GENERATED_FILE_EXTENSIONS = frozenset({".csv", ".json", ".jsonl", ".md", ".txt"})
 _SAFE_NODE_GENERATED_FILE_ROOTS = ("/tmp/", "/private/tmp/", "/var/tmp/", "/private/var/tmp/")
 _DESTRUCTIVE_GIT_SUBCOMMANDS = frozenset({"clean", "reset", "restore", "rm"})
@@ -3035,6 +3052,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
             return True
     node_heredoc_script = _single_node_heredoc_script(normalized)
     if node_heredoc_script is not None:
+        if _looks_like_safe_node_read_only_http_heredoc(node_heredoc_script):
+            return False
         if _looks_like_safe_node_generated_file_heredoc(normalized, node_heredoc_script):
             return False
         return _node_script_contains_sensitive_runtime_behavior(node_heredoc_script)
@@ -3625,6 +3644,18 @@ def _node_script_contains_sensitive_runtime_behavior(script_text: str) -> bool:
     return _contains_destructive_node_inline_script(script_text) or _node_script_contains_non_file_generation_risk(
         script_text
     )
+
+
+def _looks_like_safe_node_read_only_http_heredoc(script_text: str) -> bool:
+    if _NODE_READ_ONLY_HTTP_PATTERN.search(script_text) is None:
+        return False
+    if _NODE_MUTATING_HTTP_PATTERN.search(script_text):
+        return False
+    if _NODE_LOCAL_FILE_ACCESS_PATTERN.search(script_text):
+        return False
+    if _NODE_SENSITIVE_RUNTIME_PATTERN.search(script_text):
+        return False
+    return not _node_script_contains_disallowed_destructive_file_call(script_text)
 
 
 def _node_script_contains_non_file_generation_risk(script_text: str) -> bool:

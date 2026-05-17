@@ -94,6 +94,12 @@ _SECRET_READ_INTENT_PATTERN = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_NEGATED_SECRET_READ_PATTERN = re.compile(
+    r"\b(?:never|do\s+not|don't|dont|must\s+not|should\s+not|cannot|can't)\b[^.!?;\n]{0,80}"
+    r"\b(?:read|open|print|show|dump|cat|head|tail|less|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
+    r"use|include|grab)\b",
+    re.IGNORECASE,
+)
 _EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"
 _EXFIL_ARTIFACTS = r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)"
 _EXFIL_DESTINATIONS = r"(?:to|into|onto|via|through|over|at)"
@@ -218,12 +224,32 @@ def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
 
 
 def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
-    return (
-        _SECRET_READ_INTENT_PATTERN.search(
-            _prompt_secret_intent_region(prompt_text, start=start, end=end),
-        )
-        is not None
-    )
+    if _secret_match_sentence_is_negated(prompt_text, start=start, end=end):
+        return False
+    region = _prompt_secret_intent_region(prompt_text, start=start, end=end)
+    for match in _SECRET_READ_INTENT_PATTERN.finditer(region):
+        if not _secret_read_intent_is_negated(region, match.start()):
+            return True
+    return False
+
+
+def _secret_match_sentence_is_negated(prompt_text: str, *, start: int, end: int) -> bool:
+    sentence_start = _prompt_sentence_start(prompt_text, start)
+    sentence_end = _prompt_sentence_end(prompt_text, end)
+    sentence = prompt_text[sentence_start:sentence_end]
+    if _NEGATED_SECRET_READ_PATTERN.search(sentence) is None:
+        return False
+    relative_end = max(0, end - sentence_start)
+    suffix = sentence[relative_end:]
+    for match in _SECRET_READ_INTENT_PATTERN.finditer(suffix):
+        if not _secret_read_intent_is_negated(sentence, relative_end + match.start()):
+            return False
+    return True
+
+
+def _secret_read_intent_is_negated(region: str, intent_start: int) -> bool:
+    prefix = region[max(0, intent_start - 90) : intent_start + 40]
+    return _NEGATED_SECRET_READ_PATTERN.search(prefix) is not None
 
 
 def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[str] | None:
