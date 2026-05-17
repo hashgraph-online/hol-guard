@@ -420,10 +420,18 @@ function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string):
 
 function extractDuplicateReviewRemainder(candidateText: string, stoppedText: string): string {
   const candidate = candidateText.trim();
-  const stopped = stoppedText.trim();
-  return candidate.toLowerCase().startsWith(stopped.toLowerCase())
-    ? candidate.slice(stopped.length).trim()
-    : "";
+  const stopped = normalizeDuplicateReviewText(stoppedText);
+  if (stopped.length === 0) {
+    return "";
+  }
+  let normalizedPrefix = "";
+  for (let index = 0; index < candidate.length; index += 1) {
+    normalizedPrefix += normalizeDuplicateReviewText(candidate[index]);
+    if (normalizedPrefix.length >= stopped.length) {
+      return normalizedPrefix.startsWith(stopped) ? candidate.slice(index + 1).trim() : "";
+    }
+  }
+  return "";
 }
 
 function hasDuplicateReviewSafetyContextRemainder(remainder: string): boolean {

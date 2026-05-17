@@ -585,6 +585,26 @@ assert(
   "GR211-06g: secondary risk summary hides normal prompt continuation text that contains broad non-risk verbs"
 );
 
+const REFLOWED_PRIMARY_PROMPT_TEXT =
+  "# Overview\nGenerate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project: /Users/test/project. Get an understanding of the user's intent and goals by deeply viewing";
+const REFLOWED_PROMPT_WITH_SAFETY_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-reflowed-prompt-with-safety-context",
+  risk_summary:
+    "Codex prompt for `.npmrc`: # Overview Generate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project /Users/test/project Get an understanding of the user's intent and goals by deeply viewing. This may expose npm registry credentials to the model.",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: REFLOWED_PRIMARY_PROMPT_TEXT,
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(REFLOWED_PROMPT_WITH_SAFETY_CONTEXT_REQUEST) ===
+    REFLOWED_PROMPT_WITH_SAFETY_CONTEXT_REQUEST.risk_summary,
+  "GR211-06h: secondary risk summary keeps safety context after normalized prefix extraction"
+);
+
 const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-prefixed-extra-context-prompt-risk",
