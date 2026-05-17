@@ -16,7 +16,8 @@ from codex_plugin_scanner.guard.desktop_notifications import (
 
 
 class _Completed:
-    returncode = 0
+    def __init__(self, returncode: int = 0) -> None:
+        self.returncode = returncode
 
 
 def _notification() -> DesktopApprovalNotification:
@@ -102,6 +103,24 @@ def test_unsupported_platform_is_noop() -> None:
 
     assert sent is False
     assert calls == []
+
+
+def test_notification_command_nonzero_exit_is_failure() -> None:
+    calls: list[list[str]] = []
+
+    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
+        calls.append(command)
+        return _Completed(returncode=1)  # type: ignore[return-value]
+
+    sent = send_desktop_approval_notification(
+        _notification(),
+        system_name="Darwin",
+        run=run,
+        which=lambda _name: None,
+    )
+
+    assert sent is False
+    assert calls[0][0] == "osascript"
 
 
 def test_failed_notification_attempt_can_retry(monkeypatch) -> None:

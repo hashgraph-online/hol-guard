@@ -83,7 +83,8 @@ def _send_macos_notification(
 ) -> bool:
     terminal_notifier = which("terminal-notifier")
     if terminal_notifier:
-        run(
+        return _run_notification_command(
+            run,
             [
                 terminal_notifier,
                 "-title",
@@ -100,8 +101,8 @@ def _send_macos_notification(
             check=False,
             timeout=3,
         )
-        return True
-    run(
+    return _run_notification_command(
+        run,
         [
             "osascript",
             "-e",
@@ -114,7 +115,6 @@ def _send_macos_notification(
         check=False,
         timeout=3,
     )
-    return True
 
 
 def _send_windows_notification(
@@ -123,7 +123,8 @@ def _send_windows_notification(
     run: Callable[..., subprocess.CompletedProcess[object]],
 ) -> bool:
     script = _windows_toast_script(notification)
-    run(
+    return _run_notification_command(
+        run,
         [
             "powershell",
             "-NoProfile",
@@ -135,7 +136,6 @@ def _send_windows_notification(
         check=False,
         timeout=5,
     )
-    return True
 
 
 def _windows_toast_script(notification: DesktopApprovalNotification) -> str:
@@ -156,6 +156,15 @@ $Toast = [Windows.UI.Notifications.ToastNotification]::new($Xml)
 $Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('HOL Guard')
 $Notifier.Show($Toast)
 """.strip()
+
+
+def _run_notification_command(
+    run: Callable[..., subprocess.CompletedProcess[object]],
+    command: list[str],
+    **kwargs: object,
+) -> bool:
+    result = run(command, **kwargs)
+    return result.returncode == 0
 
 
 def _escape_osascript(value: str) -> str:
