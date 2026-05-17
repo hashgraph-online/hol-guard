@@ -2611,6 +2611,12 @@ def test_tool_action_request_classifier_allows_python_time_sleep_one_liner():
     assert request is None
 
 
+def test_tool_action_request_classifier_allows_python_c_argument_named_like_module_flag():
+    request = extract_sensitive_tool_action_request("bash", {"command": "python -c 'print(1)' -m"})
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_does_not_allow_wait_with_shell_substitution():
     request = extract_sensitive_tool_action_request(
         "bash",

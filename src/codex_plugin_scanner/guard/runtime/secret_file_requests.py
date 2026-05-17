@@ -4930,9 +4930,9 @@ def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], com
 def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str], command_names: list[str]) -> bool:
     if "$(" in command_text or "`" in command_text or "<(" in command_text or ">(" in command_text:
         return False
-    if any(_is_python_interpreter_command(command_name) for command_name in command_names) and any(
-        part == "-m" or (part.startswith("-m") and len(part) > 2) for part in parts
-    ):
+    if any(
+        _is_python_interpreter_command(command_name) for command_name in command_names
+    ) and _parts_use_python_module_mode(parts):
         return False
     heredoc_script = _single_interpreter_heredoc_script(command_text)
     if heredoc_script is not None:
@@ -4991,6 +4991,36 @@ def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key:
     return any(
         token.split("=", 1)[0].upper() == normalized_env_key for token in segment[:command_index] if "=" in token
     )
+
+
+def _parts_use_python_module_mode(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None or not _is_python_interpreter_command(command_name):
+            continue
+        if _python_args_use_module_mode(segment[command_index + 1 :]):
+            return True
+    return False
+
+
+def _python_args_use_module_mode(args: list[str]) -> bool:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--" or arg in {"-c", "--command"} or arg.startswith(("-c", "--command=")):
+            return False
+        if arg == "-m" or (arg.startswith("-m") and len(arg) > 2):
+            return True
+        if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(option) and len(arg) > len(option) for option in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES):
+            index += 1
+            continue
+        if not arg.startswith("-"):
+            return False
+        index += 1
+    return False
 
 
 def _python_segment_runs_safe_module(args: list[str]) -> bool:
