@@ -52,7 +52,6 @@ def notify_pending_approval_once(
             target=_deliver_notification,
             args=(notification,),
             name=f"hol-guard-notify-{notification.request_id}",
-            daemon=True,
         ).start()
         return True
     return _deliver_notification(notification)
@@ -184,7 +183,7 @@ $OpenAction.SetAttribute('activationType', 'protocol')
 $Actions.AppendChild($OpenAction) > $null
 $ToastNode.AppendChild($Actions) > $null
 $Toast = [Windows.UI.Notifications.ToastNotification]::new($Xml)
-$Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('HOL Guard')
+$Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier()
 $Notifier.Show($Toast)
 """.strip()
 
