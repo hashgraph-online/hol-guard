@@ -843,6 +843,8 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker buildx --debug build --secret id=npm,src=.npmrc .",
         "docker --debug login registry.example.com",
         "docker --tlsverify run alpine",
+        "docker --debug=true login registry.example.com",
+        "docker --tlsverify=false run alpine",
         "docker login registry.example.com",
         "docker --context prod login registry.example.com",
         "docker run -v ~/.ssh:/root/.ssh ubuntu:latest",
@@ -875,6 +877,8 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
         "python -m ruff --color always format .",
         "python -m mypy --install-types package",
         "python -m pytest --basetemp=/tmp/guard-pytest",
+        "python -m pytest --junitxml=/tmp/guard-pytest.xml",
+        "python -m pytest --debug=/tmp/guard-pytest.log",
     ],
 )
 def test_tool_action_request_classifier_blocks_mutating_python_module_invocations(command):

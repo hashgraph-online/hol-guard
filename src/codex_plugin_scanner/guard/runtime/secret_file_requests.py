@@ -87,7 +87,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"mypy", "pytest", "ruff", "unittest"})
 _PYTHON_MODULE_MUTATING_FLAGS = {
     "mypy": frozenset({"--install-types"}),
-    "pytest": frozenset({"--basetemp"}),
+    "pytest": frozenset({"--basetemp", "--debug", "--junitxml"}),
     "ruff": frozenset({"--add-noqa", "--fix", "--fix-only"}),
 }
 _PYTHON_MODULE_MUTATING_SUBCOMMANDS = {
@@ -3079,7 +3079,7 @@ def _docker_subcommand_index(args: list[str]) -> int | None:
         if _docker_global_option_has_value(token):
             index += 1 if "=" in token else 2
             continue
-        if token in _DOCKER_GLOBAL_FLAG_OPTIONS:
+        if _docker_global_flag_option_matches(token):
             index += 1
             continue
         if token.startswith("-") and not token.startswith("--"):
@@ -3093,6 +3093,12 @@ def _docker_global_option_has_value(token: str) -> bool:
     # Accept both long attached values like --host=... and short forms like -H=....
     return token in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES or any(
         token.startswith(f"{option}=") for option in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES
+    )
+
+
+def _docker_global_flag_option_matches(token: str) -> bool:
+    return token in _DOCKER_GLOBAL_FLAG_OPTIONS or any(
+        token.startswith(f"{option}=") for option in _DOCKER_GLOBAL_FLAG_OPTIONS
     )
 
 
