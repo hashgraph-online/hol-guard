@@ -822,8 +822,13 @@ def test_tool_action_request_classifier_allows_python_test_module_invocation():
         "bash",
         {"command": "python3 -m pytest tests/test_guard_risk.py -q -c pytest.ini"},
     )
+    interpreter_option_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -W ignore -m pytest tests/test_guard_risk.py -q"},
+    )
 
     assert request is None
+    assert interpreter_option_request is None
 
 
 def test_tool_action_request_classifier_allows_python_test_module_with_read_only_followup():

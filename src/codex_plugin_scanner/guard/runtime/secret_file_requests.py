@@ -89,6 +89,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-c", "-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
+_PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
 _PYTHON_MODULE_MUTATING_FLAGS = {
     "mypy": frozenset({"--install-types"}),
     "pytest": frozenset({"--basetemp", "--debug", "--junitxml"}),
@@ -4991,6 +4992,12 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
         if arg.startswith("-m") and len(arg) > 2:
             module = arg[2:]
             return _python_module_args_are_safe(module, args[index + 1 :])
+        if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(option) and len(arg) > len(option) for option in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES):
+            index += 1
+            continue
         if not arg.startswith("-"):
             return False
         index += 1
