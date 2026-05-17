@@ -9,6 +9,8 @@ import os
 import socket
 import struct
 import tempfile
+import threading
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
@@ -21,6 +23,7 @@ class _OperationStore(Protocol):
 
 
 _DEFAULT_PROXY_TIMEOUT_SECONDS = 5.0
+_DEFAULT_COMPLETION_TIMEOUT_SECONDS = 90.0
 _DEFAULT_SOCKET_PATH = Path.home() / ".codex" / "app-server-control" / "app-server-control.sock"
 _WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 _THREAD_ID_KEYS = (
@@ -131,24 +134,51 @@ def resume_codex_thread_for_request(
             },
         },
     ]
-    try:
-        response = _send_app_server_websocket_messages(
-            socket_path=socket_path,
-            payloads=request_payloads,
-            response_id=2,
-            timeout_seconds=timeout_seconds,
-        )
-    except (OSError, TimeoutError, ValueError) as error:
+    ready = threading.Event()
+    result: dict[str, object] = {}
+    worker = threading.Thread(
+        target=_send_codex_resume_worker,
+        kwargs={
+            "socket_path": socket_path,
+            "payloads": request_payloads,
+            "response_id": 2,
+            "thread_id": thread_id,
+            "timeout_seconds": timeout_seconds,
+            "completion_timeout_seconds": _DEFAULT_COMPLETION_TIMEOUT_SECONDS,
+            "ready": ready,
+            "result": result,
+        },
+        name="hol-guard-codex-resume",
+        daemon=True,
+    )
+    worker.start()
+    if not ready.wait(timeout_seconds):
+        return {
+            "status": "failed",
+            "reason": "turn_start_timeout",
+            "thread_id": thread_id,
+            "socket_path": socket_path,
+        }
+    error = result.get("error")
+    if isinstance(error, BaseException):
         return {
             "status": "failed",
             "reason": type(error).__name__,
             "thread_id": thread_id,
             "socket_path": socket_path,
         }
+    response = result.get("response")
     if response is None:
         return {
             "status": "failed",
             "reason": "missing_turn_start_response",
+            "thread_id": thread_id,
+            "socket_path": socket_path,
+        }
+    if not isinstance(response, dict):
+        return {
+            "status": "failed",
+            "reason": "invalid_turn_start_response",
             "thread_id": thread_id,
             "socket_path": socket_path,
         }
@@ -168,6 +198,36 @@ def resume_codex_thread_for_request(
         "thread_id": thread_id,
         "socket_path": socket_path,
     }
+
+
+def _send_codex_resume_worker(
+    *,
+    socket_path: str,
+    payloads: list[dict[str, object]],
+    response_id: int,
+    thread_id: str,
+    timeout_seconds: float,
+    completion_timeout_seconds: float,
+    ready: threading.Event,
+    result: dict[str, object],
+) -> None:
+    try:
+        response, completion_status = _send_app_server_websocket_messages(
+            socket_path=socket_path,
+            payloads=payloads,
+            response_id=response_id,
+            timeout_seconds=timeout_seconds,
+            completion_thread_id=thread_id,
+            completion_timeout_seconds=completion_timeout_seconds,
+            ready=ready,
+            result=result,
+        )
+        result["response"] = response
+        result["completion_status"] = completion_status
+    except (OSError, TimeoutError, ValueError) as error:
+        result["error"] = error
+    finally:
+        ready.set()
 
 
 def _find_codex_operation_for_request(store: _OperationStore, request_id: str) -> dict[str, object] | None:
@@ -201,17 +261,36 @@ def _send_app_server_websocket_messages(
     payloads: list[dict[str, object]],
     response_id: int,
     timeout_seconds: float,
-) -> dict[str, object] | None:
+    completion_thread_id: str | None = None,
+    completion_timeout_seconds: float | None = None,
+    ready: threading.Event | None = None,
+    result: dict[str, object] | None = None,
+) -> tuple[dict[str, object] | None, str]:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(timeout_seconds)
         client.connect(str(Path(socket_path).expanduser()))
         pending = bytearray(_send_websocket_handshake(client))
         for payload in payloads:
             _send_websocket_text(client, json.dumps(payload, separators=(",", ":")))
+        response: dict[str, object] | None = None
+        response_deadline = time.monotonic() + timeout_seconds
+        completion_deadline = time.monotonic() + (completion_timeout_seconds or timeout_seconds)
+        client.settimeout(1.0)
         while True:
-            opcode, payload = _read_websocket_frame(client, pending)
+            try:
+                opcode, payload = _read_websocket_frame(client, pending)
+            except TimeoutError:
+                if response is None:
+                    if time.monotonic() >= response_deadline:
+                        raise
+                    continue
+                if response is not None and completion_thread_id is not None:
+                    if time.monotonic() >= completion_deadline:
+                        return response, "completion_timeout"
+                    continue
+                raise
             if opcode == 0x8:
-                return None
+                return response, "socket_closed"
             if opcode == 0x9:
                 _send_websocket_frame(client, 0xA, payload)
                 continue
@@ -222,8 +301,44 @@ def _send_app_server_websocket_messages(
             except json.JSONDecodeError:
                 continue
             if isinstance(message, dict) and message.get("id") == response_id:
-                return message
-    return None
+                response = message
+                if result is not None:
+                    result["response"] = message
+                if ready is not None:
+                    ready.set()
+                if isinstance(message.get("error"), dict) or completion_thread_id is None:
+                    return message, "turn_start_response"
+                continue
+            if response is not None and completion_thread_id is not None and _is_thread_completion_message(
+                message,
+                completion_thread_id,
+            ):
+                return response, _completion_status(message)
+    return None, "socket_closed"
+
+
+def _is_thread_completion_message(message: object, thread_id: str) -> bool:
+    if not isinstance(message, dict):
+        return False
+    method = message.get("method")
+    params = message.get("params")
+    if not isinstance(params, dict) or params.get("threadId") != thread_id:
+        return False
+    if method == "turn/completed":
+        return True
+    if method == "thread/status/changed":
+        status = params.get("status")
+        return isinstance(status, dict) and status.get("type") == "idle"
+    return False
+
+
+def _completion_status(message: Mapping[str, object]) -> str:
+    method = message.get("method")
+    if method == "turn/completed":
+        return "turn_completed"
+    if method == "thread/status/changed":
+        return "thread_idle"
+    return "completed"
 
 
 def _send_websocket_handshake(client: socket.socket) -> bytes:

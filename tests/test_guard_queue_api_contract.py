@@ -191,6 +191,20 @@ def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, obj
                         )
                     if message.get("id") == 2:
                         _send_websocket_text(connection, {"id": 2, "result": {"turnId": "turn-next"}})
+                        time.sleep(0.05)
+                        _send_websocket_text(
+                            connection,
+                            {
+                                "method": "turn/completed",
+                                "params": {
+                                    "threadId": "thread-1",
+                                    "turn": {
+                                        "id": "turn-next",
+                                        "status": "completed",
+                                    },
+                                },
+                            },
+                        )
                         break
 
     thread = threading.Thread(target=server, daemon=True)

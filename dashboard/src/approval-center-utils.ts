@@ -380,10 +380,13 @@ function hasSupplyChainArtifactEvidence(item: GuardApprovalRequest): boolean {
 function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string): boolean {
   const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
   const candidateText = normalizeDuplicateReviewText(value);
+  const contextStrippedValue = stripDuplicateReviewContextPrefix(value);
+  const candidateWithoutContext =
+    contextStrippedValue === null ? "" : normalizeDuplicateReviewText(contextStrippedValue);
   if (stoppedText.length === 0 || candidateText.length === 0) {
     return false;
   }
-  if (stoppedText === candidateText) {
+  if (stoppedText === candidateText || stoppedText === candidateWithoutContext) {
     return true;
   }
   if (
@@ -391,6 +394,12 @@ function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string):
     candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH
   ) {
     return false;
+  }
+  if (
+    candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH &&
+    (candidateWithoutContext.includes(stoppedText) || stoppedText.includes(candidateWithoutContext))
+  ) {
+    return true;
   }
   if (!candidateText.includes(stoppedText)) {
     return false;
@@ -402,8 +411,16 @@ function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string):
 function normalizeDuplicateReviewText(value: string): string {
   return value
     .toLowerCase()
-    .replace(/[`"'\s:.,;!?()[\]{}_-]+/g, "")
+    .replace(/[`"'\s:.,;!?()[\]{}_\-…]+/g, "")
     .trim();
+}
+
+function stripDuplicateReviewContextPrefix(value: string): string | null {
+  const stripped = value.replace(
+    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
+    "",
+  );
+  return stripped === value ? null : stripped;
 }
 
 export function primaryReviewActionToggleLabel(isVisible: boolean): string {
