@@ -110,7 +110,6 @@ def queue_blocked_approvals(
             scanner_evidence=_item_scanner_evidence(item),
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
-        is_new_pending_request = persisted_request_id == request.request_id
         if persisted_request_id != request.request_id:
             request = replace(
                 request,
@@ -118,8 +117,7 @@ def queue_blocked_approvals(
                 review_command=f"{GUARD_COMMAND} approvals approve {persisted_request_id}",
                 approval_url=f"{approval_center_url.rstrip('/')}/approvals/{persisted_request_id}",
             )
-        if is_new_pending_request:
-            _notify_pending_approval(store=store, request=request)
+        _notify_pending_approval(store=store, request=request)
         queued.append(request.to_dict())
     return queued
 
