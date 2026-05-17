@@ -53,6 +53,7 @@ _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILD_SECRET_FLAGS = frozenset({"--allow", "--secret", "--ssh"})
+_DOCKER_BUILD_OUTPUT_FLAGS = frozenset({"--iidfile", "--metadata-file", "--output", "-o"})
 _DOCKER_BUILD_METADATA_FLAGS = frozenset({"--annotation", "--label"})
 _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {
@@ -84,7 +85,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "glpat-",
     "sk-",
 )
-_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest", "unittest"})
+_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-c", "-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_MODULE_MUTATING_FLAGS = {
@@ -3137,6 +3138,10 @@ def _docker_build_args_are_sensitive(args: list[str]) -> bool:
             return False
         if token in _DOCKER_BUILD_SECRET_FLAGS or any(
             token.startswith(f"{flag}=") for flag in _DOCKER_BUILD_SECRET_FLAGS
+        ):
+            return True
+        if token in _DOCKER_BUILD_OUTPUT_FLAGS or any(
+            token.startswith(f"{flag}=") for flag in _DOCKER_BUILD_OUTPUT_FLAGS
         ):
             return True
         if token == "--build-arg":

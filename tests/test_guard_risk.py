@@ -847,6 +847,9 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker build --annotation $(cat ~/.aws/credentials)=x .",
         "docker buildx --debug build --secret id=npm,src=.npmrc .",
         "docker buildx build --allow security.insecure .",
+        "docker buildx build --output type=local,dest=/tmp/out .",
+        "docker build --iidfile /tmp/image-id .",
+        "docker build --metadata-file=/tmp/metadata.json .",
         "docker --debug login registry.example.com",
         "docker --tlsverify run alpine",
         "docker --debug=true login registry.example.com",
@@ -889,6 +892,7 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
         "python -m pytest --debug=/tmp/guard-pytest.log",
         "python -m pytest --log-file=/tmp/guard-pytest.log",
         "python dangerous.py -m pytest",
+        "python -m unittest discover",
     ],
 )
 def test_tool_action_request_classifier_blocks_mutating_python_module_invocations(command):
