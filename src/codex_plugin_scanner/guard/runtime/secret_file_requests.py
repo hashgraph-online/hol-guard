@@ -797,7 +797,7 @@ def _gh_pr_create_command_index(segment: list[_ShellTokenWithQuoteContext]) -> i
             index += 1
             continue
         if command_name == "command":
-            index += 1
+            index = _skip_command_builtin_options(segment, index + 1)
             continue
         if command_name == "time":
             index = _skip_shell_wrapper_options(segment, index + 1)
@@ -818,6 +818,18 @@ def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], inde
     return index
 
 
+def _skip_command_builtin_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain == "--":
+            return index + 1
+        if plain.startswith("-"):
+            index += 1
+            continue
+        break
+    return index
+
+
 def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
     while index < len(segment):
         plain = segment[index].plain
@@ -834,6 +846,9 @@ def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index:
             index += 2
             continue
         if any(plain.startswith(f"{flag}=") for flag in {"--unset", "--chdir", "--split-string"}):
+            index += 1
+            continue
+        if plain.startswith("-"):
             index += 1
             continue
         break
