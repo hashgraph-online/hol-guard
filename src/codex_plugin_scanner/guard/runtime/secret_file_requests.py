@@ -897,6 +897,12 @@ def _gh_pr_create_body_args_have_substitution(args: list[_ShellTokenWithQuoteCon
                 return True
             index += 2
             continue
+        if (
+            arg.plain.startswith("-b")
+            and len(arg.plain) > 2
+            and _shell_command_substitution_payloads(arg.raw[2:])
+        ):
+            return True
         if arg.plain.startswith("--body=") and _shell_command_substitution_payloads(_shell_token_raw_value(arg.raw)):
             return True
         index += 1
