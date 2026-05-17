@@ -119,12 +119,14 @@ _MUTATING_HTTP_FETCH_PATTERN = re.compile(
     r"\b(?:POST|PUT|PATCH|DELETE)\b|"
     r"\bmethod\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]|"
     r"(?:^|[\s;&|])(?:--request|-X)\s*(?:POST|PUT|PATCH|DELETE)\b|"
-    r"(?:^|[\s;&|])(?:--data(?:-binary|-raw|-urlencode)?|-d|--form|-F|--json|--upload-file|-T)\b|"
+    r"(?:^|[\s;&|])(?:--data(?:-binary|-raw|-urlencode)?(?:[=\s]|$)|-d(?:\S|\s|$)"
+    r"|--form(?:[=\s]|$)|-F(?:\S|\s|$)|--json(?:[=\s]|$)|--upload-file(?:[=\s]|$)|-T(?:\S|\s|$))|"
     r"\b(?:body|data)\s*:",
     re.IGNORECASE,
 )
 _HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
-    r"(?:^|[\s;&|])(?:--output|-o|--remote-name|-O|--remote-header-name|--dump-header|-D)\b",
+    r"(?:^|[\s;&|])(?:--output(?:[=\s]|$)|-o(?:\S|\s|$)|--remote-name(?:[=\s]|$)|-[A-Za-z]*O[A-Za-z]*"
+    r"|--remote-header-name(?:[=\s]|$)|--dump-header(?:[=\s]|$)|-D(?:\S|\s|$))",
     re.IGNORECASE,
 )
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
