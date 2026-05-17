@@ -247,13 +247,19 @@ def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest
         config = None
     if config is not None and not config.desktop_notifications:
         return
+    if store.approval_desktop_notified_at(request.request_id) is not None:
+        return
     notify_pending_approval_once(
         DesktopApprovalNotification(
             request_id=request.request_id,
             title="HOL Guard needs approval",
             message=_approval_notification_message(request),
             approval_url=request.approval_url,
-        )
+        ),
+        on_success=lambda: store.mark_approval_desktop_notified(
+            request.request_id,
+            _now(),
+        ),
     )
 
 

@@ -559,9 +559,10 @@ class TestGuardApprovals:
         )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.approvals.notify_pending_approval_once",
-            lambda notification: desktop_notifications.notify_pending_approval_once(
+            lambda notification, **kwargs: desktop_notifications.notify_pending_approval_once(
                 notification,
                 asynchronous=False,
+                **kwargs,
             ),
         )
         store = GuardStore(tmp_path / "guard-home")
@@ -606,6 +607,9 @@ class TestGuardApprovals:
             approval_center_url="http://127.0.0.1:4455",
             now="2026-04-17T00:00:00+00:00",
         )
+        with desktop_notifications._NOTIFIED_APPROVAL_IDS_LOCK:
+            desktop_notifications._NOTIFIED_APPROVAL_IDS.clear()
+            desktop_notifications._NOTIFICATION_ATTEMPTS_IN_FLIGHT.clear()
         second = queue_blocked_approvals(
             detection=detection,
             evaluation=evaluation,
@@ -637,9 +641,10 @@ class TestGuardApprovals:
         )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.approvals.notify_pending_approval_once",
-            lambda notification: desktop_notifications.notify_pending_approval_once(
+            lambda notification, **kwargs: desktop_notifications.notify_pending_approval_once(
                 notification,
                 asynchronous=False,
+                **kwargs,
             ),
         )
         store = GuardStore(tmp_path / "guard-home")
@@ -682,6 +687,9 @@ class TestGuardApprovals:
             approval_center_url="http://127.0.0.1:4455",
             now="2026-04-17T00:00:00+00:00",
         )
+        with desktop_notifications._NOTIFIED_APPROVAL_IDS_LOCK:
+            desktop_notifications._NOTIFIED_APPROVAL_IDS.clear()
+            desktop_notifications._NOTIFICATION_ATTEMPTS_IN_FLIGHT.clear()
         second = queue_blocked_approvals(
             detection=detection,
             evaluation=evaluation,

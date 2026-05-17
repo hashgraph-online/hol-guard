@@ -31,6 +31,7 @@ def notify_pending_approval_once(
     notification: DesktopApprovalNotification,
     *,
     asynchronous: bool = True,
+    on_success: Callable[[], None] | None = None,
 ) -> bool:
     """Send one native notification for an approval request ID.
 
@@ -51,7 +52,7 @@ def notify_pending_approval_once(
         try:
             threading.Thread(
                 target=_deliver_notification,
-                args=(notification,),
+                args=(notification, on_success),
                 name=f"hol-guard-notify-{notification.request_id}",
             ).start()
         except Exception:
@@ -59,10 +60,13 @@ def notify_pending_approval_once(
                 _NOTIFICATION_ATTEMPTS_IN_FLIGHT.discard(notification.request_id)
             return False
         return True
-    return _deliver_notification(notification)
+    return _deliver_notification(notification, on_success)
 
 
-def _deliver_notification(notification: DesktopApprovalNotification) -> bool:
+def _deliver_notification(
+    notification: DesktopApprovalNotification,
+    on_success: Callable[[], None] | None = None,
+) -> bool:
     """Deliver notification and update request ID state after real success."""
 
     try:
@@ -76,6 +80,8 @@ def _deliver_notification(notification: DesktopApprovalNotification) -> bool:
         return False
     with _NOTIFIED_APPROVAL_IDS_LOCK:
         _NOTIFIED_APPROVAL_IDS.add(notification.request_id)
+    if on_success is not None:
+        on_success()
     return True
 
 
