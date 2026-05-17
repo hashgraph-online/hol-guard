@@ -557,6 +557,13 @@ class TestGuardApprovals:
             "codex_plugin_scanner.guard.desktop_notifications.send_desktop_approval_notification",
             fake_send,
         )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.approvals.notify_pending_approval_once",
+            lambda notification: desktop_notifications.notify_pending_approval_once(
+                notification,
+                asynchronous=False,
+            ),
+        )
         store = GuardStore(tmp_path / "guard-home")
         artifact = GuardArtifact(
             artifact_id="codex:runtime:project:danger_lab:desktop_notice",
@@ -627,6 +634,13 @@ class TestGuardApprovals:
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.desktop_notifications.send_desktop_approval_notification",
             fake_send,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.approvals.notify_pending_approval_once",
+            lambda notification: desktop_notifications.notify_pending_approval_once(
+                notification,
+                asynchronous=False,
+            ),
         )
         store = GuardStore(tmp_path / "guard-home")
         artifact = GuardArtifact(

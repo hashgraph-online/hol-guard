@@ -27,8 +27,16 @@ _NOTIFICATION_ATTEMPTS_IN_FLIGHT: set[str] = set()
 _NOTIFIED_APPROVAL_IDS_LOCK = threading.Lock()
 
 
-def notify_pending_approval_once(notification: DesktopApprovalNotification) -> bool:
-    """Send one native notification for an approval request ID."""
+def notify_pending_approval_once(
+    notification: DesktopApprovalNotification,
+    *,
+    asynchronous: bool = True,
+) -> bool:
+    """Send one native notification for an approval request ID.
+
+    The default path dispatches native notification work off-thread so approval
+    waiting is never delayed by OS notification APIs.
+    """
 
     if _desktop_notifications_disabled_by_env():
         return False
@@ -39,6 +47,20 @@ def notify_pending_approval_once(notification: DesktopApprovalNotification) -> b
         ):
             return False
         _NOTIFICATION_ATTEMPTS_IN_FLIGHT.add(notification.request_id)
+    if asynchronous:
+        threading.Thread(
+            target=_deliver_notification,
+            args=(notification,),
+            name=f"hol-guard-notify-{notification.request_id}",
+            daemon=True,
+        ).start()
+        return True
+    return _deliver_notification(notification)
+
+
+def _deliver_notification(notification: DesktopApprovalNotification) -> bool:
+    """Deliver notification and update request ID state after real success."""
+
     try:
         sent = send_desktop_approval_notification(notification)
     except Exception:

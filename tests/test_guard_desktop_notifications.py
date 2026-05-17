@@ -139,6 +139,6 @@ def test_failed_notification_attempt_can_retry(monkeypatch) -> None:
         fake_send,
     )
 
-    assert notify_pending_approval_once(_notification()) is False
-    assert notify_pending_approval_once(_notification()) is True
-    assert notify_pending_approval_once(_notification()) is False
+    assert notify_pending_approval_once(_notification(), asynchronous=False) is False
+    assert notify_pending_approval_once(_notification(), asynchronous=False) is True
+    assert notify_pending_approval_once(_notification(), asynchronous=False) is False
