@@ -817,7 +817,7 @@ def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
     assert build_arg_request is None
 
 
-def test_tool_action_request_classifier_allows_python_test_module_invocation():
+def test_tool_action_request_classifier_blocks_python_test_module_invocation():
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "python3 -m pytest tests/test_guard_risk.py -q"},
@@ -827,17 +827,20 @@ def test_tool_action_request_classifier_allows_python_test_module_invocation():
         {"command": "python3 -W ignore -m pytest tests/test_guard_risk.py -q"},
     )
 
-    assert request is None
-    assert interpreter_option_request is None
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+    assert interpreter_option_request is not None
+    assert interpreter_option_request.action_class == "destructive shell command"
 
 
-def test_tool_action_request_classifier_allows_python_test_module_with_read_only_followup():
+def test_tool_action_request_classifier_blocks_python_test_module_with_read_only_followup():
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "python3 -m pytest tests/test_guard_risk.py -q | grep passed && echo success"},
     )
 
-    assert request is None
+    assert request is not None
+    assert request.action_class == "destructive shell command"
 
 
 @pytest.mark.parametrize(
@@ -874,6 +877,7 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker build --ssh default -t registry.example.com/app:v1 .",
         "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
         "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",
+        "docker build --build-arg FOO=$SECRETTOKEN -t registry.example.com/app:v1 .",
         "docker build --build-arg FOO=${NPM_TOKEN:-fallback} -t registry.example.com/app:v1 .",
         "docker build --build-arg FOO=sk-test -t registry.example.com/app:v1 .",
     ],

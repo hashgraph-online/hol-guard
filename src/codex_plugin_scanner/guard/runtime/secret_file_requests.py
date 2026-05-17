@@ -86,7 +86,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "glpat-",
     "sk-",
 )
-_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
+_SAFE_PYTHON_MODULE_COMMANDS = frozenset()
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
@@ -3203,7 +3203,11 @@ def _docker_build_metadata_value_is_sensitive(value: str) -> bool:
 
 def _docker_build_arg_name_is_sensitive(value: str) -> bool:
     normalized = value.upper().replace("-", "_")
-    return any(part in _DOCKER_BUILD_ARG_SECRET_MARKERS for part in normalized.split("_"))
+    parts = normalized.split("_")
+    if any(part in _DOCKER_BUILD_ARG_SECRET_MARKERS for part in parts):
+        return True
+    substring_markers = _DOCKER_BUILD_ARG_SECRET_MARKERS - {"KEY"}
+    return any(marker in normalized for marker in substring_markers)
 
 
 def _docker_build_arg_value_is_sensitive(value: str) -> bool:
