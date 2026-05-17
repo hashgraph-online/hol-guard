@@ -4967,6 +4967,8 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
     index = 0
     while index < len(args):
         arg = args[index]
+        if arg == "--":
+            return False
         if arg in {"-c", "--command"} or arg.startswith(("-c", "--command=")):
             return False
         if arg == "-m":
@@ -4975,6 +4977,8 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
         if arg.startswith("-m") and len(arg) > 2:
             module = arg[2:]
             return _python_module_args_are_safe(module, args[index + 1 :])
+        if not arg.startswith("-"):
+            return False
         index += 1
     return False
 

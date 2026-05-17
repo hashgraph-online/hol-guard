@@ -888,6 +888,7 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
         "python -m pytest --junit-xml=/tmp/guard-pytest.xml",
         "python -m pytest --debug=/tmp/guard-pytest.log",
         "python -m pytest --log-file=/tmp/guard-pytest.log",
+        "python dangerous.py -m pytest",
     ],
 )
 def test_tool_action_request_classifier_blocks_mutating_python_module_invocations(command):
