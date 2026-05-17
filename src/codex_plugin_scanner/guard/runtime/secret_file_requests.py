@@ -92,6 +92,9 @@ _PYTHON_MODULE_MUTATING_FLAGS = {
 _PYTHON_MODULE_MUTATING_SUBCOMMANDS = {
     "ruff": frozenset({"format"}),
 }
+_PYTHON_MODULE_OPTIONS_WITH_VALUES = {
+    "ruff": frozenset({"--config"}),
+}
 _SAFE_STATIC_SHELL_COMMANDS = frozenset({"echo", "printf"})
 _SHELL_TOOL_NAMES = frozenset(
     {
@@ -3166,10 +3169,12 @@ def _docker_build_arg_is_sensitive(value: str) -> bool:
 
 
 def _docker_build_metadata_value_is_sensitive(value: str) -> bool:
-    _, separator, assigned_value = value.partition("=")
+    key, separator, assigned_value = value.partition("=")
     if not separator:
         return _docker_build_arg_value_is_sensitive(value.strip())
-    return _docker_build_arg_value_is_sensitive(assigned_value.strip())
+    return _docker_build_arg_value_is_sensitive(key.strip()) or _docker_build_arg_value_is_sensitive(
+        assigned_value.strip()
+    )
 
 
 def _docker_build_arg_name_is_sensitive(value: str) -> bool:
@@ -4970,12 +4975,32 @@ def _python_module_args_are_safe(module: str, module_args: list[str]) -> bool:
     if module_root not in _SAFE_PYTHON_MODULE_COMMANDS:
         return False
     mutating_subcommands = _PYTHON_MODULE_MUTATING_SUBCOMMANDS.get(module_root, frozenset())
-    if module_args and module_args[0] in mutating_subcommands:
+    if _python_module_subcommand(module_root, module_args) in mutating_subcommands:
         return False
     mutating_flags = _PYTHON_MODULE_MUTATING_FLAGS.get(module_root, frozenset())
     return not any(
         arg in mutating_flags or any(arg.startswith(f"{flag}=") for flag in mutating_flags) for arg in module_args
     )
+
+
+def _python_module_subcommand(module_root: str, module_args: list[str]) -> str | None:
+    options_with_values = _PYTHON_MODULE_OPTIONS_WITH_VALUES.get(module_root, frozenset())
+    index = 0
+    while index < len(module_args):
+        arg = module_args[index]
+        if arg == "--":
+            return None
+        if arg in options_with_values:
+            index += 2
+            continue
+        if any(arg.startswith(f"{option}=") for option in options_with_values):
+            index += 1
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        return arg
+    return None
 
 
 def _static_shell_segment_is_safe(args: list[str]) -> bool:

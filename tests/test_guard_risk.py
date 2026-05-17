@@ -838,6 +838,8 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker build --build-arg FOO=`cat ~/.aws/credentials` .",
         "docker build --label leak=$(cat ~/.aws/credentials) .",
         "docker build --annotation leak=$(cat ~/.aws/credentials) .",
+        "docker build --label $NPM_TOKEN=1 .",
+        "docker build --annotation $(cat ~/.aws/credentials)=x .",
         "docker buildx --debug build --secret id=npm,src=.npmrc .",
         "docker --debug login registry.example.com",
         "docker --tlsverify run alpine",
@@ -868,6 +870,7 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
     [
         "python -m ruff check --fix .",
         "python -m ruff format .",
+        "python -m ruff --config ruff.toml format .",
         "python -m mypy --install-types package",
     ],
 )
