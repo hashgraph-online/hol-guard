@@ -67,6 +67,7 @@ def test_macos_notification_falls_back_to_osascript() -> None:
     assert calls[0][0] == "osascript"
     assert "display notification" in calls[0][2]
     assert "HOL Guard needs approval" in calls[0][2]
+    assert "http://127.0.0.1:5474/approvals/req-native" in calls[0][2]
 
 
 def test_windows_notification_uses_powershell_toast() -> None:
@@ -143,3 +144,25 @@ def test_failed_notification_attempt_can_retry(monkeypatch) -> None:
     assert notify_pending_approval_once(_notification(), asynchronous=False) is False
     assert notify_pending_approval_once(_notification(), asynchronous=False) is True
     assert notify_pending_approval_once(_notification(), asynchronous=False) is False
+
+
+def test_thread_start_failure_clears_inflight(monkeypatch) -> None:
+    with _NOTIFIED_APPROVAL_IDS_LOCK:
+        _NOTIFIED_APPROVAL_IDS.clear()
+        _NOTIFICATION_ATTEMPTS_IN_FLIGHT.clear()
+
+    class BrokenThread:
+        def __init__(self, **_: Any) -> None:
+            pass
+
+        def start(self) -> None:
+            raise RuntimeError("thread limit")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.desktop_notifications.threading.Thread",
+        BrokenThread,
+    )
+
+    assert notify_pending_approval_once(_notification()) is False
+    with _NOTIFIED_APPROVAL_IDS_LOCK:
+        assert not _NOTIFICATION_ATTEMPTS_IN_FLIGHT

@@ -48,11 +48,16 @@ def notify_pending_approval_once(
             return False
         _NOTIFICATION_ATTEMPTS_IN_FLIGHT.add(notification.request_id)
     if asynchronous:
-        threading.Thread(
-            target=_deliver_notification,
-            args=(notification,),
-            name=f"hol-guard-notify-{notification.request_id}",
-        ).start()
+        try:
+            threading.Thread(
+                target=_deliver_notification,
+                args=(notification,),
+                name=f"hol-guard-notify-{notification.request_id}",
+            ).start()
+        except Exception:
+            with _NOTIFIED_APPROVAL_IDS_LOCK:
+                _NOTIFICATION_ATTEMPTS_IN_FLIGHT.discard(notification.request_id)
+            return False
         return True
     return _deliver_notification(notification)
 
@@ -128,7 +133,7 @@ def _send_macos_notification(
             "osascript",
             "-e",
             (
-                f'display notification "{_escape_osascript(notification.message)}" '
+                f'display notification "{_escape_osascript(_macos_fallback_message(notification))}" '
                 f'with title "{_escape_osascript(notification.title)}" '
                 'subtitle "Action needs approval"'
             ),
@@ -199,6 +204,10 @@ def _run_notification_command(
 
 def _escape_osascript(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _macos_fallback_message(notification: DesktopApprovalNotification) -> str:
+    return f"{notification.message} Open: {notification.approval_url}"
 
 
 def _escape_powershell_single_quoted(value: str) -> str:
