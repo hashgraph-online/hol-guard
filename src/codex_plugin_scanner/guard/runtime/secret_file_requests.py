@@ -802,7 +802,10 @@ def _gh_pr_create_command_index(segment: list[_ShellTokenWithQuoteContext]) -> i
         if command_name == "gh":
             if index + 2 >= len(segment):
                 return None
-            if segment[index + 1].plain == "pr" and segment[index + 2].plain == "create":
+            if segment[index + 1].plain == "pr" and segment[index + 2].plain in {
+                "create",
+                "new",
+            }:
                 return index
             return None
         if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token.plain)):
