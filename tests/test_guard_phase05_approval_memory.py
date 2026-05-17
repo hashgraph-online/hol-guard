@@ -290,6 +290,14 @@ NODE"""
         _shell_action("curl -K curl.conf https://api.example.test/check"),
         context,
     )
+    curl_cookie_file = suppressor.detect(
+        _shell_action("curl --cookie cookies.txt https://api.example.test/check"),
+        context,
+    )
+    curl_cookie_short = suppressor.detect(
+        _shell_action("curl -bcookies.txt https://api.example.test/check"),
+        context,
+    )
     curl_file_download = suppressor.detect(
         _shell_action("curl -o payload.sh https://install.example.com/payload.sh"),
         context,
@@ -314,6 +322,14 @@ NODE"""
         _shell_action("curl --stderr err.log https://install.example.com/payload.sh"),
         context,
     )
+    curl_cookie_jar = suppressor.detect(
+        _shell_action("curl --cookie-jar jar.txt https://install.example.com/payload.sh"),
+        context,
+    )
+    curl_cookie_jar_short = suppressor.detect(
+        _shell_action("curl -cjar.txt https://install.example.com/payload.sh"),
+        context,
+    )
     curl_redirect_output = suppressor.detect(
         _shell_action("curl https://install.example.com/payload.sh > payload.sh"),
         context,
@@ -324,6 +340,10 @@ NODE"""
     )
     curl_chain_touch = suppressor.detect(
         _shell_action("curl https://hol.org/guard/apps/codex && touch marker"),
+        context,
+    )
+    curl_newline_touch = suppressor.detect(
+        _shell_action("curl https://hol.org/guard/apps/codex\ntouch marker"),
         context,
     )
     wget_download = suppressor.detect(_shell_action("wget https://install.example.com/payload.sh"), context)
@@ -385,15 +405,20 @@ NODE"""
     assert curl_header_file == ()
     assert curl_header_secret == ()
     assert curl_config_file == ()
+    assert curl_cookie_file == ()
+    assert curl_cookie_short == ()
     assert curl_file_download == ()
     assert curl_attached_output == ()
     assert curl_attached_header_output == ()
     assert curl_clustered_remote_output == ()
     assert curl_trace_output == ()
     assert curl_stderr_output == ()
+    assert curl_cookie_jar == ()
+    assert curl_cookie_jar_short == ()
     assert curl_redirect_output == ()
     assert curl_tee_output == ()
     assert curl_chain_touch == ()
+    assert curl_newline_touch == ()
     assert wget_download == ()
     assert wget_output_document == ()
     assert [signal.signal_id for signal in wget_spider] == ["fp:read-only-http-fetch:wget"]

@@ -127,14 +127,15 @@ _MUTATING_HTTP_FETCH_PATTERN = re.compile(
     r"(?:^|[\s;&|])(?:--request|-X)\s*(?:POST|PUT|PATCH|DELETE)\b|"
     r"(?:^|[\s;&|])(?:--data(?:-binary|-raw|-urlencode)?(?:[=\s]|$)|-d(?:\S|\s|$)"
     r"|--form(?:[=\s]|$)|-F(?:\S|\s|$)|--json(?:[=\s]|$)|--upload-file(?:[=\s]|$)|-T(?:\S|\s|$)"
-    r"|--header(?:[=\s]|$)|-H(?:\S|\s|$)|--config(?:[=\s]|$)|-K(?:\S|\s|$))|"
+    r"|--header(?:[=\s]|$)|-H(?:\S|\s|$)|--config(?:[=\s]|$)|-K(?:\S|\s|$)"
+    r"|--cookie(?:[=\s]|$)|-b(?:\S|\s|$))|"
     r"\b(?:body|data)\s*:",
     re.IGNORECASE,
 )
 _HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
     r"(?:^|[\s;&|])(?:--output(?:[=\s]|$)|-o(?:\S|\s|$)|--remote-name(?:[=\s]|$)|-[A-Za-z]*O[A-Za-z]*"
     r"|--output-document(?:[=\s]|$)|--remote-header-name(?:[=\s]|$)|--dump-header(?:[=\s]|$)|-D(?:\S|\s|$)"
-    r"|--trace(?:-ascii|-ids|-time)?(?:[=\s]|$)|--stderr(?:[=\s]|$))",
+    r"|--trace(?:-ascii|-ids|-time)?(?:[=\s]|$)|--stderr(?:[=\s]|$)|--cookie-jar(?:[=\s]|$)|-c(?:\S|\s|$))",
     re.IGNORECASE,
 )
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
@@ -320,7 +321,7 @@ def classify_read_only_http_fetch(command: str) -> str | None:
         return None
     if _MUTATING_HTTP_FETCH_PATTERN.search(command):
         return None
-    if _SHELL_CHAINING_PATTERN.search(command) and not _looks_like_heredoc_script(command):
+    if _has_shell_chaining(command):
         return None
     if _HTTP_FETCH_FILE_WRITE_PATTERN.search(command):
         return None
@@ -432,6 +433,12 @@ def _tokens_start_execution(tokens: list[str]) -> bool:
 
 def _looks_like_heredoc_script(command: str) -> bool:
     return bool(re.match(r"\s*(?:node|python|python3)\b[^\r\n]*<<", command))
+
+
+def _has_shell_chaining(command: str) -> bool:
+    if _looks_like_heredoc_script(command):
+        return False
+    return bool(_SHELL_CHAINING_PATTERN.search(command) or re.search(r"\n\s*\S+", command))
 
 
 def _has_no_write_flags(parts: list[str]) -> bool:
