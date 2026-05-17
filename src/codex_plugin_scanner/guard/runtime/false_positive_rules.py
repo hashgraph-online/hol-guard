@@ -93,10 +93,27 @@ _LOCALHOST_HEALTH_PATTERN = re.compile(
     r"(?:\s|$|[;&|'\"])",
     re.IGNORECASE,
 )
-_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
-    r"(?:^|[\s;&|])(?P<tool>curl|curl\.exe|wget|node|python|python3)\b(?s:.*?)"
-    r"(?:fetch|https?\.get|requests\.get|urllib\.request\.urlopen|https?://)",
+_CURL_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>curl|curl\.exe)\b[^\r\n;&|]*https?://",
     re.IGNORECASE,
+)
+_WGET_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>wget)\b(?=[^\r\n;&|]*(?<!\S)--spider\b)[^\r\n;&|]*https?://",
+    re.IGNORECASE,
+)
+_NODE_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>node)\b(?s:.*?)(?:\bfetch\s*\(|\bhttps?\.get\s*\()",
+    re.IGNORECASE,
+)
+_PYTHON_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>python|python3)\b(?s:.*?)(?:\brequests\.get\s*\(|\burllib\.request\.urlopen\s*\()",
+    re.IGNORECASE,
+)
+_READ_ONLY_HTTP_FETCH_PATTERNS = (
+    _CURL_READ_ONLY_HTTP_FETCH_PATTERN,
+    _WGET_READ_ONLY_HTTP_FETCH_PATTERN,
+    _NODE_READ_ONLY_HTTP_FETCH_PATTERN,
+    _PYTHON_READ_ONLY_HTTP_FETCH_PATTERN,
 )
 _MUTATING_HTTP_FETCH_PATTERN = re.compile(
     r"\b(?:POST|PUT|PATCH|DELETE)\b|"
@@ -238,7 +255,11 @@ def classify_health_endpoint_fetch(command: str) -> bool:
 
 def classify_read_only_http_fetch(command: str) -> str | None:
     """Return the read-only HTTP probe tool name when command has no upload or secret source."""
-    match = _READ_ONLY_HTTP_FETCH_PATTERN.search(command)
+    match = None
+    for pattern in _READ_ONLY_HTTP_FETCH_PATTERNS:
+        match = pattern.search(command)
+        if match is not None:
+            break
     if match is None:
         return None
     if _MUTATING_HTTP_FETCH_PATTERN.search(command):

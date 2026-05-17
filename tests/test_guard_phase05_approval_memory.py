@@ -210,6 +210,16 @@ NODE"""
         _shell_action("curl -o payload.sh https://install.example.com/payload.sh"),
         context,
     )
+    wget_download = suppressor.detect(_shell_action("wget https://install.example.com/payload.sh"), context)
+    wget_spider = suppressor.detect(_shell_action("wget --spider https://hol.org/guard/apps/codex"), context)
+    python_url_literal = suppressor.detect(
+        _shell_action("python -c \"print('https://hol.org/guard/apps/codex')\""),
+        context,
+    )
+    node_url_literal = suppressor.detect(
+        _shell_action("node -e \"console.log('https://hol.org/guard/apps/codex')\""),
+        context,
+    )
 
     assert [signal.signal_id for signal in signals] == ["fp:read-only-http-fetch:node"]
     assert exfil_signals == ()
@@ -220,6 +230,10 @@ NODE"""
     assert path_read_probe == ()
     assert curl_json_body == ()
     assert curl_file_download == ()
+    assert wget_download == ()
+    assert [signal.signal_id for signal in wget_spider] == ["fp:read-only-http-fetch:wget"]
+    assert python_url_literal == ()
+    assert node_url_literal == ()
 
 
 def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(tmp_path: Path) -> None:
