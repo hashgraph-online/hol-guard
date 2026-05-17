@@ -1026,6 +1026,58 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_safe_gh_pr_create_body_file():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "--body-file /tmp/guard-pr-body.md"
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_skips_single_quoted_gh_pr_create_markdown_body():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "--body '## Verification\n"
+                "- `pytest tests/test_guard_desktop_notifications.py tests/test_guard_approvals.py -q`\n"
+                "- `ruff check src/codex_plugin_scanner/guard/desktop_notifications.py`'"
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_explains_gh_pr_create_double_quoted_markdown_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                'gh pr create --repo hashgraph-online/hol-guard '
+                '--title "feat(guard): notify desktop for approvals" '
+                '--body "## Verification\n'
+                '- `pytest tests/test_guard_desktop_notifications.py tests/test_guard_approvals.py -q`\n'
+                'Note: `python -m build` was blocked by local HOL Guard approval."'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub PR body shell substitution"
+    assert "single quotes" in request.reason
+    assert "--body-file" in request.reason
+
+
 def test_tool_action_request_classifier_skips_node_heredoc_generated_temp_json_workflow():
     request = extract_sensitive_tool_action_request(
         "bash",

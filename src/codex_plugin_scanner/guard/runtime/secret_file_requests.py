@@ -733,6 +733,18 @@ def _destructive_shell_tool_action_request(
                 "contents to a network endpoint before the user confirms the action."
             ),
         )
+    if _gh_pr_create_body_has_shell_command_substitution(command_text):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="GitHub PR body shell substitution",
+            reason=(
+                "Guard treats command substitution inside `gh pr create --body` as sensitive because shell backticks "
+                "or `$()` run before GitHub receives the PR text. Use single quotes around Markdown code spans or "
+                "`--body-file` for PR descriptions."
+            ),
+        )
     if not _looks_destructive_shell_command(command_text):
         return None
     return ToolActionRequestMatch(
@@ -745,6 +757,48 @@ def _destructive_shell_tool_action_request(
             "local machine before the user confirms the action."
         ),
     )
+
+
+def _gh_pr_create_body_has_shell_command_substitution(command_text: str) -> bool:
+    if not _shell_command_substitution_payloads(command_text):
+        return False
+    parts = _split_shell_parts(command_text.strip())
+    for segment in _iter_shell_command_segments(parts):
+        command_index = _gh_pr_create_command_index(segment)
+        if command_index is None:
+            continue
+        if _gh_pr_create_body_args_have_substitution(segment[command_index + 3 :]):
+            return True
+    return False
+
+
+def _gh_pr_create_command_index(segment: list[str]) -> int | None:
+    for index, token in enumerate(segment):
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token)):
+            continue
+        command_name = _normalized_shell_command_name(_shell_command_token_without_attached_redirection(token))
+        if command_name == "env":
+            continue
+        if command_name != "gh":
+            return None
+        if index + 2 < len(segment) and segment[index + 1 : index + 3] == ["pr", "create"]:
+            return index
+        return None
+    return None
+
+
+def _gh_pr_create_body_args_have_substitution(args: list[str]) -> bool:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in {"--body", "-b"}:
+            if index + 1 >= len(args):
+                return False
+            return _shell_command_substitution_payloads(args[index + 1])
+        if arg.startswith("--body="):
+            return bool(_shell_command_substitution_payloads(arg.split("=", 1)[1]))
+        index += 1
+    return False
 
 
 def _contains_shell_credential_exfiltration(
