@@ -1150,6 +1150,16 @@ def test_tool_action_request_classifier_ignores_single_quoted_env_split_string_b
     )
 
 
+@pytest.mark.parametrize("lookup_flag", ["-v", "-V", "-pv"])
+def test_tool_action_request_classifier_ignores_command_lookup_gh_pr_words(lookup_flag):
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": f'command {lookup_flag} gh pr create --body "Verification: $(date)"'},
+    )
+
+    assert request is None
+
+
 @pytest.mark.parametrize(
     "command",
     [

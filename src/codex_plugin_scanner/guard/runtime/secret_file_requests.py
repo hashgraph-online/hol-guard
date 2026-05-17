@@ -869,6 +869,8 @@ def _gh_pr_create_body_args_start_index(segment: list[_ShellTokenWithQuoteContex
             index += 1
             continue
         if command_name == "command":
+            if _command_builtin_options_are_lookup_only(segment, index + 1):
+                return None
             index = _skip_command_builtin_options(segment, index + 1)
             continue
         if command_name == "time":
@@ -942,6 +944,19 @@ def _skip_command_builtin_options(segment: list[_ShellTokenWithQuoteContext], in
             continue
         break
     return index
+
+
+def _command_builtin_options_are_lookup_only(segment: list[_ShellTokenWithQuoteContext], index: int) -> bool:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain == "--":
+            return False
+        if not plain.startswith("-"):
+            return False
+        if "v" in plain[1:] or "V" in plain[1:]:
+            return True
+        index += 1
+    return False
 
 
 def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
