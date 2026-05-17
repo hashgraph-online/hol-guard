@@ -54,7 +54,7 @@ _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILDX_BUILD_SUBCOMMANDS = frozenset({"b", "build"})
 _DOCKER_BUILD_SECRET_FLAGS = frozenset({"--allow", "--secret", "--ssh"})
-_DOCKER_BUILD_OUTPUT_FLAGS = frozenset({"--iidfile", "--metadata-file", "--output", "-o"})
+_DOCKER_BUILD_OUTPUT_FLAGS = frozenset({"--cache-to", "--iidfile", "--metadata-file", "--output", "-o"})
 _DOCKER_BUILD_METADATA_FLAGS = frozenset({"--annotation", "--label"})
 _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {
