@@ -806,10 +806,15 @@ def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
         "bash",
         {"command": "docker push registry.example.com/app:v1"},
     )
+    build_arg_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker build --build-arg FOO=disk-space -t registry.example.com/app:v1 ."},
+    )
 
     assert build_request is None
     assert buildx_request is None
     assert push_request is None
+    assert build_arg_request is None
 
 
 def test_tool_action_request_classifier_allows_python_test_module_invocation():
@@ -859,6 +864,7 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
         "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",
         "docker build --build-arg FOO=${NPM_TOKEN:-fallback} -t registry.example.com/app:v1 .",
+        "docker build --build-arg FOO=sk-test -t registry.example.com/app:v1 .",
     ],
 )
 def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(command):

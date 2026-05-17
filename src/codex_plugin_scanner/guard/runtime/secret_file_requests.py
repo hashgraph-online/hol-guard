@@ -3192,8 +3192,8 @@ def _docker_build_arg_name_is_sensitive(value: str) -> bool:
 
 
 def _docker_build_arg_value_is_sensitive(value: str) -> bool:
-    lowered = value.lower()
-    if any(prefix in lowered for prefix in _DOCKER_BUILD_ARG_TOKEN_PREFIXES):
+    lowered = value.lower().strip("\"'")
+    if any(lowered.startswith(prefix) for prefix in _DOCKER_BUILD_ARG_TOKEN_PREFIXES):
         return True
     if "$(" in value or "`" in value:
         return True
