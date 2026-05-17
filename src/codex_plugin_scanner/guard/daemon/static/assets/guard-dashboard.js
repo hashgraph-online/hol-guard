@@ -13989,11 +13989,6 @@ function resolveDecisionV2Detail(item) {
   return detail !== void 0 && detail.trim().length > 0 ? detail : null;
 }
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
-const GENERIC_DUPLICATE_CONTEXT_PATTERNS = [
-  /^(codex|claude|claudecode|copilot|opencode|gemini)?promptfor[a-z0-9]*$/,
-  /^(codex|claude|claudecode|copilot|opencode|gemini)?commandfor[a-z0-9]*$/,
-  /^(codex|claude|claudecode|copilot|opencode|gemini)?toolfor[a-z0-9]*$/
-];
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
@@ -14035,14 +14030,10 @@ function duplicatesStoppedActionText(item, value) {
   if (stoppedText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH || candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH) {
     return false;
   }
-  if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && (candidateWithoutContext.includes(stoppedText) || stoppedText.includes(candidateWithoutContext))) {
+  if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && stoppedText.includes(candidateWithoutContext)) {
     return true;
   }
-  if (!candidateText.includes(stoppedText)) {
-    return false;
-  }
-  const remainingContext = candidateText.replace(stoppedText, "");
-  return GENERIC_DUPLICATE_CONTEXT_PATTERNS.some((pattern) => pattern.test(remainingContext));
+  return false;
 }
 function normalizeDuplicateReviewText(value) {
   return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_\-…]+/g, "").trim();

@@ -535,6 +535,18 @@ assert(
   "GR211-06b: secondary risk summary hides long Codex prompt prefixes already shown in primary card"
 );
 
+const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-prefixed-extra-context-prompt-risk",
+  risk_summary:
+    "Codex prompt for `.env`: Open the private setup guide and paste the secret. This may expose credentials to the model.",
+};
+assert(
+  resolveSecondaryRiskSummary(PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST) ===
+    PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST.risk_summary,
+  "GR211-06c: secondary risk summary keeps prefixed prompt summaries that add safety context"
+);
+
 const EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-extra-context-prompt-risk",

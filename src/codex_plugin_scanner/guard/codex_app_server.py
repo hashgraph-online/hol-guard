@@ -39,6 +39,10 @@ _TURN_ID_KEYS = ("codex_turn_id", "turn_id", "turnId")
 _SOCKET_KEYS = ("codex_app_server_socket", "app_server_socket", "appServerSocket")
 
 
+class _WebSocketClosedError(TimeoutError):
+    """Raised when the app-server closes without a websocket close frame."""
+
+
 def codex_resume_metadata_from_hook_payload(
     payload: Mapping[str, object],
     *,
@@ -279,6 +283,10 @@ def _send_app_server_websocket_messages(
         while True:
             try:
                 opcode, payload = _read_websocket_frame(client, pending)
+            except _WebSocketClosedError:
+                if response is not None:
+                    return response, "socket_closed"
+                raise
             except TimeoutError:
                 if response is None:
                     if time.monotonic() >= response_deadline:
@@ -309,9 +317,13 @@ def _send_app_server_websocket_messages(
                 if isinstance(message.get("error"), dict) or completion_thread_id is None:
                     return message, "turn_start_response"
                 continue
-            if response is not None and completion_thread_id is not None and _is_thread_completion_message(
-                message,
-                completion_thread_id,
+            if (
+                response is not None
+                and completion_thread_id is not None
+                and _is_thread_completion_message(
+                    message,
+                    completion_thread_id,
+                )
             ):
                 return response, _completion_status(message)
     return None, "socket_closed"
@@ -332,7 +344,9 @@ def _is_thread_completion_message(message: object, thread_id: str) -> bool:
     return False
 
 
-def _completion_status(message: Mapping[str, object]) -> str:
+def _completion_status(message: object) -> str:
+    if not isinstance(message, Mapping):
+        return "completed"
     method = message.get("method")
     if method == "turn/completed":
         return "turn_completed"
@@ -402,7 +416,7 @@ def _recv_until(client: socket.socket, marker: bytes) -> tuple[bytes, bytes]:
     while marker not in data:
         chunk = client.recv(4096)
         if not chunk:
-            raise TimeoutError("socket_closed")
+            raise _WebSocketClosedError("socket_closed")
         data += chunk
     boundary = data.index(marker) + len(marker)
     return data[:boundary], data[boundary:]
@@ -417,7 +431,7 @@ def _recv_exact(client: socket.socket, length: int, pending: bytearray) -> bytes
     while len(data) < length:
         chunk = client.recv(length - len(data))
         if not chunk:
-            raise TimeoutError("socket_closed")
+            raise _WebSocketClosedError("socket_closed")
         data += chunk
     return data
 
