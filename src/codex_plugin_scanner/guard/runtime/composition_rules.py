@@ -105,10 +105,12 @@ def compose_action_from_signals(
             downgrade_reason = "strong false-positive signals with only low-severity risk; downgraded block → ask"
 
         elif all_fp_strong and only_low_risk and no_protected_cats and base_action == "ask":
-            source_search_present = any(s.signal_id.startswith("fp:source-search:") for s in fp_signals)
-            if source_search_present and not risk_signals:
+            review_noise_fp_present = any(
+                s.signal_id.startswith(("fp:source-search:", "fp:read-only-http-fetch:")) for s in fp_signals
+            )
+            if review_noise_fp_present and not risk_signals:
                 final_rank = min(final_rank, _ACTION_RANK["warn"])
-                downgrade_reason = "strong source-search false-positive with no risk signals; downgraded ask → warn"
+                downgrade_reason = "strong read-only false-positive with no risk signals; downgraded ask → warn"
 
     if upgrade_reason:
         return CompositionResult(
