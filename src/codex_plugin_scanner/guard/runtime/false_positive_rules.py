@@ -78,9 +78,9 @@ _OUTPUT_REDIRECT_TO_EXFIL = re.compile(
     r">\s*(?:/proc/\S+|/dev/tcp/|/dev/udp/)",
     re.IGNORECASE,
 )
-_SHELL_CHAINING_PATTERN = re.compile(r"&&|\|\||(?<!<);")
+_SHELL_CHAINING_PATTERN = re.compile(r"&&|\|\||(?<!<);|(?:^|[\s])&(?![&|])(?:[\s]|$)")
 _OUTPUT_REDIRECT_TO_LOCAL_FILE = re.compile(
-    r"(?:^|[\s;&|])>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+",
+    r"(?:^|[\s;&|])(?:\d+)?>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+",
     re.IGNORECASE,
 )
 
@@ -443,6 +443,8 @@ def _has_shell_chaining(command: str) -> bool:
 
 def _has_heredoc_follow_on_command(command: str) -> bool:
     first_line = command.splitlines()[0] if command.splitlines() else ""
+    if _SHELL_CHAINING_PATTERN.search(first_line):
+        return True
     match = re.search(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", first_line)
     if match is None:
         return True
