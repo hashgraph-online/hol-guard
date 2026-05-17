@@ -325,7 +325,7 @@ export type PrimaryReviewAction = {
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
 const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
 const DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERN =
-  /(credential|secret|token|password|key|expose|exfiltrat|leak|sensitive|danger|risk|malicious|destructive|network|delete|remove)/;
+  /(credential|secret|token|password|key|expose|exfiltrat|leak|sensitive|danger|risk|malicious|destructive|network|delete|remove|root|host|thirdparty|external|admin|privilege|permission|unauthorized|remote|upload|send|sends|write|execute|shell|process)/;
 
 export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
   return {

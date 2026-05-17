@@ -564,6 +564,17 @@ assert(
   "GR211-06e: secondary risk summary keeps longer prompt prefixes when the suffix adds safety context"
 );
 
+const LONGER_PROMPT_WITH_NON_KEYWORD_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-longer-prompt-with-non-keyword-context",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} runs as root and sends data to a third-party host.`,
+};
+assert(
+  resolveSecondaryRiskSummary(LONGER_PROMPT_WITH_NON_KEYWORD_CONTEXT_REQUEST) ===
+    LONGER_PROMPT_WITH_NON_KEYWORD_CONTEXT_REQUEST.risk_summary,
+  "GR211-06f: secondary risk summary keeps longer prompt prefixes when the suffix adds non-keyword risk context"
+);
+
 const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-prefixed-extra-context-prompt-risk",
