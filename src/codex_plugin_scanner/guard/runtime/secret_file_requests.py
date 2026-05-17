@@ -824,7 +824,7 @@ def _gh_pr_create_body_args_start_index(segment: list[_ShellTokenWithQuoteContex
             index = _skip_command_builtin_options(segment, index + 1)
             continue
         if command_name == "time":
-            index = _skip_shell_wrapper_options(segment, index + 1)
+            index = _skip_generic_shell_wrapper_options(command_name, segment, index + 1)
             continue
         if command_name == "env":
             index = _skip_env_wrapper_options(segment, index + 1)
