@@ -3130,8 +3130,9 @@ def _docker_build_arg_is_sensitive(value: str) -> bool:
     return bool(
         normalized_key
         and (
-            _docker_build_arg_name_is_sensitive(normalized_key)
-            or (separator and _docker_build_arg_value_is_sensitive(assigned_value.strip()))
+            not separator
+            or _docker_build_arg_name_is_sensitive(normalized_key)
+            or _docker_build_arg_value_is_sensitive(assigned_value.strip())
         )
     )
 
