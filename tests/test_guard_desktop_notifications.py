@@ -46,6 +46,10 @@ def test_macos_notification_uses_terminal_notifier_when_available() -> None:
     assert sent is True
     assert calls[0][:2] == ["/usr/local/bin/terminal-notifier", "-title"]
     assert "-open" in calls[0]
+    assert "-sound" in calls[0]
+    assert "default" in calls[0]
+    assert "-ignoreDnD" in calls[0]
+    assert any(str(item).startswith("hol-guard-req-native-") for item in calls[0])
     assert "http://127.0.0.1:5474/approvals/req-native" in calls[0]
 
 
@@ -67,6 +71,7 @@ def test_macos_notification_falls_back_to_osascript() -> None:
     assert calls[0][0] == "osascript"
     assert "display notification" in calls[0][2]
     assert "HOL Guard needs approval" in calls[0][2]
+    assert 'sound name "default"' in calls[0][2]
     assert "http://127.0.0.1:5474/approvals/req-native" in calls[0][2]
 
 
