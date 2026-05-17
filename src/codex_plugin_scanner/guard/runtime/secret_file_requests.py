@@ -3059,7 +3059,7 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
             return True
     node_heredoc_script = _single_node_heredoc_script(normalized)
     if node_heredoc_script is not None:
-        if _looks_like_safe_node_read_only_http_heredoc(node_heredoc_script):
+        if _looks_like_safe_node_read_only_http_heredoc(normalized, node_heredoc_script):
             return False
         if _looks_like_safe_node_generated_file_heredoc(normalized, node_heredoc_script):
             return False
@@ -3633,6 +3633,16 @@ def _single_node_heredoc_script(command_text: str) -> str | None:
     return script_text or None
 
 
+def _single_node_heredoc_delimiter_is_quoted(command_text: str) -> bool:
+    match = _SINGLE_NODE_HEREDOC_PATTERN.fullmatch(command_text.strip())
+    if match is None:
+        return False
+    args = match.group("args").strip()
+    if args not in {"", "-"}:
+        return False
+    return bool(match.group("quote"))
+
+
 def _looks_like_safe_node_generated_file_heredoc(command_text: str, script_text: str) -> bool:
     if _single_node_heredoc_script(command_text) is None:
         return False
@@ -3653,7 +3663,9 @@ def _node_script_contains_sensitive_runtime_behavior(script_text: str) -> bool:
     )
 
 
-def _looks_like_safe_node_read_only_http_heredoc(script_text: str) -> bool:
+def _looks_like_safe_node_read_only_http_heredoc(command_text: str, script_text: str) -> bool:
+    if not _single_node_heredoc_delimiter_is_quoted(command_text):
+        return False
     if _NODE_READ_ONLY_HTTP_PATTERN.search(script_text) is None:
         return False
     if _NODE_MUTATING_HTTP_PATTERN.search(script_text):
