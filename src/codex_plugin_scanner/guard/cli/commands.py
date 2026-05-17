@@ -2420,6 +2420,11 @@ def run_guard_command(
                         artifact=runtime_artifact,
                         native_reason=runtime_reason,
                     )
+                elif canonical_harness == "codex" and event_name == "UserPromptSubmit":
+                    system_message = _codex_prompt_block_system_message(
+                        policy_action=policy_action,
+                        native_reason=runtime_reason,
+                    )
                 _emit_native_hook_response(
                     harness=args.harness,
                     policy_action=policy_action,
@@ -4181,6 +4186,14 @@ def _claude_prompt_system_message(
     if event_name == "PreToolUse" and policy_action in {"require-reapproval", "block", "sandbox-required"}:
         return _ensure_terminal_punctuation(native_reason)
     return None
+
+
+def _codex_prompt_block_system_message(*, policy_action: str, native_reason: str) -> str | None:
+    if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+        return None
+    if "open hol guard" not in native_reason.lower():
+        return None
+    return f"HOL Guard paused your Codex prompt. {native_reason}"
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
