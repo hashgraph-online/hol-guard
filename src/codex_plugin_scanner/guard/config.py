@@ -162,6 +162,7 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
         "harness_risk_actions",
         "approval_wait_timeout_seconds",
         "approval_surface_policy",
+        "desktop_notifications",
         "telemetry",
         "sync",
         "billing",
@@ -257,6 +258,7 @@ class GuardConfig:
     subprocess_action: GuardAction = "warn"
     approval_wait_timeout_seconds: int = 120
     approval_surface_policy: str = "auto-open-once"
+    desktop_notifications: bool = True
     telemetry: bool = False
     sync: bool = False
     billing: bool = False
@@ -339,6 +341,7 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         subprocess_action=str(merged.get("subprocess_action", "warn")),  # type: ignore[arg-type]
         approval_wait_timeout_seconds=int(merged.get("approval_wait_timeout_seconds", 120)),
         approval_surface_policy=str(merged.get("approval_surface_policy", "auto-open-once")),
+        desktop_notifications=_coerce_loaded_bool(merged.get("desktop_notifications", True)),
         telemetry=bool(merged.get("telemetry", False)),
         sync=bool(merged.get("sync", False)),
         billing=bool(merged.get("billing", False)),
@@ -372,6 +375,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "harness_risk_actions": dict(config.harness_risk_actions or {}),
         "approval_wait_timeout_seconds": config.approval_wait_timeout_seconds,
         "approval_surface_policy": config.approval_surface_policy,
+        "desktop_notifications": config.desktop_notifications,
         "telemetry": config.telemetry,
         "sync": config.sync,
         "billing": config.billing,
@@ -433,7 +437,7 @@ def _coerce_editable_setting(key: str, value: object) -> object:
         if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 600:
             return value
         raise ValueError("Approval wait timeout must be between 0 and 600 seconds.")
-    if key in {"telemetry", "sync", "billing"}:
+    if key in {"desktop_notifications", "telemetry", "sync", "billing"}:
         if isinstance(value, bool):
             return value
         raise ValueError(f"{key} must be true or false.")
