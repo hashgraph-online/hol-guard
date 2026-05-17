@@ -78,6 +78,7 @@ _OUTPUT_REDIRECT_TO_EXFIL = re.compile(
     r">\s*(?:/proc/\S+|/dev/tcp/|/dev/udp/)",
     re.IGNORECASE,
 )
+_SHELL_CHAINING_PATTERN = re.compile(r"&&|\|\||(?<!<);")
 _OUTPUT_REDIRECT_TO_LOCAL_FILE = re.compile(
     r"(?<!<)(?:^|[^>])>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+",
     re.IGNORECASE,
@@ -151,7 +152,7 @@ _PIPE_TO_LOCAL_FILE_WRITE_PATTERN = re.compile(
     r"[|;]\s*(?:tee|dd)\b",
     re.IGNORECASE,
 )
-_PIPE_SEGMENT_PATTERN = re.compile(r"[|;]\s*([^\r\n;&|]+)")
+_PIPE_SEGMENT_PATTERN = re.compile(r"(?:\|&?|;)\s*([^\r\n;&|]+)")
 _ENV_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _EXECUTION_TOOLS = frozenset(
     {
@@ -180,6 +181,18 @@ _EXECUTION_TOOLS = frozenset(
     }
 )
 _SUDO_ARG_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-T"})
+_SUDO_ARG_LONG_FLAGS = frozenset(
+    {
+        "--chdir",
+        "--group",
+        "--host",
+        "--login-class",
+        "--prompt",
+        "--role",
+        "--type",
+        "--user",
+    }
+)
 
 _FAKE_CREDENTIAL_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
@@ -307,6 +320,8 @@ def classify_read_only_http_fetch(command: str) -> str | None:
         return None
     if _MUTATING_HTTP_FETCH_PATTERN.search(command):
         return None
+    if _SHELL_CHAINING_PATTERN.search(command) and not _looks_like_heredoc_script(command):
+        return None
     if _HTTP_FETCH_FILE_WRITE_PATTERN.search(command):
         return None
     if _PIPE_TO_EXFIL.search(command):
@@ -393,7 +408,9 @@ def _tokens_start_execution(tokens: list[str]) -> bool:
             while index < len(tokens) and tokens[index].startswith("-"):
                 flag = tokens[index]
                 index += 1
-                if flag in _SUDO_ARG_FLAGS and index < len(tokens):
+                if flag == "--":
+                    break
+                if (flag in _SUDO_ARG_FLAGS or flag in _SUDO_ARG_LONG_FLAGS) and index < len(tokens):
                     index += 1
             continue
         if base_lower == "command":
@@ -411,6 +428,10 @@ def _tokens_start_execution(tokens: list[str]) -> bool:
             return False
         return base_lower in _EXECUTION_TOOLS
     return False
+
+
+def _looks_like_heredoc_script(command: str) -> bool:
+    return bool(re.match(r"\s*(?:node|python|python3)\b[^\r\n]*<<", command))
 
 
 def _has_no_write_flags(parts: list[str]) -> bool:
