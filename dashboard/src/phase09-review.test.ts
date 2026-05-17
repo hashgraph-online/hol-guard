@@ -535,6 +535,87 @@ assert(
   "GR211-06b: secondary risk summary hides long Codex prompt prefixes already shown in primary card"
 );
 
+const TRUNCATED_PRIMARY_PROMPT_TEXT =
+  "# Overview Generate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project: /Users/test/project Get an understanding of the user's intent and goals by deeply viewing";
+const LONGER_DUPLICATE_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-longer-duplicate-prompt-risk",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} their connected apps. Suggest actionable tasks that they would actually act on/click.`,
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: TRUNCATED_PRIMARY_PROMPT_TEXT,
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(LONGER_DUPLICATE_PROMPT_RISK_REQUEST) === null,
+  "GR211-06d: secondary risk summary hides longer prompt prefixes when primary card already shows the prompt excerpt"
+);
+
+const LONGER_PROMPT_WITH_SAFETY_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-longer-prompt-with-safety-context",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} This may expose npm registry credentials to the model.`,
+};
+assert(
+  resolveSecondaryRiskSummary(LONGER_PROMPT_WITH_SAFETY_CONTEXT_REQUEST) ===
+    LONGER_PROMPT_WITH_SAFETY_CONTEXT_REQUEST.risk_summary,
+  "GR211-06e: secondary risk summary keeps longer prompt prefixes when the suffix adds safety context"
+);
+
+const LONGER_PROMPT_WITH_NON_KEYWORD_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-longer-prompt-with-non-keyword-context",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} runs as root and sends data to a third-party host.`,
+};
+assert(
+  resolveSecondaryRiskSummary(LONGER_PROMPT_WITH_NON_KEYWORD_CONTEXT_REQUEST) ===
+    LONGER_PROMPT_WITH_NON_KEYWORD_CONTEXT_REQUEST.risk_summary,
+  "GR211-06f: secondary risk summary keeps longer prompt prefixes when the suffix adds non-keyword risk context"
+);
+
+const LONGER_PROMPT_WITH_BENIGN_WRITE_CONTINUATION_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-longer-prompt-with-benign-write-continuation",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} write tests for the updated dashboard flow.`,
+};
+assert(
+  resolveSecondaryRiskSummary(LONGER_PROMPT_WITH_BENIGN_WRITE_CONTINUATION_REQUEST) === null,
+  "GR211-06g: secondary risk summary hides normal prompt continuation text that contains broad non-risk verbs"
+);
+
+const REFLOWED_PRIMARY_PROMPT_TEXT =
+  "# Overview\nGenerate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project: /Users/test/project. Get an understanding of the user's intent and goals by deeply viewing";
+const REFLOWED_PROMPT_WITH_SAFETY_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-reflowed-prompt-with-safety-context",
+  risk_summary:
+    "Codex prompt for `.npmrc`: # Overview Generate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project /Users/test/project Get an understanding of the user's intent and goals by deeply viewing. This may expose npm registry credentials to the model.",
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: REFLOWED_PRIMARY_PROMPT_TEXT,
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(REFLOWED_PROMPT_WITH_SAFETY_CONTEXT_REQUEST) ===
+    REFLOWED_PROMPT_WITH_SAFETY_CONTEXT_REQUEST.risk_summary,
+  "GR211-06h: secondary risk summary keeps safety context after normalized prefix extraction"
+);
+
+const PROMPT_WITH_SECRET_VARIANT_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-prompt-with-secret-variant-context",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} contains API_KEY credentials.`,
+};
+assert(
+  resolveSecondaryRiskSummary(PROMPT_WITH_SECRET_VARIANT_CONTEXT_REQUEST) ===
+    PROMPT_WITH_SECRET_VARIANT_CONTEXT_REQUEST.risk_summary,
+  "GR211-06i: secondary risk summary keeps plural and env-style secret context"
+);
+
 const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-prefixed-extra-context-prompt-risk",
@@ -585,6 +666,24 @@ const SHORT_DUPLICATE_COMMAND_RISK_REQUEST: GuardApprovalRequest = {
 assert(
   resolveSecondaryRiskSummary(SHORT_DUPLICATE_COMMAND_RISK_REQUEST) === null,
   "GR211-09: secondary risk summary hides exact short duplicate command text"
+);
+
+const LONG_COMMAND_WITH_CONTEXT_TEXT =
+  "node scripts/sync-dashboard-data.js --workspace /Users/test/project --target review-workspace --format json --include-local-cache";
+const LONG_COMMAND_WITH_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "ph09-long-command-with-context",
+  risk_summary: `Codex command for \`shell\`: ${LONG_COMMAND_WITH_CONTEXT_TEXT} dry run mode disabled.`,
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: LONG_COMMAND_WITH_CONTEXT_TEXT,
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(LONG_COMMAND_WITH_CONTEXT_REQUEST) ===
+    LONG_COMMAND_WITH_CONTEXT_REQUEST.risk_summary,
+  "GR211-09b: secondary risk summary keeps long shell command context"
 );
 
 const DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST: GuardApprovalRequest = {
