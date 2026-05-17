@@ -66,6 +66,7 @@ _SUDO_OPTION_VALUE_LONG_FLAGS = frozenset(
     }
 )
 _GH_PR_OPTION_VALUE_FLAGS = frozenset({"-R", "--repo"})
+_SHELL_CONTROL_PREFIX_TOKENS = frozenset({"!", "(", "{", "if", "while", "until"})
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
@@ -834,6 +835,9 @@ def _gh_pr_create_body_args_start_index(segment: list[_ShellTokenWithQuoteContex
             continue
         if command_name in {"nice", "nohup", "stdbuf"}:
             index = _skip_generic_shell_wrapper_options(command_name, segment, index + 1)
+            continue
+        if token.plain in _SHELL_CONTROL_PREFIX_TOKENS or command_name in _SHELL_CONTROL_PREFIX_TOKENS:
+            index += 1
             continue
         return None
     return None
