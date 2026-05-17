@@ -1167,6 +1167,8 @@ def test_tool_action_request_classifier_ignores_single_quoted_env_split_string_b
         'gh pr -R hashgraph-online/hol-guard create --body "Verification: `python -m build`"',
         '>/dev/null gh pr create --body "Verification: `python -m build`"',
         'if gh pr create --body "Verification: `python -m build`"; then echo ok; fi',
+        'if true; then gh pr create --body "Verification: `python -m build`"; fi',
+        'for target in one; do gh pr create --body "Verification: `python -m build`"; done',
         '{ gh pr create --body "Verification: `python -m build`"; }',
         '! gh pr create --body "Verification: `python -m build`"',
         'nohup gh pr create --body "Verification: `python -m build`"',
