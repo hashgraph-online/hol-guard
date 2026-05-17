@@ -93,6 +93,28 @@ _LOCALHOST_HEALTH_PATTERN = re.compile(
     r"(?:\s|$|[;&|'\"])",
     re.IGNORECASE,
 )
+_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>curl|curl\.exe|wget|node|python|python3)\b(?s:.*?)"
+    r"(?:fetch|https?\.get|requests\.get|urllib\.request\.urlopen|https?://)",
+    re.IGNORECASE,
+)
+_MUTATING_HTTP_FETCH_PATTERN = re.compile(
+    r"\b(?:POST|PUT|PATCH|DELETE)\b|"
+    r"\bmethod\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]|"
+    r"\b(?:--request|-X)\s*(?:POST|PUT|PATCH|DELETE)\b|"
+    r"\b(?:--data(?:-binary|-raw|-urlencode)?|-d|--form|-F|--upload-file|-T)\b|"
+    r"\b(?:body|data)\s*:",
+    re.IGNORECASE,
+)
+_LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
+    r"\b(?:readFileSync|open|Path\(|createReadStream|cat)\s*\(",
+    re.IGNORECASE,
+)
+_PIPE_TO_EXECUTION_PATTERN = re.compile(
+    r"[|;]\s*(?!(?-i:[A-Z_][A-Z0-9_]*\b))"
+    r"(?:bash|sh|zsh|fish|python|python3|node|perl|ruby|php|powershell|pwsh|cmd|chmod|install)\b",
+    re.IGNORECASE,
+)
 
 _FAKE_CREDENTIAL_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
@@ -207,6 +229,31 @@ def classify_fake_credential_pattern(text: str) -> bool:
 def classify_health_endpoint_fetch(command: str) -> bool:
     """Return True if *command* is a benign localhost health/readiness check."""
     return bool(_LOCALHOST_HEALTH_PATTERN.search(command))
+
+
+def classify_read_only_http_fetch(command: str) -> str | None:
+    """Return the read-only HTTP probe tool name when command has no upload or secret source."""
+    match = _READ_ONLY_HTTP_FETCH_PATTERN.search(command)
+    if match is None:
+        return None
+    if _MUTATING_HTTP_FETCH_PATTERN.search(command):
+        return None
+    if _PIPE_TO_EXFIL.search(command):
+        return None
+    if _PIPE_TO_EXECUTION_PATTERN.search(command):
+        return None
+    if _OUTPUT_REDIRECT_TO_EXFIL.search(command):
+        return None
+    if _SECRET_FILE_NAMES.search(command):
+        return None
+    if _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN.search(command):
+        return None
+    tool = match.group("tool").lower()
+    if tool in {"curl.exe", "curl"}:
+        return "curl"
+    if tool in {"python3", "python"}:
+        return "python"
+    return tool
 
 
 def classify_docs_example_source(source_hint: str) -> bool:
