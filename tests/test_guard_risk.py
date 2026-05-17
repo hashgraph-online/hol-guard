@@ -798,12 +798,17 @@ def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
         "bash",
         {"command": "docker build --platform linux/amd64 -t registry.example.com/app:v1 ."},
     )
+    buildx_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker buildx build --platform linux/amd64 -t registry.example.com/app:v1 ."},
+    )
     push_request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "docker push registry.example.com/app:v1"},
     )
 
     assert build_request is None
+    assert buildx_request is None
     assert push_request is None
 
 
@@ -836,6 +841,7 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker --context prod build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
         "docker -H tcp://docker.example build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
         "docker buildx build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker buildx --builder ci build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
         "docker build --ssh default -t registry.example.com/app:v1 .",
         "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
         "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",

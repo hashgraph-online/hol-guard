@@ -67,6 +67,7 @@ _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
         "-l",
     }
 )
+_DOCKER_BUILDX_OPTIONS_WITH_VALUES = frozenset({"--builder"})
 _DOCKER_BUILD_ARG_SECRET_MARKERS = frozenset(
     {"API", "AUTH", "AWS", "CREDENTIAL", "KEY", "NPM", "PASSWORD", "SECRET", "TOKEN"}
 )
@@ -3045,8 +3046,12 @@ def _docker_sensitive_reason(command_text: str) -> str | None:
         if subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(args[1:]):
             return "build-sensitive-flags"
         if subcommand == "buildx" and len(args) > 1:
-            buildx_subcommand = args[1].lower()
-            if buildx_subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(args[2:]):
+            buildx_subcommand_index = _docker_buildx_subcommand_index(args[1:])
+            if buildx_subcommand_index is None:
+                continue
+            buildx_args = args[1 + buildx_subcommand_index :]
+            buildx_subcommand = buildx_args[0].lower()
+            if buildx_subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(buildx_args[1:]):
                 return "buildx-build-sensitive-flags"
     return None
 
@@ -3071,6 +3076,28 @@ def _docker_global_option_has_value(token: str) -> bool:
     # Accept both long attached values like --host=... and short forms like -H=....
     return token in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES or any(
         token.startswith(f"{option}=") for option in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES
+    )
+
+
+def _docker_buildx_subcommand_index(args: list[str]) -> int | None:
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            return index + 1 if index + 1 < len(args) else None
+        if _docker_buildx_option_has_value(token):
+            index += 1 if "=" in token else 2
+            continue
+        if token.startswith("-") and not token.startswith("--"):
+            index += 1
+            continue
+        return index
+    return None
+
+
+def _docker_buildx_option_has_value(token: str) -> bool:
+    return token in _DOCKER_BUILDX_OPTIONS_WITH_VALUES or any(
+        token.startswith(f"{option}=") for option in _DOCKER_BUILDX_OPTIONS_WITH_VALUES
     )
 
 
