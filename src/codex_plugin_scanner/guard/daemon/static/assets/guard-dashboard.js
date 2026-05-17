@@ -13989,6 +13989,15 @@ function resolveDecisionV2Detail(item) {
   return detail !== void 0 && detail.trim().length > 0 ? detail : null;
 }
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
+const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
+const DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS = [
+  /\b(api[-_\s]?keys?|credentials?|secrets?|tokens?|passwords?|sensitive|malicious|destructive|unauthorized)\b/i,
+  /\b(expose|exposes|exposed|leak|leaks|leaked|exfiltrate|exfiltrates|exfiltration)\b/i,
+  /\b(may|could|can|would|will)\s+(expose|leak|send|upload|exfiltrate|delete|remove|modify|overwrite|execute|run)\b/i,
+  /\bruns?\s+as\s+(root|admin|administrator)\b/i,
+  /\bsends?\s+(data|contents|files?|credentials?|secrets?|tokens?)\s+to\b/i,
+  /\b(third[-\s]?party|remote|external)\s+host\b/i
+];
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
@@ -14017,10 +14026,13 @@ function hasSupplyChainArtifactEvidence(item) {
   return item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package");
 }
 function duplicatesStoppedActionText(item, value) {
-  const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
+  const stoppedActionText = resolveStoppedCommandText(item);
+  const canUseLongPromptPrefix = item.action_envelope_json?.action_type === "prompt" || item.artifact_type === "prompt_request";
+  const stoppedText = normalizeDuplicateReviewText(stoppedActionText);
   const candidateText = normalizeDuplicateReviewText(value);
   const contextStrippedValue = stripDuplicateReviewContextPrefix(value);
   const candidateWithoutContext = contextStrippedValue === null ? "" : normalizeDuplicateReviewText(contextStrippedValue);
+  const candidateRemainder = contextStrippedValue === null ? "" : extractDuplicateReviewRemainder(contextStrippedValue, stoppedActionText);
   if (stoppedText.length === 0 || candidateText.length === 0) {
     return false;
   }
@@ -14033,7 +14045,28 @@ function duplicatesStoppedActionText(item, value) {
   if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && stoppedText.includes(candidateWithoutContext)) {
     return true;
   }
+  if (canUseLongPromptPrefix && stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH && candidateWithoutContext.startsWith(stoppedText) && !hasDuplicateReviewSafetyContextRemainder(candidateRemainder)) {
+    return true;
+  }
   return false;
+}
+function extractDuplicateReviewRemainder(candidateText, stoppedText) {
+  const candidate = candidateText.trim();
+  const stopped = normalizeDuplicateReviewText(stoppedText);
+  if (stopped.length === 0) {
+    return "";
+  }
+  let normalizedPrefix = "";
+  for (let index = 0; index < candidate.length; index += 1) {
+    normalizedPrefix += normalizeDuplicateReviewText(candidate[index]);
+    if (normalizedPrefix.length >= stopped.length) {
+      return normalizedPrefix.startsWith(stopped) ? candidate.slice(index + 1).trim() : "";
+    }
+  }
+  return "";
+}
+function hasDuplicateReviewSafetyContextRemainder(remainder) {
+  return DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS.some((pattern) => pattern.test(remainder));
 }
 function normalizeDuplicateReviewText(value) {
   return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_\-…]+/g, "").trim();
