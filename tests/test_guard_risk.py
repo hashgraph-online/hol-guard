@@ -810,7 +810,16 @@ def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
 def test_tool_action_request_classifier_allows_python_test_module_invocation():
     request = extract_sensitive_tool_action_request(
         "bash",
-        {"command": "python3 -m pytest tests/test_guard_risk.py -q"},
+        {"command": "python3 -m pytest tests/test_guard_risk.py -q -c pytest.ini"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_allows_python_test_module_with_read_only_followup():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -m pytest tests/test_guard_risk.py -q | grep passed && echo success"},
     )
 
     assert request is None
@@ -820,11 +829,14 @@ def test_tool_action_request_classifier_allows_python_test_module_invocation():
     "command",
     [
         "docker login registry.example.com",
+        "docker --context prod login registry.example.com",
         "docker run -v ~/.ssh:/root/.ssh ubuntu:latest",
         "docker compose up --build",
         "docker build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker --context prod build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
         "docker build --ssh default -t registry.example.com/app:v1 .",
         "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
+        "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",
     ],
 )
 def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(command):

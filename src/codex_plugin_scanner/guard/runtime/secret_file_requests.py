@@ -53,10 +53,31 @@ _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILD_SECRET_FLAGS = frozenset({"--secret", "--ssh"})
+_DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
+    {
+        "--config",
+        "--context",
+        "--host",
+        "--log-level",
+        "--tlscacert",
+        "--tlscert",
+        "--tlskey",
+        "-c",
+        "-H",
+        "-l",
+    }
+)
 _DOCKER_BUILD_ARG_SECRET_RE = re.compile(
     r"(?i)(?:^|[_-])(?:aws|api|auth|credential|key|npm|password|secret|token)(?:$|[_-])"
 )
+_DOCKER_BUILD_ARG_SECRET_VALUE_RE = re.compile(
+    r"(?i)(?:"
+    r"\$\{?[A-Z0-9_]*(?:AWS|API|AUTH|CREDENTIAL|KEY|NPM|PASSWORD|SECRET|TOKEN)[A-Z0-9_]*\}?|"
+    r"gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|glpat-[A-Za-z0-9_-]+|sk-[A-Za-z0-9_-]+"
+    r")"
+)
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"mypy", "pytest", "ruff", "unittest"})
+_SAFE_STATIC_SHELL_COMMANDS = frozenset({"echo", "printf"})
 _SHELL_TOOL_NAMES = frozenset(
     {
         "ash",
@@ -3010,9 +3031,10 @@ def _docker_sensitive_reason(command_text: str) -> str | None:
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name != "docker" or command_index is None:
             continue
-        args = segment[command_index + 1 :]
-        if not args:
+        subcommand_index = _docker_subcommand_index(segment[command_index + 1 :])
+        if subcommand_index is None:
             continue
+        args = segment[command_index + 1 + subcommand_index :]
         subcommand = args[0].lower()
         if subcommand in _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS:
             return subcommand
@@ -3023,6 +3045,30 @@ def _docker_sensitive_reason(command_text: str) -> str | None:
             if buildx_subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(args[2:]):
                 return "buildx-build-sensitive-flags"
     return None
+
+
+def _docker_subcommand_index(args: list[str]) -> int | None:
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            return index + 1 if index + 1 < len(args) else None
+        if _docker_global_option_has_value(token):
+            index += 1 if "=" in token else 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        return index
+    return None
+
+
+def _docker_global_option_has_value(token: str) -> bool:
+    return token in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES or any(
+        token.startswith(f"{option}=")
+        for option in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES
+        if option.startswith("--")
+    )
 
 
 def _docker_build_args_are_sensitive(args: list[str]) -> bool:
@@ -3048,8 +3094,15 @@ def _docker_build_args_are_sensitive(args: list[str]) -> bool:
 
 
 def _docker_build_arg_is_sensitive(value: str) -> bool:
-    key = value.split("=", 1)[0].strip()
-    return bool(key and _DOCKER_BUILD_ARG_SECRET_RE.search(key))
+    key, separator, assigned_value = value.partition("=")
+    normalized_key = key.strip()
+    return bool(
+        normalized_key
+        and (
+            _DOCKER_BUILD_ARG_SECRET_RE.search(normalized_key)
+            or (separator and _DOCKER_BUILD_ARG_SECRET_VALUE_RE.search(assigned_value.strip()))
+        )
+    )
 
 
 def _docker_config_path_from_command(
@@ -4750,20 +4803,38 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
 
 def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
     segments = _iter_shell_command_segments(parts)
-    if len(segments) != 1:
+    if not segments:
         return False
-    segment = segments[0]
-    command_name, command_index = _shell_segment_primary_command(segment)
-    if command_name is None or command_index is None or not _is_python_interpreter_command(command_name):
+    saw_python_module = False
+    for segment in segments:
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            return False
+        segment_args = segment[command_index + 1 :]
+        if _is_python_interpreter_command(command_name):
+            if not _python_segment_runs_safe_module(segment_args):
+                return False
+            saw_python_module = True
+            continue
+        if command_name in _READ_ONLY_LOOKUP_FILTERS and _read_only_lookup_filter_segment_is_safe(
+            command_name,
+            segment_args,
+        ):
+            continue
+        if command_name in _SAFE_STATIC_SHELL_COMMANDS and _static_shell_segment_is_safe(segment_args):
+            continue
         return False
-    args = segment[command_index + 1 :]
+    return saw_python_module
+
+
+def _python_segment_runs_safe_module(args: list[str]) -> bool:
     if not args:
-        return False
-    if any(arg in {"-c", "--command"} or arg.startswith(("-c", "--command=")) for arg in args):
         return False
     index = 0
     while index < len(args):
         arg = args[index]
+        if arg in {"-c", "--command"} or arg.startswith(("-c", "--command=")):
+            return False
         if arg == "-m":
             module = args[index + 1] if index + 1 < len(args) else ""
             return module.split(".", 1)[0] in _SAFE_PYTHON_MODULE_COMMANDS
@@ -4772,6 +4843,13 @@ def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
             return module.split(".", 1)[0] in _SAFE_PYTHON_MODULE_COMMANDS
         index += 1
     return False
+
+
+def _static_shell_segment_is_safe(args: list[str]) -> bool:
+    return all(
+        "$" not in arg and "`" not in arg and "$(" not in arg and "<(" not in arg and ">(" not in arg
+        for arg in args
+    )
 
 
 def _contains_unmodeled_inline_interpreter_eval(
