@@ -794,9 +794,12 @@ def _gh_pr_create_body_args_have_substitution(args: list[str]) -> bool:
         if arg in {"--body", "-b"}:
             if index + 1 >= len(args):
                 return False
-            return _shell_command_substitution_payloads(args[index + 1])
-        if arg.startswith("--body="):
-            return bool(_shell_command_substitution_payloads(arg.split("=", 1)[1]))
+            if _shell_command_substitution_payloads(args[index + 1]):
+                return True
+            index += 2
+            continue
+        if arg.startswith("--body=") and _shell_command_substitution_payloads(arg.split("=", 1)[1]):
+            return True
         index += 1
     return False
 

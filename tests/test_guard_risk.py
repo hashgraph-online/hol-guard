@@ -1078,6 +1078,23 @@ def test_tool_action_request_classifier_explains_gh_pr_create_double_quoted_mark
     assert "--body-file" in request.reason
 
 
+def test_tool_action_request_classifier_explains_later_gh_pr_create_body_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "--body 'safe markdown body' "
+                '--body "Verification: `python -m build`"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub PR body shell substitution"
+
+
 def test_tool_action_request_classifier_skips_node_heredoc_generated_temp_json_workflow():
     request = extract_sensitive_tool_action_request(
         "bash",
