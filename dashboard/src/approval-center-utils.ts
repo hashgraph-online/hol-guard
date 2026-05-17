@@ -323,6 +323,7 @@ export type PrimaryReviewAction = {
 };
 
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
+const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
 
 export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
   return {
@@ -393,6 +394,12 @@ function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string):
   if (
     candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH &&
     stoppedText.includes(candidateWithoutContext)
+  ) {
+    return true;
+  }
+  if (
+    stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH &&
+    candidateWithoutContext.startsWith(stoppedText)
   ) {
     return true;
   }

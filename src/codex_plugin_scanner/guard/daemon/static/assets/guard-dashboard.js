@@ -13989,6 +13989,7 @@ function resolveDecisionV2Detail(item) {
   return detail !== void 0 && detail.trim().length > 0 ? detail : null;
 }
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
+const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
@@ -14031,6 +14032,9 @@ function duplicatesStoppedActionText(item, value) {
     return false;
   }
   if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && stoppedText.includes(candidateWithoutContext)) {
+    return true;
+  }
+  if (stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH && candidateWithoutContext.startsWith(stoppedText)) {
     return true;
   }
   return false;

@@ -535,6 +535,24 @@ assert(
   "GR211-06b: secondary risk summary hides long Codex prompt prefixes already shown in primary card"
 );
 
+const TRUNCATED_PRIMARY_PROMPT_TEXT =
+  "# Overview Generate 0 to 3 hyperpersonalized suggestions for what this user can do with Codex in this local project: /Users/test/project Get an understanding of the user's intent and goals by deeply viewing";
+const LONGER_DUPLICATE_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
+  ...DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-longer-duplicate-prompt-risk",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} their connected apps. Suggest actionable tasks that they would actually act on/click.`,
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    command: null,
+    prompt_excerpt: TRUNCATED_PRIMARY_PROMPT_TEXT,
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(LONGER_DUPLICATE_PROMPT_RISK_REQUEST) === null,
+  "GR211-06d: secondary risk summary hides longer prompt prefixes when primary card already shows the prompt excerpt"
+);
+
 const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-prefixed-extra-context-prompt-risk",
