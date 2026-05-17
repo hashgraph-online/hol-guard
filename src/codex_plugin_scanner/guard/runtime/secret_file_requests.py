@@ -69,6 +69,7 @@ _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     }
 )
 _DOCKER_BUILDX_OPTIONS_WITH_VALUES = frozenset({"--builder"})
+_DOCKER_BUILDX_FLAG_OPTIONS = frozenset({"--debug"})
 _DOCKER_BUILD_ARG_SECRET_MARKERS = frozenset(
     {"API", "AUTH", "AWS", "CREDENTIAL", "KEY", "NPM", "PASSWORD", "SECRET", "TOKEN"}
 )
@@ -3088,6 +3089,9 @@ def _docker_buildx_subcommand_index(args: list[str]) -> int | None:
             return index + 1 if index + 1 < len(args) else None
         if _docker_buildx_option_has_value(token):
             index += 1 if "=" in token else 2
+            continue
+        if token in _DOCKER_BUILDX_FLAG_OPTIONS:
+            index += 1
             continue
         if token.startswith("-") and not token.startswith("--"):
             index += 1
