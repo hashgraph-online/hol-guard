@@ -33,6 +33,7 @@ from codex_plugin_scanner.guard.risk import (
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    _gh_pr_create_body_has_shell_command_substitution,
     _path_text_is_within_root_text,
     _read_small_runtime_text_file,
     _resolved_runtime_path,
@@ -1143,6 +1144,12 @@ def test_tool_action_request_classifier_ignores_single_quoted_attached_body_flag
     assert request is None
 
 
+def test_tool_action_request_classifier_ignores_single_quoted_env_split_string_body():
+    assert not _gh_pr_create_body_has_shell_command_substitution(
+        "echo $(date) && env -S'gh pr create --body \"Verification: `python -m build`\"'"
+    )
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -1151,6 +1158,7 @@ def test_tool_action_request_classifier_ignores_single_quoted_attached_body_flag
         'time -p gh pr create --body "Verification: `python -m build`"',
         'time -o /tmp/time.log gh pr create --body "Verification: `python -m build`"',
         'env -i GH_HOST=github.com gh pr create --body "Verification: `python -m build`"',
+        'env -vS"gh pr create --body \\"Verification: `python -m build`\\""',
         'env -v gh pr create --body "Verification: `python -m build`"',
         'env -- gh pr create --body "Verification: `python -m build`"',
         'command -p gh pr create --body "Verification: `python -m build`"',

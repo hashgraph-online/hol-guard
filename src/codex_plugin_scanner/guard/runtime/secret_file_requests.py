@@ -777,17 +777,62 @@ def _destructive_shell_tool_action_request(
     )
 
 
-def _gh_pr_create_body_has_shell_command_substitution(command_text: str) -> bool:
+def _gh_pr_create_body_has_shell_command_substitution(command_text: str, *, depth: int = 0) -> bool:
+    if depth > 2:
+        return False
     if not _shell_command_substitution_payloads(command_text):
         return False
     tokens = _shell_tokens_preserving_quote_context(command_text)
     for segment in _shell_token_segments(tokens):
+        for env_split_string in _gh_pr_env_split_string_payloads_with_substitution(segment):
+            if _gh_pr_create_body_has_shell_command_substitution(env_split_string, depth=depth + 1):
+                return True
         body_args_start_index = _gh_pr_create_body_args_start_index(segment)
         if body_args_start_index is None:
             continue
         if _gh_pr_create_body_args_have_substitution(segment[body_args_start_index:]):
             return True
     return False
+
+
+def _gh_pr_env_split_string_payloads_with_substitution(segment: list[_ShellTokenWithQuoteContext]) -> tuple[str, ...]:
+    payloads: list[str] = []
+    env_index = _shell_segment_env_index([token.plain for token in segment])
+    if env_index is None:
+        return ()
+    index = env_index + 1
+    while index < len(segment):
+        token = segment[index]
+        plain = token.plain
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(plain)):
+            index += 1
+            continue
+        if plain == "--":
+            break
+        if not plain.startswith("-"):
+            break
+        if plain in {"-S", "--split-string"} and index + 1 < len(segment):
+            payload_token = segment[index + 1]
+            if _shell_command_substitution_payloads(payload_token.raw):
+                payloads.append(payload_token.plain.strip())
+            index += _wrapper_option_tokens_consumed("env", plain)
+            continue
+        if plain.startswith("--split-string="):
+            if _shell_command_substitution_payloads(token.raw):
+                payloads.append(plain.split("=", 1)[1].strip())
+            index += _wrapper_option_tokens_consumed("env", plain)
+            continue
+        clustered_payload = _env_clustered_split_string_payload(plain)
+        if clustered_payload is not None:
+            if clustered_payload:
+                if _shell_command_substitution_payloads(token.raw):
+                    payloads.append(clustered_payload.strip())
+            elif index + 1 < len(segment) and _shell_command_substitution_payloads(segment[index + 1].raw):
+                payloads.append(segment[index + 1].plain.strip())
+            index += _wrapper_option_tokens_consumed("env", plain)
+            continue
+        index += _wrapper_option_tokens_consumed("env", plain)
+    return tuple(payload for payload in payloads if payload)
 
 
 @dataclass(frozen=True, slots=True)
