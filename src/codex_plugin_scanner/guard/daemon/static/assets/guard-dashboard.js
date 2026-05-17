@@ -13991,7 +13991,7 @@ function resolveDecisionV2Detail(item) {
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
 const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
 const DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS = [
-  /\b(api[-\s]?key|credential|secret|token|password|sensitive|malicious|destructive|unauthorized)\b/i,
+  /\b(api[-_\s]?keys?|credentials?|secrets?|tokens?|passwords?|sensitive|malicious|destructive|unauthorized)\b/i,
   /\b(expose|exposes|exposed|leak|leaks|leaked|exfiltrate|exfiltrates|exfiltration)\b/i,
   /\b(may|could|can|would|will)\s+(expose|leak|send|upload|exfiltrate|delete|remove|modify|overwrite|execute|run)\b/i,
   /\bruns?\s+as\s+(root|admin|administrator)\b/i,

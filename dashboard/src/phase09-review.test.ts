@@ -605,6 +605,17 @@ assert(
   "GR211-06h: secondary risk summary keeps safety context after normalized prefix extraction"
 );
 
+const PROMPT_WITH_SECRET_VARIANT_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-prompt-with-secret-variant-context",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} contains API_KEY credentials.`,
+};
+assert(
+  resolveSecondaryRiskSummary(PROMPT_WITH_SECRET_VARIANT_CONTEXT_REQUEST) ===
+    PROMPT_WITH_SECRET_VARIANT_CONTEXT_REQUEST.risk_summary,
+  "GR211-06i: secondary risk summary keeps plural and env-style secret context"
+);
+
 const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-prefixed-extra-context-prompt-risk",
