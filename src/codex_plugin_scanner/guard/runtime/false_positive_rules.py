@@ -149,8 +149,9 @@ _PIPE_TO_LOCAL_FILE_WRITE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _PIPE_TO_EXECUTION_PATTERN = re.compile(
-    r"[|;]\s*(?:(?i:sudo|doas|command|env)\s+)*(?:[A-Za-z_][A-Za-z0-9_]*=[^\s|;]*\s+)*(?:\S*/)?"
-    r"(?:(?i:bash|sh|zsh|fish|python|python3|perl|ruby|php|powershell|pwsh|cmd|chmod|install)|node)\b",
+    r"[|;]\s*(?:(?i:sudo|doas|command)\s+)*(?:(?i:env)(?:\s+-\S+)*\s+)?"
+    r"(?:[A-Za-z_][A-Za-z0-9_]*=[^\s|;]*\s+)*(?:\S*/)?"
+    r"(?:(?i:bash|sh|zsh|fish|python|python3|perl|ruby|php|powershell|pwsh|cmd|chmod|install|source)|node)\b",
 )
 
 _FAKE_CREDENTIAL_PATTERNS: tuple[re.Pattern[str], ...] = (
