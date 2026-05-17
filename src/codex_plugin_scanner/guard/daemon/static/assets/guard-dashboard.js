@@ -13990,6 +13990,7 @@ function resolveDecisionV2Detail(item) {
 }
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
 const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
+const DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERN = /(credential|secret|token|password|key|expose|exfiltrat|leak|sensitive|danger|risk|malicious|destructive|network|delete|remove)/;
 function buildPrimaryReviewAction(item) {
   return {
     label: resolveTerminalLabel(item),
@@ -14034,10 +14035,14 @@ function duplicatesStoppedActionText(item, value) {
   if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && stoppedText.includes(candidateWithoutContext)) {
     return true;
   }
-  if (stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH && candidateWithoutContext.startsWith(stoppedText)) {
+  if (stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH && candidateWithoutContext.startsWith(stoppedText) && !hasDuplicateReviewSafetyContextRemainder(candidateWithoutContext, stoppedText)) {
     return true;
   }
   return false;
+}
+function hasDuplicateReviewSafetyContextRemainder(candidateText, stoppedText) {
+  const remainder = candidateText.slice(stoppedText.length);
+  return DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERN.test(remainder);
 }
 function normalizeDuplicateReviewText(value) {
   return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_\-…]+/g, "").trim();

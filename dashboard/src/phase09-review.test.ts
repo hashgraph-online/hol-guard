@@ -553,6 +553,17 @@ assert(
   "GR211-06d: secondary risk summary hides longer prompt prefixes when primary card already shows the prompt excerpt"
 );
 
+const LONGER_PROMPT_WITH_SAFETY_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-longer-prompt-with-safety-context",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} This may expose npm registry credentials to the model.`,
+};
+assert(
+  resolveSecondaryRiskSummary(LONGER_PROMPT_WITH_SAFETY_CONTEXT_REQUEST) ===
+    LONGER_PROMPT_WITH_SAFETY_CONTEXT_REQUEST.risk_summary,
+  "GR211-06e: secondary risk summary keeps longer prompt prefixes when the suffix adds safety context"
+);
+
 const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-prefixed-extra-context-prompt-risk",
