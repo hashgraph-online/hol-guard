@@ -820,7 +820,7 @@ def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
 def test_tool_action_request_classifier_allows_python_test_module_invocation():
     request = extract_sensitive_tool_action_request(
         "bash",
-        {"command": "python3 -m pytest tests/test_guard_risk.py -q -c pytest.ini"},
+        {"command": "python3 -m pytest tests/test_guard_risk.py -q"},
     )
     interpreter_option_request = extract_sensitive_tool_action_request(
         "bash",
@@ -898,6 +898,7 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
         "python -m pytest --junit-xml=/tmp/guard-pytest.xml",
         "python -m pytest --debug=/tmp/guard-pytest.log",
         "python -m pytest --log-file=/tmp/guard-pytest.log",
+        "python -m pytest -c attacker.ini",
         "python dangerous.py -m pytest",
         "python -m unittest discover",
     ],

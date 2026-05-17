@@ -87,7 +87,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "sk-",
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
-_PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-c", "-k", "-m", "--maxfail", "--tb"})
+_PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
 _PYTHON_MODULE_MUTATING_FLAGS = {
@@ -4925,6 +4925,10 @@ def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], com
 
 def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str], command_names: list[str]) -> bool:
     if "$(" in command_text or "`" in command_text or "<(" in command_text or ">(" in command_text:
+        return False
+    if any(_is_python_interpreter_command(command_name) for command_name in command_names) and any(
+        part == "-m" or (part.startswith("-m") and len(part) > 2) for part in parts
+    ):
         return False
     heredoc_script = _single_interpreter_heredoc_script(command_text)
     if heredoc_script is not None:
