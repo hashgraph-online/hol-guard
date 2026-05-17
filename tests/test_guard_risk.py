@@ -836,6 +836,8 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker build --build-arg FOO .",
         "docker build --build-arg FOO=$(cat ~/.npmrc) .",
         "docker build --build-arg FOO=`cat ~/.aws/credentials` .",
+        "docker build --label leak=$(cat ~/.aws/credentials) .",
+        "docker build --annotation leak=$(cat ~/.aws/credentials) .",
         "docker login registry.example.com",
         "docker --context prod login registry.example.com",
         "docker run -v ~/.ssh:/root/.ssh ubuntu:latest",

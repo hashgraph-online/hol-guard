@@ -53,6 +53,7 @@ _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILD_SECRET_FLAGS = frozenset({"--secret", "--ssh"})
+_DOCKER_BUILD_METADATA_FLAGS = frozenset({"--annotation", "--label"})
 _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {
         "--config",
@@ -3119,6 +3120,16 @@ def _docker_build_args_are_sensitive(args: list[str]) -> bool:
             continue
         if token.startswith("--build-arg=") and _docker_build_arg_is_sensitive(token.split("=", 1)[1]):
             return True
+        if token in _DOCKER_BUILD_METADATA_FLAGS:
+            value = args[index + 1] if index + 1 < len(args) else ""
+            if _docker_build_metadata_value_is_sensitive(value):
+                return True
+            index += 2
+            continue
+        if token.startswith("--") and "=" in token:
+            flag, value = token.split("=", 1)
+            if flag in _DOCKER_BUILD_METADATA_FLAGS and _docker_build_metadata_value_is_sensitive(value):
+                return True
         index += 1
     return False
 
@@ -3130,11 +3141,20 @@ def _docker_build_arg_is_sensitive(value: str) -> bool:
     return bool(
         normalized_key
         and (
+            # Bare build args pass through the caller's environment, so block
+            # them even when the variable name does not look secret-like.
             not separator
             or _docker_build_arg_name_is_sensitive(normalized_key)
             or _docker_build_arg_value_is_sensitive(assigned_value.strip())
         )
     )
+
+
+def _docker_build_metadata_value_is_sensitive(value: str) -> bool:
+    _, separator, assigned_value = value.partition("=")
+    if not separator:
+        return _docker_build_arg_value_is_sensitive(value.strip())
+    return _docker_build_arg_value_is_sensitive(assigned_value.strip())
 
 
 def _docker_build_arg_name_is_sensitive(value: str) -> bool:
