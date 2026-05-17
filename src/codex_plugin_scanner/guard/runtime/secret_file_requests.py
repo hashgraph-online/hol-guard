@@ -50,7 +50,13 @@ _PATH_KEYS = (
 _PATH_LIST_KEYS = ("paths", "file_paths", "filePaths")
 _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
-_DOCKER_SUBCOMMANDS = frozenset({"build", "compose", "login", "push", "run"})
+_DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
+_DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
+_DOCKER_BUILD_SECRET_FLAGS = frozenset({"--secret", "--ssh"})
+_DOCKER_BUILD_ARG_SECRET_RE = re.compile(
+    r"(?i)(?:^|[_-])(?:aws|api|auth|credential|key|npm|password|secret|token)(?:$|[_-])"
+)
+_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"mypy", "pytest", "ruff", "unittest"})
 _SHELL_TOOL_NAMES = frozenset(
     {
         "ash",
@@ -582,7 +588,7 @@ def _docker_sensitive_tool_action_request(
     normalized_tool_name: str,
     command_text: str,
 ) -> ToolActionRequestMatch | None:
-    if _normalize_docker_command(command_text) is None:
+    if _docker_sensitive_reason(command_text) is None:
         return None
     return ToolActionRequestMatch(
         tool_name=tool_name,
@@ -590,8 +596,8 @@ def _docker_sensitive_tool_action_request(
         command_text=command_text,
         action_class="docker-sensitive command",
         reason=(
-            "Guard treats Docker login, build, run, push, and compose actions as sensitive because they can expose "
-            "credentials or execute privileged container workflows."
+            "Guard treats Docker login, run, compose, and credential-bearing build actions as sensitive because they "
+            "can expose credentials or execute privileged container workflows."
         ),
     )
 
@@ -2998,17 +3004,52 @@ def _normalize_tool_name(tool_name: object) -> str | None:
     return tool_name.strip().lower()
 
 
-def _normalize_docker_command(command_text: str) -> str | None:
-    normalized = command_text.strip().lower()
-    if not normalized.startswith("docker "):
-        return None
-    parts = normalized.split()
-    if len(parts) < 2:
-        return None
-    subcommand = parts[1]
-    if subcommand in _DOCKER_SUBCOMMANDS:
-        return normalized
+def _docker_sensitive_reason(command_text: str) -> str | None:
+    parts = _split_shell_parts(command_text.strip())
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "docker" or command_index is None:
+            continue
+        args = segment[command_index + 1 :]
+        if not args:
+            continue
+        subcommand = args[0].lower()
+        if subcommand in _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS:
+            return subcommand
+        if subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(args[1:]):
+            return "build-sensitive-flags"
+        if subcommand == "buildx" and len(args) > 1:
+            buildx_subcommand = args[1].lower()
+            if buildx_subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(args[2:]):
+                return "buildx-build-sensitive-flags"
     return None
+
+
+def _docker_build_args_are_sensitive(args: list[str]) -> bool:
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            return False
+        if token in _DOCKER_BUILD_SECRET_FLAGS or any(
+            token.startswith(f"{flag}=") for flag in _DOCKER_BUILD_SECRET_FLAGS
+        ):
+            return True
+        if token == "--build-arg":
+            value = args[index + 1] if index + 1 < len(args) else ""
+            if _docker_build_arg_is_sensitive(value):
+                return True
+            index += 2
+            continue
+        if token.startswith("--build-arg=") and _docker_build_arg_is_sensitive(token.split("=", 1)[1]):
+            return True
+        index += 1
+    return False
+
+
+def _docker_build_arg_is_sensitive(value: str) -> bool:
+    key = value.split("=", 1)[0].strip()
+    return bool(key and _DOCKER_BUILD_ARG_SECRET_RE.search(key))
 
 
 def _docker_config_path_from_command(
@@ -3058,7 +3099,7 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     if _single_interpreter_heredoc_script(normalized) is not None or any(
         _is_python_interpreter_command(command_name) for command_name in parsed_command_names
     ):
-        return True
+        return not _looks_like_safe_python_module_invocation(parts)
     if _contains_unmodeled_inline_interpreter_eval(normalized, parts, parsed_command_names):
         return True
     if _contains_destructive_node_inline_eval(parts):
@@ -4705,6 +4746,32 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
     if not scripts or len(scripts) != len(command_names):
         return False
     return all(_script_is_read_only_observer(script_text) for script_text in scripts)
+
+
+def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
+    segments = _iter_shell_command_segments(parts)
+    if len(segments) != 1:
+        return False
+    segment = segments[0]
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name is None or command_index is None or not _is_python_interpreter_command(command_name):
+        return False
+    args = segment[command_index + 1 :]
+    if not args:
+        return False
+    if any(arg in {"-c", "--command"} or arg.startswith(("-c", "--command=")) for arg in args):
+        return False
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "-m":
+            module = args[index + 1] if index + 1 < len(args) else ""
+            return module.split(".", 1)[0] in _SAFE_PYTHON_MODULE_COMMANDS
+        if arg.startswith("-m") and len(arg) > 2:
+            module = arg[2:]
+            return module.split(".", 1)[0] in _SAFE_PYTHON_MODULE_COMMANDS
+        index += 1
+    return False
 
 
 def _contains_unmodeled_inline_interpreter_eval(

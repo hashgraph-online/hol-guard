@@ -787,6 +787,53 @@ def test_tool_action_request_classifier_detects_grep_include_secret_pipeline_upl
     assert request.action_class == "credential exfiltration shell command"
 
 
+def test_tool_action_request_classifier_allows_simple_project_deploy_script():
+    request = extract_sensitive_tool_action_request("bash", {"command": "./deploy.sh production"})
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
+    build_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker build --platform linux/amd64 -t registry.example.com/app:v1 ."},
+    )
+    push_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker push registry.example.com/app:v1"},
+    )
+
+    assert build_request is None
+    assert push_request is None
+
+
+def test_tool_action_request_classifier_allows_python_test_module_invocation():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -m pytest tests/test_guard_risk.py -q"},
+    )
+
+    assert request is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "docker login registry.example.com",
+        "docker run -v ~/.ssh:/root/.ssh ubuntu:latest",
+        "docker compose up --build",
+        "docker build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker build --ssh default -t registry.example.com/app:v1 .",
+        "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
+    ],
+)
+def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "docker-sensitive command"
+
+
 def test_tool_action_request_classifier_detects_read_only_filter_redirection_write():
     request = extract_sensitive_tool_action_request(
         "bash",
