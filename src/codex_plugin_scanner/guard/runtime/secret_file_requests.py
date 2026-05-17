@@ -84,7 +84,9 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "glpat-",
     "sk-",
 )
-_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"mypy", "pytest", "ruff", "unittest"})
+_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest", "unittest"})
+_PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-c", "-k", "-m", "--maxfail", "--tb"})
+_PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_MODULE_MUTATING_FLAGS = {
     "mypy": frozenset({"--install-types"}),
     "pytest": frozenset({"--basetemp", "--debug", "--junitxml"}),
@@ -4981,6 +4983,8 @@ def _python_module_args_are_safe(module: str, module_args: list[str]) -> bool:
     module_root = module.split(".", 1)[0]
     if module_root not in _SAFE_PYTHON_MODULE_COMMANDS:
         return False
+    if module_root == "pytest" and not _pytest_module_args_are_safe(module_args):
+        return False
     mutating_subcommands = _PYTHON_MODULE_MUTATING_SUBCOMMANDS.get(module_root, frozenset())
     if _python_module_subcommand(module_root, module_args) in mutating_subcommands:
         return False
@@ -4988,6 +4992,27 @@ def _python_module_args_are_safe(module: str, module_args: list[str]) -> bool:
     return not any(
         arg in mutating_flags or any(arg.startswith(f"{flag}=") for flag in mutating_flags) for arg in module_args
     )
+
+
+def _pytest_module_args_are_safe(module_args: list[str]) -> bool:
+    index = 0
+    while index < len(module_args):
+        arg = module_args[index]
+        if arg == "--":
+            return False
+        if arg in _PYTEST_SAFE_FLAGS:
+            index += 1
+            continue
+        if arg in _PYTEST_SAFE_FLAGS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in _PYTEST_SAFE_FLAGS_WITH_VALUES):
+            index += 1
+            continue
+        if arg.startswith("-"):
+            return False
+        index += 1
+    return True
 
 
 def _python_module_subcommand(module_root: str, module_args: list[str]) -> str | None:

@@ -878,7 +878,9 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
         "python -m mypy --install-types package",
         "python -m pytest --basetemp=/tmp/guard-pytest",
         "python -m pytest --junitxml=/tmp/guard-pytest.xml",
+        "python -m pytest --junit-xml=/tmp/guard-pytest.xml",
         "python -m pytest --debug=/tmp/guard-pytest.log",
+        "python -m pytest --log-file=/tmp/guard-pytest.log",
     ],
 )
 def test_tool_action_request_classifier_blocks_mutating_python_module_invocations(command):
