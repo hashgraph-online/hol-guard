@@ -85,6 +85,13 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "sk-",
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"mypy", "pytest", "ruff", "unittest"})
+_PYTHON_MODULE_MUTATING_FLAGS = {
+    "mypy": frozenset({"--install-types"}),
+    "ruff": frozenset({"--fix", "--fix-only"}),
+}
+_PYTHON_MODULE_MUTATING_SUBCOMMANDS = {
+    "ruff": frozenset({"format"}),
+}
 _SAFE_STATIC_SHELL_COMMANDS = frozenset({"echo", "printf"})
 _SHELL_TOOL_NAMES = frozenset(
     {
@@ -4950,12 +4957,25 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
             return False
         if arg == "-m":
             module = args[index + 1] if index + 1 < len(args) else ""
-            return module.split(".", 1)[0] in _SAFE_PYTHON_MODULE_COMMANDS
+            return _python_module_args_are_safe(module, args[index + 2 :])
         if arg.startswith("-m") and len(arg) > 2:
             module = arg[2:]
-            return module.split(".", 1)[0] in _SAFE_PYTHON_MODULE_COMMANDS
+            return _python_module_args_are_safe(module, args[index + 1 :])
         index += 1
     return False
+
+
+def _python_module_args_are_safe(module: str, module_args: list[str]) -> bool:
+    module_root = module.split(".", 1)[0]
+    if module_root not in _SAFE_PYTHON_MODULE_COMMANDS:
+        return False
+    mutating_subcommands = _PYTHON_MODULE_MUTATING_SUBCOMMANDS.get(module_root, frozenset())
+    if module_args and module_args[0] in mutating_subcommands:
+        return False
+    mutating_flags = _PYTHON_MODULE_MUTATING_FLAGS.get(module_root, frozenset())
+    return not any(
+        arg in mutating_flags or any(arg.startswith(f"{flag}=") for flag in mutating_flags) for arg in module_args
+    )
 
 
 def _static_shell_segment_is_safe(args: list[str]) -> bool:

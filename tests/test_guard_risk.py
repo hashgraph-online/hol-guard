@@ -863,6 +863,21 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
     assert request.action_class == "docker-sensitive command"
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python -m ruff check --fix .",
+        "python -m ruff format .",
+        "python -m mypy --install-types package",
+    ],
+)
+def test_tool_action_request_classifier_blocks_mutating_python_module_invocations(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_read_only_filter_redirection_write():
     request = extract_sensitive_tool_action_request(
         "bash",
