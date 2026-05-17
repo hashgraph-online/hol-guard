@@ -107,13 +107,14 @@ _MUTATING_HTTP_FETCH_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
-    r"\b(?:readFileSync|open|Path\(|createReadStream|cat)\s*\(",
+    r"\b(?:readFileSync|open|createReadStream)\s*\(|"
+    r"\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:read_text|read_bytes|open)\s*\(|"
+    r"\bcat\s+",
     re.IGNORECASE,
 )
 _PIPE_TO_EXECUTION_PATTERN = re.compile(
-    r"[|;]\s*(?!(?-i:[A-Z_][A-Z0-9_]*\b))"
-    r"(?:bash|sh|zsh|fish|python|python3|node|perl|ruby|php|powershell|pwsh|cmd|chmod|install)\b",
-    re.IGNORECASE,
+    r"[|;]\s*(?:[A-Za-z_][A-Za-z0-9_]*=[^\s|;]*\s+)*"
+    r"(?:(?i:bash|sh|zsh|fish|python|python3|perl|ruby|php|powershell|pwsh|cmd|chmod|install)|node)\b",
 )
 
 _FAKE_CREDENTIAL_PATTERNS: tuple[re.Pattern[str], ...] = (
