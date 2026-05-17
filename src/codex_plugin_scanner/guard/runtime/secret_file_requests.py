@@ -917,11 +917,13 @@ def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellToke
             tokens.append(_ShellTokenWithQuoteContext(raw=";", plain=";"))
             index += 1
             continue
-        while index < len(command_text) and command_text[index].isspace():
+        while index < len(command_text) and command_text[index].isspace() and command_text[index] not in {"\n", "\r"}:
             index += 1
         if index >= len(command_text):
             break
         if command_text[index] in {"\n", "\r"}:
+            tokens.append(_ShellTokenWithQuoteContext(raw=";", plain=";"))
+            index += 1
             continue
         if command_text[index] in {";", "&", "|"}:
             if command_text.startswith("&&", index) or command_text.startswith("||", index):

@@ -1131,6 +1131,7 @@ def test_tool_action_request_classifier_ignores_single_quoted_body_when_other_co
     "command",
     [
         'echo ok\ngh pr create --body "Verification: `python -m build`"',
+        'echo ok  \n gh pr create --body "Verification: `python -m build`"',
         'time -p gh pr create --body "Verification: `python -m build`"',
         'env -i GH_HOST=github.com gh pr create --body "Verification: `python -m build`"',
         'env -v gh pr create --body "Verification: `python -m build`"',
