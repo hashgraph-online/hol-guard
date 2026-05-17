@@ -94,7 +94,7 @@ _PYTHON_MODULE_MUTATING_SUBCOMMANDS = {
     "ruff": frozenset({"format"}),
 }
 _PYTHON_MODULE_OPTIONS_WITH_VALUES = {
-    "ruff": frozenset({"--config"}),
+    "ruff": frozenset({"--cache-dir", "--color", "--config"}),
 }
 _SAFE_STATIC_SHELL_COMMANDS = frozenset({"echo", "printf"})
 _SHELL_TOOL_NAMES = frozenset(
