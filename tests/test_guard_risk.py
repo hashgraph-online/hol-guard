@@ -1063,10 +1063,10 @@ def test_tool_action_request_classifier_explains_gh_pr_create_double_quoted_mark
         "bash",
         {
             "command": (
-                'gh pr create --repo hashgraph-online/hol-guard '
+                "gh pr create --repo hashgraph-online/hol-guard "
                 '--title "feat(guard): notify desktop for approvals" '
                 '--body "## Verification\n'
-                '- `pytest tests/test_guard_desktop_notifications.py tests/test_guard_approvals.py -q`\n'
+                "- `pytest tests/test_guard_desktop_notifications.py tests/test_guard_approvals.py -q`\n"
                 'Note: `python -m build` was blocked by local HOL Guard approval."'
             )
         },
@@ -1100,7 +1100,7 @@ def test_tool_action_request_classifier_explains_wrapped_gh_pr_create_body_subst
         "bash",
         {
             "command": (
-                'sudo gh pr create --repo hashgraph-online/hol-guard '
+                "sudo gh pr create --repo hashgraph-online/hol-guard "
                 "--title 'feat(guard): notify desktop for approvals' "
                 '--body "Verification: `python -m build`"'
             )
