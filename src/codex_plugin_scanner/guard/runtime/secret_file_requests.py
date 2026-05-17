@@ -52,6 +52,7 @@ _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
+_DOCKER_BUILDX_BUILD_SUBCOMMANDS = frozenset({"b", "build"})
 _DOCKER_BUILD_SECRET_FLAGS = frozenset({"--allow", "--secret", "--ssh"})
 _DOCKER_BUILD_OUTPUT_FLAGS = frozenset({"--iidfile", "--metadata-file", "--output", "-o"})
 _DOCKER_BUILD_METADATA_FLAGS = frozenset({"--annotation", "--label"})
@@ -3068,7 +3069,9 @@ def _docker_sensitive_reason(command_text: str) -> str | None:
                 continue
             buildx_args = args[1 + buildx_subcommand_index :]
             buildx_subcommand = buildx_args[0].lower()
-            if buildx_subcommand in _DOCKER_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(buildx_args[1:]):
+            if buildx_subcommand in _DOCKER_BUILDX_BUILD_SUBCOMMANDS and _docker_build_args_are_sensitive(
+                buildx_args[1:]
+            ):
                 return "buildx-build-sensitive-flags"
     return None
 

@@ -847,6 +847,7 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker build --annotation $(cat ~/.aws/credentials)=x .",
         "docker buildx --debug build --secret id=npm,src=.npmrc .",
         "docker buildx build --allow security.insecure .",
+        "docker buildx b --secret id=npm,src=.npmrc .",
         "docker buildx build --output type=local,dest=/tmp/out .",
         "docker build --iidfile /tmp/image-id .",
         "docker build --metadata-file=/tmp/metadata.json .",
