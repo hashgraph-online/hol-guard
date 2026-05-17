@@ -668,6 +668,24 @@ assert(
   "GR211-09: secondary risk summary hides exact short duplicate command text"
 );
 
+const LONG_COMMAND_WITH_CONTEXT_TEXT =
+  "node scripts/sync-dashboard-data.js --workspace /Users/test/project --target review-workspace --format json --include-local-cache";
+const LONG_COMMAND_WITH_CONTEXT_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "ph09-long-command-with-context",
+  risk_summary: `Codex command for \`shell\`: ${LONG_COMMAND_WITH_CONTEXT_TEXT} dry run mode disabled.`,
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "shell_command",
+    command: LONG_COMMAND_WITH_CONTEXT_TEXT,
+  },
+};
+assert(
+  resolveSecondaryRiskSummary(LONG_COMMAND_WITH_CONTEXT_REQUEST) ===
+    LONG_COMMAND_WITH_CONTEXT_REQUEST.risk_summary,
+  "GR211-09b: secondary risk summary keeps long shell command context"
+);
+
 const DUPLICATE_SUMMARY_WITH_SIGNAL_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-duplicate-summary-with-signal",

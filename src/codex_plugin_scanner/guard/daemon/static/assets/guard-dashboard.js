@@ -14027,6 +14027,7 @@ function hasSupplyChainArtifactEvidence(item) {
 }
 function duplicatesStoppedActionText(item, value) {
   const stoppedActionText = resolveStoppedCommandText(item);
+  const canUseLongPromptPrefix = item.action_envelope_json?.action_type === "prompt" || item.artifact_type === "prompt_request";
   const stoppedText = normalizeDuplicateReviewText(stoppedActionText);
   const candidateText = normalizeDuplicateReviewText(value);
   const contextStrippedValue = stripDuplicateReviewContextPrefix(value);
@@ -14044,7 +14045,7 @@ function duplicatesStoppedActionText(item, value) {
   if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && stoppedText.includes(candidateWithoutContext)) {
     return true;
   }
-  if (stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH && candidateWithoutContext.startsWith(stoppedText) && !hasDuplicateReviewSafetyContextRemainder(candidateRemainder)) {
+  if (canUseLongPromptPrefix && stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH && candidateWithoutContext.startsWith(stoppedText) && !hasDuplicateReviewSafetyContextRemainder(candidateRemainder)) {
     return true;
   }
   return false;

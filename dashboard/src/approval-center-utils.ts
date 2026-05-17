@@ -383,6 +383,8 @@ function hasSupplyChainArtifactEvidence(item: GuardApprovalRequest): boolean {
 
 function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string): boolean {
   const stoppedActionText = resolveStoppedCommandText(item);
+  const canUseLongPromptPrefix =
+    item.action_envelope_json?.action_type === "prompt" || item.artifact_type === "prompt_request";
   const stoppedText = normalizeDuplicateReviewText(stoppedActionText);
   const candidateText = normalizeDuplicateReviewText(value);
   const contextStrippedValue = stripDuplicateReviewContextPrefix(value);
@@ -409,6 +411,7 @@ function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string):
     return true;
   }
   if (
+    canUseLongPromptPrefix &&
     stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH &&
     candidateWithoutContext.startsWith(stoppedText) &&
     !hasDuplicateReviewSafetyContextRemainder(candidateRemainder)
