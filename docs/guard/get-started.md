@@ -149,6 +149,7 @@ Home config:
 mode = "prompt"
 default_action = "warn"
 changed_hash_action = "require-reapproval"
+desktop_notifications = true
 
 [harnesses.codex]
 default_action = "allow"
@@ -298,15 +299,16 @@ That means the user should never get a silent pass-through on a risky Codex acti
 When Guard blocks a launch, it opens a persistent approval link in the terminal rather than pausing the session. You can resolve requests without leaving your harness:
 
 1. Guard returns the approval URL in the block output and queues the request locally.
-2. Open the approval center at the URL or in your browser.
-3. Approve or deny the request from the approval center UI or the CLI:
+2. On macOS and Windows, Guard also sends a native desktop notification for the new request. Set `desktop_notifications = false` in `~/.hol-guard/config.toml` or `HOL_GUARD_DESKTOP_NOTIFICATIONS=0` to disable it.
+3. Open the approval center at the URL, from the notification, or in your browser.
+4. Approve or deny the request from the approval center UI or the CLI:
 
    ```bash
    hol-guard approvals approve <request-id>
    hol-guard approvals deny <request-id>
    ```
 
-4. After you resolve the request, Guard emits copy telling you to return to your AI assistant and retry. No page reload or session restart is needed.
+5. After you resolve the request, Guard emits copy telling you to return to your AI assistant and retry. No page reload or session restart is needed.
 
 To inspect a pending request's details or get the approval URL, pass the request-id to the `approve` command with `--dry-run`, or visit the approval center URL shown in the block message directly.
 
