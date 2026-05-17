@@ -172,6 +172,7 @@ def approval_schema_statement() -> str:
           decision_v2_json text,
           fallback_cli_command text,
           scanner_evidence_json text not null default '[]',
+          desktop_notified_at text,
           review_command text not null,
           approval_url text not null,
           status text not null,
