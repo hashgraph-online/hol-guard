@@ -1620,6 +1620,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Methods": allow_methods,
             "Access-Control-Allow-Headers": allow_headers,
+            "Access-Control-Allow-Private-Network": "true",
             "Vary": "Origin",
         }
 
@@ -1825,6 +1826,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "Access-Control-Allow-Origin",
             "Access-Control-Allow-Methods",
             "Access-Control-Allow-Headers",
+            "Access-Control-Allow-Private-Network",
             "Vary",
         }
         validated: dict[str, str] = {}
