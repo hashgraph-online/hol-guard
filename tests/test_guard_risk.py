@@ -1127,6 +1127,22 @@ def test_tool_action_request_classifier_ignores_single_quoted_body_when_other_co
     assert request is None
 
 
+def test_tool_action_request_classifier_ignores_single_quoted_attached_body_flag():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "echo $(date) && "
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "'-bVerification: `python -m build`'"
+            )
+        },
+    )
+
+    assert request is None
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -1139,6 +1155,11 @@ def test_tool_action_request_classifier_ignores_single_quoted_body_when_other_co
         'command -p gh pr create --body "Verification: `python -m build`"',
         'gh pr create -b"Verification: `python -m build`"',
         'gh pr new --body "Verification: `python -m build`"',
+        'gh pr -R hashgraph-online/hol-guard create --body "Verification: `python -m build`"',
+        '>/dev/null gh pr create --body "Verification: `python -m build`"',
+        'nohup gh pr create --body "Verification: `python -m build`"',
+        'nice -n 5 gh pr create --body "Verification: `python -m build`"',
+        'stdbuf -oL gh pr create --body "Verification: `python -m build`"',
         'sudo -u builder gh pr create --body "Verification: `python -m build`"',
         'sudo -D /tmp gh pr create --body "Verification: `python -m build`"',
         'sudo --chroot /tmp gh pr create --body "Verification: `python -m build`"',

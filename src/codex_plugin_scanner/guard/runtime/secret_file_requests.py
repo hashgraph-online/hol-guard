@@ -65,6 +65,7 @@ _SUDO_OPTION_VALUE_LONG_FLAGS = frozenset(
         "--user",
     }
 )
+_GH_PR_OPTION_VALUE_FLAGS = frozenset({"-R", "--repo"})
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
@@ -780,10 +781,10 @@ def _gh_pr_create_body_has_shell_command_substitution(command_text: str) -> bool
         return False
     tokens = _shell_tokens_preserving_quote_context(command_text)
     for segment in _shell_token_segments(tokens):
-        command_index = _gh_pr_create_command_index(segment)
-        if command_index is None:
+        body_args_start_index = _gh_pr_create_body_args_start_index(segment)
+        if body_args_start_index is None:
             continue
-        if _gh_pr_create_body_args_have_substitution(segment[command_index + 3 :]):
+        if _gh_pr_create_body_args_have_substitution(segment[body_args_start_index:]):
             return True
     return False
 
@@ -794,19 +795,27 @@ class _ShellTokenWithQuoteContext:
     plain: str
 
 
-def _gh_pr_create_command_index(segment: list[_ShellTokenWithQuoteContext]) -> int | None:
+def _gh_pr_create_body_args_start_index(segment: list[_ShellTokenWithQuoteContext]) -> int | None:
     index = 0
+    plain_segment = [token.plain for token in segment]
     while index < len(segment):
+        redirect_tokens_consumed = _leading_shell_redirection_tokens_consumed(plain_segment, index)
+        if redirect_tokens_consumed > 0:
+            index += redirect_tokens_consumed
+            continue
         token = segment[index]
         command_name = _normalized_shell_command_name(_shell_command_token_without_attached_redirection(token.plain))
         if command_name == "gh":
-            if index + 2 >= len(segment):
+            if index + 1 >= len(segment) or segment[index + 1].plain != "pr":
                 return None
-            if segment[index + 1].plain == "pr" and segment[index + 2].plain in {
+            pr_command_index = _skip_gh_pr_options(segment, index + 2)
+            if pr_command_index >= len(segment):
+                return None
+            if segment[pr_command_index].plain in {
                 "create",
                 "new",
             }:
-                return index
+                return pr_command_index + 1
             return None
         if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token.plain)):
             index += 1
@@ -823,13 +832,52 @@ def _gh_pr_create_command_index(segment: list[_ShellTokenWithQuoteContext]) -> i
         if command_name == "sudo":
             index = _skip_sudo_wrapper_options(segment, index + 1)
             continue
+        if command_name in {"nice", "nohup", "stdbuf"}:
+            index = _skip_generic_shell_wrapper_options(command_name, segment, index + 1)
+            continue
         return None
     return None
+
+
+def _skip_gh_pr_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain == "--":
+            return index + 1
+        if plain in _GH_PR_OPTION_VALUE_FLAGS:
+            index += 2
+            continue
+        if any(plain.startswith(f"{flag}=") for flag in _GH_PR_OPTION_VALUE_FLAGS):
+            index += 1
+            continue
+        if plain.startswith("-R") and plain != "-R":
+            index += 1
+            continue
+        if plain.startswith("-"):
+            index += 1
+            continue
+        break
+    return index
 
 
 def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
     while index < len(segment) and segment[index].plain.startswith("-"):
         index += 1
+    return index
+
+
+def _skip_generic_shell_wrapper_options(
+    command_name: str,
+    segment: list[_ShellTokenWithQuoteContext],
+    index: int,
+) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain == "--":
+            return index + 1
+        if not plain.startswith("-"):
+            break
+        index += _wrapper_option_tokens_consumed(command_name, plain)
     return index
 
 
@@ -900,18 +948,12 @@ def _gh_pr_create_body_args_have_substitution(args: list[_ShellTokenWithQuoteCon
                 return True
             index += 2
             continue
-        if arg.plain.startswith("-b") and len(arg.plain) > 2 and _shell_command_substitution_payloads(arg.raw[2:]):
+        if arg.plain.startswith("-b") and len(arg.plain) > 2 and _shell_command_substitution_payloads(arg.raw):
             return True
-        if arg.plain.startswith("--body=") and _shell_command_substitution_payloads(_shell_token_raw_value(arg.raw)):
+        if arg.plain.startswith("--body=") and _shell_command_substitution_payloads(arg.raw):
             return True
         index += 1
     return False
-
-
-def _shell_token_raw_value(raw_token: str) -> str:
-    if "=" not in raw_token:
-        return ""
-    return raw_token.split("=", 1)[1]
 
 
 def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellTokenWithQuoteContext]:
