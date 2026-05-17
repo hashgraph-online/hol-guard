@@ -603,6 +603,15 @@ def test_tool_action_request_classifier_skips_absolute_source_line_lookup():
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_multi_range_source_line_lookup():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "sed -n '206,224p;1728,1744p' __tests__/analytics-client.test.ts"},
+    )
+
+    assert request is None
+
+
 @pytest.mark.parametrize("command", ["ls", "ls .", "rg TODO"])
 def test_tool_action_request_classifier_skips_common_read_only_lookups_without_targets(command):
     request = extract_sensitive_tool_action_request("bash", {"command": command})
