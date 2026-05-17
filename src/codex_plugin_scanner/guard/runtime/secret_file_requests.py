@@ -87,7 +87,8 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"mypy", "pytest", "ruff", "unittest"})
 _PYTHON_MODULE_MUTATING_FLAGS = {
     "mypy": frozenset({"--install-types"}),
-    "ruff": frozenset({"--fix", "--fix-only"}),
+    "pytest": frozenset({"--basetemp"}),
+    "ruff": frozenset({"--add-noqa", "--fix", "--fix-only"}),
 }
 _PYTHON_MODULE_MUTATING_SUBCOMMANDS = {
     "ruff": frozenset({"format"}),

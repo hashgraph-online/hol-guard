@@ -869,9 +869,11 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
     "command",
     [
         "python -m ruff check --fix .",
+        "python -m ruff check --add-noqa .",
         "python -m ruff format .",
         "python -m ruff --config ruff.toml format .",
         "python -m mypy --install-types package",
+        "python -m pytest --basetemp=/tmp/guard-pytest",
     ],
 )
 def test_tool_action_request_classifier_blocks_mutating_python_module_invocations(command):
