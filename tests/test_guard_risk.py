@@ -837,6 +837,7 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker build --ssh default -t registry.example.com/app:v1 .",
         "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
         "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",
+        "docker build --build-arg FOO=${NPM_TOKEN:-fallback} -t registry.example.com/app:v1 .",
     ],
 )
 def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(command):

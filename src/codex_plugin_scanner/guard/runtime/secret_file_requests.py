@@ -72,6 +72,7 @@ _DOCKER_BUILD_ARG_SECRET_RE = re.compile(
 )
 _DOCKER_BUILD_ARG_SECRET_VALUE_RE = re.compile(
     r"(?i)(?:"
+    r"\$\{[^}]*\b(?:AWS|API|AUTH|CREDENTIAL|KEY|NPM|PASSWORD|SECRET|TOKEN)[A-Z0-9_]*[^}]*\}|"
     r"\$\{?[A-Z0-9_]*(?:AWS|API|AUTH|CREDENTIAL|KEY|NPM|PASSWORD|SECRET|TOKEN)[A-Z0-9_]*\}?|"
     r"gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|glpat-[A-Za-z0-9_-]+|sk-[A-Za-z0-9_-]+"
     r")"
@@ -3065,9 +3066,7 @@ def _docker_subcommand_index(args: list[str]) -> int | None:
 
 def _docker_global_option_has_value(token: str) -> bool:
     return token in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES or any(
-        token.startswith(f"{option}=")
-        for option in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES
-        if option.startswith("--")
+        token.startswith(f"{option}=") for option in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES if option.startswith("--")
     )
 
 
@@ -4847,8 +4846,7 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
 
 def _static_shell_segment_is_safe(args: list[str]) -> bool:
     return all(
-        "$" not in arg and "`" not in arg and "$(" not in arg and "<(" not in arg and ">(" not in arg
-        for arg in args
+        "$" not in arg and "`" not in arg and "$(" not in arg and "<(" not in arg and ">(" not in arg for arg in args
     )
 
 
