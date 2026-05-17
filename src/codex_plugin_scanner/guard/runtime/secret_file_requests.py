@@ -3117,7 +3117,7 @@ def _docker_buildx_subcommand_index(args: list[str]) -> int | None:
         if _docker_buildx_option_has_value(token):
             index += 1 if "=" in token else 2
             continue
-        if token in _DOCKER_BUILDX_FLAG_OPTIONS:
+        if _docker_buildx_flag_option_matches(token):
             index += 1
             continue
         if token.startswith("-") and not token.startswith("--"):
@@ -3130,6 +3130,12 @@ def _docker_buildx_subcommand_index(args: list[str]) -> int | None:
 def _docker_buildx_option_has_value(token: str) -> bool:
     return token in _DOCKER_BUILDX_OPTIONS_WITH_VALUES or any(
         token.startswith(f"{option}=") for option in _DOCKER_BUILDX_OPTIONS_WITH_VALUES
+    )
+
+
+def _docker_buildx_flag_option_matches(token: str) -> bool:
+    return token in _DOCKER_BUILDX_FLAG_OPTIONS or any(
+        token.startswith(f"{option}=") for option in _DOCKER_BUILDX_FLAG_OPTIONS
     )
 
 
