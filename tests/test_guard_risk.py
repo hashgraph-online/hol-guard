@@ -859,6 +859,7 @@ def test_tool_action_request_classifier_blocks_python_test_module_with_read_only
         "docker buildx b --secret id=npm,src=.npmrc .",
         "docker buildx build --cache-to type=local,dest=/tmp/cache .",
         "docker buildx build --load .",
+        "docker buildx build -otype=local,dest=/tmp/out .",
         "docker buildx build --output type=local,dest=/tmp/out .",
         "docker build --iidfile /tmp/image-id .",
         "docker build --metadata-file=/tmp/metadata.json .",

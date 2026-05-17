@@ -3150,9 +3150,7 @@ def _docker_build_args_are_sensitive(args: list[str]) -> bool:
             token.startswith(f"{flag}=") for flag in _DOCKER_BUILD_SECRET_FLAGS
         ):
             return True
-        if token in _DOCKER_BUILD_OUTPUT_FLAGS or any(
-            token.startswith(f"{flag}=") for flag in _DOCKER_BUILD_OUTPUT_FLAGS
-        ):
+        if _docker_build_output_flag_matches(token):
             return True
         if token == "--build-arg":
             value = args[index + 1] if index + 1 < len(args) else ""
@@ -3174,6 +3172,12 @@ def _docker_build_args_are_sensitive(args: list[str]) -> bool:
                 return True
         index += 1
     return False
+
+
+def _docker_build_output_flag_matches(token: str) -> bool:
+    if token in _DOCKER_BUILD_OUTPUT_FLAGS or any(token.startswith(f"{flag}=") for flag in _DOCKER_BUILD_OUTPUT_FLAGS):
+        return True
+    return token.startswith("-o") and len(token) > 2
 
 
 def _docker_build_arg_is_sensitive(value: str) -> bool:
