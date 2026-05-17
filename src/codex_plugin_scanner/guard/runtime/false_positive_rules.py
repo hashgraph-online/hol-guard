@@ -77,6 +77,10 @@ _OUTPUT_REDIRECT_TO_EXFIL = re.compile(
     r">\s*(?:/proc/\S+|/dev/tcp/|/dev/udp/)",
     re.IGNORECASE,
 )
+_OUTPUT_REDIRECT_TO_LOCAL_FILE = re.compile(
+    r"(?<!<)(?:^|[^>])>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+",
+    re.IGNORECASE,
+)
 
 _CLIPBOARD_PIPE = re.compile(
     r"[|;]\s*(?:pbcopy|xclip|xsel|wl-copy|clip)\b",
@@ -133,6 +137,15 @@ _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
     r"\b(?:readFileSync|open|createReadStream)\s*\(|"
     r"\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:read_text|read_bytes|open)\s*\(|"
     r"\bcat\s+",
+    re.IGNORECASE,
+)
+_LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN = re.compile(
+    r"\b(?:writeFileSync|appendFileSync|createWriteStream)\s*\(|"
+    r"\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:write_text|write_bytes)\s*\(",
+    re.IGNORECASE,
+)
+_PIPE_TO_LOCAL_FILE_WRITE_PATTERN = re.compile(
+    r"[|;]\s*(?:tee|dd)\b",
     re.IGNORECASE,
 )
 _PIPE_TO_EXECUTION_PATTERN = re.compile(
@@ -274,9 +287,15 @@ def classify_read_only_http_fetch(command: str) -> str | None:
         return None
     if _OUTPUT_REDIRECT_TO_EXFIL.search(command):
         return None
+    if _OUTPUT_REDIRECT_TO_LOCAL_FILE.search(command):
+        return None
     if _SECRET_FILE_NAMES.search(command):
         return None
     if _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN.search(command):
+        return None
+    if _LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN.search(command):
+        return None
+    if _PIPE_TO_LOCAL_FILE_WRITE_PATTERN.search(command):
         return None
     tool = match.group("tool").lower()
     if tool in {"curl.exe", "curl"}:

@@ -234,8 +234,27 @@ NODE"""
         _shell_action("curl -OJ https://install.example.com/payload.sh"),
         context,
     )
+    curl_redirect_output = suppressor.detect(
+        _shell_action("curl https://install.example.com/payload.sh > payload.sh"),
+        context,
+    )
+    curl_tee_output = suppressor.detect(
+        _shell_action("curl https://install.example.com/payload.sh | tee payload.sh"),
+        context,
+    )
     wget_download = suppressor.detect(_shell_action("wget https://install.example.com/payload.sh"), context)
     wget_spider = suppressor.detect(_shell_action("wget --spider https://hol.org/guard/apps/codex"), context)
+    node_write_probe = suppressor.detect(
+        _shell_action("node -e \"fetch('https://hol.org/x').then(r=>r.text()).then(t=>fs.writeFileSync('x.txt',t))\""),
+        context,
+    )
+    python_write_probe = suppressor.detect(
+        _shell_action(
+            "python -c \"import requests; from pathlib import Path; "
+            "Path('x.txt').write_text(requests.get('https://hol.org/x').text)\""
+        ),
+        context,
+    )
     python_url_literal = suppressor.detect(
         _shell_action("python -c \"print('https://hol.org/guard/apps/codex')\""),
         context,
@@ -260,8 +279,12 @@ NODE"""
     assert curl_attached_output == ()
     assert curl_attached_header_output == ()
     assert curl_clustered_remote_output == ()
+    assert curl_redirect_output == ()
+    assert curl_tee_output == ()
     assert wget_download == ()
     assert [signal.signal_id for signal in wget_spider] == ["fp:read-only-http-fetch:wget"]
+    assert node_write_probe == ()
+    assert python_write_probe == ()
     assert python_url_literal == ()
     assert node_url_literal == ()
 
