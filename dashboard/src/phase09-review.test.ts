@@ -575,6 +575,16 @@ assert(
   "GR211-06f: secondary risk summary keeps longer prompt prefixes when the suffix adds non-keyword risk context"
 );
 
+const LONGER_PROMPT_WITH_BENIGN_WRITE_CONTINUATION_REQUEST: GuardApprovalRequest = {
+  ...LONGER_DUPLICATE_PROMPT_RISK_REQUEST,
+  request_id: "ph09-longer-prompt-with-benign-write-continuation",
+  risk_summary: `Codex prompt for \`.npmrc\`: ${TRUNCATED_PRIMARY_PROMPT_TEXT} write tests for the updated dashboard flow.`,
+};
+assert(
+  resolveSecondaryRiskSummary(LONGER_PROMPT_WITH_BENIGN_WRITE_CONTINUATION_REQUEST) === null,
+  "GR211-06g: secondary risk summary hides normal prompt continuation text that contains broad non-risk verbs"
+);
+
 const PREFIXED_EXTRA_CONTEXT_PROMPT_RISK_REQUEST: GuardApprovalRequest = {
   ...DUPLICATE_PROMPT_RISK_REQUEST,
   request_id: "ph09-prefixed-extra-context-prompt-risk",

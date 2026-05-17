@@ -324,8 +324,14 @@ export type PrimaryReviewAction = {
 
 const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
 const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
-const DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERN =
-  /(credential|secret|token|password|key|expose|exfiltrat|leak|sensitive|danger|risk|malicious|destructive|network|delete|remove|root|host|thirdparty|external|admin|privilege|permission|unauthorized|remote|upload|send|sends|write|execute|shell|process)/;
+const DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS = [
+  /\b(api[-\s]?key|credential|secret|token|password|sensitive|malicious|destructive|unauthorized)\b/i,
+  /\b(expose|exposes|exposed|leak|leaks|leaked|exfiltrate|exfiltrates|exfiltration)\b/i,
+  /\b(may|could|can|would|will)\s+(expose|leak|send|upload|exfiltrate|delete|remove|modify|overwrite|execute|run)\b/i,
+  /\bruns?\s+as\s+(root|admin|administrator)\b/i,
+  /\bsends?\s+(data|contents|files?|credentials?|secrets?|tokens?)\s+to\b/i,
+  /\b(third[-\s]?party|remote|external)\s+host\b/i,
+];
 
 export function buildPrimaryReviewAction(item: GuardApprovalRequest): PrimaryReviewAction {
   return {
@@ -376,11 +382,14 @@ function hasSupplyChainArtifactEvidence(item: GuardApprovalRequest): boolean {
 }
 
 function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string): boolean {
-  const stoppedText = normalizeDuplicateReviewText(resolveStoppedCommandText(item));
+  const stoppedActionText = resolveStoppedCommandText(item);
+  const stoppedText = normalizeDuplicateReviewText(stoppedActionText);
   const candidateText = normalizeDuplicateReviewText(value);
   const contextStrippedValue = stripDuplicateReviewContextPrefix(value);
   const candidateWithoutContext =
     contextStrippedValue === null ? "" : normalizeDuplicateReviewText(contextStrippedValue);
+  const candidateRemainder =
+    contextStrippedValue === null ? "" : extractDuplicateReviewRemainder(contextStrippedValue, stoppedActionText);
   if (stoppedText.length === 0 || candidateText.length === 0) {
     return false;
   }
@@ -402,16 +411,23 @@ function duplicatesStoppedActionText(item: GuardApprovalRequest, value: string):
   if (
     stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH &&
     candidateWithoutContext.startsWith(stoppedText) &&
-    !hasDuplicateReviewSafetyContextRemainder(candidateWithoutContext, stoppedText)
+    !hasDuplicateReviewSafetyContextRemainder(candidateRemainder)
   ) {
     return true;
   }
   return false;
 }
 
-function hasDuplicateReviewSafetyContextRemainder(candidateText: string, stoppedText: string): boolean {
-  const remainder = candidateText.slice(stoppedText.length);
-  return DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERN.test(remainder);
+function extractDuplicateReviewRemainder(candidateText: string, stoppedText: string): string {
+  const candidate = candidateText.trim();
+  const stopped = stoppedText.trim();
+  return candidate.toLowerCase().startsWith(stopped.toLowerCase())
+    ? candidate.slice(stopped.length).trim()
+    : "";
+}
+
+function hasDuplicateReviewSafetyContextRemainder(remainder: string): boolean {
+  return DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS.some((pattern) => pattern.test(remainder));
 }
 
 function normalizeDuplicateReviewText(value: string): string {
