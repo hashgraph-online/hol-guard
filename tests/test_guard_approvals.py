@@ -704,7 +704,7 @@ class TestGuardApprovals:
     def test_guard_queue_respects_disabled_desktop_notifications(self, tmp_path, monkeypatch):
         notifications: list[str] = []
 
-        def fake_notify(notification):
+        def fake_notify(notification, **_kwargs):
             notifications.append(notification.request_id)
             return True
 
@@ -744,6 +744,62 @@ class TestGuardApprovals:
                         "changed_fields": ["runtime_tool_call"],
                         "policy_action": "require-reapproval",
                         "launch_target": "no_notice",
+                    }
+                ]
+            },
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-04-17T00:00:00+00:00",
+        )
+
+        assert notifications == []
+
+    def test_guard_queue_respects_workspace_disabled_desktop_notifications(self, tmp_path, monkeypatch):
+        notifications: list[str] = []
+
+        def fake_notify(notification, **_kwargs):
+            notifications.append(notification.request_id)
+            return True
+
+        monkeypatch.setattr("codex_plugin_scanner.guard.approvals.notify_pending_approval_once", fake_notify)
+        guard_home = tmp_path / "guard-home"
+        workspace = tmp_path / "workspace"
+        guard_home.mkdir()
+        workspace.mkdir()
+        (guard_home / "config.toml").write_text("desktop_notifications = true\n", encoding="utf-8")
+        (workspace / ".hol-guard.toml").write_text("desktop_notifications = false\n", encoding="utf-8")
+        store = GuardStore(guard_home)
+        artifact = GuardArtifact(
+            artifact_id="codex:runtime:project:danger_lab:workspace_no_notice",
+            name="danger_lab:workspace_no_notice",
+            harness="codex",
+            artifact_type="tool_call",
+            source_scope="project",
+            config_path=str(workspace / ".codex" / "config.toml"),
+            command="workspace_no_notice",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        queue_blocked_approvals(
+            detection=detection,
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_name": artifact.name,
+                        "artifact_hash": "hash-runtime",
+                        "artifact_type": artifact.artifact_type,
+                        "source_scope": artifact.source_scope,
+                        "config_path": artifact.config_path,
+                        "changed_fields": ["runtime_tool_call"],
+                        "policy_action": "require-reapproval",
+                        "launch_target": "workspace_no_notice",
                     }
                 ]
             },

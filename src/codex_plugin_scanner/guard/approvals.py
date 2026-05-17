@@ -242,7 +242,10 @@ def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -
 
 def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest) -> None:
     try:
-        config = load_guard_config(store.guard_home)
+        config = load_guard_config(
+            store.guard_home,
+            Path(request.workspace) if request.workspace is not None else None,
+        )
     except Exception:
         config = None
     if config is not None and not config.desktop_notifications:
