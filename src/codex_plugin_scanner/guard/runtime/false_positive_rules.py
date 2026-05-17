@@ -125,7 +125,8 @@ _MUTATING_HTTP_FETCH_PATTERN = re.compile(
     r"\bmethod\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]|"
     r"(?:^|[\s;&|])(?:--request|-X)\s*(?:POST|PUT|PATCH|DELETE)\b|"
     r"(?:^|[\s;&|])(?:--data(?:-binary|-raw|-urlencode)?(?:[=\s]|$)|-d(?:\S|\s|$)"
-    r"|--form(?:[=\s]|$)|-F(?:\S|\s|$)|--json(?:[=\s]|$)|--upload-file(?:[=\s]|$)|-T(?:\S|\s|$))|"
+    r"|--form(?:[=\s]|$)|-F(?:\S|\s|$)|--json(?:[=\s]|$)|--upload-file(?:[=\s]|$)|-T(?:\S|\s|$)"
+    r"|--header(?:[=\s]|$)|-H(?:\S|\s|$)|--config(?:[=\s]|$)|-K(?:\S|\s|$))|"
     r"\b(?:body|data)\s*:",
     re.IGNORECASE,
 )
@@ -406,7 +407,9 @@ def _tokens_start_execution(tokens: list[str]) -> bool:
         if _ENV_ASSIGNMENT_PATTERN.match(token):
             index += 1
             continue
-        return base in _EXECUTION_TOOLS
+        if base == "NODE" and len(tokens) == 1:
+            return False
+        return base_lower in _EXECUTION_TOOLS
     return False
 
 
