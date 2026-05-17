@@ -49,6 +49,10 @@ _PATH_KEYS = (
 )
 _PATH_LIST_KEYS = ("paths", "file_paths", "filePaths")
 _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
+_SUDO_OPTION_VALUE_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-T"})
+_SUDO_OPTION_VALUE_LONG_FLAGS = frozenset(
+    {"--chdir", "--group", "--host", "--login-class", "--prompt", "--role", "--type", "--user"}
+)
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
@@ -779,7 +783,9 @@ class _ShellTokenWithQuoteContext:
 
 
 def _gh_pr_create_command_index(segment: list[_ShellTokenWithQuoteContext]) -> int | None:
-    for index, token in enumerate(segment):
+    index = 0
+    while index < len(segment):
+        token = segment[index]
         command_name = _normalized_shell_command_name(_shell_command_token_without_attached_redirection(token.plain))
         if command_name == "gh":
             if index + 2 >= len(segment):
@@ -788,11 +794,66 @@ def _gh_pr_create_command_index(segment: list[_ShellTokenWithQuoteContext]) -> i
                 return index
             return None
         if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token.plain)):
+            index += 1
             continue
-        if command_name in {"command", "env", "sudo", "time"}:
+        if command_name == "command":
+            index += 1
+            continue
+        if command_name == "time":
+            index = _skip_shell_wrapper_options(segment, index + 1)
+            continue
+        if command_name == "env":
+            index = _skip_env_wrapper_options(segment, index + 1)
+            continue
+        if command_name == "sudo":
+            index = _skip_sudo_wrapper_options(segment, index + 1)
             continue
         return None
     return None
+
+
+def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment) and segment[index].plain.startswith("-"):
+        index += 1
+    return index
+
+
+def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(plain)):
+            index += 1
+            continue
+        if plain in {"-i", "-0", "--ignore-environment", "--null"}:
+            index += 1
+            continue
+        if plain in {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}:
+            index += 2
+            continue
+        if any(plain.startswith(f"{flag}=") for flag in {"--unset", "--chdir", "--split-string"}):
+            index += 1
+            continue
+        break
+    return index
+
+
+def _skip_sudo_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain in _SUDO_OPTION_VALUE_FLAGS:
+            index += 2
+            continue
+        if plain in _SUDO_OPTION_VALUE_LONG_FLAGS:
+            index += 2
+            continue
+        if any(plain.startswith(f"{flag}=") for flag in _SUDO_OPTION_VALUE_LONG_FLAGS):
+            index += 1
+            continue
+        if plain.startswith("-"):
+            index += 1
+            continue
+        break
+    return index
 
 
 def _gh_pr_create_body_args_have_substitution(args: list[_ShellTokenWithQuoteContext]) -> bool:
@@ -822,10 +883,16 @@ def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellToke
     tokens: list[_ShellTokenWithQuoteContext] = []
     index = 0
     while index < len(command_text):
+        if command_text[index] in {"\n", "\r"}:
+            tokens.append(_ShellTokenWithQuoteContext(raw=";", plain=";"))
+            index += 1
+            continue
         while index < len(command_text) and command_text[index].isspace():
             index += 1
         if index >= len(command_text):
             break
+        if command_text[index] in {"\n", "\r"}:
+            continue
         if command_text[index] in {";", "&", "|"}:
             if command_text.startswith("&&", index) or command_text.startswith("||", index):
                 raw_token = command_text[index : index + 2]

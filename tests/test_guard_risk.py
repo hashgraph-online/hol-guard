@@ -1127,6 +1127,22 @@ def test_tool_action_request_classifier_ignores_single_quoted_body_when_other_co
     assert request is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        'echo ok\ngh pr create --body "Verification: `python -m build`"',
+        'time -p gh pr create --body "Verification: `python -m build`"',
+        'env -i GH_HOST=github.com gh pr create --body "Verification: `python -m build`"',
+        'sudo -u builder gh pr create --body "Verification: `python -m build`"',
+    ],
+)
+def test_tool_action_request_classifier_explains_wrapped_or_multiline_gh_pr_create_body_substitution(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "GitHub PR body shell substitution"
+
+
 def test_tool_action_request_classifier_skips_node_heredoc_generated_temp_json_workflow():
     request = extract_sensitive_tool_action_request(
         "bash",
