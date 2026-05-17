@@ -130,7 +130,7 @@ _MUTATING_HTTP_FETCH_PATTERN = re.compile(
 )
 _HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
     r"(?:^|[\s;&|])(?:--output(?:[=\s]|$)|-o(?:\S|\s|$)|--remote-name(?:[=\s]|$)|-[A-Za-z]*O[A-Za-z]*"
-    r"|--remote-header-name(?:[=\s]|$)|--dump-header(?:[=\s]|$)|-D(?:\S|\s|$))",
+    r"|--output-document(?:[=\s]|$)|--remote-header-name(?:[=\s]|$)|--dump-header(?:[=\s]|$)|-D(?:\S|\s|$))",
     re.IGNORECASE,
 )
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
@@ -149,7 +149,7 @@ _PIPE_TO_LOCAL_FILE_WRITE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _PIPE_TO_EXECUTION_PATTERN = re.compile(
-    r"[|;]\s*(?:[A-Za-z_][A-Za-z0-9_]*=[^\s|;]*\s+)*"
+    r"[|;]\s*(?:(?i:sudo|doas|command|env)\s+)*(?:[A-Za-z_][A-Za-z0-9_]*=[^\s|;]*\s+)*(?:\S*/)?"
     r"(?:(?i:bash|sh|zsh|fish|python|python3|perl|ruby|php|powershell|pwsh|cmd|chmod|install)|node)\b",
 )
 
