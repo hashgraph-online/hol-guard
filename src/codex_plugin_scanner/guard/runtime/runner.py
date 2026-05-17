@@ -100,6 +100,10 @@ _NEGATED_SECRET_READ_PATTERN = re.compile(
     r"use|include|grab)\b",
     re.IGNORECASE,
 )
+_FOLLOWING_SECRET_REFERENCE_PATTERN = re.compile(
+    r"\b(?:it|file|secret|secrets|contents?|credentials?|token|tokens?|key|keys)\b",
+    re.IGNORECASE,
+)
 _EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"
 _EXFIL_ARTIFACTS = r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)"
 _EXFIL_DESTINATIONS = r"(?:to|into|onto|via|through|over|at)"
@@ -225,13 +229,14 @@ def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
 
 def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
     sentence = _secret_match_sentence(prompt_text, start=start, end=end)
+    sentence_end = _prompt_sentence_end(prompt_text, end)
     sentence_intents = tuple(_SECRET_READ_INTENT_PATTERN.finditer(sentence))
     if sentence_intents:
-        return any(
-            not _secret_read_intent_is_negated(sentence, match.start(), match.end()) for match in sentence_intents
-        )
+        if any(not _secret_read_intent_is_negated(sentence, match.start(), match.end()) for match in sentence_intents):
+            return True
+        return _following_sentence_has_secret_read_intent(prompt_text, sentence_end)
     if _NEGATED_SECRET_READ_PATTERN.search(sentence) is not None:
-        return False
+        return _following_sentence_has_secret_read_intent(prompt_text, sentence_end)
     region = _prompt_secret_intent_region(prompt_text, start=start, end=end)
     for match in _SECRET_READ_INTENT_PATTERN.finditer(region):
         if not _secret_read_intent_is_negated(region, match.start(), match.end()):
@@ -243,6 +248,16 @@ def _secret_match_sentence(prompt_text: str, *, start: int, end: int) -> str:
     sentence_start = _prompt_sentence_start(prompt_text, start)
     sentence_end = _prompt_sentence_end(prompt_text, end)
     return prompt_text[sentence_start:sentence_end]
+
+
+def _following_sentence_has_secret_read_intent(prompt_text: str, sentence_end: int) -> bool:
+    if sentence_end >= len(prompt_text):
+        return False
+    next_end = _prompt_sentence_end(prompt_text, sentence_end)
+    following = prompt_text[sentence_end:next_end]
+    if _SECRET_READ_INTENT_PATTERN.search(following) is None:
+        return False
+    return _FOLLOWING_SECRET_REFERENCE_PATTERN.search(following) is not None
 
 
 def _secret_read_intent_is_negated(region: str, intent_start: int, intent_end: int) -> bool:
