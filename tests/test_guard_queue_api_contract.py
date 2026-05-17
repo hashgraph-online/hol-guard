@@ -17,6 +17,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+from codex_plugin_scanner.guard.codex_app_server import _send_app_server_websocket_messages
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -216,6 +217,78 @@ def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, obj
     return thread
 
 
+def _start_fake_streaming_codex_app_server(socket_path: Path, received: list[dict[str, object]]) -> threading.Thread:
+    def server() -> None:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+            listener.bind(str(socket_path))
+            listener.listen(1)
+            connection, _ = listener.accept()
+            with connection:
+                headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
+                key = ""
+                for line in headers.split("\r\n"):
+                    if line.lower().startswith("sec-websocket-key:"):
+                        key = line.split(":", 1)[1].strip()
+                        break
+                accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode(
+                    "ascii"
+                )
+                connection.sendall(
+                    (
+                        "HTTP/1.1 101 Switching Protocols\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Upgrade: websocket\r\n"
+                        f"Sec-WebSocket-Accept: {accept}\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                while True:
+                    opcode, payload = _recv_websocket_frame(connection)
+                    if opcode != 0x1:
+                        continue
+                    message = json.loads(payload.decode("utf-8"))
+                    received.append(message)
+                    if message.get("id") == 1:
+                        _send_websocket_text(
+                            connection,
+                            {
+                                "id": 1,
+                                "result": {
+                                    "userAgent": "test",
+                                    "codexHome": "/tmp",
+                                    "platformFamily": "unix",
+                                    "platformOs": "macos",
+                                },
+                            },
+                        )
+                    if message.get("id") == 2:
+                        _send_websocket_text(connection, {"id": 2, "result": {"turnId": "turn-next"}})
+                        for _ in range(10):
+                            try:
+                                _send_websocket_text(
+                                    connection,
+                                    {
+                                        "method": "thread/status/changed",
+                                        "params": {
+                                            "threadId": "thread-1",
+                                            "status": {"type": "active", "activeFlags": []},
+                                        },
+                                    },
+                                )
+                            except BrokenPipeError:
+                                break
+                            time.sleep(0.02)
+                        break
+
+    thread = threading.Thread(target=server, daemon=True)
+    thread.start()
+    for _ in range(50):
+        if socket_path.exists():
+            break
+        time.sleep(0.01)
+    return thread
+
+
 def _recv_until(connection: socket.socket, marker: bytes) -> bytes:
     data = b""
     while marker not in data:
@@ -355,6 +428,51 @@ def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Pat
     assert turn_start["params"]["threadId"] == "thread-1"
     assert "HOL Guard approved" in turn_start["params"]["input"][0]["text"]
     assert store.list_events(event_name="codex/thread_resume")[0]["payload"]["status"] == "sent"
+
+
+def test_codex_resume_completion_timeout_bounds_streaming_noncompletion_frames() -> None:
+    socket_path = Path(tempfile.gettempdir()) / f"hol-guard-codex-{uuid.uuid4().hex}.sock"
+    received_messages: list[dict[str, object]] = []
+    codex_server = _start_fake_streaming_codex_app_server(socket_path, received_messages)
+
+    response, completion_status = _send_app_server_websocket_messages(
+        socket_path=str(socket_path),
+        payloads=[
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "clientInfo": {
+                        "name": "hol-guard",
+                        "title": "HOL Guard",
+                        "version": "1.0.0",
+                    },
+                    "capabilities": {"experimentalApi": True},
+                },
+            },
+            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "turn/start",
+                "params": {
+                    "threadId": "thread-1",
+                    "input": [{"type": "text", "text": "continue"}],
+                },
+            },
+        ],
+        response_id=2,
+        timeout_seconds=1,
+        completion_thread_id="thread-1",
+        completion_timeout_seconds=0.03,
+    )
+    codex_server.join(timeout=2)
+    socket_path.unlink(missing_ok=True)
+
+    assert response is not None
+    assert response["id"] == 2
+    assert completion_status == "completion_timeout"
 
 
 def test_resolving_last_item_returns_empty_queue_hint(tmp_path: Path) -> None:
