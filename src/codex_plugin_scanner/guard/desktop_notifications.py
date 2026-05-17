@@ -8,6 +8,7 @@ import platform
 import shutil
 import subprocess
 import threading
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -128,7 +129,10 @@ def _send_macos_notification(
                 "-open",
                 notification.approval_url,
                 "-group",
-                f"hol-guard-{notification.request_id}",
+                f"hol-guard-{notification.request_id}-{uuid.uuid4().hex}",
+                "-sound",
+                "default",
+                "-ignoreDnD",
             ],
             check=False,
             timeout=3,
@@ -141,7 +145,7 @@ def _send_macos_notification(
             (
                 f'display notification "{_escape_osascript(_macos_fallback_message(notification))}" '
                 f'with title "{_escape_osascript(notification.title)}" '
-                'subtitle "Action needs approval"'
+                'subtitle "Action needs approval" sound name "default"'
             ),
         ],
         check=False,
