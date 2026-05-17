@@ -1095,6 +1095,38 @@ def test_tool_action_request_classifier_explains_later_gh_pr_create_body_substit
     assert request.action_class == "GitHub PR body shell substitution"
 
 
+def test_tool_action_request_classifier_explains_wrapped_gh_pr_create_body_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                'sudo gh pr create --repo hashgraph-online/hol-guard '
+                "--title 'feat(guard): notify desktop for approvals' "
+                '--body "Verification: `python -m build`"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub PR body shell substitution"
+
+
+def test_tool_action_request_classifier_ignores_single_quoted_body_when_other_command_substitutes():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "echo $(date) && "
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "--body 'Verification: `python -m build`'"
+            )
+        },
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_skips_node_heredoc_generated_temp_json_workflow():
     request = extract_sensitive_tool_action_request(
         "bash",

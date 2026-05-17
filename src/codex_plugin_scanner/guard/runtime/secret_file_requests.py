@@ -762,8 +762,8 @@ def _destructive_shell_tool_action_request(
 def _gh_pr_create_body_has_shell_command_substitution(command_text: str) -> bool:
     if not _shell_command_substitution_payloads(command_text):
         return False
-    parts = _split_shell_parts(command_text.strip())
-    for segment in _iter_shell_command_segments(parts):
+    tokens = _shell_tokens_preserving_quote_context(command_text)
+    for segment in _shell_token_segments(tokens):
         command_index = _gh_pr_create_command_index(segment)
         if command_index is None:
             continue
@@ -772,36 +772,125 @@ def _gh_pr_create_body_has_shell_command_substitution(command_text: str) -> bool
     return False
 
 
-def _gh_pr_create_command_index(segment: list[str]) -> int | None:
+@dataclass(frozen=True, slots=True)
+class _ShellTokenWithQuoteContext:
+    raw: str
+    plain: str
+
+
+def _gh_pr_create_command_index(segment: list[_ShellTokenWithQuoteContext]) -> int | None:
     for index, token in enumerate(segment):
-        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token)):
-            continue
-        command_name = _normalized_shell_command_name(_shell_command_token_without_attached_redirection(token))
-        if command_name == "env":
-            continue
-        if command_name != "gh":
+        command_name = _normalized_shell_command_name(_shell_command_token_without_attached_redirection(token.plain))
+        if command_name == "gh":
+            if index + 2 >= len(segment):
+                return None
+            if segment[index + 1].plain == "pr" and segment[index + 2].plain == "create":
+                return index
             return None
-        if index + 2 < len(segment) and segment[index + 1 : index + 3] == ["pr", "create"]:
-            return index
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token.plain)):
+            continue
+        if command_name in {"command", "env", "sudo", "time"}:
+            continue
         return None
     return None
 
 
-def _gh_pr_create_body_args_have_substitution(args: list[str]) -> bool:
+def _gh_pr_create_body_args_have_substitution(args: list[_ShellTokenWithQuoteContext]) -> bool:
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg in {"--body", "-b"}:
+        if arg.plain in {"--body", "-b"}:
             if index + 1 >= len(args):
                 return False
-            if _shell_command_substitution_payloads(args[index + 1]):
+            if _shell_command_substitution_payloads(args[index + 1].raw):
                 return True
             index += 2
             continue
-        if arg.startswith("--body=") and _shell_command_substitution_payloads(arg.split("=", 1)[1]):
+        if arg.plain.startswith("--body=") and _shell_command_substitution_payloads(_shell_token_raw_value(arg.raw)):
             return True
         index += 1
     return False
+
+
+def _shell_token_raw_value(raw_token: str) -> str:
+    if "=" not in raw_token:
+        return ""
+    return raw_token.split("=", 1)[1]
+
+
+def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellTokenWithQuoteContext]:
+    tokens: list[_ShellTokenWithQuoteContext] = []
+    index = 0
+    while index < len(command_text):
+        while index < len(command_text) and command_text[index].isspace():
+            index += 1
+        if index >= len(command_text):
+            break
+        if command_text[index] in {";", "&", "|"}:
+            if command_text.startswith("&&", index) or command_text.startswith("||", index):
+                raw_token = command_text[index : index + 2]
+                index += 2
+            else:
+                raw_token = command_text[index]
+                index += 1
+            tokens.append(_ShellTokenWithQuoteContext(raw=raw_token, plain=raw_token))
+            continue
+        start = index
+        quote: str | None = None
+        escaped = False
+        while index < len(command_text):
+            char = command_text[index]
+            if escaped:
+                escaped = False
+                index += 1
+                continue
+            if char == "\\":
+                escaped = True
+                index += 1
+                continue
+            if quote is not None:
+                if char == quote:
+                    quote = None
+                index += 1
+                continue
+            if char in {"'", '"'}:
+                quote = char
+                index += 1
+                continue
+            if char.isspace() or char in {";", "&", "|"}:
+                break
+            index += 1
+        raw_token = command_text[start:index]
+        if raw_token:
+            tokens.append(_ShellTokenWithQuoteContext(raw=raw_token, plain=_plain_shell_token(raw_token)))
+    return tokens
+
+
+def _plain_shell_token(raw_token: str) -> str:
+    try:
+        parts = shlex.split(raw_token, posix=True)
+    except ValueError:
+        return raw_token.strip("'\"")
+    if not parts:
+        return ""
+    return parts[0]
+
+
+def _shell_token_segments(
+    tokens: list[_ShellTokenWithQuoteContext],
+) -> list[list[_ShellTokenWithQuoteContext]]:
+    segments: list[list[_ShellTokenWithQuoteContext]] = []
+    current: list[_ShellTokenWithQuoteContext] = []
+    for token in tokens:
+        if token.plain in {"&&", "||", ";", "&", "|", "|&"}:
+            if current:
+                segments.append(current)
+                current = []
+            continue
+        current.append(token)
+    if current:
+        segments.append(current)
+    return segments
 
 
 def _contains_shell_credential_exfiltration(
