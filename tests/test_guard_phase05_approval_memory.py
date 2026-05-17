@@ -360,6 +360,19 @@ NODE"""
         _shell_action("node -e \"fetch('https://hol.org/x').then(r=>r.text()).then(t=>fs.writeFileSync('x.txt',t))\""),
         context,
     )
+    node_arrow_probe = suppressor.detect(
+        _shell_action("node -e \"fetch('https://hol.org/guard/apps/codex').then(res => res.text())\""),
+        context,
+    )
+    node_heredoc_follow_on = suppressor.detect(
+        _shell_action(
+            """node - <<'NODE'
+fetch('https://hol.org/guard/apps/codex').then(res => res.text())
+NODE
+touch marker"""
+        ),
+        context,
+    )
     python_write_probe = suppressor.detect(
         _shell_action(
             "python -c \"import requests; from pathlib import Path; "
@@ -424,6 +437,8 @@ NODE"""
     assert [signal.signal_id for signal in wget_spider] == ["fp:read-only-http-fetch:wget"]
     assert wget_chain_remove == ()
     assert node_write_probe == ()
+    assert [signal.signal_id for signal in node_arrow_probe] == ["fp:read-only-http-fetch:node"]
+    assert node_heredoc_follow_on == ()
     assert python_write_probe == ()
     assert python_url_literal == ()
     assert node_url_literal == ()

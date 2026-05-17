@@ -80,7 +80,7 @@ _OUTPUT_REDIRECT_TO_EXFIL = re.compile(
 )
 _SHELL_CHAINING_PATTERN = re.compile(r"&&|\|\||(?<!<);")
 _OUTPUT_REDIRECT_TO_LOCAL_FILE = re.compile(
-    r"(?<!<)(?:^|[^>])>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+",
+    r"(?:^|[\s;&|])>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+",
     re.IGNORECASE,
 )
 
@@ -437,8 +437,21 @@ def _looks_like_heredoc_script(command: str) -> bool:
 
 def _has_shell_chaining(command: str) -> bool:
     if _looks_like_heredoc_script(command):
-        return False
+        return _has_heredoc_follow_on_command(command)
     return bool(_SHELL_CHAINING_PATTERN.search(command) or re.search(r"\n\s*\S+", command))
+
+
+def _has_heredoc_follow_on_command(command: str) -> bool:
+    first_line = command.splitlines()[0] if command.splitlines() else ""
+    match = re.search(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", first_line)
+    if match is None:
+        return True
+    delimiter = match.group(1)
+    lines = command.splitlines()[1:]
+    for index, line in enumerate(lines):
+        if line.strip() == delimiter:
+            return any(rest.strip() for rest in lines[index + 1 :])
+    return True
 
 
 def _has_no_write_flags(parts: list[str]) -> bool:
