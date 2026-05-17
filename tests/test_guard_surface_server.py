@@ -1563,6 +1563,33 @@ class TestGuardSurfaceServer:
             "token": "session-token-123",
         }
 
+    def test_guard_daemon_allows_private_network_preflight_for_hosted_dashboard(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/capabilities",
+                headers={
+                    "Access-Control-Request-Headers": "authorization,x-guard-token",
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Private-Network": "true",
+                    "Origin": "https://hol.org",
+                },
+                method="OPTIONS",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                allow_origin = response.headers.get("Access-Control-Allow-Origin")
+                allow_private_network = response.headers.get("Access-Control-Allow-Private-Network")
+                status = response.status
+        finally:
+            daemon.stop()
+
+        assert status == 200
+        assert allow_origin == "https://hol.org"
+        assert allow_private_network == "true"
+
     def test_guard_daemon_rejects_browser_connect_pairing_for_wrong_origin(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
