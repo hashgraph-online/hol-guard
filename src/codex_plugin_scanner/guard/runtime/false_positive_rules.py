@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -77,6 +78,11 @@ _OUTPUT_REDIRECT_TO_EXFIL = re.compile(
     r">\s*(?:/proc/\S+|/dev/tcp/|/dev/udp/)",
     re.IGNORECASE,
 )
+_SHELL_CHAINING_PATTERN = re.compile(r"&&|\|\||(?<!<);|(?:^|[\s])&(?![&|])(?:[\s]|$)")
+_OUTPUT_REDIRECT_TO_LOCAL_FILE = re.compile(
+    r"(?:^|[\s;&|])(?:\d+)?>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+",
+    re.IGNORECASE,
+)
 
 _CLIPBOARD_PIPE = re.compile(
     r"[|;]\s*(?:pbcopy|xclip|xsel|wl-copy|clip)\b",
@@ -92,6 +98,101 @@ _LOCALHOST_HEALTH_PATTERN = re.compile(
     r"(?:/(?:healthz?|readiness|ready|liveness|live|ping|status|metrics|info|version))?"
     r"(?:\s|$|[;&|'\"])",
     re.IGNORECASE,
+)
+_CURL_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>curl|curl\.exe)\b[^\r\n;&|]*https?://",
+    re.IGNORECASE,
+)
+_WGET_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>wget)\b(?=[^\r\n;&|]*(?<!\S)--spider\b)[^\r\n;&|]*https?://",
+    re.IGNORECASE,
+)
+_NODE_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>node)\b(?s:.*?)(?:\bfetch\s*\(|\bhttps?\.get\s*\()",
+    re.IGNORECASE,
+)
+_PYTHON_READ_ONLY_HTTP_FETCH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?P<tool>python|python3)\b(?s:.*?)(?:\brequests\.get\s*\(|\burllib\.request\.urlopen\s*\()",
+    re.IGNORECASE,
+)
+_READ_ONLY_HTTP_FETCH_PATTERNS = (
+    _CURL_READ_ONLY_HTTP_FETCH_PATTERN,
+    _WGET_READ_ONLY_HTTP_FETCH_PATTERN,
+    _NODE_READ_ONLY_HTTP_FETCH_PATTERN,
+    _PYTHON_READ_ONLY_HTTP_FETCH_PATTERN,
+)
+_MUTATING_HTTP_FETCH_PATTERN = re.compile(
+    r"\b(?:POST|PUT|PATCH|DELETE)\b|"
+    r"\bmethod\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]|"
+    r"(?:^|[\s;&|])(?:--request|-X)\s*(?:POST|PUT|PATCH|DELETE)\b|"
+    r"(?:^|[\s;&|])(?:--data(?:-binary|-raw|-urlencode)?(?:[=\s]|$)|-d(?:\S|\s|$)"
+    r"|--form(?:[=\s]|$)|-F(?:\S|\s|$)|--json(?:[=\s]|$)|--upload-file(?:[=\s]|$)|-T(?:\S|\s|$)"
+    r"|--header(?:[=\s]|$)|-H(?:\S|\s|$)|--config(?:[=\s]|$)|-K(?:\S|\s|$)"
+    r"|--cookie(?:[=\s]|$)|-b(?:\S|\s|$))|"
+    r"\b(?:body|data)\s*:",
+    re.IGNORECASE,
+)
+_HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?:--output(?:[=\s]|$)|-o(?:\S|\s|$)|--remote-name(?:[=\s]|$)|-[A-Za-z]*O[A-Za-z]*"
+    r"|--output-document(?:[=\s]|$)|--remote-header-name(?:[=\s]|$)|--dump-header(?:[=\s]|$)|-D(?:\S|\s|$)"
+    r"|--trace(?:-ascii|-ids|-time)?(?:[=\s]|$)|--stderr(?:[=\s]|$)|--cookie-jar(?:[=\s]|$)|-c(?:\S|\s|$))",
+    re.IGNORECASE,
+)
+_LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
+    r"\b(?:readFileSync|open|createReadStream)\s*\(|"
+    r"\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:read_text|read_bytes|open)\s*\(|"
+    r"\bcat\s+",
+    re.IGNORECASE,
+)
+_LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN = re.compile(
+    r"\b(?:writeFileSync|appendFileSync|createWriteStream)\s*\(|"
+    r"\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:write_text|write_bytes)\s*\(",
+    re.IGNORECASE,
+)
+_PIPE_TO_LOCAL_FILE_WRITE_PATTERN = re.compile(
+    r"[|;]\s*(?:tee|dd)\b",
+    re.IGNORECASE,
+)
+_PIPE_SEGMENT_PATTERN = re.compile(r"(?:\|&?|;)\s*([^\r\n;&|]+)")
+_ENV_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_EXECUTION_TOOLS = frozenset(
+    {
+        ".",
+        "bash",
+        "chmod",
+        "cmd",
+        "csh",
+        "dash",
+        "fish",
+        "install",
+        "ksh",
+        "mksh",
+        "node",
+        "perl",
+        "php",
+        "powershell",
+        "pwsh",
+        "python",
+        "python3",
+        "ruby",
+        "sh",
+        "source",
+        "tcsh",
+        "zsh",
+    }
+)
+_SUDO_ARG_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-T"})
+_SUDO_ARG_LONG_FLAGS = frozenset(
+    {
+        "--chdir",
+        "--group",
+        "--host",
+        "--login-class",
+        "--prompt",
+        "--role",
+        "--type",
+        "--user",
+    }
 )
 
 _FAKE_CREDENTIAL_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -209,6 +310,45 @@ def classify_health_endpoint_fetch(command: str) -> bool:
     return bool(_LOCALHOST_HEALTH_PATTERN.search(command))
 
 
+def classify_read_only_http_fetch(command: str) -> str | None:
+    """Return the read-only HTTP probe tool name when command has no upload or secret source."""
+    match = None
+    for pattern in _READ_ONLY_HTTP_FETCH_PATTERNS:
+        match = pattern.search(command)
+        if match is not None:
+            break
+    if match is None:
+        return None
+    if _MUTATING_HTTP_FETCH_PATTERN.search(command):
+        return None
+    if _has_shell_chaining(command):
+        return None
+    if _HTTP_FETCH_FILE_WRITE_PATTERN.search(command):
+        return None
+    if _PIPE_TO_EXFIL.search(command):
+        return None
+    if _pipes_to_execution(command):
+        return None
+    if _OUTPUT_REDIRECT_TO_EXFIL.search(command):
+        return None
+    if _OUTPUT_REDIRECT_TO_LOCAL_FILE.search(command):
+        return None
+    if _SECRET_FILE_NAMES.search(command):
+        return None
+    if _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN.search(command):
+        return None
+    if _LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN.search(command):
+        return None
+    if _PIPE_TO_LOCAL_FILE_WRITE_PATTERN.search(command):
+        return None
+    tool = match.group("tool").lower()
+    if tool in {"curl.exe", "curl"}:
+        return "curl"
+    if tool in {"python3", "python"}:
+        return "python"
+    return tool
+
+
 def classify_docs_example_source(source_hint: str) -> bool:
     """Return True if *source_hint* (path or context label) is a docs/example location."""
     return bool(_DOCS_EXAMPLE_CONTEXT.search(source_hint))
@@ -242,6 +382,78 @@ def _leading_tool(parts: list[str]) -> str | None:
 
 def _strip_path_prefix(token: str) -> str:
     return token.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+
+
+def _pipes_to_execution(command: str) -> bool:
+    for match in _PIPE_SEGMENT_PATTERN.finditer(command):
+        segment = match.group(1).strip()
+        if not segment:
+            continue
+        try:
+            tokens = shlex.split(segment, posix=True)
+        except ValueError:
+            tokens = segment.split()
+        if _tokens_start_execution(tokens):
+            return True
+    return False
+
+
+def _tokens_start_execution(tokens: list[str]) -> bool:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        base = _strip_path_prefix(token)
+        base_lower = base.lower()
+        if base_lower in {"sudo", "doas"}:
+            index += 1
+            while index < len(tokens) and tokens[index].startswith("-"):
+                flag = tokens[index]
+                index += 1
+                if flag == "--":
+                    break
+                if (flag in _SUDO_ARG_FLAGS or flag in _SUDO_ARG_LONG_FLAGS) and index < len(tokens):
+                    index += 1
+            continue
+        if base_lower == "command":
+            index += 1
+            continue
+        if base_lower == "env":
+            index += 1
+            while index < len(tokens) and tokens[index].startswith("-"):
+                index += 1
+            continue
+        if _ENV_ASSIGNMENT_PATTERN.match(token):
+            index += 1
+            continue
+        if base == "NODE" and len(tokens) == 1:
+            return False
+        return base_lower in _EXECUTION_TOOLS
+    return False
+
+
+def _looks_like_heredoc_script(command: str) -> bool:
+    return bool(re.match(r"\s*(?:node|python|python3)\b[^\r\n]*<<", command))
+
+
+def _has_shell_chaining(command: str) -> bool:
+    if _looks_like_heredoc_script(command):
+        return _has_heredoc_follow_on_command(command)
+    return bool(_SHELL_CHAINING_PATTERN.search(command) or re.search(r"\n\s*\S+", command))
+
+
+def _has_heredoc_follow_on_command(command: str) -> bool:
+    first_line = command.splitlines()[0] if command.splitlines() else ""
+    if _SHELL_CHAINING_PATTERN.search(first_line):
+        return True
+    match = re.search(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", first_line)
+    if match is None:
+        return True
+    delimiter = match.group(1)
+    lines = command.splitlines()[1:]
+    for index, line in enumerate(lines):
+        if line.strip() == delimiter:
+            return any(rest.strip() for rest in lines[index + 1 :])
+    return True
 
 
 def _has_no_write_flags(parts: list[str]) -> bool:

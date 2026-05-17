@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.false_positive_rules import (
     classify_docs_example_source,
     classify_health_endpoint_fetch,
     classify_package_metadata_access,
+    classify_read_only_http_fetch,
     classify_source_search_command,
     classify_version_file_access,
 )
@@ -405,6 +406,28 @@ class FalsePositiveSuppressorDetector:
                             " which is a normal development pattern."
                         ),
                         technical_detail="matched localhost health endpoint pattern",
+                        evidence_ref="command",
+                        redaction_level="none",
+                        false_positive_hint=None,
+                        advisory_id=None,
+                    )
+                )
+
+            read_only_http_tool = classify_read_only_http_fetch(action.command)
+            if read_only_http_tool is not None:
+                signals.append(
+                    RiskSignalV2(
+                        signal_id=f"fp:read-only-http-fetch:{read_only_http_tool}",
+                        category="false_positive",
+                        severity="info",
+                        confidence="strong",
+                        detector=self.detector_id,
+                        title="Read-only HTTP page probe",
+                        plain_reason=(
+                            "This command fetches a page and inspects the response locally without uploading data "
+                            "or reading secret files."
+                        ),
+                        technical_detail="matched read-only HTTP fetch pattern",
                         evidence_ref="command",
                         redaction_level="none",
                         false_positive_hint=None,
