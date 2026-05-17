@@ -4965,6 +4965,8 @@ def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
             return False
         segment_args = segment[command_index + 1 :]
         if _is_python_interpreter_command(command_name):
+            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
+                return False
             if not _python_segment_runs_safe_module(segment_args):
                 return False
             saw_python_module = True
@@ -4978,6 +4980,13 @@ def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
             continue
         return False
     return saw_python_module
+
+
+def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key: str) -> bool:
+    normalized_env_key = env_key.upper()
+    return any(
+        token.split("=", 1)[0].upper() == normalized_env_key for token in segment[:command_index] if "=" in token
+    )
 
 
 def _python_segment_runs_safe_module(args: list[str]) -> bool:

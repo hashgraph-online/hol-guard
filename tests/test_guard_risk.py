@@ -899,6 +899,7 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
         "python -m pytest --debug=/tmp/guard-pytest.log",
         "python -m pytest --log-file=/tmp/guard-pytest.log",
         "python -m pytest -c attacker.ini",
+        "PYTEST_ADDOPTS=--basetemp=/tmp/guard-pytest python -m pytest -q",
         "python dangerous.py -m pytest",
         "python -m unittest discover",
     ],
