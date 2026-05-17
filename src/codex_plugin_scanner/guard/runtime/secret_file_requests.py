@@ -49,7 +49,7 @@ _PATH_KEYS = (
 )
 _PATH_LIST_KEYS = ("paths", "file_paths", "filePaths")
 _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
-_SUDO_OPTION_VALUE_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-T"})
+_SUDO_OPTION_VALUE_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-r", "-T", "-t"})
 _SUDO_OPTION_VALUE_LONG_FLAGS = frozenset(
     {"--chdir", "--group", "--host", "--login-class", "--prompt", "--role", "--type", "--user"}
 )
@@ -827,6 +827,9 @@ def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index:
         if plain in {"-i", "-0", "--ignore-environment", "--null"}:
             index += 1
             continue
+        if plain == "--":
+            index += 1
+            break
         if plain in {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}:
             index += 2
             continue
