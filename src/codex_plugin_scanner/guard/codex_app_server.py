@@ -281,7 +281,10 @@ def _send_app_server_websocket_messages(
         completion_deadline = time.monotonic() + (completion_timeout_seconds or timeout_seconds)
         client.settimeout(1.0)
         while True:
-            if response is not None and completion_thread_id is not None and time.monotonic() >= completion_deadline:
+            now = time.monotonic()
+            if response is None and now >= response_deadline:
+                raise TimeoutError("turn_start_timeout")
+            if response is not None and completion_thread_id is not None and now >= completion_deadline:
                 return response, "completion_timeout"
             try:
                 opcode, payload = _read_websocket_frame(client, pending)
