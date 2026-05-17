@@ -834,6 +834,8 @@ def test_tool_action_request_classifier_allows_python_test_module_with_read_only
         "docker compose up --build",
         "docker build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
         "docker --context prod build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker -H tcp://docker.example build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
+        "docker buildx build --secret id=npm,src=.npmrc -t registry.example.com/app:v1 .",
         "docker build --ssh default -t registry.example.com/app:v1 .",
         "docker build --build-arg NPM_TOKEN=$NPM_TOKEN -t registry.example.com/app:v1 .",
         "docker build --build-arg FOO=$NPM_TOKEN -t registry.example.com/app:v1 .",

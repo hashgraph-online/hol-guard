@@ -67,15 +67,18 @@ _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
         "-l",
     }
 )
-_DOCKER_BUILD_ARG_SECRET_RE = re.compile(
-    r"(?i)(?:^|[_-])(?:aws|api|auth|credential|key|npm|password|secret|token)(?:$|[_-])"
+_DOCKER_BUILD_ARG_SECRET_MARKERS = frozenset(
+    {"API", "AUTH", "AWS", "CREDENTIAL", "KEY", "NPM", "PASSWORD", "SECRET", "TOKEN"}
 )
-_DOCKER_BUILD_ARG_SECRET_VALUE_RE = re.compile(
-    r"(?i)(?:"
-    r"\$\{[^}]*\b(?:AWS|API|AUTH|CREDENTIAL|KEY|NPM|PASSWORD|SECRET|TOKEN)[A-Z0-9_]*[^}]*\}|"
-    r"\$\{?[A-Z0-9_]*(?:AWS|API|AUTH|CREDENTIAL|KEY|NPM|PASSWORD|SECRET|TOKEN)[A-Z0-9_]*\}?|"
-    r"gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|glpat-[A-Za-z0-9_-]+|sk-[A-Za-z0-9_-]+"
-    r")"
+_DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
+    "ghp_",
+    "gho_",
+    "ghu_",
+    "ghs_",
+    "ghr_",
+    "github_pat_",
+    "glpat-",
+    "sk-",
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"mypy", "pytest", "ruff", "unittest"})
 _SAFE_STATIC_SHELL_COMMANDS = frozenset({"echo", "printf"})
@@ -3057,7 +3060,7 @@ def _docker_subcommand_index(args: list[str]) -> int | None:
         if _docker_global_option_has_value(token):
             index += 1 if "=" in token else 2
             continue
-        if token.startswith("-"):
+        if token.startswith("-") and not token.startswith("--"):
             index += 1
             continue
         return index
@@ -3065,8 +3068,9 @@ def _docker_subcommand_index(args: list[str]) -> int | None:
 
 
 def _docker_global_option_has_value(token: str) -> bool:
+    # Accept both long attached values like --host=... and short forms like -H=....
     return token in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES or any(
-        token.startswith(f"{option}=") for option in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES if option.startswith("--")
+        token.startswith(f"{option}=") for option in _DOCKER_GLOBAL_OPTIONS_WITH_VALUES
     )
 
 
@@ -3094,14 +3098,66 @@ def _docker_build_args_are_sensitive(args: list[str]) -> bool:
 
 def _docker_build_arg_is_sensitive(value: str) -> bool:
     key, separator, assigned_value = value.partition("=")
+    # Normalize after splitting to tolerate unusual shell tokenization.
     normalized_key = key.strip()
     return bool(
         normalized_key
         and (
-            _DOCKER_BUILD_ARG_SECRET_RE.search(normalized_key)
-            or (separator and _DOCKER_BUILD_ARG_SECRET_VALUE_RE.search(assigned_value.strip()))
+            _docker_build_arg_name_is_sensitive(normalized_key)
+            or (separator and _docker_build_arg_value_is_sensitive(assigned_value.strip()))
         )
     )
+
+
+def _docker_build_arg_name_is_sensitive(value: str) -> bool:
+    normalized = value.upper().replace("-", "_")
+    return any(part in _DOCKER_BUILD_ARG_SECRET_MARKERS for part in normalized.split("_"))
+
+
+def _docker_build_arg_value_is_sensitive(value: str) -> bool:
+    lowered = value.lower()
+    if any(prefix in lowered for prefix in _DOCKER_BUILD_ARG_TOKEN_PREFIXES):
+        return True
+    return any(_docker_build_arg_name_is_sensitive(variable_name) for variable_name in _shell_variable_names(value))
+
+
+def _shell_variable_names(value: str) -> tuple[str, ...]:
+    names: list[str] = []
+    index = 0
+    while index < len(value):
+        dollar_index = value.find("$", index)
+        if dollar_index == -1 or dollar_index + 1 >= len(value):
+            break
+        if value[dollar_index + 1] == "{":
+            closing_index = value.find("}", dollar_index + 2)
+            if closing_index == -1:
+                index = dollar_index + 2
+                continue
+            variable_name = _shell_braced_variable_name(value[dollar_index + 2 : closing_index])
+            if variable_name:
+                names.append(variable_name)
+            index = closing_index + 1
+            continue
+        variable_name, next_index = _shell_unbraced_variable_name(value, dollar_index + 1)
+        if variable_name:
+            names.append(variable_name)
+        index = next_index
+    return tuple(names)
+
+
+def _shell_braced_variable_name(value: str) -> str:
+    start = 1 if value.startswith("!") else 0
+    variable_name, _ = _shell_unbraced_variable_name(value, start)
+    return variable_name
+
+
+def _shell_unbraced_variable_name(value: str, start: int) -> tuple[str, int]:
+    if start >= len(value) or not (value[start].isalpha() or value[start] == "_"):
+        return "", start + 1
+    index = start + 1
+    while index < len(value) and (value[index].isalnum() or value[index] == "_"):
+        index += 1
+    return value[start:index], index
 
 
 def _docker_config_path_from_command(
