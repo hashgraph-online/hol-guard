@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -130,7 +131,8 @@ _MUTATING_HTTP_FETCH_PATTERN = re.compile(
 )
 _HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
     r"(?:^|[\s;&|])(?:--output(?:[=\s]|$)|-o(?:\S|\s|$)|--remote-name(?:[=\s]|$)|-[A-Za-z]*O[A-Za-z]*"
-    r"|--output-document(?:[=\s]|$)|--remote-header-name(?:[=\s]|$)|--dump-header(?:[=\s]|$)|-D(?:\S|\s|$))",
+    r"|--output-document(?:[=\s]|$)|--remote-header-name(?:[=\s]|$)|--dump-header(?:[=\s]|$)|-D(?:\S|\s|$)"
+    r"|--trace(?:-ascii|-ids|-time)?(?:[=\s]|$)|--stderr(?:[=\s]|$))",
     re.IGNORECASE,
 )
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
@@ -148,12 +150,35 @@ _PIPE_TO_LOCAL_FILE_WRITE_PATTERN = re.compile(
     r"[|;]\s*(?:tee|dd)\b",
     re.IGNORECASE,
 )
-_PIPE_TO_EXECUTION_PATTERN = re.compile(
-    r"[|;]\s*(?:(?i:sudo|doas)\s+(?:(?:-(?:u|g|h|p|C|T)\s+\S+|-\S+)\s+)*|(?i:command)\s+)*"
-    r"(?:(?i:env)(?:\s+-\S+)*\s+)?"
-    r"(?:[A-Za-z_][A-Za-z0-9_]*=[^\s|;]*\s+)*(?:\S*/)?"
-    r"(?:(?i:bash|sh|zsh|fish|python|python3|perl|ruby|php|powershell|pwsh|cmd|chmod|install|source)|node)\b",
+_PIPE_SEGMENT_PATTERN = re.compile(r"[|;]\s*([^\r\n;&|]+)")
+_ENV_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_EXECUTION_TOOLS = frozenset(
+    {
+        ".",
+        "bash",
+        "chmod",
+        "cmd",
+        "csh",
+        "dash",
+        "fish",
+        "install",
+        "ksh",
+        "mksh",
+        "node",
+        "perl",
+        "php",
+        "powershell",
+        "pwsh",
+        "python",
+        "python3",
+        "ruby",
+        "sh",
+        "source",
+        "tcsh",
+        "zsh",
+    }
 )
+_SUDO_ARG_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-T"})
 
 _FAKE_CREDENTIAL_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
@@ -285,7 +310,7 @@ def classify_read_only_http_fetch(command: str) -> str | None:
         return None
     if _PIPE_TO_EXFIL.search(command):
         return None
-    if _PIPE_TO_EXECUTION_PATTERN.search(command):
+    if _pipes_to_execution(command):
         return None
     if _OUTPUT_REDIRECT_TO_EXFIL.search(command):
         return None
@@ -340,6 +365,49 @@ def _leading_tool(parts: list[str]) -> str | None:
 
 def _strip_path_prefix(token: str) -> str:
     return token.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+
+
+def _pipes_to_execution(command: str) -> bool:
+    for match in _PIPE_SEGMENT_PATTERN.finditer(command):
+        segment = match.group(1).strip()
+        if not segment:
+            continue
+        try:
+            tokens = shlex.split(segment, posix=True)
+        except ValueError:
+            tokens = segment.split()
+        if _tokens_start_execution(tokens):
+            return True
+    return False
+
+
+def _tokens_start_execution(tokens: list[str]) -> bool:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        base = _strip_path_prefix(token)
+        base_lower = base.lower()
+        if base_lower in {"sudo", "doas"}:
+            index += 1
+            while index < len(tokens) and tokens[index].startswith("-"):
+                flag = tokens[index]
+                index += 1
+                if flag in _SUDO_ARG_FLAGS and index < len(tokens):
+                    index += 1
+            continue
+        if base_lower == "command":
+            index += 1
+            continue
+        if base_lower == "env":
+            index += 1
+            while index < len(tokens) and tokens[index].startswith("-"):
+                index += 1
+            continue
+        if _ENV_ASSIGNMENT_PATTERN.match(token):
+            index += 1
+            continue
+        return base in _EXECUTION_TOOLS
+    return False
 
 
 def _has_no_write_flags(parts: list[str]) -> bool:
