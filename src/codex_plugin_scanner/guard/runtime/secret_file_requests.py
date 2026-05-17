@@ -992,14 +992,18 @@ def _gh_pr_create_body_args_have_substitution(args: list[_ShellTokenWithQuoteCon
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg.plain in {"--body", "-b"}:
+        if arg.plain in {"--body", "-b", "--body-file", "-F"}:
             if index + 1 >= len(args):
                 return False
             if _shell_command_substitution_payloads(args[index + 1].raw):
                 return True
             index += 2
             continue
+        if arg.plain.startswith("-F") and len(arg.plain) > 2 and _shell_command_substitution_payloads(arg.raw):
+            return True
         if arg.plain.startswith("-b") and len(arg.plain) > 2 and _shell_command_substitution_payloads(arg.raw):
+            return True
+        if arg.plain.startswith("--body-file=") and _shell_command_substitution_payloads(arg.raw):
             return True
         if arg.plain.startswith("--body=") and _shell_command_substitution_payloads(arg.raw):
             return True
