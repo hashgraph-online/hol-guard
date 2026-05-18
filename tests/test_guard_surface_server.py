@@ -1663,11 +1663,10 @@ class TestGuardSurfaceServer:
             with urllib.request.urlopen(request, timeout=5) as response:
                 allow_origin = response.headers.get("Access-Control-Allow-Origin")
                 allow_private_network = response.headers.get("Access-Control-Allow-Private-Network")
-                status = response.status
         finally:
             daemon.stop()
 
-        assert status == 200
+        assert response.status == 200
         assert allow_origin == "https://hol.org"
         assert allow_private_network == "true"
 
