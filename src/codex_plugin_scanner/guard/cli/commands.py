@@ -1487,8 +1487,11 @@ def run_guard_command(
         if getattr(args, "notifications", False):
             approval_url = "hol-guard://notification-preview"
             if desktop_notification_setup_supported():
-                approval_center_url = ensure_guard_daemon(guard_home)
-                approval_url = f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
+                try:
+                    approval_center_url = ensure_guard_daemon(guard_home)
+                    approval_url = f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
+                except Exception:
+                    approval_url = "hol-guard://notification-preview"
             result = ensure_desktop_notification_setup(
                 guard_home,
                 approval_url=approval_url,
