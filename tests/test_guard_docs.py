@@ -60,8 +60,9 @@ def test_static_docs_make_init_the_first_run_path() -> None:
     assert "hol-guard bootstrap" not in first_step
     assert "first-run" in readme_text.lower()
     assert "first-run" in get_started_text.lower()
-    assert "asks before each side effect" in readme_text
+    assert "gates each side effect" in readme_text
     assert "Nothing opens or changes until you approve" in get_started_text
+    assert "reports completion before the next prompt appears" in get_started_text
     assert "hol-guard init --yes" in get_started_text
     assert "desktop notification" in get_started_text.lower()
 

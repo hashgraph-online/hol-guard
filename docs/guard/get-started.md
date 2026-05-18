@@ -13,7 +13,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard init
    ```
 
-   Guard prints a plan first, then asks before each side effect. You approve the dashboard open, harness installs, Guard Cloud connect, and desktop notification setup one at a time. Nothing opens or changes until you approve that checkpoint, so the flow stays clear instead of spawning windows without context.
+   Guard prints a plan first, then asks before one side effect at a time. You approve the dashboard open, Guard completes it, then you move to harness installs, Guard Cloud connect, and desktop notification setup. Nothing opens or changes until you approve that checkpoint, and each checkpoint reports completion before the next prompt appears.
 
    For automation only, run:
 

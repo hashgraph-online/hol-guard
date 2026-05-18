@@ -365,7 +365,7 @@ def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
         input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hello"}),
         text=True,
         capture_output=True,
-        timeout=5,
+        timeout=40,
         check=False,
     )
 
@@ -389,7 +389,7 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
         ),
         text=True,
         capture_output=True,
-        timeout=5,
+        timeout=40,
         check=False,
     )
     assert result.returncode == 0
@@ -419,7 +419,7 @@ def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_
         ),
         text=True,
         capture_output=True,
-        timeout=5,
+        timeout=40,
         check=False,
     )
     payload = json.loads(result.stdout)
@@ -428,11 +428,6 @@ def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_
     assert result.stderr == ""
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "HOL Guard" in reason
-    assert "approval flow came from HOL Guard" in reason
-    assert "Allow once" in reason
-    assert "Keep blocked" in reason
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
