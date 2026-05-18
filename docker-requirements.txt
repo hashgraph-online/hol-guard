@@ -1909,9 +1909,9 @@ requests==2.34.0 \
     --hash=sha256:7d62fe92f50eb82c529b0916bb445afa1531a566fc8f35ffdc64446e771b856a \
     --hash=sha256:917520a21b767485ce7c588f4ebb917c436b24a31231b44228715eaeb5a52c60
     # via tiktoken
-rich==14.2.0 \
-    --hash=sha256:73ff50c7c0c1c77c8243079283f4edb376f0f6442433aecb8ce7e6d0b92d1fe4 \
-    --hash=sha256:76bc51fe2e57d2b1be1f96c524b890b816e334ab4c1e45888799bfaab0021edd
+rich==15.0.0 \
+    --hash=sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb \
+    --hash=sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36
     # via
     #   hol-guard (pyproject.toml)
     #   cisco-ai-skill-scanner
@@ -2050,9 +2050,9 @@ sse-starlette==3.4.4 \
     --hash=sha256:07e0fa0460138baf25cdd5fb28683472c3995dc1642225191b3832d62526bcb0 \
     --hash=sha256:3f4dd50d8aed2771a091f3a83000323fc3844541c16b4fe585ae2420cc6df973
     # via mcp
-starlette==0.50.0 \
-    --hash=sha256:9e5391843ec9b6e472eed1365a78c8098cfceb7a74bfd4d6b1c0c0095efb3bca \
-    --hash=sha256:a2a17b22203254bcbc2e1f926d2d55f3f9497f769416b3190768befe598fa3ca
+starlette==1.0.0 \
+    --hash=sha256:6a4beaf1f81bb472fd19ea9b918b50dc3a77a6f2e190a12954b25e6ed5eea149 \
+    --hash=sha256:d3ec55e0bb321692d275455ddfd3df75fff145d009685eb40dc91fc66b03d38b
     # via
     #   fastapi
     #   mcp
@@ -2061,9 +2061,9 @@ tabulate==0.9.0 \
     --hash=sha256:0095b12bf5966de529c0feb1fa08671671b3368eec77d7ef7ab114be2c068b3c \
     --hash=sha256:024ca478df22e9340661486f85298cff5f6dcdba14f3813e8830015b9ed1948f
     # via cisco-ai-skill-scanner
-textual==7.5.0 \
-    --hash=sha256:849dfee9d705eab3b2d07b33152b7bd74fb1f5056e002873cc448bce500c6374 \
-    --hash=sha256:c730cba1e3d704e8f1ca915b6a3af01451e3bca380114baacf6abf87e9dac8b6
+textual==8.2.6 \
+    --hash=sha256:17c92bec7ff1617bd7db2a3d9734b0c3b7d2c274c67d5eba94371ea2f99a63fd \
+    --hash=sha256:cef3714498a120a99278b98d4c165c278844e73db50f1db039aaabd89f2d1b63
     # via cisco-ai-skill-scanner
 tiktoken==0.12.0 \
     --hash=sha256:01d99484dc93b129cd0964f9d34eee953f2737301f18b3c7257bf368d7615baa \
