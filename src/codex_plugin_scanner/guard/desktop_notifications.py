@@ -175,16 +175,17 @@ def ensure_desktop_notification_setup(
         which=which,
     )
     settings_opened = _open_macos_notification_settings(run=run)
-    _write_notification_setup_state(
-        state_path,
-        {
-            "opened_at": _utc_now(),
-            "settings_url": MACOS_NOTIFICATION_SETTINGS_URL,
-            "preview_sent": preview_sent,
-            "settings_opened": settings_opened,
-            "notifier_path": terminal_notifier,
-        },
-    )
+    if settings_opened:
+        _write_notification_setup_state(
+            state_path,
+            {
+                "opened_at": _utc_now(),
+                "settings_url": MACOS_NOTIFICATION_SETTINGS_URL,
+                "preview_sent": preview_sent,
+                "settings_opened": settings_opened,
+                "notifier_path": terminal_notifier,
+            },
+        )
     return DesktopNotificationSetupResult(
         platform=system,
         supported=True,
