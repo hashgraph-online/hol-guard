@@ -7,10 +7,13 @@ from typing import Any
 
 from codex_plugin_scanner.guard.desktop_notifications import (
     _NOTIFICATION_ATTEMPTS_IN_FLIGHT,
+    _NOTIFICATION_SETUP_LOCK,
+    _NOTIFICATION_SETUP_PATHS_IN_FLIGHT,
     _NOTIFIED_APPROVAL_IDS,
     _NOTIFIED_APPROVAL_IDS_LOCK,
     DesktopApprovalNotification,
     ensure_desktop_notification_setup,
+    ensure_desktop_notification_setup_async,
     notify_pending_approval_once,
     send_desktop_approval_notification,
 )
@@ -207,6 +210,34 @@ def test_thread_start_failure_clears_inflight(monkeypatch) -> None:
     assert notify_pending_approval_once(_notification()) is False
     with _NOTIFIED_APPROVAL_IDS_LOCK:
         assert not _NOTIFICATION_ATTEMPTS_IN_FLIGHT
+
+
+def test_macos_setup_async_deduplicates_inflight_work(tmp_path, monkeypatch) -> None:
+    started: list[tuple[Any, tuple[Any, ...]]] = []
+
+    class CapturingThread:
+        def __init__(self, **kwargs: Any) -> None:
+            started.append((kwargs["target"], kwargs["args"]))
+
+        def start(self) -> None:
+            return None
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.desktop_notifications.threading.Thread", CapturingThread)
+    monkeypatch.setattr("codex_plugin_scanner.guard.desktop_notifications.platform.system", lambda: "Darwin")
+
+    guard_home = tmp_path / "guard-home"
+
+    assert ensure_desktop_notification_setup_async(
+        guard_home,
+        approval_url="http://127.0.0.1:5474/approvals/preview",
+    )
+    assert not ensure_desktop_notification_setup_async(
+        guard_home,
+        approval_url="http://127.0.0.1:5474/approvals/preview",
+    )
+    assert len(started) == 1
+    with _NOTIFICATION_SETUP_LOCK:
+        _NOTIFICATION_SETUP_PATHS_IN_FLIGHT.clear()
 
 
 def test_macos_setup_sends_preview_opens_settings_and_records_state(tmp_path) -> None:

@@ -45,6 +45,8 @@ class DesktopNotificationSetupResult:
 _NOTIFIED_APPROVAL_IDS: set[str] = set()
 _NOTIFICATION_ATTEMPTS_IN_FLIGHT: set[str] = set()
 _NOTIFIED_APPROVAL_IDS_LOCK = threading.Lock()
+_NOTIFICATION_SETUP_PATHS_IN_FLIGHT: set[Path] = set()
+_NOTIFICATION_SETUP_LOCK = threading.Lock()
 
 
 def notify_pending_approval_once(
@@ -128,6 +130,37 @@ def desktop_notification_setup_supported(system_name: str | None = None) -> bool
     return (system_name or platform.system()) == "Darwin" and not _desktop_notifications_disabled_by_env()
 
 
+def ensure_desktop_notification_setup_async(
+    guard_home: Path,
+    *,
+    approval_url: str,
+    force: bool = False,
+) -> bool:
+    """Start local notification setup without delaying approval queueing."""
+
+    if not force and not desktop_notification_setup_supported():
+        return False
+    state_path = guard_home / _NOTIFICATION_SETUP_STATE_FILE
+    if state_path.exists() and not force:
+        return False
+    key = guard_home.expanduser().resolve(strict=False)
+    with _NOTIFICATION_SETUP_LOCK:
+        if key in _NOTIFICATION_SETUP_PATHS_IN_FLIGHT:
+            return False
+        _NOTIFICATION_SETUP_PATHS_IN_FLIGHT.add(key)
+    try:
+        threading.Thread(
+            target=_ensure_desktop_notification_setup_worker,
+            args=(key, guard_home, approval_url, force),
+            name=f"hol-guard-notification-setup-{uuid.uuid4().hex}",
+        ).start()
+    except Exception:
+        with _NOTIFICATION_SETUP_LOCK:
+            _NOTIFICATION_SETUP_PATHS_IN_FLIGHT.discard(key)
+        return False
+    return True
+
+
 def ensure_desktop_notification_setup(
     guard_home: Path,
     *,
@@ -195,6 +228,25 @@ def ensure_desktop_notification_setup(
         already_prompted=already_prompted,
         notifier_path=terminal_notifier,
     )
+
+
+def _ensure_desktop_notification_setup_worker(
+    key: Path,
+    guard_home: Path,
+    approval_url: str,
+    force: bool,
+) -> None:
+    try:
+        ensure_desktop_notification_setup(
+            guard_home,
+            approval_url=approval_url,
+            force=force,
+        )
+    except Exception:
+        return
+    finally:
+        with _NOTIFICATION_SETUP_LOCK:
+            _NOTIFICATION_SETUP_PATHS_IN_FLIGHT.discard(key)
 
 
 def _desktop_notifications_disabled_by_env() -> bool:
