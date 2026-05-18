@@ -942,49 +942,49 @@ def _prompt_init_step(step: dict[str, object]) -> str:
     return sys.stdin.readline().strip().lower()
 
 
-def _resolve_init_decisions(
+def _approve_init_step(
     args: argparse.Namespace,
-    plan: list[dict[str, object]],
+    step: dict[str, object],
     *,
     interactive: bool,
-) -> tuple[list[dict[str, object]], bool]:
-    approved_any = False
-    auto_approve = bool(getattr(args, "yes", False))
-    for step in plan:
-        skip_flag = step.get("skip_flag")
-        if isinstance(skip_flag, str) and bool(getattr(args, skip_flag, False)):
-            step["decision"] = "skipped"
-            step["reason"] = skip_flag
-            continue
-        if auto_approve:
-            step["decision"] = "approved"
-            step["reason"] = "yes_flag"
-            approved_any = True
-            continue
-        if not interactive:
-            step["decision"] = "skipped"
-            step["reason"] = "needs_approval"
-            continue
-        answer = _prompt_init_step(step)
-        if answer in {"y", "yes"}:
-            step["decision"] = "approved"
-            step["reason"] = "user_approved"
-            approved_any = True
-        else:
-            step["decision"] = "skipped"
-            step["reason"] = "user_skipped"
-    return plan, approved_any
+) -> bool:
+    skip_flag = step.get("skip_flag")
+    if isinstance(skip_flag, str) and bool(getattr(args, skip_flag, False)):
+        step["decision"] = "skipped"
+        step["reason"] = skip_flag
+        return False
+    if bool(getattr(args, "yes", False)):
+        step["decision"] = "approved"
+        step["reason"] = "yes_flag"
+        return True
+    if not interactive:
+        step["decision"] = "skipped"
+        step["reason"] = "needs_approval"
+        return False
+    answer = _prompt_init_step(step)
+    if answer in {"y", "yes"}:
+        step["decision"] = "approved"
+        step["reason"] = "user_approved"
+        return True
+    step["decision"] = "skipped"
+    step["reason"] = "user_skipped"
+    return False
 
 
-def _init_step_approved(plan: list[dict[str, object]], step_id: str) -> bool:
-    return any(step.get("id") == step_id and step.get("decision") == "approved" for step in plan)
+def _skip_init_step_payload(step: dict[str, object]) -> dict[str, object]:
+    return {"skipped": True, "reason": str(step.get("reason") or "skipped")}
 
 
-def _init_step_reason(plan: list[dict[str, object]], step_id: str) -> str:
-    for step in plan:
-        if step.get("id") == step_id:
-            return str(step.get("reason") or "skipped")
-    return "skipped"
+def _print_init_step_complete(step: dict[str, object], payload: dict[str, object]) -> None:
+    title = str(step.get("title") or step.get("id") or "Init step")
+    if bool(payload.get("skipped")):
+        reason = str(payload.get("reason") or "skipped").replace("_", " ")
+        print(f"Skipped: {title} ({reason})", file=sys.stderr)
+        return
+    if payload.get("error"):
+        print(f"Needs attention: {title} ({payload.get('error')})", file=sys.stderr)
+        return
+    print(f"Completed: {title}", file=sys.stderr)
 
 
 def _run_init_command(
@@ -998,93 +998,100 @@ def _run_init_command(
     interactive = sys.stdin.isatty() and not bool(getattr(args, "json", False))
     if interactive and not bool(getattr(args, "yes", False)) and not bool(getattr(args, "json", False)):
         _print_init_plan_preview(init_plan)
-    plan, approved_any = _resolve_init_decisions(
-        args,
-        init_plan,
-        interactive=interactive,
-    )
+    approved_any = False
     approval_center_url: str | None = None
     dashboard_payload: dict[str, object] | None = None
-    if _init_step_approved(plan, "dashboard"):
-        try:
-            approval_center_url = ensure_guard_daemon(context.guard_home)
-            open_result = _open_approval_center(
-                approval_center_url,
-                store=store,
-                config=config,
-                open_key="init",
-                force_open=True,
-            )
-            dashboard_payload = {
-                "approval_center_url": approval_center_url,
-                "browser_url": open_result.get("browser_url"),
-                "opened": bool(open_result.get("opened")),
-                "reason": str(open_result.get("reason") or "unknown"),
-            }
-        except RuntimeError as error:
-            dashboard_payload = {"opened": False, "error": str(error)}
-    else:
-        dashboard_payload = {"skipped": True, "reason": _init_step_reason(plan, "dashboard")}
+    apps_payload: dict[str, object] = {}
+    cloud_payload: dict[str, object] = {}
+    notification_payload: dict[str, object] = {}
 
-    apps_payload: dict[str, object]
-    if not _init_step_approved(plan, "apps"):
-        apps_payload = {"skipped": True, "reason": _init_step_reason(plan, "apps")}
-    else:
-        try:
-            apps_payload = apply_managed_install(
-                "install",
-                None,
-                True,
-                context,
-                store,
-                str(workspace) if workspace else None,
-                _now(),
+    for step in init_plan:
+        step_id = str(step.get("id") or "")
+        if not _approve_init_step(args, step, interactive=interactive):
+            step_payload = _skip_init_step_payload(step)
+        elif step_id == "dashboard":
+            approved_any = True
+            try:
+                approval_center_url = ensure_guard_daemon(context.guard_home)
+                open_result = _open_approval_center(
+                    approval_center_url,
+                    store=store,
+                    config=config,
+                    open_key="init",
+                    force_open=True,
+                )
+                step_payload = {
+                    "approval_center_url": approval_center_url,
+                    "browser_url": open_result.get("browser_url"),
+                    "opened": bool(open_result.get("opened")),
+                    "reason": str(open_result.get("reason") or "unknown"),
+                }
+            except RuntimeError as error:
+                step_payload = {"opened": False, "error": str(error)}
+        elif step_id == "apps":
+            approved_any = True
+            try:
+                step_payload = apply_managed_install(
+                    "install",
+                    None,
+                    True,
+                    context,
+                    store,
+                    str(workspace) if workspace else None,
+                    _now(),
+                )
+                step_payload["skipped"] = False
+            except ValueError as error:
+                step_payload = {"skipped": False, "error": str(error), "managed_installs": []}
+        elif step_id == "cloud":
+            approved_any = True
+            try:
+                step_payload = _run_guard_connect_flow(
+                    guard_home=context.guard_home,
+                    store=store,
+                    sync_url=args.sync_url,
+                    connect_url=args.connect_url,
+                    wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 0)),
+                )
+                step_payload["skipped"] = False
+            except Exception as error:
+                step_payload = {"skipped": False, "connected": False, "error": str(error)}
+        elif step_id == "notifications":
+            approved_any = True
+            approval_url = (
+                f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
+                if isinstance(approval_center_url, str) and approval_center_url
+                else "hol-guard://notification-preview"
             )
-            apps_payload["skipped"] = False
-        except ValueError as error:
-            apps_payload = {"skipped": False, "error": str(error), "managed_installs": []}
-
-    cloud_payload: dict[str, object]
-    if not _init_step_approved(plan, "cloud"):
-        cloud_payload = {"skipped": True, "reason": _init_step_reason(plan, "cloud")}
-    else:
-        try:
-            cloud_payload = _run_guard_connect_flow(
-                guard_home=context.guard_home,
-                store=store,
-                sync_url=args.sync_url,
-                connect_url=args.connect_url,
-                wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 0)),
+            result = ensure_desktop_notification_setup(
+                context.guard_home,
+                approval_url=approval_url,
+                force=True,
             )
-            cloud_payload["skipped"] = False
-        except Exception as error:
-            cloud_payload = {"skipped": False, "connected": False, "error": str(error)}
+            step_payload = desktop_notification_setup_payload(
+                result,
+                guidance=macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None,
+            )
+            step_payload["skipped"] = False
+        else:
+            step_payload = {"skipped": True, "reason": "unknown_step"}
 
-    notification_payload: dict[str, object]
-    if not _init_step_approved(plan, "notifications"):
-        notification_payload = {"skipped": True, "reason": _init_step_reason(plan, "notifications")}
-    else:
-        approval_url = (
-            f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
-            if isinstance(approval_center_url, str) and approval_center_url
-            else "hol-guard://notification-preview"
-        )
-        result = ensure_desktop_notification_setup(
-            context.guard_home,
-            approval_url=approval_url,
-            force=True,
-        )
-        notification_payload = desktop_notification_setup_payload(
-            result,
-            guidance=macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None,
-        )
-        notification_payload["skipped"] = False
+        if step_id == "dashboard":
+            dashboard_payload = step_payload
+        elif step_id == "apps":
+            apps_payload = step_payload
+        elif step_id == "cloud":
+            cloud_payload = step_payload
+        elif step_id == "notifications":
+            notification_payload = step_payload
+        if interactive:
+            _print_init_step_complete(step, step_payload)
 
     payload = {
         "generated_at": _now(),
         "status": "initialized" if approved_any else "approval_required",
         "mode": "auto_approved" if bool(getattr(args, "yes", False)) else "progressive",
-        "plan": plan,
+        "plan": init_plan,
         "dashboard": dashboard_payload,
         "apps": apps_payload,
         "cloud": cloud_payload,

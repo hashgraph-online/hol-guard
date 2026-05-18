@@ -30,7 +30,7 @@ pipx install hol-guard
 hol-guard init
 ```
 
-`hol-guard init` is the first-run guided setup. It shows a progressive plan first, then asks before each side effect: open the local dashboard, protect detected harnesses, start Guard Cloud connect, and enable desktop notifications. Nothing opens or changes until you approve that step. Use `hol-guard init --yes` only for automation when you already trust the plan.
+`hol-guard init` is the first-run guided setup. It shows a progressive plan first, then gates each side effect: approve dashboard, Guard completes it, then approve app protection, Guard completes it, then approve Cloud connect and notifications. Nothing opens or changes until you approve that checkpoint. Use `hol-guard init --yes` only for automation when you already trust the plan.
 
 Manual and follow-up commands:
 
