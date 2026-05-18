@@ -6988,7 +6988,57 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["reason"] == "opened"
         assert "notification_setup_started" not in output
 
-    def test_guard_init_runs_apps_cloud_notifications_and_dashboard(self, tmp_path, capsys, monkeypatch):
+    def test_guard_init_requires_progressive_approval_before_side_effects(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        prompt_calls: list[bool] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda *_args, **_kwargs: pytest.fail("dashboard should wait for approval"),
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "apply_managed_install",
+            lambda *_args, **_kwargs: pytest.fail("app install should wait for approval"),
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_run_guard_connect_flow",
+            lambda **_kwargs: pytest.fail("cloud connect should wait for approval"),
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_desktop_notification_setup",
+            lambda *_args, **_kwargs: pytest.fail("notification setup should wait for approval"),
+        )
+        monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_prompt_init_step",
+            lambda *_args, **_kwargs: prompt_calls.append(True) or "y",
+        )
+
+        rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert prompt_calls == []
+        assert output["status"] == "approval_required"
+        assert [step["id"] for step in output["plan"]] == [
+            "dashboard",
+            "apps",
+            "cloud",
+            "notifications",
+        ]
+        assert output["dashboard"] == {"skipped": True, "reason": "needs_approval"}
+        assert output["apps"] == {"skipped": True, "reason": "needs_approval"}
+        assert output["cloud"] == {"skipped": True, "reason": "needs_approval"}
+        assert output["desktop_notifications"] == {"skipped": True, "reason": "needs_approval"}
+        assert output["next_command"] == "hol-guard init --yes"
+
+    def test_guard_init_runs_apps_cloud_notifications_and_dashboard_with_yes(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
         dashboard_calls: list[tuple[str, str | None, bool]] = []
@@ -7057,10 +7107,12 @@ url = http://127.0.0.1:8787/guard-canary
 
         monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
 
-        rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
+        rc = main(["guard", "init", "--yes", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
+        assert output["mode"] == "auto_approved"
+        assert [step["decision"] for step in output["plan"]] == ["approved", "approved", "approved", "approved"]
         assert dashboard_calls == [("http://127.0.0.1:5474", "init", True)]
         assert install_calls == [("install", None, True)]
         assert output["dashboard"]["opened"] is True
@@ -7070,6 +7122,73 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["desktop_notifications"]["preview_sent"] is True
         assert "terminal-notifier" in output["desktop_notifications"]["guidance"]
         assert notification_calls == [(guard_home, "http://127.0.0.1:5474/approvals/notification-preview", True)]
+
+    def test_guard_init_interactive_no_skips_only_cloud_step(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        answers = iter(["y", "y", "n", "y"])
+        dashboard_calls: list[str] = []
+        install_calls: list[bool] = []
+        notification_calls: list[bool] = []
+
+        monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr(guard_commands_module, "_prompt_init_step", lambda *_args, **_kwargs: next(answers))
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
+                dashboard_calls.append(approval_center_url),
+                {"opened": True, "reason": "opened", "browser_url": f"{approval_center_url}/home"},
+            )[-1],
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "apply_managed_install",
+            lambda *_args, **_kwargs: (
+                install_calls.append(True),
+                {"managed_installs": [{"harness": "codex", "active": True}]},
+            )[-1],
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_run_guard_connect_flow",
+            lambda **_kwargs: pytest.fail("cloud connect should be skipped"),
+        )
+
+        def fake_setup(
+            guard_home_path: Path,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            del guard_home_path, approval_url, force
+            notification_calls.append(True)
+            return DesktopNotificationSetupResult(
+                platform="Darwin",
+                supported=True,
+                preview_sent=True,
+                settings_opened=False,
+                settings_url=None,
+                already_prompted=False,
+                notifier_path="/usr/local/bin/terminal-notifier",
+            )
+
+        monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
+
+        rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home)])
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert dashboard_calls == ["http://127.0.0.1:5474"]
+        assert install_calls == [True]
+        assert notification_calls == [True]
+        assert "skipped (user skipped)" in output
+        assert "Progressive init plan" in output
 
     def test_guard_init_skip_flags_do_not_run_install_cloud_or_notifications(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

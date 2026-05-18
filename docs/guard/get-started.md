@@ -13,7 +13,13 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard init
    ```
 
-   This opens the local dashboard, finds supported harnesses, installs Guard-managed app commands where possible, starts the Guard Cloud connect flow when you want shared history, and runs desktop notification setup so approval prompts reach you outside the terminal.
+   Guard prints a plan first, then asks before each side effect. You approve the dashboard open, harness installs, Guard Cloud connect, and desktop notification setup one at a time. Nothing opens or changes until you approve that checkpoint, so the flow stays clear instead of spawning windows without context.
+
+   For automation only, run:
+
+   ```bash
+   hol-guard init --yes
+   ```
 
 2. Alternatively, use the manual discovery path only when you want to inspect each step yourself:
 
