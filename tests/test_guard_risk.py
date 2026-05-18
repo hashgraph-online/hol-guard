@@ -33,6 +33,7 @@ from codex_plugin_scanner.guard.risk import (
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    _gh_pr_create_body_has_shell_command_substitution,
     _path_text_is_within_root_text,
     _read_small_runtime_text_file,
     _resolved_runtime_path,
@@ -1024,6 +1025,180 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
     )
 
     assert request is None
+
+
+def test_tool_action_request_classifier_skips_safe_gh_pr_create_body_file():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "--body-file /tmp/guard-pr-body.md"
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_skips_single_quoted_gh_pr_create_markdown_body():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "--body '## Verification\n"
+                "- `pytest tests/test_guard_desktop_notifications.py tests/test_guard_approvals.py -q`\n"
+                "- `ruff check src/codex_plugin_scanner/guard/desktop_notifications.py`'"
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_explains_gh_pr_create_double_quoted_markdown_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --repo hashgraph-online/hol-guard "
+                '--title "feat(guard): notify desktop for approvals" '
+                '--body "## Verification\n'
+                "- `pytest tests/test_guard_desktop_notifications.py tests/test_guard_approvals.py -q`\n"
+                'Note: `python -m build` was blocked by local HOL Guard approval."'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub PR body shell substitution"
+    assert "single quotes" in request.reason
+    assert "--body-file" in request.reason
+
+
+def test_tool_action_request_classifier_explains_later_gh_pr_create_body_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "--body 'safe markdown body' "
+                '--body "Verification: `python -m build`"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub PR body shell substitution"
+
+
+def test_tool_action_request_classifier_explains_wrapped_gh_pr_create_body_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "sudo gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                '--body "Verification: `python -m build`"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "GitHub PR body shell substitution"
+
+
+def test_tool_action_request_classifier_ignores_single_quoted_body_when_other_command_substitutes():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "echo $(date) && "
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "--body 'Verification: `python -m build`'"
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_ignores_single_quoted_attached_body_flag():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "echo $(date) && "
+                "gh pr create --repo hashgraph-online/hol-guard "
+                "--title 'feat(guard): notify desktop for approvals' "
+                "'-bVerification: `python -m build`'"
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_ignores_single_quoted_env_split_string_body():
+    assert not _gh_pr_create_body_has_shell_command_substitution(
+        "echo $(date) && env -S'gh pr create --body \"Verification: `python -m build`\"'"
+    )
+
+
+@pytest.mark.parametrize("lookup_flag", ["-v", "-V", "-pv"])
+def test_tool_action_request_classifier_ignores_command_lookup_gh_pr_words(lookup_flag):
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": f'command {lookup_flag} gh pr create --body "Verification: $(date)"'},
+    )
+
+    assert request is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        'echo ok\ngh pr create --body "Verification: `python -m build`"',
+        'echo ok  \n gh pr create --body "Verification: `python -m build`"',
+        'time -p gh pr create --body "Verification: `python -m build`"',
+        'time -o /tmp/time.log gh pr create --body "Verification: `python -m build`"',
+        'env -i GH_HOST=github.com gh pr create --body "Verification: `python -m build`"',
+        'env -vS"gh pr create --body \\"Verification: `python -m build`\\""',
+        'env -v gh pr create --body "Verification: `python -m build`"',
+        'env -- gh pr create --body "Verification: `python -m build`"',
+        'command -p gh pr create --body "Verification: `python -m build`"',
+        'gh pr create -b"Verification: `python -m build`"',
+        "gh pr create --body-file <(date)",
+        "gh pr create --body-file=<(date)",
+        "gh pr create -F<(date)",
+        'gh pr new --body "Verification: `python -m build`"',
+        'gh pr -R hashgraph-online/hol-guard create --body "Verification: `python -m build`"',
+        '>/dev/null gh pr create --body "Verification: `python -m build`"',
+        'if gh pr create --body "Verification: `python -m build`"; then echo ok; fi',
+        'if true; then gh pr create --body "Verification: `python -m build`"; fi',
+        'for target in one; do gh pr create --body "Verification: `python -m build`"; done',
+        'case "$target" in one) gh pr create --body "Verification: `python -m build`";; esac',
+        'select target in one do gh pr create --body "Verification: `python -m build`"; done',
+        '{ gh pr create --body "Verification: `python -m build`"; }',
+        '! gh pr create --body "Verification: `python -m build`"',
+        'nohup gh pr create --body "Verification: `python -m build`"',
+        'nice -n 5 gh pr create --body "Verification: `python -m build`"',
+        'stdbuf -oL gh pr create --body "Verification: `python -m build`"',
+        'sudo -u builder gh pr create --body "Verification: `python -m build`"',
+        'sudo -D /tmp gh pr create --body "Verification: `python -m build`"',
+        'sudo --chroot /tmp gh pr create --body "Verification: `python -m build`"',
+    ],
+)
+def test_tool_action_request_classifier_explains_wrapped_or_multiline_gh_pr_create_body_substitution(command):
+    request = extract_sensitive_tool_action_request("bash", {"command": command})
+
+    assert request is not None
+    assert request.action_class == "GitHub PR body shell substitution"
 
 
 def test_tool_action_request_classifier_skips_node_heredoc_generated_temp_json_workflow():
