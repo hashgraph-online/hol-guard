@@ -153,6 +153,7 @@ def ensure_desktop_notification_setup_async(
             target=_ensure_desktop_notification_setup_worker,
             args=(key, guard_home, approval_url, force),
             name=f"hol-guard-notification-setup-{uuid.uuid4().hex}",
+            daemon=True,
         ).start()
     except Exception:
         with _NOTIFICATION_SETUP_LOCK:
