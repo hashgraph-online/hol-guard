@@ -165,6 +165,7 @@ def test_macos_setup_command_timeout_does_not_raise(tmp_path) -> None:
     assert result.preview_sent is False
     assert result.settings_opened is False
     assert len(calls) == 2
+    assert not (tmp_path / "guard-home" / "desktop-notifications.json").exists()
 
 
 def test_failed_notification_attempt_can_retry(monkeypatch) -> None:
