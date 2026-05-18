@@ -254,6 +254,9 @@ def _render_start(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_init(console: Console, payload: dict[str, object]) -> None:
+    plan = _coerce_dict_list(payload.get("plan"))
+    if plan:
+        console.print(_init_plan_panel(plan, str(payload.get("status") or "initialized")))
     dashboard = payload.get("dashboard")
     apps = payload.get("apps")
     cloud = payload.get("cloud")
@@ -268,7 +271,8 @@ def _render_init(console: Console, payload: dict[str, object]) -> None:
     summary.add_row("Apps", _init_apps_summary(apps_payload, len(managed_installs)))
     summary.add_row("Cloud", _init_cloud_summary(cloud_payload))
     summary.add_row("Notifications", _init_notification_summary(notification_payload))
-    console.print(Panel(summary, title="HOL Guard initialized", border_style="cyan"))
+    title = "HOL Guard init needs approval" if payload.get("status") == "approval_required" else "HOL Guard initialized"
+    console.print(Panel(summary, title=title, border_style="cyan"))
     if managed_installs:
         console.print(_managed_install_batch_table(managed_installs))
     guidance = notification_payload.get("guidance")
@@ -277,7 +281,31 @@ def _render_init(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
 
 
+def _init_plan_panel(plan: list[dict[str, object]], status: str) -> Panel:
+    table = Table.grid(padding=(0, 1))
+    for step in plan:
+        decision = str(step.get("decision") or "pending").replace("_", " ")
+        title = str(step.get("title") or step.get("id") or "Step")
+        command = str(step.get("command") or "")
+        table.add_row(_init_decision_label(decision), f"[bold]{title}[/bold]", command)
+        detail = step.get("detail")
+        if isinstance(detail, str) and detail:
+            table.add_row("", f"[dim]{detail}[/dim]", "")
+    border = "yellow" if status == "approval_required" else "cyan"
+    return Panel(table, title="Progressive init plan", border_style=border)
+
+
+def _init_decision_label(decision: str) -> str:
+    if decision == "approved":
+        return "[green]approved[/green]"
+    if decision == "skipped":
+        return "[yellow]skipped[/yellow]"
+    return "[blue]pending[/blue]"
+
+
 def _init_dashboard_summary(payload: dict[str, object]) -> str:
+    if bool(payload.get("skipped")):
+        return f"skipped ({payload.get('reason') or 'not approved'})"
     if payload.get("error"):
         return f"not opened ({payload.get('error')})"
     opened = "opened" if bool(payload.get("opened")) else "ready"
@@ -287,7 +315,7 @@ def _init_dashboard_summary(payload: dict[str, object]) -> str:
 
 def _init_apps_summary(payload: dict[str, object], count: int) -> str:
     if bool(payload.get("skipped")):
-        return "skipped"
+        return f"skipped ({payload.get('reason') or 'not approved'})"
     if payload.get("error"):
         return f"needs attention ({payload.get('error')})"
     return f"{count} app install{'s' if count != 1 else ''} checked"
@@ -295,7 +323,7 @@ def _init_apps_summary(payload: dict[str, object], count: int) -> str:
 
 def _init_cloud_summary(payload: dict[str, object]) -> str:
     if bool(payload.get("skipped")):
-        return "skipped"
+        return f"skipped ({payload.get('reason') or 'not approved'})"
     if payload.get("error"):
         return f"needs attention ({payload.get('error')})"
     if bool(payload.get("connected")):
@@ -306,7 +334,7 @@ def _init_cloud_summary(payload: dict[str, object]) -> str:
 
 def _init_notification_summary(payload: dict[str, object]) -> str:
     if bool(payload.get("skipped")):
-        return "skipped"
+        return f"skipped ({payload.get('reason') or 'not approved'})"
     if not bool(payload.get("supported")):
         return "not supported on this OS"
     states = []

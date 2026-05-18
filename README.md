@@ -30,7 +30,7 @@ pipx install hol-guard
 hol-guard init
 ```
 
-`hol-guard init` is the first-run guided setup. It opens the local dashboard, finds supported harnesses, installs Guard-managed app commands where possible, starts the Guard Cloud connect flow when you want shared history, and runs desktop notification setup so approval prompts reach you outside the terminal.
+`hol-guard init` is the first-run guided setup. It shows a progressive plan first, then asks before each side effect: open the local dashboard, protect detected harnesses, start Guard Cloud connect, and enable desktop notifications. Nothing opens or changes until you approve that step. Use `hol-guard init --yes` only for automation when you already trust the plan.
 
 Manual and follow-up commands:
 
@@ -66,7 +66,7 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 - `hol-guard start`
   Shows the next step for the harnesses Guard found.
 - `hol-guard init`
-  Runs first-run onboarding: local dashboard, harness discovery and install, optional Guard Cloud connect, and desktop notification setup.
+  Runs first-run onboarding as approval checkpoints: local dashboard, harness discovery and install, optional Guard Cloud connect, and desktop notification setup.
 - `hol-guard bootstrap`
   Detects the best local harness, starts the approval center, and installs Guard in front of it.
 - `hol-guard hermes bootstrap`
