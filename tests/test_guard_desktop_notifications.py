@@ -133,6 +133,40 @@ def test_notification_command_nonzero_exit_is_failure() -> None:
     assert calls[0][0] == "osascript"
 
 
+def test_notification_command_launch_failure_is_best_effort() -> None:
+    def run(_command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
+        raise FileNotFoundError("osascript")
+
+    sent = send_desktop_approval_notification(
+        _notification(),
+        system_name="Darwin",
+        run=run,
+        which=lambda _name: None,
+    )
+
+    assert sent is False
+
+
+def test_macos_setup_command_timeout_does_not_raise(tmp_path) -> None:
+    calls: list[list[str]] = []
+
+    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
+        calls.append(command)
+        raise subprocess.TimeoutExpired(command, timeout=3)
+
+    result = ensure_desktop_notification_setup(
+        tmp_path / "guard-home",
+        approval_url="http://127.0.0.1:5474/approvals/preview",
+        system_name="Darwin",
+        run=run,
+        which=lambda _name: "/usr/local/bin/terminal-notifier",
+    )
+
+    assert result.preview_sent is False
+    assert result.settings_opened is False
+    assert len(calls) == 2
+
+
 def test_failed_notification_attempt_can_retry(monkeypatch) -> None:
     with _NOTIFIED_APPROVAL_IDS_LOCK:
         _NOTIFIED_APPROVAL_IDS.clear()
