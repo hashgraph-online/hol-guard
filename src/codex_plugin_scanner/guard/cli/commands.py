@@ -1009,72 +1009,75 @@ def _run_init_command(
         step_id = str(step.get("id") or "")
         if not _approve_init_step(args, step, interactive=interactive):
             step_payload = _skip_init_step_payload(step)
-        elif step_id == "dashboard":
-            approved_any = True
-            try:
-                approval_center_url = ensure_guard_daemon(context.guard_home)
-                open_result = _open_approval_center(
-                    approval_center_url,
-                    store=store,
-                    config=config,
-                    open_key="init",
-                    force_open=True,
-                )
-                step_payload = {
-                    "approval_center_url": approval_center_url,
-                    "browser_url": open_result.get("browser_url"),
-                    "opened": bool(open_result.get("opened")),
-                    "reason": str(open_result.get("reason") or "unknown"),
-                }
-            except RuntimeError as error:
-                step_payload = {"opened": False, "error": str(error)}
-        elif step_id == "apps":
-            approved_any = True
-            try:
-                step_payload = apply_managed_install(
-                    "install",
-                    None,
-                    True,
-                    context,
-                    store,
-                    str(workspace) if workspace else None,
-                    _now(),
-                )
-                step_payload["skipped"] = False
-            except ValueError as error:
-                step_payload = {"skipped": False, "error": str(error), "managed_installs": []}
-        elif step_id == "cloud":
-            approved_any = True
-            try:
-                step_payload = _run_guard_connect_flow(
-                    guard_home=context.guard_home,
-                    store=store,
-                    sync_url=args.sync_url,
-                    connect_url=args.connect_url,
-                    wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 0)),
-                )
-                step_payload["skipped"] = False
-            except Exception as error:
-                step_payload = {"skipped": False, "connected": False, "error": str(error)}
-        elif step_id == "notifications":
-            approved_any = True
-            approval_url = (
-                f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
-                if isinstance(approval_center_url, str) and approval_center_url
-                else "hol-guard://notification-preview"
-            )
-            result = ensure_desktop_notification_setup(
-                context.guard_home,
-                approval_url=approval_url,
-                force=True,
-            )
-            step_payload = desktop_notification_setup_payload(
-                result,
-                guidance=macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None,
-            )
-            step_payload["skipped"] = False
         else:
-            step_payload = {"skipped": True, "reason": "unknown_step"}
+            approved_any = True
+            if step_id == "dashboard":
+                try:
+                    approval_center_url = ensure_guard_daemon(context.guard_home)
+                    open_result = _open_approval_center(
+                        approval_center_url,
+                        store=store,
+                        config=config,
+                        open_key="init",
+                        force_open=True,
+                    )
+                    step_payload = {
+                        "approval_center_url": approval_center_url,
+                        "browser_url": open_result.get("browser_url"),
+                        "opened": bool(open_result.get("opened")),
+                        "reason": str(open_result.get("reason") or "unknown"),
+                    }
+                except RuntimeError as error:
+                    step_payload = {"opened": False, "error": str(error)}
+            elif step_id == "apps":
+                try:
+                    step_payload = apply_managed_install(
+                        "install",
+                        None,
+                        True,
+                        context,
+                        store,
+                        str(workspace) if workspace else None,
+                        _now(),
+                    )
+                    step_payload["skipped"] = False
+                except ValueError as error:
+                    step_payload = {"skipped": False, "error": str(error), "managed_installs": []}
+            elif step_id == "cloud":
+                try:
+                    step_payload = _run_guard_connect_flow(
+                        guard_home=context.guard_home,
+                        store=store,
+                        sync_url=args.sync_url,
+                        connect_url=args.connect_url,
+                        wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 0)),
+                    )
+                    step_payload["skipped"] = False
+                except Exception as error:
+                    step_payload = {"skipped": False, "connected": False, "error": str(error)}
+            elif step_id == "notifications":
+                try:
+                    approval_url = (
+                        f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
+                        if isinstance(approval_center_url, str) and approval_center_url
+                        else "hol-guard://notification-preview"
+                    )
+                    result = ensure_desktop_notification_setup(
+                        context.guard_home,
+                        approval_url=approval_url,
+                        force=True,
+                    )
+                    step_payload = desktop_notification_setup_payload(
+                        result,
+                        guidance=macos_notification_guidance(result.notifier_path)
+                        if result.platform == "Darwin"
+                        else None,
+                    )
+                    step_payload["skipped"] = False
+                except Exception as error:
+                    step_payload = {"skipped": False, "error": str(error)}
+            else:
+                step_payload = {"skipped": True, "reason": "unknown_step"}
 
         if step_id == "dashboard":
             dashboard_payload = step_payload
