@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import json
 import os
 import platform
 import shutil
@@ -11,6 +12,11 @@ import threading
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+MACOS_NOTIFICATION_SETTINGS_URL = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+_NOTIFICATION_SETUP_STATE_FILE = "desktop-notifications.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +27,19 @@ class DesktopApprovalNotification:
     title: str
     message: str
     approval_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class DesktopNotificationSetupResult:
+    """Result from local OS notification permission setup."""
+
+    platform: str
+    supported: bool
+    preview_sent: bool
+    settings_opened: bool
+    settings_url: str | None
+    already_prompted: bool
+    notifier_path: str | None
 
 
 _NOTIFIED_APPROVAL_IDS: set[str] = set()
@@ -103,6 +122,74 @@ def send_desktop_approval_notification(
     return False
 
 
+def ensure_desktop_notification_setup(
+    guard_home: Path,
+    *,
+    approval_url: str,
+    force: bool = False,
+    system_name: str | None = None,
+    run: Callable[..., subprocess.CompletedProcess[object]] = subprocess.run,
+    which: Callable[[str], str | None] = shutil.which,
+) -> DesktopNotificationSetupResult:
+    """Register macOS notifier and open Notifications settings when needed."""
+
+    system = system_name or platform.system()
+    if system != "Darwin" or _desktop_notifications_disabled_by_env():
+        return DesktopNotificationSetupResult(
+            platform=system,
+            supported=False,
+            preview_sent=False,
+            settings_opened=False,
+            settings_url=None,
+            already_prompted=False,
+            notifier_path=None,
+        )
+    state_path = guard_home / _NOTIFICATION_SETUP_STATE_FILE
+    already_prompted = state_path.exists()
+    terminal_notifier = which("terminal-notifier")
+    if already_prompted and not force:
+        return DesktopNotificationSetupResult(
+            platform=system,
+            supported=True,
+            preview_sent=False,
+            settings_opened=False,
+            settings_url=MACOS_NOTIFICATION_SETTINGS_URL,
+            already_prompted=True,
+            notifier_path=terminal_notifier,
+        )
+    preview_sent = send_desktop_approval_notification(
+        DesktopApprovalNotification(
+            request_id=f"notification-setup-{uuid.uuid4().hex}",
+            title="HOL Guard notifications",
+            message="Enable alerts for approval requests from HOL Guard.",
+            approval_url=approval_url,
+        ),
+        system_name=system,
+        run=run,
+        which=which,
+    )
+    settings_opened = _open_macos_notification_settings(run=run)
+    _write_notification_setup_state(
+        state_path,
+        {
+            "opened_at": _utc_now(),
+            "settings_url": MACOS_NOTIFICATION_SETTINGS_URL,
+            "preview_sent": preview_sent,
+            "settings_opened": settings_opened,
+            "notifier_path": terminal_notifier,
+        },
+    )
+    return DesktopNotificationSetupResult(
+        platform=system,
+        supported=True,
+        preview_sent=preview_sent,
+        settings_opened=settings_opened,
+        settings_url=MACOS_NOTIFICATION_SETTINGS_URL,
+        already_prompted=already_prompted,
+        notifier_path=terminal_notifier,
+    )
+
+
 def _desktop_notifications_disabled_by_env() -> bool:
     value = os.environ.get("HOL_GUARD_DESKTOP_NOTIFICATIONS", "").strip().lower()
     return value in {"0", "false", "off", "no"}
@@ -174,6 +261,18 @@ def _send_windows_notification(
     )
 
 
+def _open_macos_notification_settings(
+    *,
+    run: Callable[..., subprocess.CompletedProcess[object]],
+) -> bool:
+    return _run_notification_command(
+        run,
+        ["open", MACOS_NOTIFICATION_SETTINGS_URL],
+        check=False,
+        timeout=3,
+    )
+
+
 def _windows_toast_script(notification: DesktopApprovalNotification) -> str:
     title = _escape_powershell_single_quoted(notification.title)
     message = _escape_powershell_single_quoted(notification.message)
@@ -210,6 +309,18 @@ def _run_notification_command(
 ) -> bool:
     result = run(command, **kwargs)
     return result.returncode == 0
+
+
+def _write_notification_setup_state(state_path: Path, payload: dict[str, object]) -> None:
+    try:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(payload, sort_keys=True, indent=2), encoding="utf-8")
+    except OSError:
+        return
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _escape_osascript(value: str) -> str:

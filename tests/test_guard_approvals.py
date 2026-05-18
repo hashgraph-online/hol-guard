@@ -541,6 +541,63 @@ class TestGuardApprovals:
         assert queued[0]["risk_signals"] == ["call arguments mention sensitive local files or secrets"]
         assert queued[0]["launch_summary"] == "Launches with `dangerous_delete .env`."
 
+    def test_guard_queue_runs_desktop_notification_setup_before_request_notice(self, tmp_path, monkeypatch):
+        setup_calls: list[tuple[Path, str]] = []
+        notice_calls: list[str] = []
+
+        def fake_setup(guard_home: Path, *, approval_url: str) -> None:
+            setup_calls.append((guard_home, approval_url))
+
+        def fake_notify(notification, **_kwargs):
+            notice_calls.append(notification.request_id)
+            return True
+
+        monkeypatch.setattr("codex_plugin_scanner.guard.approvals.ensure_desktop_notification_setup", fake_setup)
+        monkeypatch.setattr("codex_plugin_scanner.guard.approvals.notify_pending_approval_once", fake_notify)
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        artifact = GuardArtifact(
+            artifact_id="codex:runtime:project:danger_lab:setup_notice",
+            name="danger_lab:setup_notice",
+            harness="codex",
+            artifact_type="tool_call",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="setup_notice",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_name": artifact.name,
+                        "artifact_hash": "hash-runtime",
+                        "artifact_type": artifact.artifact_type,
+                        "source_scope": artifact.source_scope,
+                        "config_path": artifact.config_path,
+                        "changed_fields": ["runtime_tool_call"],
+                        "policy_action": "require-reapproval",
+                        "launch_target": "setup_notice",
+                    }
+                ]
+            },
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-04-17T00:00:00+00:00",
+        )
+
+        assert setup_calls == [(guard_home, queued[0]["approval_url"])]
+        assert notice_calls == [queued[0]["request_id"]]
+
     def test_guard_queue_notifies_desktop_once_for_new_request(self, tmp_path, monkeypatch):
         notifications: list[str] = []
 
@@ -556,6 +613,10 @@ class TestGuardApprovals:
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.desktop_notifications.send_desktop_approval_notification",
             fake_send,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.approvals.ensure_desktop_notification_setup",
+            lambda *_args, **_kwargs: None,
         )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.approvals.notify_pending_approval_once",
@@ -638,6 +699,10 @@ class TestGuardApprovals:
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.desktop_notifications.send_desktop_approval_notification",
             fake_send,
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.approvals.ensure_desktop_notification_setup",
+            lambda *_args, **_kwargs: None,
         )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.approvals.notify_pending_approval_once",
