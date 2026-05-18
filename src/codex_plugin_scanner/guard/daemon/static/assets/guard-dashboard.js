@@ -13482,6 +13482,25 @@ async function repairApprovalCenter() {
   }
   return response.json();
 }
+async function setupDesktopNotifications() {
+  if (isGuardDemoMode()) {
+    return {
+      platform: "Darwin",
+      supported: true,
+      preview_sent: true,
+      settings_opened: true,
+      settings_url: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=fr.julienxx.oss.terminal-notifier",
+      already_prompted: false,
+      notifier_path: "/usr/local/bin/terminal-notifier",
+      guidance: "macOS may open the general Notifications list. Choose terminal-notifier, enable Allow Notifications, then enable Banners or Alerts plus Sounds."
+    };
+  }
+  return readJson("/v1/notifications/setup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+}
 var DefaultContext = {
   color: void 0,
   size: void 0,
@@ -13748,6 +13767,9 @@ function HiMiniCalendarDays(props) {
 }
 function HiMiniBolt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M11.983 1.907a.75.75 0 0 0-1.292-.657l-8.5 9.5A.75.75 0 0 0 2.75 12h6.572l-1.305 6.093a.75.75 0 0 0 1.292.657l8.5-9.5A.75.75 0 0 0 17.25 8h-6.572l1.305-6.093Z" }, "child": [] }] })(props);
+}
+function HiMiniBellAlert(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.214 3.227a.75.75 0 0 0-1.156-.955 8.97 8.97 0 0 0-1.856 3.825.75.75 0 0 0 1.466.316 7.47 7.47 0 0 1 1.546-3.186ZM16.942 2.272a.75.75 0 0 0-1.157.955 7.47 7.47 0 0 1 1.547 3.186.75.75 0 0 0 1.466-.316 8.971 8.971 0 0 0-1.856-3.825Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.91 32.91 0 0 0 3.256.508 3.5 3.5 0 0 0 6.972 0 32.903 32.903 0 0 0 3.256-.508.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6Zm0 14.5a2 2 0 0 1-1.95-1.557 33.54 33.54 0 0 0 3.9 0A2 2 0 0 1 10 16.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniArrowTopRightOnSquare(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -21454,7 +21476,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniArrowPath as $,
+  GuardHarnessActionError as $,
   ActionButton as A,
   Badge as B,
   clearPolicy as C,
@@ -21464,29 +21486,31 @@ export {
   GuardHero as G,
   HiMiniCheckCircle as H,
   repairApprovalCenter as I,
-  HiMiniMagnifyingGlass as J,
-  HiMiniLockClosed as K,
-  HiMiniCog6Tooth as L,
-  fetchApprovalPage as M,
-  fetchPolicy as N,
-  HiMiniArrowLeft as O,
+  setupDesktopNotifications as J,
+  HiMiniMagnifyingGlass as K,
+  HiMiniLockClosed as L,
+  HiMiniCog6Tooth as M,
+  HiMiniBellAlert as N,
+  fetchApprovalPage as O,
   ProofStrip as P,
-  HiMiniHome as Q,
-  HiMiniAdjustmentsHorizontal as R,
+  fetchPolicy as Q,
+  HiMiniArrowLeft as R,
   SectionLabel as S,
   Tag as T,
-  detectCategory as U,
-  CATEGORIES as V,
-  policyIdentityKey as W,
-  HiMiniChartBar as X,
-  runHarnessAction as Y,
-  GuardHarnessActionError as Z,
-  HiMiniRocketLaunch as _,
+  HiMiniHome as U,
+  HiMiniAdjustmentsHorizontal as V,
+  detectCategory as W,
+  CATEGORIES as X,
+  policyIdentityKey as Y,
+  HiMiniChartBar as Z,
+  runHarnessAction as _,
   HiMiniShieldCheck as a,
-  HiMiniTrash as a0,
-  clearLabelForScope as a1,
-  formatHarnessCommand as a2,
-  HiMiniCommandLine as a3,
+  HiMiniRocketLaunch as a0,
+  HiMiniArrowPath as a1,
+  HiMiniTrash as a2,
+  clearLabelForScope as a3,
+  formatHarnessCommand as a4,
+  HiMiniCommandLine as a5,
   formatRelativeTime as b,
   HiMiniSparkles as c,
   HiMiniXMark as d,
