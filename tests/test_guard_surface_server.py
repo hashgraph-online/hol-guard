@@ -302,6 +302,35 @@ class TestGuardSurfaceServer:
         assert payload["settings_opened"] is True
         assert "terminal-notifier" in payload["guidance"]
 
+    def test_guard_daemon_notification_setup_endpoint_returns_json_error(self, tmp_path, monkeypatch) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+
+        def fail_setup(*_args, **_kwargs) -> DesktopNotificationSetupResult:
+            raise OSError("settings unavailable")
+
+        monkeypatch.setattr(daemon_server_module, "ensure_desktop_notification_setup", fail_setup)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            setup_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/notifications/setup",
+                data=json.dumps({}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(setup_request, timeout=5)
+            payload = json.loads(error.value.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 500
+        assert payload == {"error": "settings unavailable"}
+
     def test_guard_daemon_settings_accepts_gentle_preset(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

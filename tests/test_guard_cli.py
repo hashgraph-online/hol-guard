@@ -83,6 +83,7 @@ def test_guard_help_uses_ai_antivirus_product_language() -> None:
     assert "Inbox" in help_text
     assert "Evidence" in help_text
     assert "Settings" in help_text
+    assert "init" in help_text
     assert "Watched Apps" not in help_text
 
 

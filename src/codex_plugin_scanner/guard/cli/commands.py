@@ -326,8 +326,9 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         parser_class=FriendlyArgumentParser,
         metavar=(
-            "{start,status,dashboard,apps,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
-            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync,device,bridge}"
+            "{start,status,dashboard,init,apps,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,"
+            "receipts,inventory,abom,approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,"
+            "login,sync,device,bridge}"
         ),
     )
 

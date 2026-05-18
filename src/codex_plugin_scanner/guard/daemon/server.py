@@ -987,11 +987,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         host = self.server.server_address[0]  # type: ignore[attr-defined]
         port = self.server.server_address[1]  # type: ignore[attr-defined]
         approval_url = _build_local_url(host, port, "/approvals/notification-preview")
-        result = ensure_desktop_notification_setup(
-            self.server.store.guard_home,  # type: ignore[attr-defined]
-            approval_url=approval_url,
-            force=True,
-        )
+        try:
+            result = ensure_desktop_notification_setup(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                approval_url=approval_url,
+                force=True,
+            )
+        except Exception as error:
+            self._write_json({"error": str(error)}, status=500)
+            return
         guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
         self._write_json(desktop_notification_setup_payload(result, guidance=guidance))
 

@@ -66,7 +66,7 @@ def desktop_notification_setup_payload(
     return payload
 
 
-def macos_notification_guidance(notifier_path: object) -> str:
+def macos_notification_guidance(notifier_path: str | None) -> str:
     """Describe macOS setup when Settings cannot reliably deep-link to the app row."""
 
     app_name = "terminal-notifier" if notifier_path else "Terminal or terminal-notifier"
