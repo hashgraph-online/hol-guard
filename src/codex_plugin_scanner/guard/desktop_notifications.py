@@ -307,7 +307,10 @@ def _run_notification_command(
     command: list[str],
     **kwargs: object,
 ) -> bool:
-    result = run(command, **kwargs)
+    try:
+        result = run(command, **kwargs)
+    except (OSError, subprocess.SubprocessError):
+        return False
     return result.returncode == 0
 
 
