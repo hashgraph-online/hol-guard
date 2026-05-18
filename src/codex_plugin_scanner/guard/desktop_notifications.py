@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-MACOS_NOTIFICATION_SETTINGS_URL = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+MACOS_TERMINAL_NOTIFIER_BUNDLE_ID = "fr.julienxx.oss.terminal-notifier"
+MACOS_NOTIFICATION_SETTINGS_URL = (
+    f"x-apple.systempreferences:com.apple.Notifications-Settings.extension?id={MACOS_TERMINAL_NOTIFIER_BUNDLE_ID}"
+)
 _NOTIFICATION_SETUP_STATE_FILE = "desktop-notifications.json"
 
 
@@ -40,6 +43,37 @@ class DesktopNotificationSetupResult:
     settings_url: str | None
     already_prompted: bool
     notifier_path: str | None
+
+
+def desktop_notification_setup_payload(
+    result: object,
+    *,
+    guidance: str | None = None,
+) -> dict[str, object]:
+    """Return a stable JSON payload for notification setup results."""
+
+    payload = {
+        "platform": getattr(result, "platform", "unknown"),
+        "supported": bool(getattr(result, "supported", False)),
+        "preview_sent": bool(getattr(result, "preview_sent", False)),
+        "settings_opened": bool(getattr(result, "settings_opened", False)),
+        "settings_url": getattr(result, "settings_url", None),
+        "already_prompted": bool(getattr(result, "already_prompted", False)),
+        "notifier_path": getattr(result, "notifier_path", None),
+    }
+    if guidance:
+        payload["guidance"] = guidance
+    return payload
+
+
+def macos_notification_guidance(notifier_path: str | None) -> str:
+    """Describe macOS setup when Settings cannot reliably deep-link to the app row."""
+
+    app_name = "terminal-notifier" if notifier_path else "Terminal or terminal-notifier"
+    return (
+        f"macOS may open the general Notifications list. Choose {app_name}, enable Allow Notifications, "
+        "then enable Banners or Alerts plus Sounds."
+    )
 
 
 _NOTIFIED_APPROVAL_IDS: set[str] = set()

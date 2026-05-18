@@ -1,5 +1,5 @@
 import { resolveSecurityLevelDescription, buildClearPolicyPayload } from "./settings-workspace";
-import { repairApprovalCenter } from "./guard-api";
+import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -28,4 +28,4 @@ const clearNonePayload = buildClearPolicyPayload(false);
 assert(clearNonePayload.all === false, "T530: clearPolicy payload with all=false should have all=false");
 
 assert(typeof repairApprovalCenter === "function", "T739: repairApprovalCenter should be exported as a function");
-
+assert(typeof setupDesktopNotifications === "function", "T740: setupDesktopNotifications should be exported as a function");

@@ -253,6 +253,72 @@ def _render_start(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
 
 
+def _render_init(console: Console, payload: dict[str, object]) -> None:
+    dashboard = payload.get("dashboard")
+    apps = payload.get("apps")
+    cloud = payload.get("cloud")
+    notifications = payload.get("desktop_notifications")
+    dashboard_payload = dashboard if isinstance(dashboard, dict) else {}
+    apps_payload = apps if isinstance(apps, dict) else {}
+    cloud_payload = cloud if isinstance(cloud, dict) else {}
+    notification_payload = notifications if isinstance(notifications, dict) else {}
+    managed_installs = _coerce_dict_list(apps_payload.get("managed_installs"))
+    summary = Table.grid(padding=(0, 1))
+    summary.add_row("Dashboard", _init_dashboard_summary(dashboard_payload))
+    summary.add_row("Apps", _init_apps_summary(apps_payload, len(managed_installs)))
+    summary.add_row("Cloud", _init_cloud_summary(cloud_payload))
+    summary.add_row("Notifications", _init_notification_summary(notification_payload))
+    console.print(Panel(summary, title="HOL Guard initialized", border_style="cyan"))
+    if managed_installs:
+        console.print(_managed_install_batch_table(managed_installs))
+    guidance = notification_payload.get("guidance")
+    if isinstance(guidance, str) and guidance:
+        console.print(Panel(guidance, title="Notification setup", border_style="blue"))
+    console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
+
+
+def _init_dashboard_summary(payload: dict[str, object]) -> str:
+    if payload.get("error"):
+        return f"not opened ({payload.get('error')})"
+    opened = "opened" if bool(payload.get("opened")) else "ready"
+    url = payload.get("browser_url") or payload.get("approval_center_url") or "local approval center"
+    return f"{opened}: {url}"
+
+
+def _init_apps_summary(payload: dict[str, object], count: int) -> str:
+    if bool(payload.get("skipped")):
+        return "skipped"
+    if payload.get("error"):
+        return f"needs attention ({payload.get('error')})"
+    return f"{count} app install{'s' if count != 1 else ''} checked"
+
+
+def _init_cloud_summary(payload: dict[str, object]) -> str:
+    if bool(payload.get("skipped")):
+        return "skipped"
+    if payload.get("error"):
+        return f"needs attention ({payload.get('error')})"
+    if bool(payload.get("connected")):
+        return "connected"
+    status = payload.get("status") or payload.get("state") or "waiting"
+    return str(status).replace("_", " ")
+
+
+def _init_notification_summary(payload: dict[str, object]) -> str:
+    if bool(payload.get("skipped")):
+        return "skipped"
+    if not bool(payload.get("supported")):
+        return "not supported on this OS"
+    states = []
+    if bool(payload.get("preview_sent")):
+        states.append("preview sent")
+    if bool(payload.get("settings_opened")):
+        states.append("settings opened")
+    if bool(payload.get("already_prompted")):
+        states.append("already prompted")
+    return ", ".join(states) if states else "ready"
+
+
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     console.print(
@@ -2064,6 +2130,7 @@ def _clean_terminal_output(value: str) -> str:
 
 _RENDERERS: dict[str, Any] = {
     "approvals": _render_approvals,
+    "init": _render_init,
     "start": _render_start,
     "status": _render_status,
     "dashboard": _render_dashboard,

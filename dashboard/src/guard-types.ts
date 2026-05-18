@@ -443,6 +443,17 @@ export type GuardSettingsPayload = {
   settings: GuardSettings;
 };
 
+export type GuardNotificationSetupResult = {
+  platform: string;
+  supported: boolean;
+  preview_sent: boolean;
+  settings_opened: boolean;
+  settings_url: string | null;
+  already_prompted: boolean;
+  notifier_path: string | null;
+  guidance: string | null;
+};
+
 export type GuardSettingsExport = {
   schema_version: 1;
   privacy_warning: string;

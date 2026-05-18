@@ -264,7 +264,10 @@ def test_macos_setup_sends_preview_opens_settings_and_records_state(tmp_path) ->
     assert result.already_prompted is False
     assert result.notifier_path == "/usr/local/bin/terminal-notifier"
     assert calls[0][0] == "/usr/local/bin/terminal-notifier"
-    assert calls[1][:2] == ["open", "x-apple.systempreferences:com.apple.Notifications-Settings.extension"]
+    assert calls[1] == [
+        "open",
+        "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=fr.julienxx.oss.terminal-notifier",
+    ]
     assert (tmp_path / "guard-home" / "desktop-notifications.json").exists()
 
 
