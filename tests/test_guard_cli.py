@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.cli import update_commands as guard_update_comma
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.store import GuardStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -4321,6 +4322,200 @@ args = ["-lc", "echo hi"]
             "timeout_ms": 75,
             "disabled_detector_ids": ["secret.local"],
         }
+
+    def test_guard_doctor_notifications_opens_system_settings(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        calls: list[tuple[Path, str, bool]] = []
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
+        monkeypatch.setattr(guard_commands_module, "desktop_notification_setup_supported", lambda: True)
+
+        def fake_setup(
+            guard_home_path: Path,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            calls.append((guard_home_path, approval_url, force))
+            return DesktopNotificationSetupResult(
+                platform="Darwin",
+                supported=True,
+                preview_sent=True,
+                settings_opened=True,
+                settings_url="x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+                already_prompted=False,
+                notifier_path="/usr/local/bin/terminal-notifier",
+            )
+
+        monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "--notifications",
+                "--force-notification-settings",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert calls == [
+            (
+                guard_home,
+                "http://127.0.0.1:5474/approvals/notification-preview",
+                True,
+            )
+        ]
+        assert output["desktop_notifications"] == {
+            "platform": "Darwin",
+            "supported": True,
+            "preview_sent": True,
+            "settings_opened": True,
+            "settings_url": "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+            "already_prompted": False,
+            "notifier_path": "/usr/local/bin/terminal-notifier",
+        }
+
+    def test_guard_doctor_notifications_human_output_uses_setup_renderer(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
+        monkeypatch.setattr(guard_commands_module, "desktop_notification_setup_supported", lambda: True)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_desktop_notification_setup",
+            lambda *_args, **_kwargs: DesktopNotificationSetupResult(
+                platform="Darwin",
+                supported=True,
+                preview_sent=True,
+                settings_opened=True,
+                settings_url="x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+                already_prompted=False,
+                notifier_path="/usr/local/bin/terminal-notifier",
+            ),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "--notifications",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Guard notification setup" in output
+        assert "Platform" in output
+        assert "Darwin" in output
+        assert "Settings opened" in output
+        assert "unknown" not in output.lower()
+
+    def test_guard_doctor_notifications_skips_daemon_when_setup_unsupported(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        calls: list[tuple[Path, str, bool]] = []
+
+        def fail_daemon(_guard_home: Path) -> str:
+            raise RuntimeError("daemon should not start")
+
+        def fake_setup(
+            guard_home_path: Path,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            calls.append((guard_home_path, approval_url, force))
+            return DesktopNotificationSetupResult(
+                platform="Linux",
+                supported=False,
+                preview_sent=False,
+                settings_opened=False,
+                settings_url=None,
+                already_prompted=False,
+                notifier_path=None,
+            )
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", fail_daemon)
+        monkeypatch.setattr(guard_commands_module, "desktop_notification_setup_supported", lambda: False)
+        monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "--notifications",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert calls == [(guard_home, "hol-guard://notification-preview", False)]
+        assert output["desktop_notifications"]["supported"] is False
+
+    def test_guard_doctor_notifications_falls_back_when_daemon_start_fails(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        calls: list[tuple[Path, str, bool]] = []
+
+        def fail_daemon(_guard_home: Path) -> str:
+            raise RuntimeError("port conflict")
+
+        def fake_setup(
+            guard_home_path: Path,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            calls.append((guard_home_path, approval_url, force))
+            return DesktopNotificationSetupResult(
+                platform="Darwin",
+                supported=True,
+                preview_sent=True,
+                settings_opened=True,
+                settings_url="x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+                already_prompted=False,
+                notifier_path="/usr/local/bin/terminal-notifier",
+            )
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", fail_daemon)
+        monkeypatch.setattr(guard_commands_module, "desktop_notification_setup_supported", lambda: True)
+        monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "--notifications",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert calls == [(guard_home, "hol-guard://notification-preview", False)]
+        assert output["desktop_notifications"]["settings_opened"] is True
 
     def test_guard_doctor_human_output_includes_detector_registry_line(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
