@@ -13,9 +13,9 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard init
    ```
 
-   This opens the local dashboard, finds supported harnesses, installs Guard-managed app commands where possible, starts the Guard Cloud connect flow when you want shared history, and runs desktop notification setup for approval prompts.
+   This opens the local dashboard, finds supported harnesses, installs Guard-managed app commands where possible, starts the Guard Cloud connect flow when you want shared history, and runs desktop notification setup so approval prompts reach you outside the terminal.
 
-2. Use the manual discovery path only when you want to inspect each step yourself:
+2. Alternatively, use the manual discovery path only when you want to inspect each step yourself:
 
    ```bash
    hol-guard bootstrap
@@ -27,7 +27,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard hermes bootstrap
    ```
 
-3. If you prefer the manual path, install Guard in front of the harness you use most:
+3. Or, if you prefer the manual path, install Guard in front of the harness you use most:
 
    ```bash
    hol-guard install codex
@@ -37,7 +37,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 
    After upgrading later, run `hol-guard update` to update the installed `hol-guard` package in that environment.
 
-4. Run one dry pass so Guard records the current state:
+4. Once setup is complete, run one dry pass so Guard records the current state:
 
    ```bash
    hol-guard run codex --dry-run
@@ -98,7 +98,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | Situation | Command | What it answers |
 | :--- | :--- | :--- |
 | I need the current protection posture | `hol-guard status` | What is Guard watching, is sync connected, and what is the next action? |
-| I need first-run setup | `hol-guard init` | Which harnesses can be installed, should Cloud connect start, and are desktop notifications ready? |
+| I need first-run setup | `hol-guard init` | Open the local dashboard, install supported harnesses, start optional Cloud connect, and check desktop notifications. |
 | I need install/connect docs | `hol-guard explain install-connect` | Which local-first setup and optional cloud commands should I share? |
 | I need setup or runtime troubleshooting | `hol-guard doctor <harness>` | Why is this harness or Guard runtime not behaving correctly? |
 | A launch was blocked or changed | `hol-guard diff <harness>` | What changed since the last recorded snapshot? |

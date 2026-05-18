@@ -42,16 +42,25 @@ def test_static_docs_include_canonical_install_connect_commands() -> None:
 
 
 def test_static_docs_make_init_the_first_run_path() -> None:
-    docs_text = "\n".join(
-        [
-            _read_repo_file("README.md"),
-            _read_repo_file("docs/guard/get-started.md"),
-        ]
-    )
+    readme_text = _read_repo_file("README.md")
+    get_started_text = _read_repo_file("docs/guard/get-started.md")
 
-    assert "hol-guard init" in docs_text
-    assert "first-run" in docs_text.lower() or "first-install" in docs_text.lower()
-    assert "desktop notification" in docs_text.lower()
+    readme_quickstart = readme_text.split("## Guard Quickstart", 1)[1].split(
+        "Manual and follow-up commands:",
+        1,
+    )[0]
+    everyday_flow = get_started_text.split("## The everyday flow", 1)[1].split(
+        "## Which command should I use?",
+        1,
+    )[0]
+    first_step = everyday_flow.split("2. Alternatively", 1)[0]
+
+    assert "hol-guard init" in readme_quickstart
+    assert "hol-guard init" in first_step
+    assert "hol-guard bootstrap" not in first_step
+    assert "first-run" in readme_text.lower()
+    assert "first-run" in get_started_text.lower()
+    assert "desktop notification" in get_started_text.lower()
 
 
 def test_static_docs_explain_safe_decode_sandbox_guarantee() -> None:
