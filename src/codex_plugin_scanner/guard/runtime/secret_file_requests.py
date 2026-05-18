@@ -49,6 +49,26 @@ _PATH_KEYS = (
 )
 _PATH_LIST_KEYS = ("paths", "file_paths", "filePaths")
 _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
+_SUDO_OPTION_VALUE_FLAGS = frozenset({"-u", "-g", "-h", "-p", "-C", "-D", "-R", "-r", "-T", "-t"})
+_SUDO_OPTION_VALUE_LONG_FLAGS = frozenset(
+    {
+        "--chdir",
+        "--chroot",
+        "--close-from",
+        "--command-timeout",
+        "--group",
+        "--host",
+        "--login-class",
+        "--prompt",
+        "--role",
+        "--type",
+        "--user",
+    }
+)
+_GH_PR_OPTION_VALUE_FLAGS = frozenset({"-R", "--repo"})
+_SHELL_CONTROL_PREFIX_TOKENS = frozenset(
+    {"!", "(", "{", "case", "do", "elif", "else", "for", "if", "select", "then", "until", "while"}
+)
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
@@ -733,6 +753,18 @@ def _destructive_shell_tool_action_request(
                 "contents to a network endpoint before the user confirms the action."
             ),
         )
+    if _gh_pr_create_body_has_shell_command_substitution(command_text):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="GitHub PR body shell substitution",
+            reason=(
+                "Guard treats command substitution inside `gh pr create --body` as sensitive because shell backticks "
+                "or `$()` run before GitHub receives the PR text. Use single quotes around Markdown code spans or "
+                "`--body-file` for PR descriptions."
+            ),
+        )
     if not _looks_destructive_shell_command(command_text):
         return None
     return ToolActionRequestMatch(
@@ -745,6 +777,358 @@ def _destructive_shell_tool_action_request(
             "local machine before the user confirms the action."
         ),
     )
+
+
+def _gh_pr_create_body_has_shell_command_substitution(command_text: str, *, depth: int = 0) -> bool:
+    if depth > 2:
+        return False
+    if not _shell_command_substitution_payloads(command_text):
+        return False
+    tokens = _shell_tokens_preserving_quote_context(command_text)
+    for segment in _shell_token_segments(tokens):
+        for env_split_string in _gh_pr_env_split_string_payloads_with_substitution(segment):
+            if _gh_pr_create_body_has_shell_command_substitution(env_split_string, depth=depth + 1):
+                return True
+        body_args_start_index = _gh_pr_create_body_args_start_index(segment)
+        if body_args_start_index is None:
+            continue
+        if _gh_pr_create_body_args_have_substitution(segment[body_args_start_index:]):
+            return True
+    return False
+
+
+def _gh_pr_env_split_string_payloads_with_substitution(segment: list[_ShellTokenWithQuoteContext]) -> tuple[str, ...]:
+    payloads: list[str] = []
+    env_index = _shell_segment_env_index([token.plain for token in segment])
+    if env_index is None:
+        return ()
+    index = env_index + 1
+    while index < len(segment):
+        token = segment[index]
+        plain = token.plain
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(plain)):
+            index += 1
+            continue
+        if plain == "--":
+            break
+        if not plain.startswith("-"):
+            break
+        if plain in {"-S", "--split-string"} and index + 1 < len(segment):
+            payload_token = segment[index + 1]
+            if _shell_command_substitution_payloads(payload_token.raw):
+                payloads.append(payload_token.plain.strip())
+            index += _wrapper_option_tokens_consumed("env", plain)
+            continue
+        if plain.startswith("--split-string="):
+            if _shell_command_substitution_payloads(token.raw):
+                payloads.append(plain.split("=", 1)[1].strip())
+            index += _wrapper_option_tokens_consumed("env", plain)
+            continue
+        clustered_payload = _env_clustered_split_string_payload(plain)
+        if clustered_payload is not None:
+            if clustered_payload:
+                if _shell_command_substitution_payloads(token.raw):
+                    payloads.append(clustered_payload.strip())
+            elif index + 1 < len(segment) and _shell_command_substitution_payloads(segment[index + 1].raw):
+                payloads.append(segment[index + 1].plain.strip())
+            index += _wrapper_option_tokens_consumed("env", plain)
+            continue
+        index += _wrapper_option_tokens_consumed("env", plain)
+    return tuple(payload for payload in payloads if payload)
+
+
+@dataclass(frozen=True, slots=True)
+class _ShellTokenWithQuoteContext:
+    raw: str
+    plain: str
+
+
+def _gh_pr_create_body_args_start_index(segment: list[_ShellTokenWithQuoteContext]) -> int | None:
+    index = 0
+    plain_segment = [token.plain for token in segment]
+    while index < len(segment):
+        redirect_tokens_consumed = _leading_shell_redirection_tokens_consumed(plain_segment, index)
+        if redirect_tokens_consumed > 0:
+            index += redirect_tokens_consumed
+            continue
+        token = segment[index]
+        command_name = _normalized_shell_command_name(_shell_command_token_without_attached_redirection(token.plain))
+        if command_name == "gh":
+            if index + 1 >= len(segment) or segment[index + 1].plain != "pr":
+                return None
+            pr_command_index = _skip_gh_pr_options(segment, index + 2)
+            if pr_command_index >= len(segment):
+                return None
+            if segment[pr_command_index].plain in {
+                "create",
+                "new",
+            }:
+                return pr_command_index + 1
+            return None
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token.plain)):
+            index += 1
+            continue
+        if command_name == "command":
+            if _command_builtin_options_are_lookup_only(segment, index + 1):
+                return None
+            index = _skip_command_builtin_options(segment, index + 1)
+            continue
+        if command_name == "time":
+            index = _skip_generic_shell_wrapper_options(command_name, segment, index + 1)
+            continue
+        if command_name == "env":
+            index = _skip_env_wrapper_options(segment, index + 1)
+            continue
+        if command_name == "sudo":
+            index = _skip_sudo_wrapper_options(segment, index + 1)
+            continue
+        if command_name in {"nice", "nohup", "stdbuf"}:
+            index = _skip_generic_shell_wrapper_options(command_name, segment, index + 1)
+            continue
+        if command_name == "case":
+            index = _skip_shell_case_header(segment, index + 1)
+            continue
+        if command_name == "select":
+            index = _skip_shell_select_header(segment, index + 1)
+            continue
+        if token.plain in _SHELL_CONTROL_PREFIX_TOKENS or command_name in _SHELL_CONTROL_PREFIX_TOKENS:
+            index += 1
+            continue
+        return None
+    return None
+
+
+def _skip_gh_pr_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain == "--":
+            return index + 1
+        if plain in _GH_PR_OPTION_VALUE_FLAGS:
+            index += 2
+            continue
+        if any(plain.startswith(f"{flag}=") for flag in _GH_PR_OPTION_VALUE_FLAGS):
+            index += 1
+            continue
+        if plain.startswith("-R") and plain != "-R":
+            index += 1
+            continue
+        if plain.startswith("-"):
+            index += 1
+            continue
+        break
+    return index
+
+
+def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment) and segment[index].plain.startswith("-"):
+        index += 1
+    return index
+
+
+def _skip_generic_shell_wrapper_options(
+    command_name: str,
+    segment: list[_ShellTokenWithQuoteContext],
+    index: int,
+) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain == "--":
+            return index + 1
+        if not plain.startswith("-"):
+            break
+        index += _wrapper_option_tokens_consumed(command_name, plain)
+    return index
+
+
+def _skip_command_builtin_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain == "--":
+            return index + 1
+        if plain.startswith("-"):
+            index += 1
+            continue
+        break
+    return index
+
+
+def _command_builtin_options_are_lookup_only(segment: list[_ShellTokenWithQuoteContext], index: int) -> bool:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain == "--":
+            return False
+        if not plain.startswith("-"):
+            return False
+        if "v" in plain[1:] or "V" in plain[1:]:
+            return True
+        index += 1
+    return False
+
+
+def _skip_shell_case_header(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        if segment[index].plain.endswith(")"):
+            return index + 1
+        index += 1
+    return index
+
+
+def _skip_shell_select_header(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        if segment[index].plain == "do":
+            return index
+        index += 1
+    return index
+
+
+def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(plain)):
+            index += 1
+            continue
+        if plain in {"-i", "-0", "--ignore-environment", "--null"}:
+            index += 1
+            continue
+        if plain == "--":
+            index += 1
+            break
+        if plain in {"-u", "-C", "-S", "--unset", "--chdir", "--split-string"}:
+            index += 2
+            continue
+        if any(plain.startswith(f"{flag}=") for flag in {"--unset", "--chdir", "--split-string"}):
+            index += 1
+            continue
+        if plain.startswith("-"):
+            index += 1
+            continue
+        break
+    return index
+
+
+def _skip_sudo_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        plain = segment[index].plain
+        if plain in _SUDO_OPTION_VALUE_FLAGS:
+            index += 2
+            continue
+        if plain in _SUDO_OPTION_VALUE_LONG_FLAGS:
+            index += 2
+            continue
+        if any(plain.startswith(f"{flag}=") for flag in _SUDO_OPTION_VALUE_LONG_FLAGS):
+            index += 1
+            continue
+        if plain.startswith("-"):
+            index += 1
+            continue
+        break
+    return index
+
+
+def _gh_pr_create_body_args_have_substitution(args: list[_ShellTokenWithQuoteContext]) -> bool:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg.plain in {"--body", "-b", "--body-file", "-F"}:
+            if index + 1 >= len(args):
+                return False
+            if _shell_command_substitution_payloads(args[index + 1].raw):
+                return True
+            index += 2
+            continue
+        if arg.plain.startswith("-F") and len(arg.plain) > 2 and _shell_command_substitution_payloads(arg.raw):
+            return True
+        if arg.plain.startswith("-b") and len(arg.plain) > 2 and _shell_command_substitution_payloads(arg.raw):
+            return True
+        if arg.plain.startswith("--body-file=") and _shell_command_substitution_payloads(arg.raw):
+            return True
+        if arg.plain.startswith("--body=") and _shell_command_substitution_payloads(arg.raw):
+            return True
+        index += 1
+    return False
+
+
+def _shell_tokens_preserving_quote_context(command_text: str) -> list[_ShellTokenWithQuoteContext]:
+    tokens: list[_ShellTokenWithQuoteContext] = []
+    index = 0
+    while index < len(command_text):
+        if command_text[index] in {"\n", "\r"}:
+            tokens.append(_ShellTokenWithQuoteContext(raw=";", plain=";"))
+            index += 1
+            continue
+        while index < len(command_text) and command_text[index].isspace() and command_text[index] not in {"\n", "\r"}:
+            index += 1
+        if index >= len(command_text):
+            break
+        if command_text[index] in {"\n", "\r"}:
+            tokens.append(_ShellTokenWithQuoteContext(raw=";", plain=";"))
+            index += 1
+            continue
+        if command_text[index] in {";", "&", "|"}:
+            if command_text.startswith("&&", index) or command_text.startswith("||", index):
+                raw_token = command_text[index : index + 2]
+                index += 2
+            else:
+                raw_token = command_text[index]
+                index += 1
+            tokens.append(_ShellTokenWithQuoteContext(raw=raw_token, plain=raw_token))
+            continue
+        start = index
+        quote: str | None = None
+        escaped = False
+        while index < len(command_text):
+            char = command_text[index]
+            if escaped:
+                escaped = False
+                index += 1
+                continue
+            if char == "\\":
+                escaped = True
+                index += 1
+                continue
+            if quote is not None:
+                if char == quote:
+                    quote = None
+                index += 1
+                continue
+            if char in {"'", '"'}:
+                quote = char
+                index += 1
+                continue
+            if char.isspace() or char in {";", "&", "|"}:
+                break
+            index += 1
+        raw_token = command_text[start:index]
+        if raw_token:
+            tokens.append(_ShellTokenWithQuoteContext(raw=raw_token, plain=_plain_shell_token(raw_token)))
+    return tokens
+
+
+def _plain_shell_token(raw_token: str) -> str:
+    try:
+        parts = shlex.split(raw_token, posix=True)
+    except ValueError:
+        return raw_token.strip("'\"")
+    if not parts:
+        return ""
+    return parts[0]
+
+
+def _shell_token_segments(
+    tokens: list[_ShellTokenWithQuoteContext],
+) -> list[list[_ShellTokenWithQuoteContext]]:
+    segments: list[list[_ShellTokenWithQuoteContext]] = []
+    current: list[_ShellTokenWithQuoteContext] = []
+    for token in tokens:
+        if token.plain in {"&&", "||", ";", "&", "|", "|&"}:
+            if current:
+                segments.append(current)
+                current = []
+            continue
+        current.append(token)
+    if current:
+        segments.append(current)
+    return segments
 
 
 def _contains_shell_credential_exfiltration(
