@@ -213,11 +213,11 @@ def test_thread_start_failure_clears_inflight(monkeypatch) -> None:
 
 
 def test_macos_setup_async_deduplicates_inflight_work(tmp_path, monkeypatch) -> None:
-    started: list[tuple[Any, tuple[Any, ...]]] = []
+    started: list[dict[str, Any]] = []
 
     class CapturingThread:
         def __init__(self, **kwargs: Any) -> None:
-            started.append((kwargs["target"], kwargs["args"]))
+            started.append(kwargs)
 
         def start(self) -> None:
             return None
@@ -236,6 +236,9 @@ def test_macos_setup_async_deduplicates_inflight_work(tmp_path, monkeypatch) -> 
         approval_url="http://127.0.0.1:5474/approvals/preview",
     )
     assert len(started) == 1
+    assert started[0]["target"].__name__ == "_ensure_desktop_notification_setup_worker"
+    assert started[0]["args"][1] == guard_home
+    assert started[0]["daemon"] is True
     with _NOTIFICATION_SETUP_LOCK:
         _NOTIFICATION_SETUP_PATHS_IN_FLIGHT.clear()
 
