@@ -6957,7 +6957,6 @@ url = http://127.0.0.1:8787/guard-canary
         opened_urls: list[str] = []
         open_keys: list[str | None] = []
         force_open_flags: list[bool] = []
-        notification_calls: list[tuple[Path, str, bool]] = []
 
         monkeypatch.setattr(
             guard_commands_module,
@@ -6974,14 +6973,6 @@ url = http://127.0.0.1:8787/guard-canary
                 {"opened": True, "reason": "opened", "browser_url": approval_center_url},
             )[-1],
         )
-        monkeypatch.setattr(
-            guard_commands_module,
-            "ensure_desktop_notification_setup_async",
-            lambda guard_home, *, approval_url, force=False: (
-                notification_calls.append((guard_home, approval_url, force)),
-                True,
-            )[-1],
-        )
 
         rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -6994,38 +6985,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["browser_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is True
         assert output["reason"] == "opened"
-        assert output["notification_setup_started"] is True
-        assert notification_calls == [(home_dir, "http://127.0.0.1:5474/approvals/notification-preview", False)]
-
-    def test_guard_dashboard_respects_desktop_notification_opt_out(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        _write_text(home_dir / "config.toml", "desktop_notifications = false\n")
-
-        monkeypatch.setattr(
-            guard_commands_module,
-            "ensure_guard_daemon",
-            lambda guard_home: "http://127.0.0.1:5474",
-        )
-        monkeypatch.setattr(
-            guard_commands_module,
-            "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None, force_open=False: {
-                "opened": True,
-                "reason": "opened",
-                "browser_url": approval_center_url,
-            },
-        )
-        monkeypatch.setattr(
-            guard_commands_module,
-            "ensure_desktop_notification_setup_async",
-            lambda *_args, **_kwargs: pytest.fail("notification setup should respect config opt-out"),
-        )
-
-        rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 0
-        assert output["notification_setup_started"] is False
+        assert "notification_setup_started" not in output
 
     def test_guard_init_runs_apps_cloud_notifications_and_dashboard(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

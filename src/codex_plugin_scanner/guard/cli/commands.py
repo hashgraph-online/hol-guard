@@ -81,7 +81,6 @@ from ..desktop_notifications import (
     desktop_notification_setup_payload,
     desktop_notification_setup_supported,
     ensure_desktop_notification_setup,
-    ensure_desktop_notification_setup_async,
     macos_notification_guidance,
 )
 from ..harness_usage import record_harness_usage_events
@@ -1209,12 +1208,6 @@ def run_guard_command(
             open_key="dashboard",
             force_open=True,
         )
-        notification_setup_started = False
-        if config.desktop_notifications:
-            notification_setup_started = ensure_desktop_notification_setup_async(
-                guard_home,
-                approval_url=f"{approval_center_url.rstrip('/')}/approvals/notification-preview",
-            )
         _emit(
             "dashboard",
             {
@@ -1223,7 +1216,6 @@ def run_guard_command(
                 "browser_url": open_result.get("browser_url"),
                 "opened": bool(open_result.get("opened")),
                 "reason": str(open_result.get("reason") or "unknown"),
-                "notification_setup_started": notification_setup_started,
             },
             getattr(args, "json", False),
         )
