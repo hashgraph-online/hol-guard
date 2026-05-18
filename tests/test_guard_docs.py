@@ -41,6 +41,19 @@ def test_static_docs_include_canonical_install_connect_commands() -> None:
         assert item.command in docs_text
 
 
+def test_static_docs_make_init_the_first_run_path() -> None:
+    docs_text = "\n".join(
+        [
+            _read_repo_file("README.md"),
+            _read_repo_file("docs/guard/get-started.md"),
+        ]
+    )
+
+    assert "hol-guard init" in docs_text
+    assert "first-run" in docs_text.lower() or "first-install" in docs_text.lower()
+    assert "desktop notification" in docs_text.lower()
+
+
 def test_static_docs_explain_safe_decode_sandbox_guarantee() -> None:
     docs_text = "\n".join(
         [

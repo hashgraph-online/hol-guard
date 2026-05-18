@@ -7,7 +7,15 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 
 ## The everyday flow
 
-1. See what Guard found:
+1. Start the guided first-run setup:
+
+   ```bash
+   hol-guard init
+   ```
+
+   This opens the local dashboard, finds supported harnesses, installs Guard-managed app commands where possible, starts the Guard Cloud connect flow when you want shared history, and runs desktop notification setup for approval prompts.
+
+2. Use the manual discovery path only when you want to inspect each step yourself:
 
    ```bash
    hol-guard bootstrap
@@ -19,7 +27,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard hermes bootstrap
    ```
 
-2. If you prefer the manual path, install Guard in front of the harness you use most:
+3. If you prefer the manual path, install Guard in front of the harness you use most:
 
    ```bash
    hol-guard install codex
@@ -29,25 +37,25 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 
    After upgrading later, run `hol-guard update` to update the installed `hol-guard` package in that environment.
 
-3. Run one dry pass so Guard records the current state:
+4. Run one dry pass so Guard records the current state:
 
    ```bash
    hol-guard run codex --dry-run
    ```
 
-4. Launch through Guard after that. Guard will stop and ask if a tool is new or changed:
+5. Launch through Guard after that. Guard will stop and ask if a tool is new or changed:
 
    ```bash
    hol-guard run codex
    ```
 
-5. If the shell is interactive, approve inline. If the shell cannot prompt, Guard queues the change in the local approval center instead of ending the session with a dead stop:
+6. If the shell is interactive, approve inline. If the shell cannot prompt, Guard queues the change in the local approval center instead of ending the session with a dead stop:
 
    ```bash
    hol-guard approvals
    ```
 
-6. Review or resolve changes from the terminal when you want a text-only path:
+7. Review or resolve changes from the terminal when you want a text-only path:
 
    ```bash
    hol-guard approvals approve <request-id>
@@ -55,14 +63,14 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard diff codex
    ```
 
-7. Check receipts and current status:
+8. Check receipts and current status:
 
    ```bash
    hol-guard receipts
    hol-guard status
    ```
 
-8. Connect cloud sync later only if you want shared history:
+9. Connect cloud sync later only if you want shared history:
 
    ```bash
    hol-guard connect
@@ -71,13 +79,13 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard sync
    ```
 
-9. Share the generated install/connect command guide when someone needs the exact local-first flow:
+10. Share the generated install/connect command guide when someone needs the exact local-first flow:
 
    ```bash
    hol-guard explain install-connect
    ```
 
-10. Inspect or rotate the local installation identity that cloud sync uses:
+11. Inspect or rotate the local installation identity that cloud sync uses:
 
    ```bash
    hol-guard device show
@@ -90,6 +98,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | Situation | Command | What it answers |
 | :--- | :--- | :--- |
 | I need the current protection posture | `hol-guard status` | What is Guard watching, is sync connected, and what is the next action? |
+| I need first-run setup | `hol-guard init` | Which harnesses can be installed, should Cloud connect start, and are desktop notifications ready? |
 | I need install/connect docs | `hol-guard explain install-connect` | Which local-first setup and optional cloud commands should I share? |
 | I need setup or runtime troubleshooting | `hol-guard doctor <harness>` | Why is this harness or Guard runtime not behaving correctly? |
 | A launch was blocked or changed | `hol-guard diff <harness>` | What changed since the last recorded snapshot? |
