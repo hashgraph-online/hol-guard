@@ -770,11 +770,6 @@ function DiagnosticsPerfCard(props) {
   ] });
 }
 function NotificationSetupCard(props) {
-  const statusCopy = props.result ? [
-    props.result.supported ? "Supported" : "Unsupported",
-    props.result.preview_sent ? "Preview sent" : "Preview not sent",
-    props.result.settings_opened ? "Settings opened" : "Settings not opened"
-  ] : ["Not configured from this dashboard session"];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 md:flex-row md:items-start md:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 gap-3", children: [
@@ -791,7 +786,11 @@ function NotificationSetupCard(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onSetup, disabled: props.settingUp, children: props.settingUp ? "Opening..." : "Open notification settings" })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 flex flex-wrap gap-2", children: statusCopy.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: item.includes("not") || item.includes("Unsupported") ? "slate" : "blue", children: item }, item)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 flex flex-wrap gap-2", children: props.result ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: props.result.supported ? "blue" : "slate", children: props.result.supported ? "Supported" : "Unsupported" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: props.result.preview_sent ? "blue" : "slate", children: props.result.preview_sent ? "Preview sent" : "Preview not sent" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: props.result.settings_opened ? "blue" : "slate", children: props.result.settings_opened ? "Settings opened" : "Settings not opened" })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "Not configured from this dashboard session" }) }),
     props.result?.guidance ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs leading-relaxed text-slate-500", children: props.result.guidance }) : null
   ] });
 }

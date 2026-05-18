@@ -897,13 +897,6 @@ function NotificationSetupCard(props: {
   settingUp: boolean;
   onSetup: () => void;
 }) {
-  const statusCopy = props.result
-    ? [
-        props.result.supported ? "Supported" : "Unsupported",
-        props.result.preview_sent ? "Preview sent" : "Preview not sent",
-        props.result.settings_opened ? "Settings opened" : "Settings not opened",
-      ]
-    : ["Not configured from this dashboard session"];
   return (
     <div className="rounded-xl border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] p-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -928,11 +921,21 @@ function NotificationSetupCard(props: {
         </ActionButton>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        {statusCopy.map((item) => (
-          <Tag key={item} tone={item.includes("not") || item.includes("Unsupported") ? "slate" : "blue"}>
-            {item}
-          </Tag>
-        ))}
+        {props.result ? (
+          <>
+            <Tag tone={props.result.supported ? "blue" : "slate"}>
+              {props.result.supported ? "Supported" : "Unsupported"}
+            </Tag>
+            <Tag tone={props.result.preview_sent ? "blue" : "slate"}>
+              {props.result.preview_sent ? "Preview sent" : "Preview not sent"}
+            </Tag>
+            <Tag tone={props.result.settings_opened ? "blue" : "slate"}>
+              {props.result.settings_opened ? "Settings opened" : "Settings not opened"}
+            </Tag>
+          </>
+        ) : (
+          <Tag tone="slate">Not configured from this dashboard session</Tag>
+        )}
       </div>
       {props.result?.guidance ? (
         <p className="mt-3 text-xs leading-relaxed text-slate-500">{props.result.guidance}</p>

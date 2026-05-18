@@ -4373,15 +4373,16 @@ args = ["-lc", "echo hi"]
                 True,
             )
         ]
-        assert output["desktop_notifications"] == {
-            "platform": "Darwin",
-            "supported": True,
-            "preview_sent": True,
-            "settings_opened": True,
-            "settings_url": "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
-            "already_prompted": False,
-            "notifier_path": "/usr/local/bin/terminal-notifier",
-        }
+        assert output["desktop_notifications"]["platform"] == "Darwin"
+        assert output["desktop_notifications"]["supported"] is True
+        assert output["desktop_notifications"]["preview_sent"] is True
+        assert output["desktop_notifications"]["settings_opened"] is True
+        assert output["desktop_notifications"]["settings_url"] == (
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+        )
+        assert output["desktop_notifications"]["already_prompted"] is False
+        assert output["desktop_notifications"]["notifier_path"] == "/usr/local/bin/terminal-notifier"
+        assert "terminal-notifier" in output["desktop_notifications"]["guidance"]
 
     def test_guard_doctor_notifications_human_output_uses_setup_renderer(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -6994,9 +6995,37 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["opened"] is True
         assert output["reason"] == "opened"
         assert output["notification_setup_started"] is True
-        assert notification_calls == [
-            (home_dir, "http://127.0.0.1:5474/approvals/notification-preview", False)
-        ]
+        assert notification_calls == [(home_dir, "http://127.0.0.1:5474/approvals/notification-preview", False)]
+
+    def test_guard_dashboard_respects_desktop_notification_opt_out(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        _write_text(home_dir / "config.toml", "desktop_notifications = false\n")
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: {
+                "opened": True,
+                "reason": "opened",
+                "browser_url": approval_center_url,
+            },
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_desktop_notification_setup_async",
+            lambda *_args, **_kwargs: pytest.fail("notification setup should respect config opt-out"),
+        )
+
+        rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["notification_setup_started"] is False
 
     def test_guard_init_runs_apps_cloud_notifications_and_dashboard(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -7041,7 +7070,11 @@ url = http://127.0.0.1:8787/guard-canary
         monkeypatch.setattr(
             guard_commands_module,
             "_run_guard_connect_flow",
-            lambda **_kwargs: {"connected": False, "status": "waiting_for_browser", "connect_url": "https://hol.org/guard/connect"},
+            lambda **_kwargs: {
+                "connected": False,
+                "status": "waiting_for_browser",
+                "connect_url": "https://hol.org/guard/connect",
+            },
         )
 
         def fake_setup(
@@ -7075,9 +7108,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["cloud"]["status"] == "waiting_for_browser"
         assert output["desktop_notifications"]["preview_sent"] is True
         assert "terminal-notifier" in output["desktop_notifications"]["guidance"]
-        assert notification_calls == [
-            (guard_home, "http://127.0.0.1:5474/approvals/notification-preview", True)
-        ]
+        assert notification_calls == [(guard_home, "http://127.0.0.1:5474/approvals/notification-preview", True)]
 
     def test_guard_init_skip_flags_do_not_run_install_cloud_or_notifications(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

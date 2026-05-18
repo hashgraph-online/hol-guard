@@ -45,7 +45,11 @@ from ..config import (
     reset_guard_settings,
     update_guard_settings,
 )
-from ..desktop_notifications import ensure_desktop_notification_setup
+from ..desktop_notifications import (
+    desktop_notification_setup_payload,
+    ensure_desktop_notification_setup,
+    macos_notification_guidance,
+)
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..receipts.manager import build_receipt
 from ..runtime.surface_server import GuardSurfaceRuntime
@@ -988,25 +992,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             approval_url=approval_url,
             force=True,
         )
-        guidance = None
-        if result.platform == "Darwin":
-            app_name = "terminal-notifier" if result.notifier_path else "Terminal or terminal-notifier"
-            guidance = (
-                f"macOS may open the general Notifications list. Choose {app_name}, enable Allow Notifications, "
-                "then enable Banners or Alerts plus Sounds."
-            )
-        self._write_json(
-            {
-                "platform": result.platform,
-                "supported": result.supported,
-                "preview_sent": result.preview_sent,
-                "settings_opened": result.settings_opened,
-                "settings_url": result.settings_url,
-                "already_prompted": result.already_prompted,
-                "notifier_path": result.notifier_path,
-                "guidance": guidance,
-            }
-        )
+        guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
+        self._write_json(desktop_notification_setup_payload(result, guidance=guidance))
 
     def _handle_requests_list(self, query_string: str) -> None:
         limit = self._query_limit(query_string, default=200, maximum=200)

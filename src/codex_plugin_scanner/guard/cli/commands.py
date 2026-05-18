@@ -78,9 +78,11 @@ from ..daemon.manager import (
     load_guard_daemon_url,
 )
 from ..desktop_notifications import (
+    desktop_notification_setup_payload,
     desktop_notification_setup_supported,
     ensure_desktop_notification_setup,
     ensure_desktop_notification_setup_async,
+    macos_notification_guidance,
 )
 from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
@@ -867,33 +869,6 @@ def _guard_http_url(value: str) -> str:
     return value
 
 
-def _desktop_notification_setup_payload(
-    result: object,
-    *,
-    guidance: str | None = None,
-) -> dict[str, object]:
-    payload = {
-        "platform": getattr(result, "platform", "unknown"),
-        "supported": bool(getattr(result, "supported", False)),
-        "preview_sent": bool(getattr(result, "preview_sent", False)),
-        "settings_opened": bool(getattr(result, "settings_opened", False)),
-        "settings_url": getattr(result, "settings_url", None),
-        "already_prompted": bool(getattr(result, "already_prompted", False)),
-        "notifier_path": getattr(result, "notifier_path", None),
-    }
-    if guidance:
-        payload["guidance"] = guidance
-    return payload
-
-
-def _macos_notification_guidance(notifier_path: object) -> str:
-    app_name = "terminal-notifier" if notifier_path else "Terminal or terminal-notifier"
-    return (
-        f"macOS may open the general Notifications list. Choose {app_name}, enable Allow Notifications, "
-        "then enable Banners or Alerts plus Sounds."
-    )
-
-
 def _run_init_command(
     args: argparse.Namespace,
     context: HarnessContext,
@@ -969,9 +944,9 @@ def _run_init_command(
             approval_url=approval_url,
             force=True,
         )
-        notification_payload = _desktop_notification_setup_payload(
+        notification_payload = desktop_notification_setup_payload(
             result,
-            guidance=_macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None,
+            guidance=macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None,
         )
         notification_payload["skipped"] = False
 
@@ -1234,10 +1209,12 @@ def run_guard_command(
             open_key="dashboard",
             force_open=True,
         )
-        notification_setup_started = ensure_desktop_notification_setup_async(
-            guard_home,
-            approval_url=f"{approval_center_url.rstrip('/')}/approvals/notification-preview",
-        )
+        notification_setup_started = False
+        if config.desktop_notifications:
+            notification_setup_started = ensure_desktop_notification_setup_async(
+                guard_home,
+                approval_url=f"{approval_center_url.rstrip('/')}/approvals/notification-preview",
+            )
         _emit(
             "dashboard",
             {
@@ -1658,19 +1635,10 @@ def run_guard_command(
                 approval_url=approval_url,
                 force=bool(getattr(args, "force_notification_settings", False)),
             )
+            guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
             _emit(
                 "doctor",
-                {
-                    "desktop_notifications": {
-                        "platform": result.platform,
-                        "supported": result.supported,
-                        "preview_sent": result.preview_sent,
-                        "settings_opened": result.settings_opened,
-                        "settings_url": result.settings_url,
-                        "already_prompted": result.already_prompted,
-                        "notifier_path": result.notifier_path,
-                    }
-                },
+                {"desktop_notifications": desktop_notification_setup_payload(result, guidance=guidance)},
                 getattr(args, "json", False),
             )
             return 0
