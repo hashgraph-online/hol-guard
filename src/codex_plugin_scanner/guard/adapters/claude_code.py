@@ -551,7 +551,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "function runLocalFallback(reason,data){"
             "try{"
             "const result=cp.spawnSync(fallbackCommand[0],fallbackCommand.slice(1),{input:data,encoding:'utf8',"
-            "timeout:3000,env:process.env});"
+            "timeout:30000,env:process.env});"
             "if(result.error)return degraded(`${reason}; fallback failed: ${result.error.message}`,data);"
             "if(result.status===0){"
             "if(shouldSuppressOutput(data,result.stdout)){process.exit(0);}"
