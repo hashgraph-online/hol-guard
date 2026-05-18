@@ -77,6 +77,7 @@ from ..daemon.manager import (
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
 )
+from ..desktop_notifications import desktop_notification_setup_supported, ensure_desktop_notification_setup
 from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
 from ..mcp_tool_calls import (
@@ -627,6 +628,16 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         help="List all supported harnesses with their protection contract",
     )
     doctor_parser.add_argument("--perf", action="store_true", help="Include detector performance timings")
+    doctor_parser.add_argument(
+        "--notifications",
+        action="store_true",
+        help="Send a notification preview and open macOS notification settings when needed",
+    )
+    doctor_parser.add_argument(
+        "--force-notification-settings",
+        action="store_true",
+        help="Open macOS notification settings even if Guard already prompted before",
+    )
 
     login_parser = guard_subparsers.add_parser(
         "login",
@@ -1473,6 +1484,35 @@ def run_guard_command(
         return 0
 
     if args.guard_command == "doctor":
+        if getattr(args, "notifications", False):
+            approval_url = "hol-guard://notification-preview"
+            if desktop_notification_setup_supported():
+                try:
+                    approval_center_url = ensure_guard_daemon(guard_home)
+                    approval_url = f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
+                except Exception:
+                    approval_url = "hol-guard://notification-preview"
+            result = ensure_desktop_notification_setup(
+                guard_home,
+                approval_url=approval_url,
+                force=bool(getattr(args, "force_notification_settings", False)),
+            )
+            _emit(
+                "doctor",
+                {
+                    "desktop_notifications": {
+                        "platform": result.platform,
+                        "supported": result.supported,
+                        "preview_sent": result.preview_sent,
+                        "settings_opened": result.settings_opened,
+                        "settings_url": result.settings_url,
+                        "already_prompted": result.already_prompted,
+                        "notifier_path": result.notifier_path,
+                    }
+                },
+                getattr(args, "json", False),
+            )
+            return 0
         if getattr(args, "harnesses", False):
             from ..adapters.contracts import HARNESS_CONTRACTS
 
