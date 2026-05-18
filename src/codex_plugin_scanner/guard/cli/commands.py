@@ -359,6 +359,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Do not initialize desktop notifications",
     )
+    init_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Approve every init step without prompting. Intended for automation and docs verification.",
+    )
     init_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
     init_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
     init_parser.add_argument("--wait-timeout-seconds", type=int, default=0)
@@ -869,6 +874,119 @@ def _guard_http_url(value: str) -> str:
     return value
 
 
+def _build_init_plan(args: argparse.Namespace) -> list[dict[str, object]]:
+    del args
+    return [
+        {
+            "id": "dashboard",
+            "title": "Open local Guard dashboard",
+            "detail": (
+                "Starts the local daemon and opens the dashboard so you can see what Guard will protect "
+                "before anything is changed."
+            ),
+            "command": "hol-guard dashboard",
+            "skip_flag": None,
+        },
+        {
+            "id": "apps",
+            "title": "Protect detected AI apps",
+            "detail": (
+                "Discovers supported harnesses and installs Guard-managed launch commands for each detected app. "
+                "This is reversible with `hol-guard uninstall --all`."
+            ),
+            "command": "hol-guard install --all",
+            "skip_flag": "skip_apps",
+        },
+        {
+            "id": "cloud",
+            "title": "Connect Guard Cloud",
+            "detail": (
+                "Opens the browser pairing flow only after you approve it, then syncs receipts and policy memory "
+                "when Cloud is available."
+            ),
+            "command": "hol-guard connect",
+            "skip_flag": "skip_cloud",
+        },
+        {
+            "id": "notifications",
+            "title": "Enable desktop notifications",
+            "detail": (
+                "Sends one preview notification and opens OS notification settings only after you approve it."
+            ),
+            "command": "hol-guard doctor --notifications --force-notification-settings",
+            "skip_flag": "skip_notifications",
+        },
+    ]
+
+
+def _print_init_plan_preview(plan: list[dict[str, object]]) -> None:
+    print("HOL Guard init will ask before each setup action.", file=sys.stderr)
+    for index, step in enumerate(plan, start=1):
+        print(f"{index}. {step.get('title')}", file=sys.stderr)
+        detail = step.get("detail")
+        if isinstance(detail, str) and detail:
+            print(f"   {detail}", file=sys.stderr)
+
+
+def _prompt_init_step(step: dict[str, object]) -> str:
+    title = str(step.get("title") or "Guard init step")
+    detail = str(step.get("detail") or "")
+    command = str(step.get("command") or "")
+    print(f"\n{title}", file=sys.stderr)
+    if detail:
+        print(detail, file=sys.stderr)
+    if command:
+        print(f"Command: {command}", file=sys.stderr)
+    sys.stderr.write("Run this step? [y/N] ")
+    sys.stderr.flush()
+    return sys.stdin.readline().strip().lower()
+
+
+def _resolve_init_decisions(
+    args: argparse.Namespace,
+    plan: list[dict[str, object]],
+    *,
+    interactive: bool,
+) -> tuple[list[dict[str, object]], bool]:
+    approved_any = False
+    auto_approve = bool(getattr(args, "yes", False))
+    for step in plan:
+        skip_flag = step.get("skip_flag")
+        if isinstance(skip_flag, str) and bool(getattr(args, skip_flag, False)):
+            step["decision"] = "skipped"
+            step["reason"] = skip_flag
+            continue
+        if auto_approve:
+            step["decision"] = "approved"
+            step["reason"] = "yes_flag"
+            approved_any = True
+            continue
+        if not interactive:
+            step["decision"] = "skipped"
+            step["reason"] = "needs_approval"
+            continue
+        answer = _prompt_init_step(step)
+        if answer in {"y", "yes"}:
+            step["decision"] = "approved"
+            step["reason"] = "user_approved"
+            approved_any = True
+        else:
+            step["decision"] = "skipped"
+            step["reason"] = "user_skipped"
+    return plan, approved_any
+
+
+def _init_step_approved(plan: list[dict[str, object]], step_id: str) -> bool:
+    return any(step.get("id") == step_id and step.get("decision") == "approved" for step in plan)
+
+
+def _init_step_reason(plan: list[dict[str, object]], step_id: str) -> str:
+    for step in plan:
+        if step.get("id") == step_id:
+            return str(step.get("reason") or "skipped")
+    return "skipped"
+
+
 def _run_init_command(
     args: argparse.Namespace,
     context: HarnessContext,
@@ -876,29 +994,41 @@ def _run_init_command(
     config: GuardConfig,
     workspace: Path | None,
 ) -> int:
+    init_plan = _build_init_plan(args)
+    interactive = sys.stdin.isatty() and not bool(getattr(args, "json", False))
+    if interactive and not bool(getattr(args, "yes", False)) and not bool(getattr(args, "json", False)):
+        _print_init_plan_preview(init_plan)
+    plan, approved_any = _resolve_init_decisions(
+        args,
+        init_plan,
+        interactive=interactive,
+    )
     approval_center_url: str | None = None
     dashboard_payload: dict[str, object] | None = None
-    try:
-        approval_center_url = ensure_guard_daemon(context.guard_home)
-        open_result = _open_approval_center(
-            approval_center_url,
-            store=store,
-            config=config,
-            open_key="init",
-            force_open=True,
-        )
-        dashboard_payload = {
-            "approval_center_url": approval_center_url,
-            "browser_url": open_result.get("browser_url"),
-            "opened": bool(open_result.get("opened")),
-            "reason": str(open_result.get("reason") or "unknown"),
-        }
-    except RuntimeError as error:
-        dashboard_payload = {"opened": False, "error": str(error)}
+    if _init_step_approved(plan, "dashboard"):
+        try:
+            approval_center_url = ensure_guard_daemon(context.guard_home)
+            open_result = _open_approval_center(
+                approval_center_url,
+                store=store,
+                config=config,
+                open_key="init",
+                force_open=True,
+            )
+            dashboard_payload = {
+                "approval_center_url": approval_center_url,
+                "browser_url": open_result.get("browser_url"),
+                "opened": bool(open_result.get("opened")),
+                "reason": str(open_result.get("reason") or "unknown"),
+            }
+        except RuntimeError as error:
+            dashboard_payload = {"opened": False, "error": str(error)}
+    else:
+        dashboard_payload = {"skipped": True, "reason": _init_step_reason(plan, "dashboard")}
 
     apps_payload: dict[str, object]
-    if bool(getattr(args, "skip_apps", False)):
-        apps_payload = {"skipped": True, "reason": "skip_apps"}
+    if not _init_step_approved(plan, "apps"):
+        apps_payload = {"skipped": True, "reason": _init_step_reason(plan, "apps")}
     else:
         try:
             apps_payload = apply_managed_install(
@@ -915,8 +1045,8 @@ def _run_init_command(
             apps_payload = {"skipped": False, "error": str(error), "managed_installs": []}
 
     cloud_payload: dict[str, object]
-    if bool(getattr(args, "skip_cloud", False)):
-        cloud_payload = {"skipped": True, "reason": "skip_cloud"}
+    if not _init_step_approved(plan, "cloud"):
+        cloud_payload = {"skipped": True, "reason": _init_step_reason(plan, "cloud")}
     else:
         try:
             cloud_payload = _run_guard_connect_flow(
@@ -931,8 +1061,8 @@ def _run_init_command(
             cloud_payload = {"skipped": False, "connected": False, "error": str(error)}
 
     notification_payload: dict[str, object]
-    if bool(getattr(args, "skip_notifications", False)):
-        notification_payload = {"skipped": True, "reason": "skip_notifications"}
+    if not _init_step_approved(plan, "notifications"):
+        notification_payload = {"skipped": True, "reason": _init_step_reason(plan, "notifications")}
     else:
         approval_url = (
             f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
@@ -952,11 +1082,14 @@ def _run_init_command(
 
     payload = {
         "generated_at": _now(),
-        "status": "initialized",
+        "status": "initialized" if approved_any else "approval_required",
+        "mode": "auto_approved" if bool(getattr(args, "yes", False)) else "progressive",
+        "plan": plan,
         "dashboard": dashboard_payload,
         "apps": apps_payload,
         "cloud": cloud_payload,
         "desktop_notifications": notification_payload,
+        "next_command": "hol-guard init --yes" if not approved_any else "hol-guard status",
         "next_steps": [
             {
                 "title": "Open dashboard settings",
