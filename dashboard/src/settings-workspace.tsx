@@ -6,6 +6,7 @@ import {
   HiMiniCheckCircle,
   HiMiniInformationCircle,
   HiMiniExclamationTriangle,
+  HiMiniBellAlert,
   HiMiniChevronDown,
   HiMiniChevronUp,
   HiMiniMagnifyingGlass,
@@ -19,10 +20,24 @@ import {
   Tag,
   GuardHero,
 } from "./approval-center-primitives";
-import { clearEvidence, exportDiagnostics, fetchRuntimeSnapshot, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
+import {
+  clearEvidence,
+  exportDiagnostics,
+  fetchRuntimeSnapshot,
+  fetchSettings,
+  updateSettings,
+  clearPolicy,
+  repairApprovalCenter,
+  setupDesktopNotifications,
+} from "./guard-api";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch, securityLevelLabel } from "./apps/app-catalog";
-import type { GuardRuntimeSnapshot, GuardSettings, GuardSettingsPayload } from "./guard-types";
+import type {
+  GuardNotificationSetupResult,
+  GuardRuntimeSnapshot,
+  GuardSettings,
+  GuardSettingsPayload,
+} from "./guard-types";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 
@@ -271,6 +286,8 @@ export function SettingsWorkspace() {
   const [clearingEvidence, setClearingEvidence] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [repairing, setRepairing] = useState(false);
+  const [settingUpNotifications, setSettingUpNotifications] = useState(false);
+  const [notificationSetup, setNotificationSetup] = useState<GuardNotificationSetupResult | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
@@ -487,6 +504,28 @@ export function SettingsWorkspace() {
     }
   }, []);
 
+  const handleSetupNotifications = useCallback(async () => {
+    setSettingUpNotifications(true);
+    setActionMessage(null);
+    try {
+      const result = await setupDesktopNotifications();
+      setNotificationSetup(result);
+      if (!result.supported) {
+        setActionMessage("Desktop notification setup is not available on this OS.");
+      } else if (result.settings_opened) {
+        setActionMessage("Notification settings opened. Enable terminal-notifier alerts, banners, and sounds.");
+      } else {
+        setActionMessage(
+          "Notification setup ran, but macOS did not open Settings. Open System Settings > Notifications and choose terminal-notifier."
+        );
+      }
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to set up notifications.");
+    } finally {
+      setSettingUpNotifications(false);
+    }
+  }, []);
+
   if (state.kind === "loading") {
     return (
       <div className="space-y-4">
@@ -692,6 +731,11 @@ export function SettingsWorkspace() {
           sectionId="diagnostics"
         >
           <div className="space-y-4">
+            <NotificationSetupCard
+              result={notificationSetup}
+              settingUp={settingUpNotifications}
+              onSetup={handleSetupNotifications}
+            />
             {perfSnapshot !== null && <DiagnosticsPerfCard snapshot={perfSnapshot} />}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-3">
@@ -844,6 +888,55 @@ function DiagnosticsPerfCard(props: { snapshot: GuardRuntimeSnapshot }) {
         {daemonPort !== null && <span>Port {daemonPort}</span>}
         {startedAt !== null && <span>Started {new Date(startedAt).toLocaleTimeString()}</span>}
       </div>
+    </div>
+  );
+}
+
+function NotificationSetupCard(props: {
+  result: GuardNotificationSetupResult | null;
+  settingUp: boolean;
+  onSetup: () => void;
+}) {
+  const statusCopy = props.result
+    ? [
+        props.result.supported ? "Supported" : "Unsupported",
+        props.result.preview_sent ? "Preview sent" : "Preview not sent",
+        props.result.settings_opened ? "Settings opened" : "Settings not opened",
+      ]
+    : ["Not configured from this dashboard session"];
+  return (
+    <div className="rounded-xl border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] p-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
+            <HiMiniBellAlert className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-brand-dark">Desktop notifications</p>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
+              Guard pauses risky AI actions. Enable local alerts so approvals do not hide behind the dashboard.
+            </p>
+            <ol className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+              <li className="rounded-lg bg-white/80 p-3 ring-1 ring-slate-100">1. Open notification settings.</li>
+              <li className="rounded-lg bg-white/80 p-3 ring-1 ring-slate-100">2. Choose terminal-notifier on macOS.</li>
+              <li className="rounded-lg bg-white/80 p-3 ring-1 ring-slate-100">3. Enable banners or alerts plus sounds.</li>
+            </ol>
+          </div>
+        </div>
+        <ActionButton onClick={props.onSetup} disabled={props.settingUp}>
+          {props.settingUp ? "Opening..." : "Open notification settings"}
+        </ActionButton>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {statusCopy.map((item) => (
+          <Tag key={item} tone={item.includes("not") || item.includes("Unsupported") ? "slate" : "blue"}>
+            {item}
+          </Tag>
+        ))}
+      </div>
+      {props.result?.guidance ? (
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">{props.result.guidance}</p>
+      ) : null}
     </div>
   );
 }

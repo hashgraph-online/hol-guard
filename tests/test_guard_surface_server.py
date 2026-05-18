@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
@@ -249,6 +250,57 @@ class TestGuardSurfaceServer:
         assert 'changed_hash_action = "review"' in config_text
         assert "approval_wait_timeout_seconds = 45" in config_text
         assert "telemetry = true" in config_text
+
+    def test_guard_daemon_notification_setup_endpoint_opens_settings(self, tmp_path, monkeypatch) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        calls: list[tuple[str, bool]] = []
+
+        def fake_setup(
+            guard_home,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            assert guard_home == store.guard_home
+            calls.append((approval_url, force))
+            return DesktopNotificationSetupResult(
+                platform="Darwin",
+                supported=True,
+                preview_sent=True,
+                settings_opened=True,
+                settings_url=(
+                    "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+                    "?id=fr.julienxx.oss.terminal-notifier"
+                ),
+                already_prompted=False,
+                notifier_path="/usr/local/bin/terminal-notifier",
+            )
+
+        monkeypatch.setattr(daemon_server_module, "ensure_desktop_notification_setup", fake_setup)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            setup_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/notifications/setup",
+                data=json.dumps({}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(setup_request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert calls == [(f"http://127.0.0.1:{daemon.port}/approvals/notification-preview", True)]
+        assert payload["supported"] is True
+        assert payload["preview_sent"] is True
+        assert payload["settings_opened"] is True
+        assert "terminal-notifier" in payload["guidance"]
 
     def test_guard_daemon_settings_accepts_gentle_preset(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

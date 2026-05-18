@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-MACOS_NOTIFICATION_SETTINGS_URL = "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+MACOS_TERMINAL_NOTIFIER_BUNDLE_ID = "fr.julienxx.oss.terminal-notifier"
+MACOS_NOTIFICATION_SETTINGS_URL = (
+    "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
+    f"?id={MACOS_TERMINAL_NOTIFIER_BUNDLE_ID}"
+)
 _NOTIFICATION_SETUP_STATE_FILE = "desktop-notifications.json"
 
 

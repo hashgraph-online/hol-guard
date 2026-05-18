@@ -45,6 +45,7 @@ from ..config import (
     reset_guard_settings,
     update_guard_settings,
 )
+from ..desktop_notifications import ensure_desktop_notification_setup
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..receipts.manager import build_receipt
 from ..runtime.surface_server import GuardSurfaceRuntime
@@ -482,6 +483,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/daemon/repair":
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
             self._write_json(result)
+            return
+        if parsed.path == "/v1/notifications/setup":
+            self._handle_notification_setup(payload)
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
@@ -973,6 +977,36 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": str(error)}, status=400)
             return
         self._write_json({"harness": adapter.harness, "action": action, "dry_run": False, **result})
+
+    def _handle_notification_setup(self, payload: dict[str, object]) -> None:
+        del payload
+        host = self.server.server_address[0]  # type: ignore[attr-defined]
+        port = self.server.server_address[1]  # type: ignore[attr-defined]
+        approval_url = _build_local_url(host, port, "/approvals/notification-preview")
+        result = ensure_desktop_notification_setup(
+            self.server.store.guard_home,  # type: ignore[attr-defined]
+            approval_url=approval_url,
+            force=True,
+        )
+        guidance = None
+        if result.platform == "Darwin":
+            app_name = "terminal-notifier" if result.notifier_path else "Terminal or terminal-notifier"
+            guidance = (
+                f"macOS may open the general Notifications list. Choose {app_name}, enable Allow Notifications, "
+                "then enable Banners or Alerts plus Sounds."
+            )
+        self._write_json(
+            {
+                "platform": result.platform,
+                "supported": result.supported,
+                "preview_sent": result.preview_sent,
+                "settings_opened": result.settings_opened,
+                "settings_url": result.settings_url,
+                "already_prompted": result.already_prompted,
+                "notifier_path": result.notifier_path,
+                "guidance": guidance,
+            }
+        )
 
     def _handle_requests_list(self, query_string: str) -> None:
         limit = self._query_limit(query_string, default=200, maximum=200)
@@ -1543,6 +1577,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/evidence",
             "/v1/evidence/export",
             "/v1/harnesses",
+            "/v1/notifications/setup",
             "/v1/policy",
             "/v1/policy/clear",
             "/v1/policy/sync",
@@ -1765,6 +1800,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/import",
             "/v1/settings/reset",
             "/v1/daemon/repair",
+            "/v1/notifications/setup",
         }:
             return True
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:

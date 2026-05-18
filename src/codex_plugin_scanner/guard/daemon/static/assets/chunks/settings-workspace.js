@@ -1,4 +1,4 @@
-import { r as reactExports, x as fetchSettings, y as fetchRuntimeSnapshot, z as updateSettings, C as clearPolicy, D as clearEvidence, F as exportDiagnostics, I as repairApprovalCenter, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, J as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, K as HiMiniLockClosed, L as HiMiniCog6Tooth, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown } from "../guard-dashboard.js";
+import { r as reactExports, x as fetchSettings, y as fetchRuntimeSnapshot, z as updateSettings, C as clearPolicy, D as clearEvidence, F as exportDiagnostics, I as repairApprovalCenter, J as setupDesktopNotifications, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, K as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, L as HiMiniLockClosed, M as HiMiniCog6Tooth, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, N as HiMiniBellAlert } from "../guard-dashboard.js";
 import { a as resolveProtectionLevelCopy } from "./runtime-overview.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
@@ -223,6 +223,8 @@ function SettingsWorkspace() {
   const [clearingEvidence, setClearingEvidence] = reactExports.useState(false);
   const [exporting, setExporting] = reactExports.useState(false);
   const [repairing, setRepairing] = reactExports.useState(false);
+  const [settingUpNotifications, setSettingUpNotifications] = reactExports.useState(false);
+  const [notificationSetup, setNotificationSetup] = reactExports.useState(null);
   const [actionMessage, setActionMessage] = reactExports.useState(null);
   const [perfSnapshot, setPerfSnapshot] = reactExports.useState(null);
   const [pendingMode, setPendingMode] = reactExports.useState(null);
@@ -426,6 +428,27 @@ function SettingsWorkspace() {
       setRepairing(false);
     }
   }, []);
+  const handleSetupNotifications = reactExports.useCallback(async () => {
+    setSettingUpNotifications(true);
+    setActionMessage(null);
+    try {
+      const result = await setupDesktopNotifications();
+      setNotificationSetup(result);
+      if (!result.supported) {
+        setActionMessage("Desktop notification setup is not available on this OS.");
+      } else if (result.settings_opened) {
+        setActionMessage("Notification settings opened. Enable terminal-notifier alerts, banners, and sounds.");
+      } else {
+        setActionMessage(
+          "Notification setup ran, but macOS did not open Settings. Open System Settings > Notifications and choose terminal-notifier."
+        );
+      }
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to set up notifications.");
+    } finally {
+      setSettingUpNotifications(false);
+    }
+  }, []);
   if (state.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-10 w-64" }),
@@ -622,6 +645,14 @@ function SettingsWorkspace() {
             onToggle: handleToggleDiagnostics,
             sectionId: "diagnostics",
             children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                NotificationSetupCard,
+                {
+                  result: notificationSetup,
+                  settingUp: settingUpNotifications,
+                  onSetup: handleSetupNotifications
+                }
+              ),
               perfSnapshot !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
@@ -736,6 +767,32 @@ function DiagnosticsPerfCard(props) {
         new Date(startedAt).toLocaleTimeString()
       ] })
     ] })
+  ] });
+}
+function NotificationSetupCard(props) {
+  const statusCopy = props.result ? [
+    props.result.supported ? "Supported" : "Unsupported",
+    props.result.preview_sent ? "Preview sent" : "Preview not sent",
+    props.result.settings_opened ? "Settings opened" : "Settings not opened"
+  ] : ["Not configured from this dashboard session"];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 md:flex-row md:items-start md:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBellAlert, { className: "h-5 w-5", "aria-hidden": "true" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Desktop notifications" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-xs leading-relaxed text-slate-500", children: "Guard pauses risky AI actions. Enable local alerts so approvals do not hide behind the dashboard." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "rounded-lg bg-white/80 p-3 ring-1 ring-slate-100", children: "1. Open notification settings." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "rounded-lg bg-white/80 p-3 ring-1 ring-slate-100", children: "2. Choose terminal-notifier on macOS." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "rounded-lg bg-white/80 p-3 ring-1 ring-slate-100", children: "3. Enable banners or alerts plus sounds." })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onSetup, disabled: props.settingUp, children: props.settingUp ? "Opening..." : "Open notification settings" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 flex flex-wrap gap-2", children: statusCopy.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: item.includes("not") || item.includes("Unsupported") ? "slate" : "blue", children: item }, item)) }),
+    props.result?.guidance ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs leading-relaxed text-slate-500", children: props.result.guidance }) : null
   ] });
 }
 function SettingSelect(props) {

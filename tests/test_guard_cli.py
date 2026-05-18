@@ -6956,6 +6956,7 @@ url = http://127.0.0.1:8787/guard-canary
         opened_urls: list[str] = []
         open_keys: list[str | None] = []
         force_open_flags: list[bool] = []
+        notification_calls: list[tuple[Path, str, bool]] = []
 
         monkeypatch.setattr(
             guard_commands_module,
@@ -6972,6 +6973,14 @@ url = http://127.0.0.1:8787/guard-canary
                 {"opened": True, "reason": "opened", "browser_url": approval_center_url},
             )[-1],
         )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_desktop_notification_setup_async",
+            lambda guard_home, *, approval_url, force=False: (
+                notification_calls.append((guard_home, approval_url, force)),
+                True,
+            )[-1],
+        )
 
         rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -6984,6 +6993,149 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["browser_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is True
         assert output["reason"] == "opened"
+        assert output["notification_setup_started"] is True
+        assert notification_calls == [
+            (home_dir, "http://127.0.0.1:5474/approvals/notification-preview", False)
+        ]
+
+    def test_guard_init_runs_apps_cloud_notifications_and_dashboard(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        dashboard_calls: list[tuple[str, str | None, bool]] = []
+        install_calls: list[tuple[str, str | None, bool]] = []
+        notification_calls: list[tuple[Path, str, bool]] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
+                dashboard_calls.append((approval_center_url, open_key, force_open)),
+                {"opened": True, "reason": "opened", "browser_url": f"{approval_center_url}/home"},
+            )[-1],
+        )
+
+        def fake_install(
+            mode: str,
+            harness: str | None,
+            all_flag: bool,
+            context: HarnessContext,
+            store: GuardStore,
+            workspace: str | None,
+            now: str,
+        ) -> dict[str, object]:
+            del context, store, workspace, now
+            install_calls.append((mode, harness, all_flag))
+            return {
+                "managed_installs": [
+                    {"harness": "codex", "active": True, "workspace": None, "manifest": {}},
+                    {"harness": "opencode", "active": True, "workspace": None, "manifest": {}},
+                ]
+            }
+
+        monkeypatch.setattr(guard_commands_module, "apply_managed_install", fake_install)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_run_guard_connect_flow",
+            lambda **_kwargs: {"connected": False, "status": "waiting_for_browser", "connect_url": "https://hol.org/guard/connect"},
+        )
+
+        def fake_setup(
+            guard_home_path: Path,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            notification_calls.append((guard_home_path, approval_url, force))
+            return DesktopNotificationSetupResult(
+                platform="Darwin",
+                supported=True,
+                preview_sent=True,
+                settings_opened=True,
+                settings_url="x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=fr.julienxx.oss.terminal-notifier",
+                already_prompted=False,
+                notifier_path="/usr/local/bin/terminal-notifier",
+            )
+
+        monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
+
+        rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert dashboard_calls == [("http://127.0.0.1:5474", "init", True)]
+        assert install_calls == [("install", None, True)]
+        assert output["dashboard"]["opened"] is True
+        assert output["apps"]["skipped"] is False
+        assert [item["harness"] for item in output["apps"]["managed_installs"]] == ["codex", "opencode"]
+        assert output["cloud"]["status"] == "waiting_for_browser"
+        assert output["desktop_notifications"]["preview_sent"] is True
+        assert "terminal-notifier" in output["desktop_notifications"]["guidance"]
+        assert notification_calls == [
+            (guard_home, "http://127.0.0.1:5474/approvals/notification-preview", True)
+        ]
+
+    def test_guard_init_skip_flags_do_not_run_install_cloud_or_notifications(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: {
+                "opened": True,
+                "reason": "opened",
+                "browser_url": approval_center_url,
+            },
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "apply_managed_install",
+            lambda *_args, **_kwargs: pytest.fail("install should be skipped"),
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_run_guard_connect_flow",
+            lambda **_kwargs: pytest.fail("cloud connect should be skipped"),
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_desktop_notification_setup",
+            lambda *_args, **_kwargs: pytest.fail("notification setup should be skipped"),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "init",
+                "--skip-apps",
+                "--skip-cloud",
+                "--skip-notifications",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["apps"] == {"skipped": True, "reason": "skip_apps"}
+        assert output["cloud"] == {"skipped": True, "reason": "skip_cloud"}
+        assert output["desktop_notifications"] == {
+            "skipped": True,
+            "reason": "skip_notifications",
+        }
 
     def test_guard_admin_alias_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

@@ -77,7 +77,11 @@ from ..daemon.manager import (
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
 )
-from ..desktop_notifications import desktop_notification_setup_supported, ensure_desktop_notification_setup
+from ..desktop_notifications import (
+    desktop_notification_setup_supported,
+    ensure_desktop_notification_setup,
+    ensure_desktop_notification_setup_async,
+)
 from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
 from ..mcp_tool_calls import (
@@ -340,6 +344,23 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
     _add_guard_common_args(dashboard_parser)
     dashboard_parser.add_argument("--json", action="store_true")
+
+    init_parser = guard_subparsers.add_parser(
+        "init",
+        help="Run first-run setup: protect detected apps, connect Cloud, and enable desktop notifications",
+    )
+    _add_guard_common_args(init_parser)
+    init_parser.add_argument("--skip-apps", action="store_true", help="Do not install Guard into detected harnesses")
+    init_parser.add_argument("--skip-cloud", action="store_true", help="Do not open Guard Cloud pairing")
+    init_parser.add_argument(
+        "--skip-notifications",
+        action="store_true",
+        help="Do not initialize desktop notifications",
+    )
+    init_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
+    init_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
+    init_parser.add_argument("--wait-timeout-seconds", type=int, default=0)
+    init_parser.add_argument("--json", action="store_true")
 
     apps_parser = guard_subparsers.add_parser("apps", help="Connect, test, repair, or disconnect protected apps")
     _add_guard_common_args(apps_parser)
@@ -846,6 +867,138 @@ def _guard_http_url(value: str) -> str:
     return value
 
 
+def _desktop_notification_setup_payload(
+    result: object,
+    *,
+    guidance: str | None = None,
+) -> dict[str, object]:
+    payload = {
+        "platform": getattr(result, "platform", "unknown"),
+        "supported": bool(getattr(result, "supported", False)),
+        "preview_sent": bool(getattr(result, "preview_sent", False)),
+        "settings_opened": bool(getattr(result, "settings_opened", False)),
+        "settings_url": getattr(result, "settings_url", None),
+        "already_prompted": bool(getattr(result, "already_prompted", False)),
+        "notifier_path": getattr(result, "notifier_path", None),
+    }
+    if guidance:
+        payload["guidance"] = guidance
+    return payload
+
+
+def _macos_notification_guidance(notifier_path: object) -> str:
+    app_name = "terminal-notifier" if notifier_path else "Terminal or terminal-notifier"
+    return (
+        f"macOS may open the general Notifications list. Choose {app_name}, enable Allow Notifications, "
+        "then enable Banners or Alerts plus Sounds."
+    )
+
+
+def _run_init_command(
+    args: argparse.Namespace,
+    context: HarnessContext,
+    store: GuardStore,
+    config: GuardConfig,
+    workspace: Path | None,
+) -> int:
+    approval_center_url: str | None = None
+    dashboard_payload: dict[str, object] | None = None
+    try:
+        approval_center_url = ensure_guard_daemon(context.guard_home)
+        open_result = _open_approval_center(
+            approval_center_url,
+            store=store,
+            config=config,
+            open_key="init",
+            force_open=True,
+        )
+        dashboard_payload = {
+            "approval_center_url": approval_center_url,
+            "browser_url": open_result.get("browser_url"),
+            "opened": bool(open_result.get("opened")),
+            "reason": str(open_result.get("reason") or "unknown"),
+        }
+    except RuntimeError as error:
+        dashboard_payload = {"opened": False, "error": str(error)}
+
+    apps_payload: dict[str, object]
+    if bool(getattr(args, "skip_apps", False)):
+        apps_payload = {"skipped": True, "reason": "skip_apps"}
+    else:
+        try:
+            apps_payload = apply_managed_install(
+                "install",
+                None,
+                True,
+                context,
+                store,
+                str(workspace) if workspace else None,
+                _now(),
+            )
+            apps_payload["skipped"] = False
+        except ValueError as error:
+            apps_payload = {"skipped": False, "error": str(error), "managed_installs": []}
+
+    cloud_payload: dict[str, object]
+    if bool(getattr(args, "skip_cloud", False)):
+        cloud_payload = {"skipped": True, "reason": "skip_cloud"}
+    else:
+        try:
+            cloud_payload = _run_guard_connect_flow(
+                guard_home=context.guard_home,
+                store=store,
+                sync_url=args.sync_url,
+                connect_url=args.connect_url,
+                wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 0)),
+            )
+            cloud_payload["skipped"] = False
+        except Exception as error:
+            cloud_payload = {"skipped": False, "connected": False, "error": str(error)}
+
+    notification_payload: dict[str, object]
+    if bool(getattr(args, "skip_notifications", False)):
+        notification_payload = {"skipped": True, "reason": "skip_notifications"}
+    else:
+        approval_url = (
+            f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
+            if isinstance(approval_center_url, str) and approval_center_url
+            else "hol-guard://notification-preview"
+        )
+        result = ensure_desktop_notification_setup(
+            context.guard_home,
+            approval_url=approval_url,
+            force=True,
+        )
+        notification_payload = _desktop_notification_setup_payload(
+            result,
+            guidance=_macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None,
+        )
+        notification_payload["skipped"] = False
+
+    payload = {
+        "generated_at": _now(),
+        "status": "initialized",
+        "dashboard": dashboard_payload,
+        "apps": apps_payload,
+        "cloud": cloud_payload,
+        "desktop_notifications": notification_payload,
+        "next_steps": [
+            {
+                "title": "Open dashboard settings",
+                "command": "hol-guard dashboard",
+                "detail": "Use Settings for notification setup and protection tuning.",
+            },
+            {
+                "title": "Check coverage",
+                "command": "hol-guard status",
+                "detail": "Confirm apps are protected and Cloud pairing is healthy.",
+            },
+        ],
+    }
+    _emit("init", payload, getattr(args, "json", False))
+    return 0
+
+
 def _run_apps_command(
     args: argparse.Namespace,
     context: HarnessContext,
@@ -1054,6 +1207,9 @@ def run_guard_command(
         _emit("status", payload, getattr(args, "json", False))
         return 0
 
+    if args.guard_command == "init":
+        return _run_init_command(args, context, store, config, workspace)
+
     if args.guard_command in {"dashboard", "admin"}:
         try:
             approval_center_url = ensure_guard_daemon(guard_home)
@@ -1078,6 +1234,10 @@ def run_guard_command(
             open_key="dashboard",
             force_open=True,
         )
+        notification_setup_started = ensure_desktop_notification_setup_async(
+            guard_home,
+            approval_url=f"{approval_center_url.rstrip('/')}/approvals/notification-preview",
+        )
         _emit(
             "dashboard",
             {
@@ -1086,6 +1246,7 @@ def run_guard_command(
                 "browser_url": open_result.get("browser_url"),
                 "opened": bool(open_result.get("opened")),
                 "reason": str(open_result.get("reason") or "unknown"),
+                "notification_setup_started": notification_setup_started,
             },
             getattr(args, "json", False),
         )
