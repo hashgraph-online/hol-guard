@@ -16,7 +16,6 @@ from .adapters.base import HarnessContext
 from .config import load_guard_config
 from .desktop_notifications import (
     DesktopApprovalNotification,
-    ensure_desktop_notification_setup_async,
     notify_pending_approval_once,
 )
 from .incident import build_incident_context
@@ -256,10 +255,6 @@ def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest
         return
     if store.approval_desktop_notified_at(request.request_id) is not None:
         return
-    ensure_desktop_notification_setup_async(
-        store.guard_home,
-        approval_url=request.approval_url,
-    )
     notify_pending_approval_once(
         DesktopApprovalNotification(
             request_id=request.request_id,
