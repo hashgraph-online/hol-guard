@@ -122,6 +122,12 @@ def send_desktop_approval_notification(
     return False
 
 
+def desktop_notification_setup_supported(system_name: str | None = None) -> bool:
+    """Return whether local notification setup can prompt the current OS."""
+
+    return (system_name or platform.system()) == "Darwin" and not _desktop_notifications_disabled_by_env()
+
+
 def ensure_desktop_notification_setup(
     guard_home: Path,
     *,
@@ -134,7 +140,7 @@ def ensure_desktop_notification_setup(
     """Register macOS notifier and open Notifications settings when needed."""
 
     system = system_name or platform.system()
-    if system != "Darwin" or _desktop_notifications_disabled_by_env():
+    if not desktop_notification_setup_supported(system):
         return DesktopNotificationSetupResult(
             platform=system,
             supported=False,
