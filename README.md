@@ -26,6 +26,15 @@
 ## Guard Quickstart
 
 ```bash
+pipx install hol-guard
+hol-guard init
+```
+
+`hol-guard init` is the first-run guided setup. It opens the local dashboard, finds supported harnesses, installs Guard-managed app commands where possible, starts the Guard Cloud connect flow when you want shared history, and runs desktop notification setup so approval prompts reach you outside the terminal.
+
+Manual and follow-up commands:
+
+```bash
 pipx run hol-guard bootstrap
 pipx run hol-guard hermes bootstrap
 pipx run hol-guard run codex --dry-run
@@ -56,6 +65,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 
 - `hol-guard start`
   Shows the next step for the harnesses Guard found.
+- `hol-guard init`
+  Runs first-run onboarding: local dashboard, harness discovery and install, optional Guard Cloud connect, and desktop notification setup.
 - `hol-guard bootstrap`
   Detects the best local harness, starts the approval center, and installs Guard in front of it.
 - `hol-guard hermes bootstrap`
