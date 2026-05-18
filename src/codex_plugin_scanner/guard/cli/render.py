@@ -271,8 +271,10 @@ def _render_init(console: Console, payload: dict[str, object]) -> None:
     summary.add_row("Apps", _init_apps_summary(apps_payload, len(managed_installs)))
     summary.add_row("Cloud", _init_cloud_summary(cloud_payload))
     summary.add_row("Notifications", _init_notification_summary(notification_payload))
-    title = "HOL Guard init needs approval" if payload.get("status") == "approval_required" else "HOL Guard initialized"
-    console.print(Panel(summary, title=title, border_style="cyan"))
+    status = str(payload.get("status") or "initialized")
+    title = _init_panel_title(status)
+    border_style = "red" if status == "needs_attention" else "cyan"
+    console.print(Panel(summary, title=title, border_style=border_style))
     if managed_installs:
         console.print(_managed_install_batch_table(managed_installs))
     guidance = notification_payload.get("guidance")
@@ -291,7 +293,7 @@ def _init_plan_panel(plan: list[dict[str, object]], status: str) -> Panel:
         detail = step.get("detail")
         if isinstance(detail, str) and detail:
             table.add_row("", f"[dim]{detail}[/dim]", "")
-    border = "yellow" if status == "approval_required" else "cyan"
+    border = "red" if status == "needs_attention" else ("yellow" if status == "approval_required" else "cyan")
     return Panel(table, title="Progressive init plan", border_style=border)
 
 
@@ -301,6 +303,14 @@ def _init_decision_label(decision: str) -> str:
     if decision == "skipped":
         return "[yellow]skipped[/yellow]"
     return "[blue]pending[/blue]"
+
+
+def _init_panel_title(status: str) -> str:
+    if status == "approval_required":
+        return "HOL Guard init needs approval"
+    if status == "needs_attention":
+        return "HOL Guard init needs attention"
+    return "HOL Guard initialized"
 
 
 def _init_skip_reason(payload: dict[str, object]) -> str:
@@ -339,6 +349,8 @@ def _init_cloud_summary(payload: dict[str, object]) -> str:
 def _init_notification_summary(payload: dict[str, object]) -> str:
     if bool(payload.get("skipped")):
         return f"skipped ({_init_skip_reason(payload)})"
+    if payload.get("error"):
+        return f"needs attention ({payload.get('error')})"
     if not bool(payload.get("supported")):
         return "not supported on this OS"
     states = []
