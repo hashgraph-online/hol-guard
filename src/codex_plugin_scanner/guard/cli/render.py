@@ -317,7 +317,24 @@ def _bootstrap_install_summary(bootstrap_install: object, *, fallback_harness: s
 
 
 def _render_doctor(console: Console, payload: dict[str, object]) -> None:
-    if "adapters" in payload:
+    if "desktop_notifications" in payload:
+        desktop = payload.get("desktop_notifications")
+        if not isinstance(desktop, dict):
+            desktop = {}
+        summary = Table.grid(padding=(0, 1))
+        summary.add_row("Platform", f"[bold]{desktop.get('platform', 'unknown')}[/bold]")
+        summary.add_row("Supported", _bool_label(bool(desktop.get("supported"))))
+        summary.add_row("Preview sent", _bool_label(bool(desktop.get("preview_sent"))))
+        summary.add_row("Settings opened", _bool_label(bool(desktop.get("settings_opened"))))
+        summary.add_row("Already prompted", _bool_label(bool(desktop.get("already_prompted"))))
+        notifier_path = desktop.get("notifier_path")
+        if notifier_path:
+            summary.add_row("Notifier", str(notifier_path))
+        settings_url = desktop.get("settings_url")
+        if settings_url:
+            summary.add_row("Settings URL", str(settings_url))
+        console.print(Panel(summary, title="Guard notification setup", border_style="cyan"))
+    elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
         console.print(
             Panel.fit(
