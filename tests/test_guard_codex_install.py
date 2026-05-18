@@ -108,6 +108,81 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "codex" in permission_handler["command"]
 
 
+def test_guard_apps_connect_codex_defaults_to_project_scope_when_local_codex_config_exists(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.chdir(workspace_dir)
+
+    rc = main(
+        [
+            "guard",
+            "apps",
+            "connect",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(home_dir / ".hol-guard"),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["managed_install"]["active"] is True
+    assert output["managed_install"]["workspace"] == str(workspace_dir)
+    assert output["managed_install"]["manifest"]["managed_config_path"] == str(
+        workspace_dir / ".codex" / "config.toml"
+    )
+
+
+def test_guard_apps_connect_codex_stays_global_without_local_codex_config(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_text(
+        home_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.global_tools]
+command = "python3"
+args = ["-m", "http.server", "9000"]
+""".strip()
+        + "\n",
+    )
+    monkeypatch.chdir(workspace_dir)
+
+    rc = main(
+        [
+            "guard",
+            "apps",
+            "connect",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(home_dir / ".hol-guard"),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["managed_install"]["active"] is True
+    assert output["managed_install"]["workspace"] is None
+    assert output["managed_install"]["manifest"]["managed_config_path"] == str(
+        home_dir / ".codex" / "config.toml"
+    )
+
+
 def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
