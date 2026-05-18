@@ -19,6 +19,7 @@ import type {
   GuardHarnessAction,
   GuardHarnessActionErrorPayload,
   GuardHarnessActionResult,
+  GuardNotificationSetupResult,
   GuardPolicyDecision,
   GuardCodexResumeResult,
   GuardQueueResolutionCopy,
@@ -1079,4 +1080,26 @@ export async function repairApprovalCenter(): Promise<{ repaired: boolean; clear
     throw new Error(`Repair failed with ${response.status}`);
   }
   return response.json() as Promise<{ repaired: boolean; cleared: string[] }>;
+}
+
+export async function setupDesktopNotifications(): Promise<GuardNotificationSetupResult> {
+  if (isGuardDemoMode()) {
+    return {
+      platform: "Darwin",
+      supported: true,
+      preview_sent: true,
+      settings_opened: true,
+      settings_url:
+        "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=fr.julienxx.oss.terminal-notifier",
+      already_prompted: false,
+      notifier_path: "/usr/local/bin/terminal-notifier",
+      guidance:
+        "macOS may open the general Notifications list. Choose terminal-notifier, enable Allow Notifications, then enable Banners or Alerts plus Sounds."
+    };
+  }
+  return readJson<GuardNotificationSetupResult>("/v1/notifications/setup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
 }
