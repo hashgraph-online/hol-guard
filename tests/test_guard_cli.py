@@ -6991,6 +6991,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_init_requires_progressive_approval_before_side_effects(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
+        prompt_calls: list[bool] = []
 
         monkeypatch.setattr(
             guard_commands_module,
@@ -7012,11 +7013,18 @@ url = http://127.0.0.1:8787/guard-canary
             "ensure_desktop_notification_setup",
             lambda *_args, **_kwargs: pytest.fail("notification setup should wait for approval"),
         )
+        monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_prompt_init_step",
+            lambda *_args, **_kwargs: prompt_calls.append(True) or "y",
+        )
 
         rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
+        assert prompt_calls == []
         assert output["status"] == "approval_required"
         assert [step["id"] for step in output["plan"]] == [
             "dashboard",
@@ -7172,20 +7180,15 @@ url = http://127.0.0.1:8787/guard-canary
 
         monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
 
-        rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
-        output = json.loads(capsys.readouterr().out)
+        rc = main(["guard", "init", "--home", str(home_dir), "--guard-home", str(guard_home)])
+        output = capsys.readouterr().out
 
         assert rc == 0
         assert dashboard_calls == ["http://127.0.0.1:5474"]
         assert install_calls == [True]
         assert notification_calls == [True]
-        assert output["cloud"] == {"skipped": True, "reason": "user_skipped"}
-        assert [step["decision"] for step in output["plan"]] == [
-            "approved",
-            "approved",
-            "skipped",
-            "approved",
-        ]
+        assert "skipped (user skipped)" in output
+        assert "Progressive init plan" in output
 
     def test_guard_init_skip_flags_do_not_run_install_cloud_or_notifications(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

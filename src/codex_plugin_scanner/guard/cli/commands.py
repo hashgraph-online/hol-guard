@@ -920,24 +920,26 @@ def _build_init_plan(args: argparse.Namespace) -> list[dict[str, object]]:
 
 
 def _print_init_plan_preview(plan: list[dict[str, object]]) -> None:
-    print("HOL Guard init will ask before each setup action.")
+    print("HOL Guard init will ask before each setup action.", file=sys.stderr)
     for index, step in enumerate(plan, start=1):
-        print(f"{index}. {step.get('title')}")
+        print(f"{index}. {step.get('title')}", file=sys.stderr)
         detail = step.get("detail")
         if isinstance(detail, str) and detail:
-            print(f"   {detail}")
+            print(f"   {detail}", file=sys.stderr)
 
 
 def _prompt_init_step(step: dict[str, object]) -> str:
     title = str(step.get("title") or "Guard init step")
     detail = str(step.get("detail") or "")
     command = str(step.get("command") or "")
-    print(f"\n{title}")
+    print(f"\n{title}", file=sys.stderr)
     if detail:
-        print(detail)
+        print(detail, file=sys.stderr)
     if command:
-        print(f"Command: {command}")
-    return input("Run this step? [y/N] ").strip().lower()
+        print(f"Command: {command}", file=sys.stderr)
+    sys.stderr.write("Run this step? [y/N] ")
+    sys.stderr.flush()
+    return sys.stdin.readline().strip().lower()
 
 
 def _resolve_init_decisions(
@@ -993,7 +995,7 @@ def _run_init_command(
     workspace: Path | None,
 ) -> int:
     init_plan = _build_init_plan(args)
-    interactive = sys.stdin.isatty()
+    interactive = sys.stdin.isatty() and not bool(getattr(args, "json", False))
     if interactive and not bool(getattr(args, "yes", False)) and not bool(getattr(args, "json", False)):
         _print_init_plan_preview(init_plan)
     plan, approved_any = _resolve_init_decisions(

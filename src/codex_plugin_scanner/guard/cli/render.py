@@ -303,9 +303,13 @@ def _init_decision_label(decision: str) -> str:
     return "[blue]pending[/blue]"
 
 
+def _init_skip_reason(payload: dict[str, object]) -> str:
+    return str(payload.get("reason") or "not approved").replace("_", " ")
+
+
 def _init_dashboard_summary(payload: dict[str, object]) -> str:
     if bool(payload.get("skipped")):
-        return f"skipped ({payload.get('reason') or 'not approved'})"
+        return f"skipped ({_init_skip_reason(payload)})"
     if payload.get("error"):
         return f"not opened ({payload.get('error')})"
     opened = "opened" if bool(payload.get("opened")) else "ready"
@@ -315,7 +319,7 @@ def _init_dashboard_summary(payload: dict[str, object]) -> str:
 
 def _init_apps_summary(payload: dict[str, object], count: int) -> str:
     if bool(payload.get("skipped")):
-        return f"skipped ({payload.get('reason') or 'not approved'})"
+        return f"skipped ({_init_skip_reason(payload)})"
     if payload.get("error"):
         return f"needs attention ({payload.get('error')})"
     return f"{count} app install{'s' if count != 1 else ''} checked"
@@ -323,7 +327,7 @@ def _init_apps_summary(payload: dict[str, object], count: int) -> str:
 
 def _init_cloud_summary(payload: dict[str, object]) -> str:
     if bool(payload.get("skipped")):
-        return f"skipped ({payload.get('reason') or 'not approved'})"
+        return f"skipped ({_init_skip_reason(payload)})"
     if payload.get("error"):
         return f"needs attention ({payload.get('error')})"
     if bool(payload.get("connected")):
@@ -334,7 +338,7 @@ def _init_cloud_summary(payload: dict[str, object]) -> str:
 
 def _init_notification_summary(payload: dict[str, object]) -> str:
     if bool(payload.get("skipped")):
-        return f"skipped ({payload.get('reason') or 'not approved'})"
+        return f"skipped ({_init_skip_reason(payload)})"
     if not bool(payload.get("supported")):
         return "not supported on this OS"
     states = []
