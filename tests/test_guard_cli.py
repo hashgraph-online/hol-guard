@@ -4430,6 +4430,53 @@ args = ["-lc", "echo hi"]
         assert calls == [(guard_home, "hol-guard://notification-preview", False)]
         assert output["desktop_notifications"]["supported"] is False
 
+    def test_guard_doctor_notifications_falls_back_when_daemon_start_fails(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        calls: list[tuple[Path, str, bool]] = []
+
+        def fail_daemon(_guard_home: Path) -> str:
+            raise RuntimeError("port conflict")
+
+        def fake_setup(
+            guard_home_path: Path,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            calls.append((guard_home_path, approval_url, force))
+            return DesktopNotificationSetupResult(
+                platform="Darwin",
+                supported=True,
+                preview_sent=True,
+                settings_opened=True,
+                settings_url="x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+                already_prompted=False,
+                notifier_path="/usr/local/bin/terminal-notifier",
+            )
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", fail_daemon)
+        monkeypatch.setattr(guard_commands_module, "desktop_notification_setup_supported", lambda: True)
+        monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "--notifications",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert calls == [(guard_home, "hol-guard://notification-preview", False)]
+        assert output["desktop_notifications"]["settings_opened"] is True
+
     def test_guard_doctor_human_output_includes_detector_registry_line(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
