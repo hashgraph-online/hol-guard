@@ -885,6 +885,12 @@ def _gh_pr_create_body_args_start_index(segment: list[_ShellTokenWithQuoteContex
         if command_name in {"nice", "nohup", "stdbuf"}:
             index = _skip_generic_shell_wrapper_options(command_name, segment, index + 1)
             continue
+        if command_name == "case":
+            index = _skip_shell_case_header(segment, index + 1)
+            continue
+        if command_name == "select":
+            index = _skip_shell_select_header(segment, index + 1)
+            continue
         if token.plain in _SHELL_CONTROL_PREFIX_TOKENS or command_name in _SHELL_CONTROL_PREFIX_TOKENS:
             index += 1
             continue
@@ -957,6 +963,22 @@ def _command_builtin_options_are_lookup_only(segment: list[_ShellTokenWithQuoteC
             return True
         index += 1
     return False
+
+
+def _skip_shell_case_header(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        if segment[index].plain.endswith(")"):
+            return index + 1
+        index += 1
+    return index
+
+
+def _skip_shell_select_header(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
+    while index < len(segment):
+        if segment[index].plain == "do":
+            return index
+        index += 1
+    return index
 
 
 def _skip_env_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:

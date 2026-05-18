@@ -1182,6 +1182,8 @@ def test_tool_action_request_classifier_ignores_command_lookup_gh_pr_words(looku
         'if gh pr create --body "Verification: `python -m build`"; then echo ok; fi',
         'if true; then gh pr create --body "Verification: `python -m build`"; fi',
         'for target in one; do gh pr create --body "Verification: `python -m build`"; done',
+        'case "$target" in one) gh pr create --body "Verification: `python -m build`";; esac',
+        'select target in one do gh pr create --body "Verification: `python -m build`"; done',
         '{ gh pr create --body "Verification: `python -m build`"; }',
         '! gh pr create --body "Verification: `python -m build`"',
         'nohup gh pr create --body "Verification: `python -m build`"',
