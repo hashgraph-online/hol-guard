@@ -999,6 +999,7 @@ def _run_init_command(
     if interactive and not bool(getattr(args, "yes", False)) and not bool(getattr(args, "json", False)):
         _print_init_plan_preview(init_plan)
     approved_any = False
+    init_failed = False
     approval_center_url: str | None = None
     dashboard_payload: dict[str, object] | None = None
     apps_payload: dict[str, object] = {}
@@ -1075,6 +1076,7 @@ def _run_init_command(
                     )
                     step_payload["skipped"] = False
                 except Exception as error:
+                    init_failed = True
                     step_payload = {"skipped": False, "error": str(error)}
             else:
                 step_payload = {"skipped": True, "reason": "unknown_step"}
@@ -1092,7 +1094,7 @@ def _run_init_command(
 
     payload = {
         "generated_at": _now(),
-        "status": "initialized" if approved_any else "approval_required",
+        "status": "needs_attention" if init_failed else ("initialized" if approved_any else "approval_required"),
         "mode": "auto_approved" if bool(getattr(args, "yes", False)) else "progressive",
         "plan": init_plan,
         "dashboard": dashboard_payload,
@@ -1114,7 +1116,7 @@ def _run_init_command(
         ],
     }
     _emit("init", payload, getattr(args, "json", False))
-    return 0
+    return 1 if init_failed else 0
 
 
 def _run_apps_command(

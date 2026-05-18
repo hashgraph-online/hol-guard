@@ -7123,6 +7123,47 @@ url = http://127.0.0.1:8787/guard-canary
         assert "terminal-notifier" in output["desktop_notifications"]["guidance"]
         assert notification_calls == [(guard_home, "http://127.0.0.1:5474/approvals/notification-preview", True)]
 
+    def test_guard_init_yes_fails_when_notification_setup_fails(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda _guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: {
+                "opened": True,
+                "reason": "opened",
+                "browser_url": f"{approval_center_url}/home",
+            },
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "apply_managed_install",
+            lambda *_args, **_kwargs: {"managed_installs": [{"harness": "codex", "active": True}]},
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_run_guard_connect_flow",
+            lambda **_kwargs: {"connected": False, "status": "waiting_for_browser"},
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_desktop_notification_setup",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("notification permission failed")),
+        )
+
+        rc = main(["guard", "init", "--yes", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["status"] == "needs_attention"
+        assert output["desktop_notifications"]["error"] == "notification permission failed"
+
     def test_guard_init_interactive_no_skips_only_cloud_step(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
