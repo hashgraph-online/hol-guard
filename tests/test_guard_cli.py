@@ -4329,6 +4329,7 @@ args = ["-lc", "echo hi"]
         calls: list[tuple[Path, str, bool]] = []
 
         monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
+        monkeypatch.setattr(guard_commands_module, "desktop_notification_setup_supported", lambda: True)
 
         def fake_setup(
             guard_home_path: Path,
@@ -4381,6 +4382,53 @@ args = ["-lc", "echo hi"]
             "already_prompted": False,
             "notifier_path": "/usr/local/bin/terminal-notifier",
         }
+
+    def test_guard_doctor_notifications_skips_daemon_when_setup_unsupported(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        calls: list[tuple[Path, str, bool]] = []
+
+        def fail_daemon(_guard_home: Path) -> str:
+            raise RuntimeError("daemon should not start")
+
+        def fake_setup(
+            guard_home_path: Path,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            calls.append((guard_home_path, approval_url, force))
+            return DesktopNotificationSetupResult(
+                platform="Linux",
+                supported=False,
+                preview_sent=False,
+                settings_opened=False,
+                settings_url=None,
+                already_prompted=False,
+                notifier_path=None,
+            )
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", fail_daemon)
+        monkeypatch.setattr(guard_commands_module, "desktop_notification_setup_supported", lambda: False)
+        monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "--notifications",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert calls == [(guard_home, "hol-guard://notification-preview", False)]
+        assert output["desktop_notifications"]["supported"] is False
 
     def test_guard_doctor_human_output_includes_detector_registry_line(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"

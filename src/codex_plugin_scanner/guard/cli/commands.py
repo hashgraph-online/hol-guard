@@ -77,7 +77,7 @@ from ..daemon.manager import (
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
 )
-from ..desktop_notifications import ensure_desktop_notification_setup
+from ..desktop_notifications import desktop_notification_setup_supported, ensure_desktop_notification_setup
 from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
 from ..mcp_tool_calls import (
@@ -1485,10 +1485,13 @@ def run_guard_command(
 
     if args.guard_command == "doctor":
         if getattr(args, "notifications", False):
-            approval_center_url = ensure_guard_daemon(guard_home)
+            approval_url = "hol-guard://notification-preview"
+            if desktop_notification_setup_supported():
+                approval_center_url = ensure_guard_daemon(guard_home)
+                approval_url = f"{approval_center_url.rstrip('/')}/approvals/notification-preview"
             result = ensure_desktop_notification_setup(
                 guard_home,
-                approval_url=f"{approval_center_url.rstrip('/')}/approvals/notification-preview",
+                approval_url=approval_url,
                 force=bool(getattr(args, "force_notification_settings", False)),
             )
             _emit(
