@@ -1123,6 +1123,39 @@ def _run_init_command(
     return 1 if init_failed else 0
 
 
+def _resolve_guard_workspace(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path,
+) -> Path | None:
+    explicit_workspace = getattr(args, "workspace", None)
+    if explicit_workspace:
+        return Path(explicit_workspace).resolve()
+    if getattr(args, "guard_command", None) != "apps":
+        return None
+    if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
+        return None
+    harness = str(getattr(args, "harness", "")).strip()
+    if not harness:
+        return None
+    try:
+        adapter = get_adapter(harness)
+    except ValueError:
+        return None
+    cwd = Path.cwd().resolve()
+    detection = adapter.detect(
+        HarnessContext(
+            home_dir=Path.home().resolve(),
+            workspace_dir=cwd,
+            guard_home=guard_home,
+        )
+    )
+    for config_path in detection.config_paths:
+        if Path(config_path).resolve().is_relative_to(cwd):
+            return cwd
+    return None
+
+
 def _run_apps_command(
     args: argparse.Namespace,
     context: HarnessContext,
@@ -1267,7 +1300,7 @@ def run_guard_command(
 
     home_override = getattr(args, "home", None)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
-    workspace = Path(args.workspace).resolve() if getattr(args, "workspace", None) else None
+    workspace = _resolve_guard_workspace(args, guard_home=guard_home)
     context = HarnessContext(
         home_dir=Path(home_override).resolve() if home_override else Path.home().resolve(),
         workspace_dir=workspace,
