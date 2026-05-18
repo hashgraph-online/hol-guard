@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.cli import update_commands as guard_update_comma
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.store import GuardStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -4320,6 +4321,65 @@ args = ["-lc", "echo hi"]
             "debug_trace": False,
             "timeout_ms": 75,
             "disabled_detector_ids": ["secret.local"],
+        }
+
+    def test_guard_doctor_notifications_opens_system_settings(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        calls: list[tuple[Path, str, bool]] = []
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
+
+        def fake_setup(
+            guard_home_path: Path,
+            *,
+            approval_url: str,
+            force: bool = False,
+        ) -> DesktopNotificationSetupResult:
+            calls.append((guard_home_path, approval_url, force))
+            return DesktopNotificationSetupResult(
+                platform="Darwin",
+                supported=True,
+                preview_sent=True,
+                settings_opened=True,
+                settings_url="x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+                already_prompted=False,
+                notifier_path="/usr/local/bin/terminal-notifier",
+            )
+
+        monkeypatch.setattr(guard_commands_module, "ensure_desktop_notification_setup", fake_setup)
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "--notifications",
+                "--force-notification-settings",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert calls == [
+            (
+                guard_home,
+                "http://127.0.0.1:5474/approvals/notification-preview",
+                True,
+            )
+        ]
+        assert output["desktop_notifications"] == {
+            "platform": "Darwin",
+            "supported": True,
+            "preview_sent": True,
+            "settings_opened": True,
+            "settings_url": "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+            "already_prompted": False,
+            "notifier_path": "/usr/local/bin/terminal-notifier",
         }
 
     def test_guard_doctor_human_output_includes_detector_registry_line(self, tmp_path, monkeypatch, capsys):

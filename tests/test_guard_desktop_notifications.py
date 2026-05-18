@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.desktop_notifications import (
     _NOTIFIED_APPROVAL_IDS,
     _NOTIFIED_APPROVAL_IDS_LOCK,
     DesktopApprovalNotification,
+    ensure_desktop_notification_setup,
     notify_pending_approval_once,
     send_desktop_approval_notification,
 )
@@ -171,3 +172,53 @@ def test_thread_start_failure_clears_inflight(monkeypatch) -> None:
     assert notify_pending_approval_once(_notification()) is False
     with _NOTIFIED_APPROVAL_IDS_LOCK:
         assert not _NOTIFICATION_ATTEMPTS_IN_FLIGHT
+
+
+def test_macos_setup_sends_preview_opens_settings_and_records_state(tmp_path) -> None:
+    calls: list[list[str]] = []
+
+    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
+        calls.append(command)
+        return _Completed()  # type: ignore[return-value]
+
+    result = ensure_desktop_notification_setup(
+        tmp_path / "guard-home",
+        approval_url="http://127.0.0.1:5474/approvals/preview",
+        system_name="Darwin",
+        run=run,
+        which=lambda name: "/usr/local/bin/terminal-notifier" if name == "terminal-notifier" else None,
+    )
+
+    assert result.supported is True
+    assert result.preview_sent is True
+    assert result.settings_opened is True
+    assert result.already_prompted is False
+    assert result.notifier_path == "/usr/local/bin/terminal-notifier"
+    assert calls[0][0] == "/usr/local/bin/terminal-notifier"
+    assert calls[1][:2] == ["open", "x-apple.systempreferences:com.apple.Notifications-Settings.extension"]
+    assert (tmp_path / "guard-home" / "desktop-notifications.json").exists()
+
+
+def test_macos_setup_does_not_reopen_after_prompt_marker(tmp_path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "desktop-notifications.json").write_text("{}", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
+        calls.append(command)
+        return _Completed()  # type: ignore[return-value]
+
+    result = ensure_desktop_notification_setup(
+        guard_home,
+        approval_url="http://127.0.0.1:5474/approvals/preview",
+        system_name="Darwin",
+        run=run,
+        which=lambda _name: "/usr/local/bin/terminal-notifier",
+    )
+
+    assert result.supported is True
+    assert result.already_prompted is True
+    assert result.preview_sent is False
+    assert result.settings_opened is False
+    assert calls == []
