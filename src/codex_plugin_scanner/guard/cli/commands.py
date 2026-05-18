@@ -1029,6 +1029,7 @@ def _run_init_command(
                         "reason": str(open_result.get("reason") or "unknown"),
                     }
                 except RuntimeError as error:
+                    init_failed = True
                     step_payload = {"opened": False, "error": str(error)}
             elif step_id == "apps":
                 try:
@@ -1043,6 +1044,7 @@ def _run_init_command(
                     )
                     step_payload["skipped"] = False
                 except ValueError as error:
+                    init_failed = True
                     step_payload = {"skipped": False, "error": str(error), "managed_installs": []}
             elif step_id == "cloud":
                 try:
@@ -1055,6 +1057,7 @@ def _run_init_command(
                     )
                     step_payload["skipped"] = False
                 except Exception as error:
+                    init_failed = True
                     step_payload = {"skipped": False, "connected": False, "error": str(error)}
             elif step_id == "notifications":
                 try:
@@ -1077,8 +1080,9 @@ def _run_init_command(
                     step_payload["skipped"] = False
                 except Exception as error:
                     init_failed = True
-                    step_payload = {"skipped": False, "error": str(error)}
+                    step_payload = {"skipped": False, "supported": True, "error": str(error)}
             else:
+                init_failed = True
                 step_payload = {"skipped": True, "reason": "unknown_step"}
 
         if step_id == "dashboard":
