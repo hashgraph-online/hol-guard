@@ -168,10 +168,26 @@ export type GuardQueueResolutionCopy = {
   body: string;
 };
 
+export const CODEX_RESUME_STATUSES = ["pending", "in_progress", "sent", "already_sent", "failed", "skipped"] as const;
+export type CodexResumeStatus = (typeof CODEX_RESUME_STATUSES)[number];
+
 export type GuardCodexResumeResult = {
-  status: "sent" | "skipped" | "failed";
-  reason: string;
-  thread_id: string;
+  request_id: string | null;
+  operation_id: string | null;
+  harness: string | null;
+  resolution_action: string | null;
+  strategy: string | null;
+  supported: boolean;
+  status: CodexResumeStatus;
+  thread_id: string | null;
+  reason: string | null;
+  message: string | null;
+  last_error: string | null;
+  attempt_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+  last_attempt_at: string | null;
+  sent_at: string | null;
 };
 
 export type GuardQueueResolutionResult = {

@@ -2,11 +2,13 @@ import {
   buildDemoRuntimeSnapshot,
   fetchApprovalPage,
   fetchQueueSummary,
+  fetchResumeStatus,
   formatHarnessCommand,
   normalizeApprovalRequest,
   parseActionEnvelope,
   parseDecisionV2,
-  resolveRequestWithQueueResult
+  resolveRequestWithQueueResult,
+  retryResume,
 } from "./guard-api";
 import { resolveCloudSyncHealthCopy } from "./runtime-overview";
 import {
@@ -702,3 +704,176 @@ try {
   assert(error.message.includes("401"), "L077c: malformed refresh preserves original 401 status");
 }
 assert(malformedRefreshCalls.length === 2, "L077c: malformed refresh does not retry without a parsed token");
+
+installGuardWindow("?guard-token=token-codex-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const fetchCodexResolveCalls = installFetchStub({
+  "/v1/requests/req-codex/approve": {
+    resolved: true,
+    item: null,
+    resolved_request: null,
+    remaining_pending_count: 0,
+    next_selectable_request_id: null,
+    remaining_pending_summaries: [],
+    resolved_duplicate_ids: [],
+    resolution_summary: "Decision saved.",
+    retry_hint: null,
+    copy: null,
+    codex_resume: {
+      status: "sent",
+      supported: true,
+      attempt_count: 1,
+      request_id: "req-codex",
+      operation_id: "op-1",
+      harness: "codex",
+      resolution_action: "allow",
+      strategy: "reply",
+      thread_id: "thread-abc",
+      reason: null,
+      message: null,
+      last_error: null,
+      created_at: null,
+      updated_at: null,
+      last_attempt_at: null,
+      sent_at: "2025-01-01T00:00:00Z"
+    }
+  }
+});
+
+const codexResolution = await resolveRequestWithQueueResult({
+  requestId: "req-codex",
+  action: "allow",
+  scope: "artifact",
+  reason: "reviewed"
+});
+assert(fetchCodexResolveCalls.length === 1, "L078: codex resolve calls approve endpoint");
+assert(codexResolution.codex_resume !== null, "L078: codex resolve returns codex_resume");
+assert(codexResolution.codex_resume?.status === "sent", "L078: codex_resume.status is 'sent'");
+assert(codexResolution.codex_resume?.supported === true, "L078: codex_resume.supported is true");
+assert(codexResolution.codex_resume?.thread_id === "thread-abc", "L078: codex_resume.thread_id normalizes");
+assert(codexResolution.codex_resume?.attempt_count === 1, "L078: codex_resume.attempt_count normalizes");
+
+installGuardWindow("?guard-token=token-codex-statuses&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+
+for (const status of ["pending", "in_progress", "already_sent", "failed", "skipped"] as const) {
+  installFetchStub({
+    "/v1/requests/req-codex-status-check/approve": {
+      resolved: true,
+      item: null,
+      resolved_request: null,
+      remaining_pending_count: 0,
+      next_selectable_request_id: null,
+      remaining_pending_summaries: [],
+      resolved_duplicate_ids: [],
+      resolution_summary: null,
+      retry_hint: null,
+      copy: null,
+      codex_resume: {
+        status,
+        supported: true,
+        attempt_count: 0,
+        request_id: null,
+        operation_id: null,
+        harness: null,
+        resolution_action: null,
+        strategy: null,
+        thread_id: null,
+        reason: null,
+        message: null,
+        last_error: null,
+        created_at: null,
+        updated_at: null,
+        last_attempt_at: null,
+        sent_at: null
+      }
+    }
+  });
+  const res = await resolveRequestWithQueueResult({
+    requestId: "req-codex-status-check",
+    action: "allow",
+    scope: "artifact",
+    reason: ""
+  });
+  assert(res.codex_resume?.status === status, `L078b: codex_resume.status '${status}' normalizes correctly`);
+}
+
+installGuardWindow("?guard-token=token-fetch-resume&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+installFetchStub({
+  "/v1/requests/req-resume-fetch/resume": {
+    status: "in_progress",
+    supported: true,
+    attempt_count: 1,
+    request_id: "req-resume-fetch",
+    operation_id: "op-2",
+    harness: "codex",
+    resolution_action: "allow",
+    strategy: "reply",
+    thread_id: "thread-fetch",
+    reason: null,
+    message: null,
+    last_error: null,
+    created_at: null,
+    updated_at: null,
+    last_attempt_at: null,
+    sent_at: null
+  }
+});
+
+const fetchedResume = await fetchResumeStatus("req-resume-fetch");
+assert(fetchedResume !== null, "L079: fetchResumeStatus returns non-null for 200 response");
+assert(fetchedResume?.status === "in_progress", "L079: fetchResumeStatus normalizes status");
+assert(fetchedResume?.thread_id === "thread-fetch", "L079: fetchResumeStatus normalizes thread_id");
+
+installGuardWindow("?guard-token=token-fetch-resume-404&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+globalThis.fetch = async (): Promise<Response> => {
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+
+const fetchedResume404 = await fetchResumeStatus("req-missing");
+assert(fetchedResume404 === null, "L079b: fetchResumeStatus returns null for 404");
+
+installGuardWindow("?guard-token=stale-retry-resume-token&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const retryResumeCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  retryResumeCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/initialize") {
+    return new Response(JSON.stringify({ auth_token: "fresh-retry-resume-token" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  if (path === "/v1/requests/req-retry-resume/resume") {
+    const token = new Headers(init?.headers).get("X-Guard-Token");
+    if (token !== "fresh-retry-resume-token") {
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }
+    return new Response(JSON.stringify({
+      status: "sent",
+      supported: true,
+      attempt_count: 2,
+      request_id: "req-retry-resume",
+      operation_id: null,
+      harness: "codex",
+      resolution_action: "allow",
+      strategy: "reply",
+      thread_id: "thread-retry",
+      reason: null,
+      message: null,
+      last_error: null,
+      created_at: null,
+      updated_at: null,
+      last_attempt_at: null,
+      sent_at: "2025-01-01T00:01:00Z"
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+
+const retryResult = await retryResume("req-retry-resume");
+assert(retryResumeCalls.length === 3, "L080: retryResume calls initialize then retries with fresh token");
+assert(retryResult.status === "sent", "L080: retryResume returns normalized codex_resume on success");
+assert(retryResult.thread_id === "thread-retry", "L080: retryResume normalizes thread_id");
+assert(retryResult.attempt_count === 2, "L080: retryResume normalizes attempt_count");
+
+console.log("guard-api.test.ts: all tests passed");

@@ -37,7 +37,10 @@ from ..cli.install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
-from ..codex_app_server import resume_codex_thread_for_request
+from ..codex_resume import (
+    get_request_resume_status,
+    retry_request_resume,
+)
 from ..config import (
     GuardConfig,
     editable_guard_settings,
@@ -370,6 +373,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
             self._handle_session_resume(path_parts[2])
             return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
+            if not self._header_token_is_valid():
+                self._write_json(
+                    {"error": "unauthorized"},
+                    status=401,
+                    extra_headers=self._cors_headers_for_request(),
+                )
+                return
+            self._handle_request_resume_read(path_parts[2])
+            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "operations"]:
             operation = store.get_guard_operation(path_parts[2])
             if operation is None:
@@ -545,7 +558,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
-            if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+            if (
+                len(path_parts) == 4
+                and path_parts[:2] == ["v1", "requests"]
+                and path_parts[3] in {"approve", "block", "resume"}
+            ):
                 host = self.server.server_address[0]  # type: ignore[attr-defined]
                 port = self.server.server_address[1]  # type: ignore[attr-defined]
                 reconnect_url = _build_local_url(host, port, "/#/reconnect")
@@ -640,6 +657,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"]:
             self._handle_headless_app_action(path_parts[2], payload)
             return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
+            self._handle_request_resume_retry(path_parts[2])
+            return
         request_id, action, matched = self._resolve_request_action(path_parts, payload)
         if not matched:
             self.send_response(404)
@@ -710,27 +730,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness = str(updated.get("harness", ""))
         copy = _build_resolution_copy(action, harness_str or harness)
         codex_resume = None
-        if action in {"allow", "block"}:
-            codex_resume = resume_codex_thread_for_request(
-                store=self.server.store,  # type: ignore[attr-defined]
+        if harness_str == "codex" and action in {"allow", "block"}:
+            codex_resume = retry_request_resume(
+                self.server.store,  # type: ignore[attr-defined]
                 request_id=request_id,
-                action=action,
+                now=_now(),
             )
         if codex_resume is not None:
-            updated["codex_resume"] = codex_resume
-            self.server.store.add_event(  # type: ignore[attr-defined]
-                "codex/thread_resume",
-                {"request_id": request_id, "action": action, **codex_resume},
-                _now(),
+            updated = self._apply_codex_resume_result(
+                updated=updated,
+                request_id=request_id,
+                action=action,
+                copy=copy,
+                codex_resume=codex_resume,
             )
-            if codex_resume.get("status") == "sent":
-                updated["resolution_summary"] = (
-                    "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
-                )
-                copy = {
-                    "title": "Decision saved. Codex is continuing.",
-                    "body": "HOL Guard sent a continue prompt to the original Codex thread.",
-                }
+            copy = updated["copy"]
         updated["copy"] = copy
         updated["retry_hint"] = copy["body"]
         self._write_json(updated)
@@ -1436,6 +1450,81 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json(payload)
 
+    def _handle_request_resume_read(self, request_id: str) -> None:
+        if self.server.store.get_approval_request(request_id) is None:  # type: ignore[attr-defined]
+            self._write_json({"error": "not_found"}, status=404)
+            return
+        payload = get_request_resume_status(self.server.store, request_id=request_id, now=_now())  # type: ignore[attr-defined]
+        if payload is None:
+            self._write_json({"error": "not_found"}, status=404)
+            return
+        self._write_json(payload)
+
+    def _handle_request_resume_retry(self, request_id: str) -> None:
+        try:
+            payload = retry_request_resume(self.server.store, request_id=request_id, now=_now(), force=False)  # type: ignore[attr-defined]
+        except ValueError as error:
+            error_code = str(error)
+            if error_code == "not_found":
+                self._write_json({"error": "not_found"}, status=404)
+                return
+            if error_code == "not_resolved":
+                self._write_json({"error": "not_resolved"}, status=409)
+                return
+            self._write_json({"error": "resume_not_supported"}, status=400)
+            return
+        self.server.store.add_event(  # type: ignore[attr-defined]
+            "codex/thread_resume",
+            {"request_id": request_id, "action": payload.get("resolution_action"), **payload},
+            _now(),
+        )
+        self._write_json(payload)
+
+    def _apply_codex_resume_result(
+        self,
+        *,
+        updated: dict[str, object],
+        request_id: str,
+        action: str,
+        copy: dict[str, str],
+        codex_resume: dict[str, object],
+    ) -> dict[str, object]:
+        updated["codex_resume"] = codex_resume
+        self.server.store.add_event(  # type: ignore[attr-defined]
+            "codex/thread_resume",
+            {"request_id": request_id, "action": action, **codex_resume},
+            _now(),
+        )
+        status = str(codex_resume.get("status") or "")
+        message = str(codex_resume.get("message") or "")
+        if status == "sent":
+            updated["resolution_summary"] = (
+                "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
+            )
+            copy = {
+                "title": "Decision saved. Codex is continuing.",
+                "body": message,
+            }
+        elif status == "already_sent":
+            updated["resolution_summary"] = "Decision saved. Codex was already resumed for this request."
+            copy = {
+                "title": "Decision saved. Codex already resumed.",
+                "body": message,
+            }
+        else:
+            updated["resolution_summary"] = message or str(updated.get("resolution_summary") or "Decision saved.")
+            copy = {
+                "title": (
+                    "Decision saved. Return to Codex."
+                    if status == "skipped"
+                    else "Decision saved. Codex could not be resumed."
+                ),
+                "body": message or copy["body"],
+            }
+        updated["copy"] = copy
+        updated["retry_hint"] = copy["body"]
+        return updated
+
     def _handle_connect_request_create(self, payload: dict[str, object]) -> None:
         sync_url = self._optional_string(payload.get("sync_url"))
         allowed_origin = self._normalize_origin(self._optional_string(payload.get("allowed_origin")))
@@ -1751,7 +1840,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) == 3 and path_parts[:2] in (["v1", "requests"], ["v1", "receipts"]):
             return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["v1", "requests"]
+            and path_parts[3] in {"approve", "block", "resume"}
+        ):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
             return True
@@ -1965,7 +2058,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
             return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["v1", "requests"]
+            and path_parts[3] in {"approve", "block", "resume"}
+        ):
             return True
         if (
             len(path_parts) == 4

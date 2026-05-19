@@ -89,7 +89,14 @@ class TestApprovalResolutionCopyTitle:
     def test_approve_response_copy_title(self, tmp_path) -> None:
         """T726: approve response has copy.title == 'Approved. Retry in chat.'"""
         store = GuardStore(tmp_path / "guard-home")
-        store.add_approval_request(_make_approval_request(request_id="req-t726"), "2026-01-01T00:00:00Z")
+        store.add_approval_request(
+            _make_approval_request(
+                request_id="req-t726",
+                harness="claude-code",
+                artifact_id="claude-code:project:tool",
+            ),
+            "2026-01-01T00:00:00Z",
+        )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
         try:
@@ -103,7 +110,14 @@ class TestApprovalResolutionCopyTitle:
     def test_block_response_copy_title(self, tmp_path) -> None:
         """T727: block response has copy.title == 'Blocked. Guard will remember this decision.'"""
         store = GuardStore(tmp_path / "guard-home")
-        store.add_approval_request(_make_approval_request(request_id="req-t727"), "2026-01-01T00:00:00Z")
+        store.add_approval_request(
+            _make_approval_request(
+                request_id="req-t727",
+                harness="claude-code",
+                artifact_id="claude-code:project:tool",
+            ),
+            "2026-01-01T00:00:00Z",
+        )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
         try:
@@ -121,7 +135,11 @@ class TestApprovalResolutionCopyPerHarness:
     @pytest.mark.parametrize(
         "harness,expected_body",
         [
-            ("codex", "Return to Codex and retry"),
+            (
+                "codex",
+                "Decision saved. HOL Guard could not find the Codex session to resume. "
+                "Retry the same request in Codex; it should pass because this approval is now saved.",
+            ),
             ("claude-code", "Return to Claude and retry"),
             ("opencode", "Return to OpenCode and retry"),
             ("copilot", "Return to Copilot and retry"),
