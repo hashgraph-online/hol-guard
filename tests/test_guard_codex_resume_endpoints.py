@@ -100,12 +100,13 @@ def _seed_codex_operation(
     workspace: str = "/workspace",
     codex_home: str | None = None,
     command_text: str | None = None,
+    status: str = "waiting_on_approval",
 ) -> None:
     session = store.upsert_guard_session(
         session_id=f"session-{request_id}",
         harness="codex",
         surface="harness-adapter",
-        status="waiting_on_approval",
+        status=status,
         client_name="codex-hook",
         client_title="Codex hook",
         client_version="1.0.0",
@@ -128,7 +129,7 @@ def _seed_codex_operation(
         session_id=str(session["session_id"]),
         harness="codex",
         operation_type="tool_call",
-        status="waiting_on_approval",
+        status=status,
         approval_request_ids=[request_id],
         resume_token=f"resume-{request_id}",
         metadata=metadata,
@@ -177,7 +178,12 @@ def test_codex_block_resume_prompt_includes_request_id_and_safe_alternative(
     store.add_approval_request(_request("req-block"), "2026-05-19T10:00:00+00:00")
     socket_path = tmp_path / "codex-control.sock"
     socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(store, request_id="req-block", socket_path=socket_path)
+    _seed_codex_operation(
+        store,
+        request_id="req-block",
+        socket_path=socket_path,
+        status="approval_wait_timeout",
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
 
@@ -194,6 +200,46 @@ def test_codex_block_resume_prompt_includes_request_id_and_safe_alternative(
     assert payload["codex_resume"]["status"] == "sent"
     prompt = captured_payloads[2]["params"]["input"][0]["text"]
     assert prompt == "HOL Guard blocked request `req-block`. Do not retry that action. Explain a safe alternative."
+
+
+def test_codex_approve_defers_headless_resume_while_live_hook_waits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_codex_binary(monkeypatch)
+
+    def _fail_run(command, **kwargs):
+        raise AssertionError("browser approval must not launch headless Codex while the live hook is waiting")
+
+    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fail_run)
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-live"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    _seed_codex_operation(
+        store,
+        request_id="req-live",
+        socket_path=missing_socket,
+        thread_id="live-session-1",
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-live/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codex_resume"]["status"] == "in_progress"
+    assert payload["codex_resume"]["reason"] == "live_hook_waiting"
+    assert "original Codex action continue" in payload["codex_resume"]["message"]
 
 
 def test_request_resume_status_endpoint_returns_persisted_result(tmp_path: Path) -> None:
@@ -279,6 +325,7 @@ def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_prese
         request_id="req-allow-command",
         socket_path=socket_path,
         command_text="python - <<'PY'\nprint('guard')\nPY",
+        status="approval_wait_timeout",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -342,6 +389,7 @@ def test_request_resume_retry_endpoint_can_recover_after_socket_missing(
         socket_path=None,
         workspace=str(workspace),
         codex_home="/tmp/codex-home",
+        status="approval_wait_timeout",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -394,7 +442,12 @@ def test_request_resume_retry_is_idempotent_after_success(
     store.add_approval_request(_request("req-idempotent"), "2026-05-19T10:00:00+00:00")
     socket_path = tmp_path / "codex-idempotent.sock"
     socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(store, request_id="req-idempotent", socket_path=socket_path)
+    _seed_codex_operation(
+        store,
+        request_id="req-idempotent",
+        socket_path=socket_path,
+        status="approval_wait_timeout",
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
 
@@ -456,6 +509,7 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
         thread_id="session-exec-1",
         workspace=str(workspace),
         codex_home=str(codex_home),
+        status="approval_wait_timeout",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -485,6 +539,59 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     assert "approved request `req-exec`" in recorded["input"]
 
 
+def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    send_calls = 0
+
+    def _fake_resume(**kwargs):
+        nonlocal send_calls
+        send_calls += 1
+        return {
+            "status": "sent",
+            "reason": "turn_start_sent",
+            "thread_id": "session-default-socket-1",
+            "strategy": "codex-app-server-thread",
+            "supported": True,
+        }
+
+    def _fail_run(command, **kwargs):
+        raise AssertionError("app-server resume should be attempted before headless exec")
+
+    monkeypatch.setattr(codex_resume_module, "resume_codex_thread_for_request", _fake_resume)
+    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fail_run)
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-default-socket"), "2026-05-19T10:00:00+00:00")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_codex_operation(
+        store,
+        request_id="req-default-socket",
+        socket_path=None,
+        thread_id="session-default-socket-1",
+        workspace=str(workspace),
+        status="approval_wait_timeout",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-default-socket/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert send_calls == 1
+
+
 def test_codex_approve_returns_failed_resume_when_exec_launch_raises_oserror(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -507,6 +614,7 @@ def test_codex_approve_returns_failed_resume_when_exec_launch_raises_oserror(
         socket_path=missing_socket,
         thread_id="session-oserror-1",
         workspace=str(workspace),
+        status="approval_wait_timeout",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -568,6 +676,7 @@ def test_codex_approve_falls_back_to_exec_resume_after_transport_error_reason(
         socket_path=socket_path,
         thread_id="session-transport-1",
         workspace=str(workspace),
+        status="approval_wait_timeout",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

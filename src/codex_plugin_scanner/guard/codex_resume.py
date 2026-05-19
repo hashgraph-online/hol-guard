@@ -35,10 +35,9 @@ def seed_request_resume_record(store: GuardStore, *, request_id: str, now: str) 
     operation = store.get_guard_operation_for_approval_request(request_id)
     metadata = operation.get("metadata") if isinstance(operation, dict) else None
     thread_id = _first_string(metadata, _THREAD_ID_KEYS) if isinstance(metadata, Mapping) else None
-    socket_path = _first_string(metadata, _SOCKET_KEYS) if isinstance(metadata, Mapping) else None
     strategy = "manual-only"
     if thread_id is not None:
-        strategy = "codex-app-server-thread" if socket_path is not None else "codex-exec-resume"
+        strategy = "codex-app-server-thread"
     store.seed_request_resume(
         request_id=request_id,
         operation_id=str(operation["operation_id"]) if isinstance(operation, dict) else None,
@@ -110,6 +109,45 @@ def retry_request_resume(
         now=now,
     )
     return final
+
+
+def defer_request_resume_to_live_hook(
+    store: GuardStore,
+    *,
+    request_id: str,
+    action: str,
+    now: str,
+) -> dict[str, object] | None:
+    """Let an active Codex hook consume the saved browser decision itself."""
+
+    operation = store.get_guard_operation_for_approval_request(request_id)
+    if operation is None or str(operation.get("harness")) != "codex":
+        return None
+    if str(operation.get("status")) != "waiting_on_approval":
+        return None
+    resume = get_request_resume_status(store, request_id=request_id, now=now)
+    if resume is None:
+        return None
+    attempt_count = int(resume.get("attempt_count") or 0)
+    message = (
+        "Decision saved. Codex is still waiting for this browser decision, "
+        "so HOL Guard will let the original Codex action continue without starting a second headless run."
+    )
+    store.update_request_resume(
+        request_id=request_id,
+        resolution_action=action,
+        strategy=str(resume.get("strategy")) if isinstance(resume.get("strategy"), str) else None,
+        supported=bool(resume.get("supported")) if resume.get("supported") is not None else None,
+        status="in_progress",
+        reason="live_hook_waiting",
+        message=message,
+        last_error=None,
+        attempt_count=attempt_count,
+        last_attempt_at=now,
+        sent_at=str(resume.get("sent_at")) if isinstance(resume.get("sent_at"), str) else None,
+        now=now,
+    )
+    return store.get_request_resume(request_id)
 
 
 def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:

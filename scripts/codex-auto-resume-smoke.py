@@ -27,7 +27,9 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-ALLOW_SENTINEL = "HOL_GUARD_CANARY_TOKEN_PRESENT"
+from codex_plugin_scanner.guard.store import GuardStore  # noqa: E402
+
+ALLOW_SENTINEL = "HOL_GUARD_ALLOW_PROOF_PRESENT"
 PROOF_FILE_NAME = "guard-proof.txt"
 _APPROVAL_URL_PATTERN = re.compile(r"http://127\.0\.0\.1:(?P<port>\d+)/approvals/(?P<request_id>[0-9a-f]+)")
 
@@ -123,10 +125,7 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
     proof_path = workspace_dir / PROOF_FILE_NAME
 
     _write_text(home_dir / ".codex" / "config.toml", 'model = "gpt-5"\n')
-    _write_text(
-        workspace_dir / ".codex" / "config.toml",
-        'approval_policy = "never"\n\n[features]\ncodex_hooks = true\n',
-    )
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n\n[features]\nhooks = true\n')
     workspace_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=workspace_dir, check=True, capture_output=True, text=True)
 
@@ -149,67 +148,38 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
-        transcript_chunks: list[str] = []
-        request_id = uuid.uuid4().hex
-        process, master_fd = _start_codex_exec(
-            decision=decision,
-            home_dir=home_dir,
+        thread_id, initial_transcript = _start_headless_codex_thread(
             workspace_dir=workspace_dir,
-            message_path=message_path,
+            home_dir=home_dir,
             codex_home=args.codex_home,
-            guard_daemon_port=daemon.port,
-            request_id=request_id,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
         )
-        try:
-            _wait_for_process_exit(
-                process=process,
-                master_fd=master_fd,
-                transcript_chunks=transcript_chunks,
-                timeout_seconds=args.request_timeout_seconds,
-            )
-            transcript = "".join(transcript_chunks)
-            thread_id = _thread_id_from_transcript(transcript)
-            if thread_id is None:
-                raise RuntimeError(f"codex exec did not emit a resumable thread id\nstdout:\n{transcript}\n")
-            _queue_pending_request(
-                store=store,
-                request_id=request_id,
-                thread_id=thread_id,
-                workspace_dir=workspace_dir,
-                daemon_port=daemon.port,
-                codex_home=_scenario_env(home_dir=home_dir, codex_home=args.codex_home).get("CODEX_HOME"),
-            )
-            action_path = "approve" if decision == "allow" else "block"
-            approval_payload = _post_json(
-                port=daemon.port,
-                token=daemon._server.auth_token,
-                path=f"/v1/requests/{request_id}/{action_path}",
-                payload={"scope": "artifact", "reason": f"{decision}-smoke"},
-                timeout_seconds=args.timeout_seconds,
-            )
-            resume_payload = _get_json(
-                port=daemon.port,
-                token=daemon._server.auth_token,
-                path=f"/v1/requests/{request_id}/resume",
-                timeout_seconds=30.0,
-            )
-        finally:
-            if process.poll() is None:
-                process.kill()
-                process.wait(timeout=10)
-            _drain_pty(master_fd=master_fd, transcript_chunks=transcript_chunks, block=False)
-            os.close(master_fd)
+        request_id = uuid.uuid4().hex
+        _queue_pending_request(
+            store=store,
+            request_id=request_id,
+            thread_id=thread_id,
+            workspace_dir=workspace_dir,
+            daemon_port=daemon.port,
+            codex_home=args.codex_home,
+            operation_status="approval_wait_timeout",
+        )
+        action_path = "approve" if decision == "allow" else "block"
+        approval_payload = _post_json(
+            port=daemon.port,
+            token=daemon._server.auth_token,
+            path=f"/v1/requests/{request_id}/{action_path}",
+            payload={"scope": "artifact", "reason": f"{decision}-smoke"},
+            timeout_seconds=args.timeout_seconds,
+        )
+        resume_payload = approval_payload.get("codex_resume") if isinstance(approval_payload, dict) else None
+        if not isinstance(resume_payload, dict):
+            raise RuntimeError(f"approval response did not include codex_resume: {approval_payload}")
     finally:
         daemon.stop()
 
-    transcript = "".join(transcript_chunks)
-    stdout_path.write_text("".join(transcript_chunks), encoding="utf-8")
-    stderr_path.write_text("", encoding="utf-8")
-    if process.returncode != 0:
-        raise RuntimeError(
-            f"codex exec failed for {decision}: rc={process.returncode}\n"
-            f"stdout:\n{stdout_path.read_text(encoding='utf-8')}\n"
-        )
+    transcript = initial_transcript
     final_message = message_path.read_text(encoding="utf-8").strip() if message_path.is_file() else ""
     proof_created = _wait_for_proof_state(proof_path=proof_path, should_exist=decision == "allow", timeout_seconds=20.0)
     stderr_text = stderr_path.read_text(encoding="utf-8")
@@ -240,16 +210,20 @@ def _start_codex_exec(
     message_path: Path,
     codex_home: str | None,
     guard_daemon_port: int,
-    request_id: str,
+    prompt_marker: str,
 ) -> tuple[subprocess.Popen[bytes], int]:
-    prompt = _codex_prompt(decision, request_id=request_id)
+    prompt = _codex_prompt(decision, prompt_marker=prompt_marker)
     command = [
         "codex",
         "exec",
         "--json",
         "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
         "--dangerously-bypass-hook-trust",
-        "--ignore-user-config",
+        "--enable",
+        "hooks",
+        "-c",
+        f'projects."{workspace_dir.resolve()}".trust_level="trusted"',
         "--output-last-message",
         str(message_path),
         prompt,
@@ -258,7 +232,7 @@ def _start_codex_exec(
     try:
         process = subprocess.Popen(
             command,
-            cwd=workspace_dir,
+            cwd=workspace_dir.resolve(),
             env=_scenario_env(
                 home_dir=home_dir,
                 codex_home=codex_home,
@@ -275,6 +249,46 @@ def _start_codex_exec(
         raise
     finally:
         os.close(slave_fd)
+
+
+def _start_headless_codex_thread(
+    *,
+    workspace_dir: Path,
+    home_dir: Path,
+    codex_home: str | None,
+    stdout_path: Path,
+    stderr_path: Path,
+) -> tuple[str, str]:
+    command = [
+        "codex",
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "danger-full-access",
+        "-c",
+        'approval_policy="never"',
+        "-C",
+        str(workspace_dir.resolve()),
+        "Say exactly HOL_GUARD_RESUME_READY.",
+    ]
+    result = subprocess.run(
+        command,
+        cwd=workspace_dir.resolve(),
+        env=_scenario_env(home_dir=home_dir, codex_home=codex_home),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    stdout_path.write_text(result.stdout, encoding="utf-8")
+    stderr_path.write_text(result.stderr, encoding="utf-8")
+    if result.returncode != 0:
+        raise RuntimeError(f"codex exec failed to create a resumable thread: rc={result.returncode}\n{result.stderr}")
+    thread_id = _thread_id_from_transcript(result.stdout)
+    if thread_id is None:
+        raise RuntimeError(f"codex exec did not emit a thread id:\n{result.stdout}")
+    return thread_id, result.stdout
 
 
 def _scenario_env(*, home_dir: Path, codex_home: str | None, guard_daemon_port: int | None = None) -> dict[str, str]:
@@ -323,6 +337,7 @@ def _wait_for_pending_request(
     transcript_chunks: list[str],
     timeout_seconds: float,
 ) -> dict[str, object]:
+    store = GuardStore(guard_home)
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         _drain_pty(master_fd=master_fd, transcript_chunks=transcript_chunks, block=False)
@@ -330,8 +345,11 @@ def _wait_for_pending_request(
             raise RuntimeError(
                 f"codex exec exited before Guard queued a pending request\nstdout:\n{''.join(transcript_chunks)}\n"
             )
+        pending = store.list_approval_requests(status="pending", limit=10)
+        if pending:
+            return pending[0]
         time.sleep(0.5)
-    raise TimeoutError(f"Codex did not finish the seed session within {timeout_seconds:.1f}s")
+    raise TimeoutError(f"Codex did not queue a pending Guard request within {timeout_seconds:.1f}s")
 
 
 def _wait_for_process_exit(
@@ -427,22 +445,18 @@ def _daemon_auth_token(guard_home: Path) -> str | None:
     return token or None
 
 
-def _codex_prompt(decision: str, *, request_id: str) -> str:
+def _codex_prompt(decision: str, *, prompt_marker: str) -> str:
     command = _proof_command()
     if decision == "allow":
         return (
-            f"Remember this exact shell command for HOL Guard request `{request_id}`, but do not run it yet:\n"
+            f"Run this exact shell command now for HOL Guard smoke marker `{prompt_marker}`:\n"
             f"{command}\n"
-            f"If a later HOL Guard message says HOL Guard approved request `{request_id}`, "
-            f"run that exact command and then respond with ONLY {ALLOW_SENTINEL}. "
-            "For now, respond with ONLY READY."
+            f"After the command succeeds, respond with ONLY {ALLOW_SENTINEL}."
         )
     return (
-        f"Remember this exact shell command for HOL Guard request `{request_id}`, but do not run it yet:\n"
+        f"Run this exact shell command now for HOL Guard smoke marker `{prompt_marker}`:\n"
         f"{command}\n"
-        f"If a later HOL Guard message says HOL Guard blocked request `{request_id}`, "
-        "do not run that command and explain one safe alternative in one short sentence. "
-        "For now, respond with ONLY READY."
+        "If HOL Guard blocks the command, do not retry it. Explain one safe alternative in one short sentence."
     )
 
 
@@ -458,8 +472,8 @@ def _assert_expected_outcome(
     if not isinstance(codex_resume, dict):
         raise AssertionError("approval payload did not include codex_resume")
     status = str(codex_resume.get("status") or "")
-    if status != "sent":
-        raise AssertionError(f"expected codex_resume status 'sent', got {status!r}")
+    if status not in {"in_progress", "sent", "already_sent"}:
+        raise AssertionError(f"expected codex_resume status to show live continuation, got {status!r}")
     if decision == "allow":
         if not proof_created:
             raise AssertionError("allow flow did not create the proof file")
@@ -511,6 +525,7 @@ def _queue_pending_request(
     workspace_dir: Path,
     daemon_port: int,
     codex_home: str | None,
+    operation_status: str = "waiting_on_approval",
 ) -> None:
     from codex_plugin_scanner.guard.consumer import artifact_hash
     from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -552,13 +567,14 @@ def _queue_pending_request(
         session_id=str(session["session_id"]),
         harness="codex",
         operation_type="tool_call",
-        status="waiting_on_approval",
+        status=operation_status,
         approval_request_ids=[request_id],
         resume_token=f"resume-{request_id}",
         metadata={
             "codex_thread_id": thread_id,
             "session_id": thread_id,
             "codex_home": codex_home,
+            "codex_app_server_socket": str(workspace_dir / "missing-codex-app-server.sock"),
             "command_text": _proof_command(),
             "tool_name": "Bash",
             "event": "PreToolUse",
