@@ -5411,7 +5411,7 @@ def _codex_post_tool_output_artifact(
     config_path: str,
     source_scope: str,
     cwd: Path | None,
-    home_dir: Path | None,
+    home_dir: Path | None = None,
 ) -> GuardArtifact | None:
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
@@ -6018,7 +6018,7 @@ def _codex_source_inspection_can_skip_secret_output(
     response_text: str,
     content_matches: tuple[SecretContentMatch, ...],
     cwd: Path | None,
-    home_dir: Path | None,
+    home_dir: Path | None = None,
 ) -> bool:
     if not _codex_command_is_read_only_source_inspection(command_text, cwd=cwd, home_dir=home_dir):
         return False
@@ -6134,7 +6134,7 @@ def _codex_command_is_read_only_source_inspection(
     command_text: str,
     *,
     cwd: Path | None,
-    home_dir: Path | None,
+    home_dir: Path | None = None,
 ) -> bool:
     command = command_text.strip()
     if not command:
@@ -6373,7 +6373,12 @@ def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
     return _codex_head_tail_args_are_bounded_filter(parts[1:])
 
 
-def _codex_command_is_read_only_source_view(command_text: str, *, cwd: Path | None, home_dir: Path | None) -> bool:
+def _codex_command_is_read_only_source_view(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None = None,
+) -> bool:
     command = command_text.strip()
     if not command:
         return False
@@ -6397,7 +6402,12 @@ def _codex_command_is_read_only_source_view(command_text: str, *, cwd: Path | No
     return _codex_cat_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
 
 
-def _codex_command_is_read_only_source_search(command_text: str, *, cwd: Path | None, home_dir: Path | None) -> bool:
+def _codex_command_is_read_only_source_search(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None = None,
+) -> bool:
     command = command_text.strip()
     if not command:
         return False
