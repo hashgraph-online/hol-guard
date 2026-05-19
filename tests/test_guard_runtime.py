@@ -13734,13 +13734,18 @@ def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path):
     assert statuses == [{"operation_id": "operation-1", "status": "blocked"}]
 
 
-def test_codex_browser_approval_caps_wait_below_hook_timeout(tmp_path, monkeypatch):
+def test_codex_browser_approval_uses_configured_wait_timeout(tmp_path, monkeypatch):
     captured_timeout: list[int] = []
+    statuses: list[dict[str, object]] = []
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / ".codex"))
 
     def _fake_wait_for_approval_requests(**kwargs) -> dict[str, object]:
         captured_timeout.append(int(kwargs["timeout_seconds"]))
         return {"resolved": False, "pending_request_ids": ["request-1"], "items": []}
+
+    class _FakeDaemonClient:
+        def update_operation_status(self, **kwargs) -> None:
+            statuses.append(dict(kwargs))
 
     monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", _fake_wait_for_approval_requests)
 
@@ -13751,13 +13756,15 @@ def test_codex_browser_approval_caps_wait_below_hook_timeout(tmp_path, monkeypat
         response_payload={"operation_id": "operation-1", "approval_requests": [{"request_id": "request-1"}]},
         store=GuardStore(tmp_path / "home"),
         config=GuardConfig(tmp_path / "home", None, approval_wait_timeout_seconds=120),
+        daemon_client=_FakeDaemonClient(),
     )
 
     assert decision is None
-    assert captured_timeout == [25]
+    assert captured_timeout == [120]
+    assert statuses == [{"operation_id": "operation-1", "status": "approval_wait_timeout"}]
 
 
-def test_codex_browser_approval_caps_fallback_wait(tmp_path, monkeypatch):
+def test_codex_browser_approval_fallback_uses_configured_wait_timeout(tmp_path, monkeypatch):
     captured_timeout: list[int] = []
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / ".codex"))
 
@@ -13777,7 +13784,7 @@ def test_codex_browser_approval_caps_fallback_wait(tmp_path, monkeypatch):
     )
 
     assert decision is None
-    assert captured_timeout == [5]
+    assert captured_timeout == [120]
 
 
 def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
