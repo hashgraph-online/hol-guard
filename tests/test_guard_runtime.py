@@ -28,7 +28,13 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.models import (
+    GuardApprovalRequest,
+    GuardArtifact,
+    GuardReceipt,
+    HarnessDetection,
+    PolicyDecision,
+)
 from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
@@ -14823,6 +14829,70 @@ def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
 
     assert timeouts == [20, 120]
     assert payload["synced_at"] == "2026-04-19T00:00:10+00:00"
+
+
+def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    for index in range(65):
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-{index}",
+                timestamp="2026-04-19T00:00:00+00:00",
+                harness="codex",
+                artifact_id=f"artifact-{index}",
+                artifact_hash=f"sha256:{index:064x}",
+                policy_decision="review",
+                capabilities_summary="requests file write",
+                changed_capabilities=("fs_write",),
+                provenance_summary="local codex workspace",
+                artifact_name=f"artifact-{index}",
+                source_scope="workspace",
+            )
+        )
+    observed_batch_sizes: list[int] = []
+
+    class _Response:
+        def __init__(self, receipts_stored: int) -> None:
+            self._receipts_stored = receipts_stored
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "syncedAt": "2026-04-19T00:00:10+00:00",
+                    "receiptsStored": self._receipts_stored,
+                    "advisories": [],
+                    "policy": {},
+                    "alertPreferences": {},
+                    "teamPolicyPack": {},
+                    "exceptions": [],
+                }
+            ).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response(0)
+        observed_batch_sizes.append(len(payload["receipts"]))
+        return _Response(len(payload["receipts"]))
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_receipts(store)
+
+    assert observed_batch_sizes == [50, 15]
+    assert payload["receipts"] == 65
+    assert payload["receipts_stored"] == 65
 
 
 def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
