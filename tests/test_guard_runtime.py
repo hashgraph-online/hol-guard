@@ -12195,6 +12195,24 @@ def test_guard_runtime_blocks_pytest_plugin_env_override(tmp_path):
     assert binary_match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_pytest_append_assignment_env_override(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_ADDOPTS+='--junit-xml out.xml' python3 -m pytest -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTHONPATH+=:./tools pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_env_chdir_pytest_shadow_bypass(tmp_path):
     module_match = extract_sensitive_tool_action_request(
         "Bash",
@@ -12274,6 +12292,26 @@ def test_guard_runtime_blocks_selected_test_root_pytest_config_addopts(tmp_path)
     binary_match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "pytest sub -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_checks_dotted_selected_test_root_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "sub.v1" / "pytest.ini", "[pytest]\naddopts = --junit-xml out.xml\n")
+
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest sub.v1 -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest sub.v1 -q"},
         cwd=tmp_path,
     )
 

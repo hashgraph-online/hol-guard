@@ -249,7 +249,7 @@ _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf"
 _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
 _SHELL_NETWORK_SINK_COMMANDS = frozenset({"curl", "wget", "nc", "ncat", "netcat", "scp", "rsync", "ssh"})
 _SHELL_LOCAL_READ_COMMANDS = frozenset({"cat", "grep", "egrep", "fgrep", "head", "rg", "sed", "tail"})
-_SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
+_SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\+)?=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>$`]*)"
@@ -5278,6 +5278,10 @@ def _is_shell_env_assignment_token(token: str) -> bool:
     name, separator, _ = token.partition("=")
     if separator != "=" or not name:
         return False
+    if name.endswith("+"):
+        name = name[:-1]
+    if not name:
+        return False
     if not (name[0].isalpha() or name[0] == "_"):
         return False
     return all(character.isalnum() or character == "_" for character in name[1:])
@@ -5500,15 +5504,16 @@ def _segment_targets_pytest(segment: list[str], command_name: str, command_index
 
 
 def _shell_env_assignment_targets_key(token: str, env_key: str) -> bool:
-    if "=" not in token:
-        return False
-    return token.split("=", 1)[0].upper() == env_key
+    return _shell_env_assignment_key(token) == env_key.upper()
 
 
 def _shell_env_assignment_key(token: str) -> str | None:
-    if "=" not in token:
+    if "+=" in token:
+        key = token.split("+=", 1)[0]
+    elif "=" in token:
+        key = token.split("=", 1)[0]
+    else:
         return None
-    key = token.split("=", 1)[0]
     if not key:
         return None
     return key.upper()
@@ -5583,9 +5588,7 @@ def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *
 
 def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key: str) -> bool:
     normalized_env_key = env_key.upper()
-    return any(
-        token.split("=", 1)[0].upper() == normalized_env_key for token in segment[:command_index] if "=" in token
-    )
+    return any(_shell_env_assignment_key(token) == normalized_env_key for token in segment[:command_index])
 
 
 def _shell_segment_uses_env_chdir(segment: list[str], command_index: int) -> bool:
@@ -5768,12 +5771,17 @@ def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[st
             return None
         if selected_path == "":
             continue
-        root = Path(selected_path)
-        if root.suffix != "":
-            root = root.parent
-        for candidate in _pytest_config_ancestor_dirs(root):
-            if candidate not in config_dirs:
-                config_dirs.append(candidate)
+        selected_root = Path(selected_path)
+        if selected_root.suffix == "":
+            roots = [selected_root]
+        elif (cwd / selected_root).is_dir():
+            roots = [selected_root, selected_root.parent]
+        else:
+            roots = [selected_root.parent]
+        for root in roots:
+            for candidate in _pytest_config_ancestor_dirs(root):
+                if candidate not in config_dirs:
+                    config_dirs.append(candidate)
     return tuple(config_dirs)
 
 
