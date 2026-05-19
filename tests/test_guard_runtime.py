@@ -12476,6 +12476,24 @@ def test_guard_runtime_blocks_prior_set_export_before_pytest(tmp_path):
     assert keyword_match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_pytest_env_shell_script_wrapper(tmp_path):
+    bash_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest' bash -c 'pytest -q'"},
+        cwd=tmp_path,
+    )
+    sh_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_PLUGINS=evil sh -c 'python3 -m pytest -q'"},
+        cwd=tmp_path,
+    )
+
+    assert bash_match is not None
+    assert bash_match.action_class == "destructive shell command"
+    assert sh_match is not None
+    assert sh_match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_split_exported_pytest_environment(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",

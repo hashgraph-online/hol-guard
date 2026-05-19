@@ -3730,6 +3730,8 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
         return True
     if _contains_prior_pytest_state_mutation(parts):
         return True
+    if _contains_pytest_env_shell_script_wrapper(parts):
+        return True
     if _contains_unsafe_pytest_environment_wrapper(parts):
         return True
     if _looks_like_safe_read_only_lookup_command(normalized, parts):
@@ -5342,6 +5344,35 @@ def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
                 continue
             index += 1
     return tuple(scripts)
+
+
+def _contains_pytest_env_shell_script_wrapper(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS or command_index is None:
+            continue
+        if not any(
+            _shell_segment_sets_env_key(segment, command_index, env_key)
+            for env_key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH")
+        ):
+            continue
+        index = command_index + 1
+        while index < len(segment):
+            flag_payload = _interpreter_flag_payload(segment, index)
+            if flag_payload is not None and _shell_script_targets_pytest(flag_payload.script_text):
+                return True
+            index += flag_payload.tokens_consumed if flag_payload is not None else 1
+    return False
+
+
+def _shell_script_targets_pytest(script_text: str) -> bool:
+    for segment in _iter_shell_command_segments(_split_shell_parts(script_text)):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if _segment_targets_pytest(segment, command_name, command_index):
+            return True
+    return False
 
 
 def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
