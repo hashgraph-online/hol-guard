@@ -5431,6 +5431,8 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
                 return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
                 return False
+            if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
+                return False
             if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
                 return False
             if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
@@ -5539,6 +5541,8 @@ def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
                 return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
                 return False
+            if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
+                return False
             if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
                 return False
             if not _pytest_binary_segment_is_safe(segment[command_index], segment_args, cwd=cwd):
@@ -5569,6 +5573,8 @@ def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
             return True
         if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
             return True
+        if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
+            return True
         if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
             return True
         if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
@@ -5589,6 +5595,30 @@ def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *
 def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key: str) -> bool:
     normalized_env_key = env_key.upper()
     return any(_shell_env_assignment_key(token) == normalized_env_key for token in segment[:command_index])
+
+
+def _shell_segment_uses_env_split_string_wrapper(segment: list[str], command_index: int) -> bool:
+    index = 0
+    while index < command_index:
+        normalized_token = _shell_command_token_without_attached_redirection(segment[index])
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name != "env":
+            index += 1
+            continue
+        index += 1
+        while index < command_index:
+            token = segment[index]
+            if _SHELL_ASSIGNMENT_PATTERN.match(token):
+                index += 1
+                continue
+            if token in {"-S", "--split-string"} or token.startswith("--split-string="):
+                return True
+            if _env_clustered_split_string_payload(token) is not None:
+                return True
+            if not token.startswith("-"):
+                break
+            index += _wrapper_option_tokens_consumed("env", token)
+    return False
 
 
 def _shell_segment_uses_env_chdir(segment: list[str], command_index: int) -> bool:
@@ -5772,12 +5802,9 @@ def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[st
         if selected_path == "":
             continue
         selected_root = Path(selected_path)
-        if selected_root.suffix == "":
-            roots = [selected_root]
-        elif (cwd / selected_root).is_dir():
-            roots = [selected_root, selected_root.parent]
-        else:
-            roots = [selected_root.parent]
+        roots = [selected_root]
+        if selected_root.suffix != "":
+            roots.append(selected_root.parent)
         for root in roots:
             for candidate in _pytest_config_ancestor_dirs(root):
                 if candidate not in config_dirs:
@@ -5861,7 +5888,7 @@ def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_pa
         if "addopts" not in config_text:
             return False
         return _pytest_config_text_has_unsafe_addopts(config_text)
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         return False
     except OSError:
         return True
