@@ -5921,7 +5921,6 @@ _CODEX_FD_OPTION_VALUE_FLAGS = frozenset(
         "--threads",
         "--base-directory",
         "--path-separator",
-        "--search-path",
     }
 )
 _CODEX_GIT_GLOBAL_VALUE_FLAGS = frozenset(
@@ -7133,10 +7132,22 @@ def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
     parsed = _codex_split_fd_args_and_exec(args)
     fd_args = parsed[0] if parsed is not None else args
     positional: list[str] = []
+    search_paths: list[str] = []
     skip_next = False
-    for arg in fd_args:
+    for index, arg in enumerate(fd_args):
         if skip_next:
             skip_next = False
+            continue
+        if arg == "--base-directory" or arg.startswith("--base-directory="):
+            return ("__guard_unsafe_fd_base_directory__",)
+        if arg == "--search-path":
+            if index + 1 >= len(fd_args):
+                return ("__guard_missing_fd_search_path__",)
+            search_paths.append(fd_args[index + 1])
+            skip_next = True
+            continue
+        if arg.startswith("--search-path="):
+            search_paths.append(arg.split("=", 1)[1])
             continue
         if arg in _CODEX_FD_OPTION_VALUE_FLAGS:
             skip_next = True
@@ -7146,6 +7157,8 @@ def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
         if arg.startswith("-"):
             continue
         positional.append(arg)
+    if search_paths:
+        return tuple(search_paths)
     if len(positional) >= 2:
         return tuple(positional[1:])
     return ()

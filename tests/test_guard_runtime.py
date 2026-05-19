@@ -776,6 +776,44 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "require-reapproval"
         assert "destructive shell command" in output["artifact_name"]
 
+    def test_codex_pre_tool_use_blocks_fd_search_path_sensitive_dir_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        command = "fd --search-path ~/.ssh 'SKILL.md' -x sed -n '1,20p' {}"
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert "destructive shell command" in output["artifact_name"]
+
     def test_codex_post_tool_use_allows_fd_skill_docs_bounded_sed_output(
         self,
         monkeypatch,

@@ -3977,10 +3977,12 @@ def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
         arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")) for arg in args
     ):
         return _fd_exec_sed_read_only_args_are_safe(args)
-    targets = [arg for arg in args if arg and not arg.startswith("-")]
+    targets = _fd_search_targets(args)
+    if targets is None:
+        return False
     if not targets:
         return True
-    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets[1:])
+    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets)
 
 
 def _fd_exec_sed_read_only_args_are_safe(args: list[str]) -> bool:
@@ -4006,6 +4008,60 @@ def _split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | No
         if arg in {"-x", "--exec"}:
             return args[:index], args[index + 1 :]
     return None
+
+
+def _fd_search_targets(args: list[str]) -> list[str] | None:
+    positional: list[str] = []
+    search_paths: list[str] = []
+    skip_next = False
+    option_value_flags = {
+        "-d",
+        "--max-depth",
+        "-E",
+        "--exclude",
+        "-e",
+        "--extension",
+        "-t",
+        "--type",
+        "-S",
+        "--size",
+        "-o",
+        "--owner",
+        "--changed-before",
+        "--changed-within",
+        "--changed-after",
+        "-j",
+        "--threads",
+        "--path-separator",
+    }
+    for index, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in {"--base-directory"} or arg.startswith("--base-directory="):
+            return None
+        if arg == "--search-path":
+            if index + 1 >= len(args):
+                return None
+            search_paths.append(args[index + 1])
+            skip_next = True
+            continue
+        if arg.startswith("--search-path="):
+            search_paths.append(arg.split("=", 1)[1])
+            continue
+        if arg in option_value_flags:
+            skip_next = True
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in option_value_flags if flag.startswith("--")):
+            continue
+        if arg.startswith("-"):
+            continue
+        positional.append(arg)
+    if search_paths:
+        return search_paths
+    if len(positional) >= 2:
+        return positional[1:]
+    return []
 
 
 def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
