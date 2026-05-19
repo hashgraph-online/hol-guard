@@ -101,6 +101,10 @@ def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: P
     ]
     assert "codex" in payload["supported_harnesses"]
     assert payload["safe_failure_reasons"]["unsupported"] == "Harness is not supported by this daemon."
+    codex_item = next(item for item in payload["items"] if item["harness"] == "codex")
+    assert codex_item["display_name"] == "Codex"
+    assert codex_item["headless_actions"] == ["install", "repair", "remove", "status", "scan"]
+    assert codex_item["status"] in {"inactive", "observed", "protected"}
 
 
 def test_headless_app_operations_write_receipts_without_cli_copy(
@@ -138,7 +142,15 @@ def test_headless_app_operations_write_receipts_without_cli_copy(
             assert status == 200
             assert payload["receipt"]["status"] == "completed"
             assert payload["receipt"]["operation"] == operation
+            assert payload["state"]["receipt_summary"]["id"] == payload["receipt"]["id"]
+            assert payload["state"]["receipt_summary"]["operation"] == operation
             assert "npx" not in json.dumps(payload)
+            if operation == "install":
+                assert payload["state"]["outcome"] == "app_connected"
+                assert payload["state"]["app_status"] == "protected"
+            if operation == "scan":
+                assert payload["state"]["outcome"] == "proof_passed"
+                assert payload["state"]["proof_status"] == "passed"
     finally:
         daemon.stop()
 
@@ -359,7 +371,9 @@ def test_headless_api_rejects_missing_auth_and_bad_harness(tmp_path: Path) -> No
     assert auth_status == 401
     assert auth_payload["error"] == "unauthorized"
     assert bad_status == 404
-    assert bad_payload["error"] == "unknown_harness"
+    assert bad_payload["status"] == "failed"
+    assert bad_payload["error"]["code"] == "unknown_harness"
+    assert bad_payload["error"]["retryable"] is False
 
 
 def test_headless_api_rejects_forged_dashboard_session_token(tmp_path: Path) -> None:
@@ -439,3 +453,28 @@ def test_headless_api_does_not_read_env_files(
 
     assert status == 200
     assert payload["receipt"]["operation"] == "scan"
+    assert payload["state"]["outcome"] == "proof_failed"
+    assert payload["state"]["proof_status"] == "failed"
+
+
+def test_headless_api_rejects_missing_harness_with_structured_error(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/connect",
+                token=token,
+                payload={"operation": "install"},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["status"] == "failed"
+    assert payload["error"]["code"] == "missing_harness"
+    assert payload["error"]["retryable"] is False
