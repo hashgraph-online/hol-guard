@@ -106,7 +106,29 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "glpat-",
     "sk-",
 )
-_SAFE_PYTHON_MODULE_COMMANDS = frozenset()
+_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
+_SAFE_PYTHON_MODULE_SHADOW_PATHS = {
+    "pytest": (
+        "pytest.py",
+        "pytest.pyc",
+        "pytest/__init__.py",
+        "pytest/__init__.pyc",
+        "pytest/__main__.py",
+        "pytest/__main__.pyc",
+    ),
+}
+_PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
+_PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = (
+    "--basetemp",
+    "--cache-clear",
+    "--debug",
+    "--junitxml",
+    "--junit-xml",
+    "-p",
+)
+_PYTEST_UNSAFE_ENV_KEYS = frozenset({"PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE"})
+_SHELL_STARTUP_ENV_KEYS = frozenset({"BASH_ENV", "ENV", "ZDOTDIR"})
+_MAX_PYTEST_CONFIG_FILE_BYTES = 1_000_000
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
@@ -243,7 +265,7 @@ _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf"
 _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
 _SHELL_NETWORK_SINK_COMMANDS = frozenset({"curl", "wget", "nc", "ncat", "netcat", "scp", "rsync", "ssh"})
 _SHELL_LOCAL_READ_COMMANDS = frozenset({"cat", "grep", "egrep", "fgrep", "head", "rg", "sed", "tail"})
-_SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
+_SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\+)?=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>$`]*)"
@@ -765,7 +787,7 @@ def _destructive_shell_tool_action_request(
                 "`--body-file` for PR descriptions."
             ),
         )
-    if not _looks_destructive_shell_command(command_text):
+    if not _looks_destructive_shell_command(command_text, cwd=cwd):
         return None
     return ToolActionRequestMatch(
         tool_name=tool_name,
@@ -2973,7 +2995,7 @@ def _decoded_payload_looks_sensitive(
     visited_script_paths: frozenset[str],
 ) -> bool:
     lowered = payload.lower()
-    if _looks_destructive_shell_command(payload):
+    if _looks_destructive_shell_command(payload, cwd=cwd):
         return True
     if any(token in lowered for token in _SENSITIVE_DECODED_PAYLOAD_TOKENS):
         return True
@@ -3685,12 +3707,12 @@ def _docker_config_path_from_command(
     return match.normalized_path
 
 
-def _looks_destructive_shell_command(command_text: str) -> bool:
+def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = None) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
     for substitution_payload in _shell_command_substitution_payloads(normalized):
-        if _looks_destructive_shell_command(substitution_payload):
+        if _looks_destructive_shell_command(substitution_payload, cwd=cwd):
             return True
     node_heredoc_script = _single_node_heredoc_script(normalized)
     if node_heredoc_script is not None:
@@ -3708,6 +3730,14 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     redacted_command_text = _redacted_shell_text_for_command_names(lowered)
     if _contains_mutating_shell_redirection(parts):
         return True
+    if _contains_prior_pytest_state_mutation(parts):
+        return True
+    if _contains_pytest_env_shell_script_wrapper(parts):
+        return True
+    if _contains_pytest_process_substitution(normalized, parts):
+        return True
+    if _contains_unsafe_pytest_environment_wrapper(parts, cwd=cwd):
+        return True
     if _looks_like_safe_read_only_lookup_command(normalized, parts):
         return False
     raw_command_names = list(_shell_command_names(redacted_command_text))
@@ -3716,10 +3746,14 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     if _looks_like_read_only_interpreter_command(normalized, parts, parsed_command_names):
         return False
+    if _looks_like_safe_pytest_binary_invocation(parts, cwd=cwd):
+        return False
+    if _contains_unsafe_pytest_binary_invocation(parts, cwd=cwd):
+        return True
     if _single_interpreter_heredoc_script(normalized) is not None or any(
         _is_python_interpreter_command(command_name) for command_name in parsed_command_names
     ):
-        return not _looks_like_safe_python_module_invocation(parts)
+        return not _looks_like_safe_python_module_invocation(parts, cwd=cwd)
     if _contains_unmodeled_inline_interpreter_eval(normalized, parts, parsed_command_names):
         return True
     if _contains_destructive_node_inline_eval(parts):
@@ -3735,10 +3769,10 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     if _find_command_uses_delete(parts):
         return True
     for env_split_string in _env_split_string_payloads(parts):
-        if _looks_destructive_shell_command(env_split_string):
+        if _looks_destructive_shell_command(env_split_string, cwd=cwd):
             return True
     for shell_script in _shell_command_scripts(parts):
-        if _looks_destructive_shell_command(shell_script):
+        if _looks_destructive_shell_command(shell_script, cwd=cwd):
             return True
     return any(
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
@@ -5264,6 +5298,10 @@ def _is_shell_env_assignment_token(token: str) -> bool:
     name, separator, _ = token.partition("=")
     if separator != "=" or not name:
         return False
+    if name.endswith("+"):
+        name = name[:-1]
+    if not name:
+        return False
     if not (name[0].isalpha() or name[0] == "_"):
         return False
     return all(character.isalnum() or character == "_" for character in name[1:])
@@ -5310,6 +5348,36 @@ def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
                 continue
             index += 1
     return tuple(scripts)
+
+
+def _contains_pytest_env_shell_script_wrapper(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS or command_index is None:
+            continue
+        has_unsafe_env = any(
+            _shell_segment_sets_env_key(segment, command_index, env_key)
+            for env_key in _PYTEST_UNSAFE_ENV_KEYS | _SHELL_STARTUP_ENV_KEYS
+        )
+        if not has_unsafe_env:
+            continue
+        index = command_index + 1
+        while index < len(segment):
+            flag_payload = _interpreter_flag_payload(segment, index)
+            if flag_payload is not None and _shell_script_targets_pytest(flag_payload.script_text):
+                return True
+            index += flag_payload.tokens_consumed if flag_payload is not None else 1
+    return False
+
+
+def _shell_script_targets_pytest(script_text: str) -> bool:
+    for segment in _iter_shell_command_segments(_split_shell_parts(script_text)):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if _segment_targets_pytest(segment, command_name, command_index):
+            return True
+    return False
 
 
 def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
@@ -5396,7 +5464,7 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
     return all(_script_is_read_only_observer(script_text) for script_text in scripts)
 
 
-def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
+def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | None = None) -> bool:
     segments = _iter_shell_command_segments(parts)
     if not segments:
         return False
@@ -5407,9 +5475,13 @@ def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
             return False
         segment_args = segment[command_index + 1 :]
         if _is_python_interpreter_command(command_name):
-            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
+            if any(_shell_segment_sets_env_key(segment, command_index, env_key) for env_key in _PYTEST_UNSAFE_ENV_KEYS):
                 return False
-            if not _python_segment_runs_safe_module(segment_args):
+            if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
+                return False
+            if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
+                return False
+            if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
                 return False
             saw_python_module = True
             continue
@@ -5424,10 +5496,278 @@ def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
     return saw_python_module
 
 
+def _contains_unsafe_pytest_environment_wrapper(parts: list[str], *, cwd: Path | None) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if not _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
+            continue
+        if command_name == "pytest":
+            if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
+                return True
+            return True
+        if _is_python_interpreter_command(command_name) and _python_segment_targets_module(
+            segment[command_index + 1 :],
+            "pytest",
+        ):
+            if not _python_segment_runs_safe_module(segment[command_index + 1 :], cwd=cwd):
+                return True
+            return True
+    return False
+
+
+def _contains_pytest_process_substitution(command_text: str, parts: list[str]) -> bool:
+    if "<(" not in command_text and ">(" not in command_text:
+        return False
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if _segment_targets_pytest(segment, command_name, command_index):
+            return True
+    return False
+
+
+def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
+    saw_state_mutation = False
+    exported_pytest_env_keys: set[str] = set()
+    for segment in _iter_shell_command_segments(parts):
+        if any(
+            _shell_env_assignment_key(token) == "PATH" or _shell_env_assignment_key(token) in exported_pytest_env_keys
+            for token in segment
+            if _shell_env_assignment_key(token) is not None
+        ):
+            saw_state_mutation = True
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if _segment_targets_pytest(segment, command_name, command_index):
+            return saw_state_mutation
+        if command_name in {"cd", "pushd", "popd"}:
+            saw_state_mutation = True
+            continue
+        if command_name == "set" and _shell_set_exports_assignments(segment[command_index + 1 :]):
+            saw_state_mutation = True
+            continue
+        if command_name == "export":
+            for token in segment[command_index + 1 :]:
+                env_key = _shell_declared_env_key(token)
+                if env_key not in {"PATH", *_PYTEST_UNSAFE_ENV_KEYS}:
+                    continue
+                exported_pytest_env_keys.add(env_key)
+                if "=" in token:
+                    saw_state_mutation = True
+        if command_name in {"declare", "typeset"} and _shell_declaration_exports_env(segment[command_index + 1 :]):
+            for token in segment[command_index + 1 :]:
+                if token.startswith("-") or token == "--":
+                    continue
+                env_key = _shell_declared_env_key(token)
+                if env_key not in {"PATH", *_PYTEST_UNSAFE_ENV_KEYS}:
+                    continue
+                exported_pytest_env_keys.add(env_key)
+                if "=" in token:
+                    saw_state_mutation = True
+    return False
+
+
+def _segment_targets_pytest(segment: list[str], command_name: str, command_index: int) -> bool:
+    if command_name == "pytest":
+        return True
+    return _is_python_interpreter_command(command_name) and _python_segment_targets_module(
+        segment[command_index + 1 :],
+        "pytest",
+    )
+
+
+def _shell_env_assignment_targets_key(token: str, env_key: str) -> bool:
+    return _shell_env_assignment_key(token) == env_key.upper()
+
+
+def _shell_env_assignment_key(token: str) -> str | None:
+    if "+=" in token:
+        key = token.split("+=", 1)[0]
+    elif "=" in token:
+        key = token.split("=", 1)[0]
+    else:
+        return None
+    if not key:
+        return None
+    return key.upper()
+
+
+def _shell_declared_env_key(token: str) -> str:
+    assignment_key = _shell_env_assignment_key(token)
+    if assignment_key is not None:
+        return assignment_key
+    return token.upper()
+
+
+def _shell_declaration_exports_env(args: list[str]) -> bool:
+    for token in args:
+        if token == "--":
+            return False
+        if not token.startswith("-"):
+            continue
+        if token.startswith("+"):
+            continue
+        if "x" in token.lstrip("-"):
+            return True
+    return False
+
+
+def _shell_set_exports_assignments(args: list[str]) -> bool:
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            return False
+        if token in {"-a", "-k", "allexport", "keyword"}:
+            return True
+        if token == "-o":
+            return index + 1 < len(args) and args[index + 1] in {"allexport", "keyword"}
+        if token == "+o":
+            index += 2
+            continue
+        if token.startswith("-") and not token.startswith("--") and any(flag in token[1:] for flag in {"a", "k"}):
+            return True
+        index += 1
+    return False
+
+
+def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | None) -> bool:
+    saw_pytest = False
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            return False
+        segment_args = segment[command_index + 1 :]
+        if command_name == "pytest":
+            if _shell_segment_sets_env_key(segment, command_index, "PATH"):
+                return False
+            if any(_shell_segment_sets_env_key(segment, command_index, env_key) for env_key in _PYTEST_UNSAFE_ENV_KEYS):
+                return False
+            if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
+                return False
+            if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
+                return False
+            if not _pytest_binary_segment_is_safe(segment[command_index], segment_args, cwd=cwd):
+                return False
+            saw_pytest = True
+            continue
+        if command_name in _READ_ONLY_LOOKUP_FILTERS and _read_only_lookup_filter_segment_is_safe(
+            command_name,
+            segment_args,
+        ):
+            continue
+        if command_name in _SAFE_STATIC_SHELL_COMMANDS and _static_shell_segment_is_safe(segment_args):
+            continue
+        return False
+    return saw_pytest
+
+
+def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | None) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "pytest" or command_index is None:
+            continue
+        if _shell_segment_sets_env_key(segment, command_index, "PATH"):
+            return True
+        if any(_shell_segment_sets_env_key(segment, command_index, env_key) for env_key in _PYTEST_UNSAFE_ENV_KEYS):
+            return True
+        if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
+            return True
+        if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
+            return True
+        if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
+            return True
+    return False
+
+
+def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *, cwd: Path | None) -> bool:
+    if "/" in command_token or "\\" in command_token:
+        return False
+    if _python_module_may_be_shadowed("pytest", cwd):
+        return False
+    if _pytest_config_may_add_unsafe_options(cwd, module_args):
+        return False
+    return _pytest_module_args_are_safe(module_args)
+
+
 def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key: str) -> bool:
     normalized_env_key = env_key.upper()
-    return any(
-        token.split("=", 1)[0].upper() == normalized_env_key for token in segment[:command_index] if "=" in token
+    return any(_shell_env_assignment_key(token) == normalized_env_key for token in segment[:command_index])
+
+
+def _shell_segment_uses_env_split_string_wrapper(segment: list[str], command_index: int) -> bool:
+    index = 0
+    while index < command_index:
+        normalized_token = _shell_command_token_without_attached_redirection(segment[index])
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name != "env":
+            index += 1
+            continue
+        index += 1
+        while index < command_index:
+            token = segment[index]
+            if _SHELL_ASSIGNMENT_PATTERN.match(token):
+                index += 1
+                continue
+            if token in {"-S", "--split-string"} or token.startswith("--split-string="):
+                return True
+            if _env_clustered_split_string_payload(token) is not None:
+                return True
+            if not token.startswith("-"):
+                break
+            index += _wrapper_option_tokens_consumed("env", token)
+    return False
+
+
+def _shell_segment_uses_env_chdir(segment: list[str], command_index: int) -> bool:
+    index = 0
+    while index < command_index:
+        normalized_token = _shell_command_token_without_attached_redirection(segment[index])
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name != "env":
+            index += 1
+            continue
+        index += 1
+        while index < command_index:
+            token = segment[index]
+            if _SHELL_ASSIGNMENT_PATTERN.match(token):
+                index += 1
+                continue
+            if token in {"-C", "--chdir"} or token.startswith(("-C", "--chdir=")):
+                return True
+            if not token.startswith("-"):
+                break
+            index += _wrapper_option_tokens_consumed("env", token)
+    return False
+
+
+def _shell_segment_uses_sudo_chdir(segment: list[str], command_index: int) -> bool:
+    index = 0
+    while index < command_index:
+        normalized_token = _shell_command_token_without_attached_redirection(segment[index])
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name != "sudo":
+            index += 1
+            continue
+        index += 1
+        while index < command_index:
+            token = segment[index]
+            if token in {"-D", "--chdir"} or token.startswith(("-D", "--chdir=")):
+                return True
+            if not token.startswith("-"):
+                break
+            index += _wrapper_option_tokens_consumed("sudo", token)
+    return False
+
+
+def _shell_segment_uses_cwd_changing_wrapper(segment: list[str], command_index: int) -> bool:
+    return _shell_segment_uses_env_chdir(segment, command_index) or _shell_segment_uses_sudo_chdir(
+        segment,
+        command_index,
     )
 
 
@@ -5461,7 +5801,7 @@ def _python_args_use_module_mode(args: list[str]) -> bool:
     return False
 
 
-def _python_segment_runs_safe_module(args: list[str]) -> bool:
+def _python_segment_runs_safe_module(args: list[str], *, cwd: Path | None = None) -> bool:
     if not args:
         return False
     index = 0
@@ -5473,10 +5813,10 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
             return False
         if arg == "-m":
             module = args[index + 1] if index + 1 < len(args) else ""
-            return _python_module_args_are_safe(module, args[index + 2 :])
+            return _python_module_args_are_safe(module, args[index + 2 :], cwd=cwd)
         if arg.startswith("-m") and len(arg) > 2:
             module = arg[2:]
-            return _python_module_args_are_safe(module, args[index + 1 :])
+            return _python_module_args_are_safe(module, args[index + 1 :], cwd=cwd)
         if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
             index += 2
             continue
@@ -5489,9 +5829,38 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
     return False
 
 
-def _python_module_args_are_safe(module: str, module_args: list[str]) -> bool:
+def _python_segment_targets_module(args: list[str], module_root: str) -> bool:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            return False
+        if arg in {"-c", "--command"} or arg.startswith(("-c", "--command=")):
+            return False
+        if arg == "-m":
+            module = args[index + 1] if index + 1 < len(args) else ""
+            return module.split(".", 1)[0] == module_root
+        if arg.startswith("-m") and len(arg) > 2:
+            return arg[2:].split(".", 1)[0] == module_root
+        if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(option) and len(arg) > len(option) for option in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES):
+            index += 1
+            continue
+        if not arg.startswith("-"):
+            return False
+        index += 1
+    return False
+
+
+def _python_module_args_are_safe(module: str, module_args: list[str], *, cwd: Path | None = None) -> bool:
     module_root = module.split(".", 1)[0]
     if module_root not in _SAFE_PYTHON_MODULE_COMMANDS:
+        return False
+    if _python_module_may_be_shadowed(module_root, cwd):
+        return False
+    if module_root == "pytest" and _pytest_config_may_add_unsafe_options(cwd, module_args):
         return False
     if module_root == "pytest" and not _pytest_module_args_are_safe(module_args):
         return False
@@ -5502,6 +5871,168 @@ def _python_module_args_are_safe(module: str, module_args: list[str]) -> bool:
     return not any(
         arg in mutating_flags or any(arg.startswith(f"{flag}=") for flag in mutating_flags) for arg in module_args
     )
+
+
+def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
+    if cwd is None:
+        return True
+    shadow_paths = _SAFE_PYTHON_MODULE_SHADOW_PATHS.get(module_root)
+    if shadow_paths is None:
+        return True
+    if module_root == "pytest" and _pytest_local_entry_point_metadata_exists(cwd):
+        return True
+    return any((cwd / shadow_path).exists() for shadow_path in shadow_paths)
+
+
+def _pytest_local_entry_point_metadata_exists(cwd: Path) -> bool:
+    try:
+        return any(
+            child.is_dir()
+            and child.name.endswith((".dist-info", ".egg-info"))
+            and (child / "entry_points.txt").exists()
+            for child in cwd.iterdir()
+        )
+    except OSError:
+        return True
+
+
+def _pytest_config_may_add_unsafe_options(cwd: Path | None, module_args: list[str]) -> bool:
+    if cwd is None:
+        return True
+    config_dirs = _pytest_config_search_dirs(module_args, cwd=cwd)
+    if config_dirs is None:
+        return True
+    for config_dir in config_dirs:
+        for config_path in _PYTEST_OPTION_CONFIG_PATHS:
+            if _pytest_config_file_has_unsafe_addopts(cwd, config_dir, config_path):
+                return True
+    return False
+
+
+def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[str, ...] | None:
+    config_dirs: list[str] = [""]
+    for module_arg in _pytest_positional_args(module_args):
+        selected_path = _pytest_selected_relative_path(module_arg, cwd=cwd)
+        if selected_path is None:
+            return None
+        if selected_path == "":
+            continue
+        selected_root = Path(selected_path)
+        roots = [selected_root]
+        if selected_root.suffix != "":
+            roots.append(selected_root.parent)
+        for root in roots:
+            for candidate in _pytest_config_ancestor_dirs(root):
+                if candidate not in config_dirs:
+                    config_dirs.append(candidate)
+    return tuple(config_dirs)
+
+
+def _pytest_selected_relative_path(module_arg: str, *, cwd: Path) -> str | None:
+    path_text = module_arg.split("::", 1)[0]
+    if not path_text:
+        return ""
+    path = Path(path_text)
+    if ".." in path.parts:
+        return None
+    if not path.is_absolute():
+        return path.as_posix()
+    cwd_text = str(cwd)
+    path_text = str(path)
+    if path_text == cwd_text:
+        return ""
+    prefix = f"{cwd_text}{os.sep}"
+    if not path_text.startswith(prefix):
+        return None
+    relative_text = path_text[len(prefix) :]
+    relative_path = Path(relative_text)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        return None
+    return relative_path.as_posix()
+
+
+def _pytest_config_ancestor_dirs(root: Path) -> tuple[str, ...]:
+    if str(root) in {"", "."}:
+        return ("",)
+    dirs: list[str] = []
+    current = root
+    while str(current) not in {"", "."}:
+        dirs.append(current.as_posix())
+        current = current.parent
+    return tuple(dirs)
+
+
+def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
+    positional_args: list[str] = []
+    index = 0
+    while index < len(module_args):
+        arg = module_args[index]
+        if arg == "--":
+            return tuple(positional_args)
+        if arg in _PYTEST_SAFE_FLAGS:
+            index += 1
+            continue
+        if arg in _PYTEST_SAFE_FLAGS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in _PYTEST_SAFE_FLAGS_WITH_VALUES):
+            index += 1
+            continue
+        if not arg.startswith("-"):
+            positional_args.append(arg)
+        index += 1
+    return tuple(positional_args)
+
+
+def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_path: str) -> bool:
+    if Path(config_dir).is_absolute() or ".." in Path(config_dir).parts:
+        return True
+    dir_fd: int | None = None
+    file_handle: int | None = None
+    try:
+        # codeql[py/path-injection] config_dir is relative-only and config_path is from a fixed allowlist.
+        dir_fd = os.open(cwd / config_dir, os.O_RDONLY)
+        file_stat = os.stat(config_path, dir_fd=dir_fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            return False
+        if file_stat.st_size > _MAX_PYTEST_CONFIG_FILE_BYTES:
+            return True
+        file_handle = os.open(config_path, os.O_RDONLY, dir_fd=dir_fd)
+        with os.fdopen(file_handle, encoding="utf-8", errors="ignore") as config_file:
+            file_handle = None
+            config_text = config_file.read().lower()
+        if "addopts" not in config_text and "log_file" not in config_text:
+            return False
+        return _pytest_config_text_has_unsafe_addopts(config_text)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except OSError:
+        return True
+    finally:
+        if file_handle is not None:
+            os.close(file_handle)
+        if dir_fd is not None:
+            os.close(dir_fd)
+
+
+def _pytest_config_text_has_unsafe_addopts(config_text: str) -> bool:
+    in_addopts = False
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if re.match(r"^log_file\s*=", line):
+            return True
+        if "addopts" in line:
+            in_addopts = True
+            if any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
+                return True
+            continue
+        if in_addopts and (line.startswith("[") or re.match(r"^[a-z0-9_.-]+\s*=", line)):
+            in_addopts = False
+        if in_addopts and any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
+            return True
+    return False
 
 
 def _pytest_module_args_are_safe(module_args: list[str]) -> bool:
