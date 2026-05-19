@@ -38,6 +38,7 @@ from ..cli.install_commands import (
     uninstall_confirmation_token,
 )
 from ..codex_resume import (
+    defer_request_resume_to_live_hook,
     get_request_resume_status,
     retry_request_resume,
 )
@@ -731,11 +732,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         copy = _build_resolution_copy(action, harness_str or harness)
         codex_resume = None
         if harness_str == "codex" and action in {"allow", "block"}:
-            codex_resume = retry_request_resume(
+            codex_resume = defer_request_resume_to_live_hook(
                 self.server.store,  # type: ignore[attr-defined]
                 request_id=request_id,
+                action=action,
                 now=_now(),
             )
+            if codex_resume is None:
+                codex_resume = retry_request_resume(
+                    self.server.store,  # type: ignore[attr-defined]
+                    request_id=request_id,
+                    now=_now(),
+                )
         if codex_resume is not None:
             updated = self._apply_codex_resume_result(
                 updated=updated,
@@ -1504,6 +1512,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             copy = {
                 "title": "Decision saved. Codex is continuing.",
                 "body": message,
+            }
+        elif status in {"pending", "in_progress"}:
+            updated["resolution_summary"] = message or "Decision saved. Codex is still waiting for HOL Guard."
+            copy = {
+                "title": "Decision saved. Codex is continuing.",
+                "body": message or "Return to Codex; the original action should continue automatically.",
             }
         elif status == "already_sent":
             updated["resolution_summary"] = "Decision saved. Codex was already resumed for this request."
