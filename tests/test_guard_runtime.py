@@ -12249,6 +12249,24 @@ def test_guard_runtime_blocks_env_split_string_before_pytest(tmp_path):
     assert binary_match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_process_substitution_before_pytest(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest <(rm marker) -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest >(rm marker) -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_env_chdir_pytest_shadow_bypass(tmp_path):
     module_match = extract_sensitive_tool_action_request(
         "Bash",

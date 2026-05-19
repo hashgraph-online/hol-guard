@@ -3732,6 +3732,8 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
         return True
     if _contains_pytest_env_shell_script_wrapper(parts):
         return True
+    if _contains_pytest_process_substitution(normalized, parts):
+        return True
     if _contains_unsafe_pytest_environment_wrapper(parts, cwd=cwd):
         return True
     if _looks_like_safe_read_only_lookup_command(normalized, parts):
@@ -5503,11 +5505,27 @@ def _contains_unsafe_pytest_environment_wrapper(parts: list[str], *, cwd: Path |
         if not _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
             continue
         if command_name == "pytest":
+            if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
+                return True
             return True
         if _is_python_interpreter_command(command_name) and _python_segment_targets_module(
             segment[command_index + 1 :],
             "pytest",
         ):
+            if not _python_segment_runs_safe_module(segment[command_index + 1 :], cwd=cwd):
+                return True
+            return True
+    return False
+
+
+def _contains_pytest_process_substitution(command_text: str, parts: list[str]) -> bool:
+    if "<(" not in command_text and ">(" not in command_text:
+        return False
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if _segment_targets_pytest(segment, command_name, command_index):
             return True
     return False
 
