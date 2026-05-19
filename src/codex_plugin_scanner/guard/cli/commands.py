@@ -3181,8 +3181,7 @@ def _codex_browser_approval_decision(
     ]
     if not request_ids:
         return None
-    has_daemon_operation = isinstance(response_payload.get("operation_id"), str)
-    wait_timeout_seconds = min(config.approval_wait_timeout_seconds, 25 if has_daemon_operation else 5)
+    wait_timeout_seconds = max(config.approval_wait_timeout_seconds, 0)
     wait_result = wait_for_approval_requests(
         store=store,
         request_ids=request_ids,
@@ -3190,6 +3189,7 @@ def _codex_browser_approval_decision(
     )
     response_payload["approval_wait"] = wait_result
     if not bool(wait_result.get("resolved")):
+        _update_codex_browser_operation_status(response_payload, daemon_client, "approval_wait_timeout")
         response_payload["review_hint"] = (
             "Approval is still pending in HOL Guard. Approve it in the browser, then retry the same Codex action."
         )

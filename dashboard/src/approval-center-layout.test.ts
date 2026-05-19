@@ -283,11 +283,11 @@ function makeResume(status: GuardCodexResumeResult["status"], extras?: Partial<G
 
 const uxPending = buildCodexResumeUx(makeResume("pending"));
 assert(uxPending.showRetry === false, "C13: pending status has showRetry false");
-assert(uxPending.headline.toLowerCase().includes("resum"), "C13: pending headline mentions resuming");
+assert(uxPending.headline.toLowerCase().includes("continu"), "C13: pending headline mentions continuing");
 
 const uxInProgress = buildCodexResumeUx(makeResume("in_progress"));
 assert(uxInProgress.showRetry === false, "C13: in_progress status has showRetry false");
-assert(uxInProgress.headline.toLowerCase().includes("resum"), "C13: in_progress headline mentions resuming");
+assert(uxInProgress.headline.toLowerCase().includes("continu"), "C13: in_progress headline mentions continuing");
 
 const uxSent = buildCodexResumeUx(makeResume("sent"));
 assert(uxSent.showRetry === false, "C13: sent status has showRetry false");

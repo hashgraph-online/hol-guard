@@ -621,7 +621,11 @@ export function isCodexHarness(harness: string): boolean {
 
 export function buildCodexResumeUx(resume: GuardCodexResumeResult): CodexResumeUx {
   if (resume.status === "pending" || resume.status === "in_progress") {
-    return { headline: "Resuming Codex...", body: null, showRetry: false };
+    return {
+      headline: "Codex is continuing.",
+      body: resume.message ?? "HOL Guard saved your choice and the original Codex action is still waiting for it.",
+      showRetry: false
+    };
   }
   if (resume.status === "sent" || resume.status === "already_sent") {
     return {
