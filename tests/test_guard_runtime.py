@@ -33,6 +33,8 @@ from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
+from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -12098,6 +12100,560 @@ def test_guard_hook_codex_user_prompt_submit_applies_destructive_prompt_policy(
     assert rc == 0
     assert payload["decision"] == "block"
     assert "HOL Guard" in payload["reason"]
+
+
+def test_guard_runtime_allows_simple_pytest_module_invocation(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "python3 -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                "test_release_checklist_references_smoke_evidence -q"
+            )
+        },
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
+def test_guard_runtime_blocks_shadowed_pytest_module_invocation(tmp_path):
+    _write_text(tmp_path / "pytest.py", "from pathlib import Path; Path('marker').write_text('owned')\n")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_sourceless_pytest_bytecode_shadow(tmp_path):
+    _write_text(tmp_path / "pytest.pyc", "not-real-bytecode")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_package_main_shadow(tmp_path):
+    _write_text(tmp_path / "pytest" / "__main__.py", "from pathlib import Path; Path('marker').write_text('owned')\n")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_package_bytecode_shadow(tmp_path):
+    _write_text(tmp_path / "pytest" / "__init__.pyc", "not-real-bytecode")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_local_pytest_entry_point_metadata(tmp_path):
+    _write_text(tmp_path / "evil-1.0.dist-info" / "entry_points.txt", "[pytest11]\nevil = evil\n")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_allows_simple_pytest_binary_invocation(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
+def test_guard_runtime_blocks_pytest_binary_addopts(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest' pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pythonpath_pytest_module_override(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "env PYTHONPATH=./tools python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pythonuserbase_pytest_module_override(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTHONUSERBASE=./ub python3 -m pytest -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTHONUSERBASE=./ub pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_plugin_env_override(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_PLUGINS=evil python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_PLUGINS=evil pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_append_assignment_env_override(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_ADDOPTS+='--junit-xml out.xml' python3 -m pytest -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTHONPATH+=:./tools pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_env_split_string_before_pytest(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "env -S 'rm -rf /tmp/x' python3 -m pytest -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "env --split-string='rm -rf /tmp/x' pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_process_substitution_before_pytest(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest <(rm marker) -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest >(rm marker) -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_env_chdir_pytest_shadow_bypass(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "env --chdir ./shadow python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "env -C ./shadow pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_sudo_chdir_pytest_shadow_bypass(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "sudo -D ./shadow python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "sudo --chdir=./shadow pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "pytest.ini", "[pytest]\naddopts = --basetemp /tmp/guard-pytest\n")
+
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_allows_pytest_config_without_addopts(tmp_path):
+    _write_text(tmp_path / "pyproject.toml", "[tool.pytest.ini_options]\ntestpaths = ['tests']\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
+def test_guard_runtime_blocks_selected_test_root_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "sub" / "pytest.ini", "[pytest]\naddopts = -p evil\n")
+
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest sub -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest sub -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_checks_dotted_selected_test_root_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "sub.v1" / "pytest.ini", "[pytest]\naddopts = --junit-xml out.xml\n")
+
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest sub.v1 -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest sub.v1 -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_multiline_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "pytest.ini", "[pytest]\naddopts =\n  --basetemp /tmp/guard-pytest\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_config_junit_xml_alias(tmp_path):
+    _write_text(tmp_path / "pytest.ini", "[pytest]\naddopts = --junit-xml /tmp/guard-pytest.xml\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_config_cache_clear(tmp_path):
+    _write_text(tmp_path / "pytest.ini", "[pytest]\naddopts = --cache-clear\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_config_log_file(tmp_path):
+    _write_text(tmp_path / "pytest.ini", "[pytest]\nlog_file = /tmp/guard-pytest.log\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_checks_absolute_selected_test_root_pytest_config_addopts(tmp_path):
+    test_root = tmp_path / "sub"
+    _write_text(test_root / "pytest.ini", "[pytest]\naddopts = -p evil\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f"python3 -m pytest {test_root} -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_checks_selected_test_path_ancestor_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "sub" / "pytest.ini", "[pytest]\naddopts = --basetemp /tmp/guard-pytest\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest sub/pkg/test_guard.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_prior_cd_before_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "cd sub && pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_prior_pushd_before_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pushd sub >/dev/null; pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_prior_exported_pytest_environment(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "export PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'; pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_prior_declared_pytest_environment(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "declare -x PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'; pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_prior_set_export_before_pytest(tmp_path):
+    allexport_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "set -a; PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'; pytest -q"},
+        cwd=tmp_path,
+    )
+    keyword_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "set -k; pytest -q PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'"},
+        cwd=tmp_path,
+    )
+
+    assert allexport_match is not None
+    assert allexport_match.action_class == "destructive shell command"
+    assert keyword_match is not None
+    assert keyword_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_env_shell_script_wrapper(tmp_path):
+    bash_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest' bash -c 'pytest -q'"},
+        cwd=tmp_path,
+    )
+    sh_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_PLUGINS=evil sh -c 'python3 -m pytest -q'"},
+        cwd=tmp_path,
+    )
+
+    assert bash_match is not None
+    assert bash_match.action_class == "destructive shell command"
+    assert sh_match is not None
+    assert sh_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_shell_startup_env_before_wrapped_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "BASH_ENV=./evil bash -c 'pytest -q'"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_split_exported_pytest_environment(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "export PYTEST_ADDOPTS; PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'; pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_prior_path_assignment_before_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PATH=./tools:$PATH; pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PATH=./tools:$PATH pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_hook_codex_does_not_block_simple_pytest_command(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "event": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": (
+                "python3 -m pytest "
+                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                "test_release_checklist_references_smoke_evidence -q"
+            )
+        },
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert rc == 0
+    assert output["recorded"] is True
+    assert output["policy_action"] == "warn"
+    assert "approval_requests" not in output
+
+
+def test_guard_runtime_keeps_mutating_pytest_flags_sensitive(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest --basetemp /tmp/guard-pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest --basetemp /tmp/guard-pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_keeps_pytest_allowlist_disjoint_from_mutating_flags():
+    pytest_mutating_flags = secret_file_requests_module._PYTHON_MODULE_MUTATING_FLAGS["pytest"]
+
+    assert secret_file_requests_module._PYTEST_SAFE_FLAGS.isdisjoint(pytest_mutating_flags)
+    assert secret_file_requests_module._PYTEST_SAFE_FLAGS_WITH_VALUES.isdisjoint(pytest_mutating_flags)
 
 
 def test_guard_runtime_tool_action_classification_uses_exact_action_classes():
