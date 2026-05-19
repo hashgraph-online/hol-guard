@@ -110,6 +110,7 @@ _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
 _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
     "pytest": ("pytest.py", "pytest.pyc", "pytest/__init__.py"),
 }
+_PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
@@ -5514,6 +5515,8 @@ def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *
         return False
     if _python_module_may_be_shadowed("pytest", cwd):
         return False
+    if _pytest_config_may_add_options(cwd):
+        return False
     return _pytest_module_args_are_safe(module_args)
 
 
@@ -5661,6 +5664,8 @@ def _python_module_args_are_safe(module: str, module_args: list[str], *, cwd: Pa
         return False
     if _python_module_may_be_shadowed(module_root, cwd):
         return False
+    if module_root == "pytest" and _pytest_config_may_add_options(cwd):
+        return False
     if module_root == "pytest" and not _pytest_module_args_are_safe(module_args):
         return False
     mutating_subcommands = _PYTHON_MODULE_MUTATING_SUBCOMMANDS.get(module_root, frozenset())
@@ -5679,6 +5684,23 @@ def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
     if shadow_paths is None:
         return True
     return any((cwd / shadow_path).exists() for shadow_path in shadow_paths)
+
+
+def _pytest_config_may_add_options(cwd: Path | None) -> bool:
+    if cwd is None:
+        return True
+    for config_path in _PYTEST_OPTION_CONFIG_PATHS:
+        path = cwd / config_path
+        try:
+            if not path.is_file():
+                continue
+            if path.stat().st_size > 1_000_000:
+                return True
+            if "addopts" in path.read_text(encoding="utf-8", errors="ignore").lower():
+                return True
+        except OSError:
+            return True
+    return False
 
 
 def _pytest_module_args_are_safe(module_args: list[str]) -> bool:

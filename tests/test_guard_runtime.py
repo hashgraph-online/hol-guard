@@ -12222,6 +12222,38 @@ def test_guard_runtime_blocks_sudo_chdir_pytest_shadow_bypass(tmp_path):
     assert binary_match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "pytest.ini", "[pytest]\naddopts = --basetemp /tmp/guard-pytest\n")
+
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_allows_pytest_config_without_addopts(tmp_path):
+    _write_text(tmp_path / "pyproject.toml", "[tool.pytest.ini_options]\ntestpaths = ['tests']\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
 def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
