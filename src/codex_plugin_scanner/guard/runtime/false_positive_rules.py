@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 _SOURCE_SEARCH_TOOLS = frozenset(
     {
@@ -67,6 +69,11 @@ SOURCE_INSPECTION_SENSITIVE_PARTS = frozenset(
     {".aws", ".docker", ".env", ".git-credentials", ".kube", ".netrc", ".npmrc", ".pypirc", ".ssh", "credentials"}
 )
 SOURCE_INSPECTION_BENIGN_DOTFILES = frozenset({".nvmrc"})
+KNOWN_SKILL_DOC_ROOT_SUFFIXES = (
+    ".codex/superpowers/skills",
+    ".codex/skills",
+    ".agents/skills",
+)
 
 _SECRET_FILE_NAMES = re.compile(
     r"(?<![A-Za-z0-9_.-])"
@@ -80,6 +87,20 @@ _PIPE_TO_EXFIL = re.compile(
     r"[|;]\s*(?:curl|wget|nc|ncat|netcat|scp|rsync|aws\s+s3|gsutil|gcloud)\b",
     re.IGNORECASE,
 )
+
+
+def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None) -> bool:
+    """Return true for known local skill-doc roots without resolving user path text."""
+    if any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&")):
+        return False
+    expanded = os.path.expanduser(target)
+    normalized = os.path.normpath(expanded).replace("\\", "/")
+    home = os.path.normpath(str(home_dir or Path.home())).replace("\\", "/")
+    for suffix in KNOWN_SKILL_DOC_ROOT_SUFFIXES:
+        root = f"{home}/{suffix}"
+        if normalized == root or normalized.startswith(f"{root}/"):
+            return True
+    return False
 
 _FIND_MUTATING_FLAGS = re.compile(
     r"(?:^|[\s])-(?:delete|exec\s+rm|exec\s+unlink|exec\s+shred|execdir\s+rm)\b"

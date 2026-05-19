@@ -117,6 +117,7 @@ from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
+    target_is_known_skill_doc_path,
 )
 from ..runtime.runner import (
     GuardSyncNotConfiguredError,
@@ -5899,6 +5900,30 @@ _CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE = {
     "grep": frozenset({"R"}),
     "rg": frozenset({"L"}),
 }
+_CODEX_FD_OPTION_VALUE_FLAGS = frozenset(
+    {
+        "-d",
+        "--max-depth",
+        "-E",
+        "--exclude",
+        "-e",
+        "--extension",
+        "-t",
+        "--type",
+        "-S",
+        "--size",
+        "-o",
+        "--owner",
+        "--changed-before",
+        "--changed-within",
+        "--changed-after",
+        "-j",
+        "--threads",
+        "--base-directory",
+        "--path-separator",
+        "--search-path",
+    }
+)
 _CODEX_GIT_GLOBAL_VALUE_FLAGS = frozenset(
     {"-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace"}
 )
@@ -7109,28 +7134,14 @@ def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
     fd_args = parsed[0] if parsed is not None else args
     positional: list[str] = []
     skip_next = False
-    option_value_flags = {
-        "-d",
-        "--max-depth",
-        "-E",
-        "--exclude",
-        "-e",
-        "--extension",
-        "-t",
-        "--type",
-        "--changed-before",
-        "--changed-within",
-        "-j",
-        "--threads",
-    }
     for arg in fd_args:
         if skip_next:
             skip_next = False
             continue
-        if arg in option_value_flags:
+        if arg in _CODEX_FD_OPTION_VALUE_FLAGS:
             skip_next = True
             continue
-        if any(arg.startswith(f"{flag}=") for flag in option_value_flags if flag.startswith("--")):
+        if any(arg.startswith(f"{flag}=") for flag in _CODEX_FD_OPTION_VALUE_FLAGS if flag.startswith("--")):
             continue
         if arg.startswith("-"):
             continue
@@ -7230,7 +7241,7 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     stripped = target.strip().strip("'\"")
     if not stripped:
         return False
-    if _codex_search_target_is_known_skill_doc_path(stripped):
+    if target_is_known_skill_doc_path(stripped):
         return True
     if stripped.startswith("~"):
         return False
@@ -7280,25 +7291,6 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     if Path(stripped).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES:
         return True
     return Path(stripped).suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
-
-
-def _codex_search_target_is_known_skill_doc_path(target: str) -> bool:
-    if any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&")):
-        return False
-    expanded = Path(os.path.expanduser(target)).resolve(strict=False)
-    home = Path.home().resolve(strict=False)
-    allowed_roots = (
-        home / ".codex" / "superpowers" / "skills",
-        home / ".codex" / "skills",
-        home / ".agents" / "skills",
-    )
-    for root in allowed_roots:
-        try:
-            expanded.relative_to(root.resolve(strict=False))
-        except ValueError:
-            continue
-        return True
-    return False
 
 
 def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:

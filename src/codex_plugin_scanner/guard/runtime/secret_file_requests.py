@@ -22,6 +22,7 @@ from .false_positive_rules import (
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
+    target_is_known_skill_doc_path,
 )
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
@@ -4045,7 +4046,7 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
     lowered_parts = [part.lower() for part in parts]
     if not parts:
         return allow_dirs
-    if _read_only_lookup_target_is_known_skill_doc_path(stripped):
+    if target_is_known_skill_doc_path(stripped):
         return True
     if any(part in SOURCE_INSPECTION_SENSITIVE_PARTS for part in lowered_parts):
         return False
@@ -4057,25 +4058,6 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
     if Path(normalized).suffix.lower() in SOURCE_INSPECTION_EXTENSIONS:
         return True
     return allow_dirs
-
-
-def _read_only_lookup_target_is_known_skill_doc_path(target: str) -> bool:
-    if any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&")):
-        return False
-    expanded = Path(os.path.expanduser(target)).resolve(strict=False)
-    home = Path.home().resolve(strict=False)
-    allowed_roots = (
-        home / ".codex" / "superpowers" / "skills",
-        home / ".codex" / "skills",
-        home / ".agents" / "skills",
-    )
-    for root in allowed_roots:
-        try:
-            expanded.relative_to(root.resolve(strict=False))
-        except ValueError:
-            continue
-        return True
-    return False
 
 
 def _read_only_lookup_target_is_path_like(value: str) -> bool:
