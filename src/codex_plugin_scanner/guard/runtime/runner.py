@@ -820,8 +820,23 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     inventory = store.list_inventory()
     payload: dict[str, object] = {}
     receipts_stored_total = 0
+    advisories_payload: list[dict[str, object]] = []
+    exceptions_payload: list[dict[str, object]] = []
+    policy_payload: dict[str, object] | None = None
+    alert_preferences_payload: dict[str, object] | None = None
+    team_policy_pack_payload: dict[str, object] | None = None
+    remote_decisions: set[PolicyDecision] = set()
+    device_id, device_name = _guard_device_metadata(store)
     for receipt_batch in _iter_receipt_sync_batches(receipts):
-        body = json.dumps({"receipts": _cloud_sync_receipts_payload(store, receipt_batch)}).encode("utf-8")
+        body = json.dumps(
+            {
+                "receipts": _cloud_sync_receipts_payload(
+                    receipt_batch,
+                    device_id=device_id,
+                    device_name=device_name,
+                )
+            }
+        ).encode("utf-8")
         request = urllib.request.Request(
             sync_url,
             data=body,
@@ -846,35 +861,46 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         batch_receipts_stored = payload.get("receiptsStored")
         if isinstance(batch_receipts_stored, int):
             receipts_stored_total += batch_receipts_stored
+        advisories = payload.get("advisories")
+        if isinstance(advisories, list):
+            advisories_payload.extend(item for item in advisories if isinstance(item, dict))
+        policy = payload.get("policy")
+        if isinstance(policy, dict):
+            policy_payload = policy
+        alert_preferences = payload.get("alertPreferences")
+        if isinstance(alert_preferences, dict):
+            alert_preferences_payload = alert_preferences
+        team_policy_pack = payload.get("teamPolicyPack")
+        if isinstance(team_policy_pack, dict):
+            team_policy_pack_payload = team_policy_pack
+        exceptions = payload.get("exceptions")
+        if isinstance(exceptions, list):
+            exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
+        remote_decisions.update(_build_remote_policy_decisions(payload))
     now = _sync_timestamp(payload)
-    advisories = payload.get("advisories")
+    deduped_advisories = _dedupe_sync_payload_items(advisories_payload)
+    deduped_exceptions = _dedupe_sync_payload_items(exceptions_payload)
     advisories_stored = 0
-    if isinstance(advisories, list):
-        advisory_items = [item for item in advisories if isinstance(item, dict)]
-        advisories_stored = store.cache_advisories(advisory_items, now)
-    policy = payload.get("policy")
-    if isinstance(policy, dict):
-        store.set_sync_payload("policy", policy, now)
+    if deduped_advisories:
+        advisories_stored = store.cache_advisories(deduped_advisories, now)
+    if policy_payload is not None:
+        store.set_sync_payload("policy", policy_payload, now)
     else:
         store.set_sync_payload("policy", {}, now)
-    alert_preferences = payload.get("alertPreferences")
-    if isinstance(alert_preferences, dict):
-        store.set_sync_payload("alert_preferences", alert_preferences, now)
+    if alert_preferences_payload is not None:
+        store.set_sync_payload("alert_preferences", alert_preferences_payload, now)
     else:
         store.set_sync_payload("alert_preferences", {}, now)
-    team_policy_pack = payload.get("teamPolicyPack")
-    if isinstance(team_policy_pack, dict):
-        store.set_sync_payload("team_policy_pack", team_policy_pack, now)
+    if team_policy_pack_payload is not None:
+        store.set_sync_payload("team_policy_pack", team_policy_pack_payload, now)
     else:
         store.set_sync_payload("team_policy_pack", {}, now)
-    exceptions = payload.get("exceptions")
-    remote_decisions = _build_remote_policy_decisions(payload)
-    store.replace_remote_policies(remote_decisions, now)
+    store.replace_remote_policies(list(remote_decisions), now)
     _record_synced_alert_events(
         store=store,
-        advisories=advisories if isinstance(advisories, list) else [],
-        alert_preferences=alert_preferences if isinstance(alert_preferences, dict) else None,
-        exceptions=exceptions if isinstance(exceptions, list) else [],
+        advisories=deduped_advisories,
+        alert_preferences=alert_preferences_payload,
+        exceptions=deduped_exceptions,
         now=now,
     )
     pain_signals_uploaded = sync_pain_signals(store)
@@ -882,7 +908,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
         "advisories_stored": advisories_stored,
-        "exceptions_stored": len(exceptions) if isinstance(exceptions, list) else 0,
+        "exceptions_stored": len(deduped_exceptions),
         "remote_policies_stored": len(remote_decisions),
         "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
@@ -1566,9 +1592,25 @@ def _completed_guard_event_ids(payload: dict[str, object]) -> list[str]:
     return completed
 
 
-def _cloud_sync_receipts_payload(store: GuardStore, receipts: list[dict[str, object]]) -> list[dict[str, object]]:
-    device_id, device_name = _guard_device_metadata(store)
+def _cloud_sync_receipts_payload(
+    receipts: list[dict[str, object]],
+    *,
+    device_id: str,
+    device_name: str,
+) -> list[dict[str, object]]:
     return [_cloud_sync_receipt_payload(receipt, device_id=device_id, device_name=device_name) for receipt in receipts]
+
+
+def _dedupe_sync_payload_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    seen: set[str] = set()
+    deduped: list[dict[str, object]] = []
+    for item in items:
+        fingerprint = json.dumps(item, sort_keys=True)
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        deduped.append(item)
+    return deduped
 
 
 def _iter_receipt_sync_batches(receipts: list[dict[str, object]]) -> tuple[list[dict[str, object]], ...]:
