@@ -829,6 +829,35 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
         _render_sandbox_results(console, sandbox_analysis)
 
 
+def _render_apps(console: Console, payload: dict[str, object]) -> None:
+    if payload.get("managed_install") or payload.get("managed_installs"):
+        _render_managed_install(console, payload)
+    else:
+        _render_fallback(console, payload)
+    cloud_app = payload.get("cloud_app")
+    if not isinstance(cloud_app, dict):
+        return
+    body = Table.grid(padding=(0, 1))
+    browser_opened = bool(cloud_app.get("browser_opened"))
+    body.add_row("Cloud page", str(cloud_app.get("app_url") or "unknown"))
+    body.add_row("Local daemon", str(cloud_app.get("daemon_url") or "unknown"))
+    body.add_row("Browser", "opened" if browser_opened else "manual open required")
+    next_action = cloud_app.get("next_action")
+    if isinstance(next_action, dict):
+        body.add_row("Next", str(next_action.get("label") or "Open Guard Cloud app page"))
+        body.add_row(
+            "Recovery",
+            "Rerun the command; Guard opens the authenticated URL without printing the local token.",
+        )
+    console.print(
+        Panel(
+            body,
+            title="Guard Cloud app connect",
+            border_style="green" if browser_opened else "yellow",
+        )
+    )
+
+
 def _render_supply_chain_risk_results(console: Console, supply_chain_risks: list[dict[str, object]]) -> None:
     table = Table(box=box.SIMPLE_HEAVY, show_header=True, expand=True)
     table.add_column("Signal", overflow="fold")
@@ -2193,6 +2222,7 @@ _RENDERERS: dict[str, Any] = {
     "abom": _render_fallback,
     "install": _render_managed_install,
     "uninstall": _render_managed_install,
+    "apps": _render_apps,
     "allow": _render_decision,
     "deny": _render_decision,
     "login": _render_login,
