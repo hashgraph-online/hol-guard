@@ -865,13 +865,13 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         if isinstance(advisories, list):
             advisories_payload.extend(item for item in advisories if isinstance(item, dict))
         policy = payload.get("policy")
-        if isinstance(policy, dict):
+        if isinstance(policy, dict) and (policy or policy_payload is None):
             policy_payload = policy
         alert_preferences = payload.get("alertPreferences")
-        if isinstance(alert_preferences, dict):
+        if isinstance(alert_preferences, dict) and (alert_preferences or alert_preferences_payload is None):
             alert_preferences_payload = alert_preferences
         team_policy_pack = payload.get("teamPolicyPack")
-        if isinstance(team_policy_pack, dict):
+        if isinstance(team_policy_pack, dict) and (team_policy_pack or team_policy_pack_payload is None):
             team_policy_pack_payload = team_policy_pack
         exceptions = payload.get("exceptions")
         if isinstance(exceptions, list):
