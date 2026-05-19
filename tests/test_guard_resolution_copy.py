@@ -137,8 +137,8 @@ class TestApprovalResolutionCopyPerHarness:
         [
             (
                 "codex",
-                "Decision saved. HOL Guard could not find the Codex session to resume. "
-                "Retry the same request in Codex; it should pass because this approval is now saved.",
+                "Decision saved. HOL Guard could not find the original Codex chat to message. "
+                "Return to Codex and retry the same request; this approval is now saved.",
             ),
             ("claude-code", "Return to Claude and retry"),
             ("opencode", "Return to OpenCode and retry"),
