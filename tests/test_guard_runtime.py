@@ -12145,6 +12145,15 @@ def test_guard_runtime_blocks_pytest_package_main_shadow(tmp_path):
     assert match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_pytest_package_bytecode_shadow(tmp_path):
+    _write_text(tmp_path / "pytest" / "__init__.pyc", "not-real-bytecode")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_allows_simple_pytest_binary_invocation(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -12434,6 +12443,24 @@ def test_guard_runtime_blocks_prior_declared_pytest_environment(tmp_path):
 
     assert match is not None
     assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_prior_set_export_before_pytest(tmp_path):
+    allexport_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "set -a; PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'; pytest -q"},
+        cwd=tmp_path,
+    )
+    keyword_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "set -k; pytest -q PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'"},
+        cwd=tmp_path,
+    )
+
+    assert allexport_match is not None
+    assert allexport_match.action_class == "destructive shell command"
+    assert keyword_match is not None
+    assert keyword_match.action_class == "destructive shell command"
 
 
 def test_guard_runtime_blocks_split_exported_pytest_environment(tmp_path):

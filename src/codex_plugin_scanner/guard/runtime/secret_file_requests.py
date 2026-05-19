@@ -108,7 +108,14 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
 _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
-    "pytest": ("pytest.py", "pytest.pyc", "pytest/__init__.py", "pytest/__main__.py"),
+    "pytest": (
+        "pytest.py",
+        "pytest.pyc",
+        "pytest/__init__.py",
+        "pytest/__init__.pyc",
+        "pytest/__main__.py",
+        "pytest/__main__.pyc",
+    ),
 }
 _PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
 _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = ("--basetemp", "--debug", "--junitxml", "--junit-xml", "-p")
@@ -5485,6 +5492,9 @@ def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
         if command_name in {"cd", "pushd", "popd"}:
             saw_state_mutation = True
             continue
+        if command_name == "set" and _shell_set_exports_assignments(segment[command_index + 1 :]):
+            saw_state_mutation = True
+            continue
         if command_name == "export":
             for token in segment[command_index + 1 :]:
                 env_key = _shell_declared_env_key(token)
@@ -5548,6 +5558,25 @@ def _shell_declaration_exports_env(args: list[str]) -> bool:
             continue
         if "x" in token.lstrip("-"):
             return True
+    return False
+
+
+def _shell_set_exports_assignments(args: list[str]) -> bool:
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            return False
+        if token in {"-a", "-k", "allexport", "keyword"}:
+            return True
+        if token == "-o":
+            return index + 1 < len(args) and args[index + 1] in {"allexport", "keyword"}
+        if token == "+o":
+            index += 2
+            continue
+        if token.startswith("-") and not token.startswith("--") and any(flag in token[1:] for flag in {"a", "k"}):
+            return True
+        index += 1
     return False
 
 
