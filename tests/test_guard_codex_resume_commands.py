@@ -137,6 +137,31 @@ def test_guard_doctor_codex_reports_resume_diagnostics(
     assert output["codex_resume"]["latest_attempt"] is None
 
 
+def test_guard_doctor_codex_handles_launch_oserror(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    GuardStore(guard_home)
+    _stub_codex_binary(monkeypatch)
+
+    def _raise_oserror(command, **kwargs):
+        raise PermissionError("exec denied")
+
+    monkeypatch.setattr(codex_resume_module.subprocess, "run", _raise_oserror)
+
+    rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["codex_resume"]["codex_binary_found"] is True
+    assert output["codex_resume"]["app_server_support"] is False
+    assert output["codex_resume"]["remote_control_support"] is False
+    assert output["codex_resume"]["headless_resume_support"] is False
+
+
 def test_guard_approvals_resume_rejects_unsafe_thread_id(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

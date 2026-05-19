@@ -24,14 +24,6 @@ _THREAD_ID_KEYS = (
 _SOCKET_KEYS = ("codex_app_server_socket", "app_server_socket", "appServerSocket")
 _CODEX_HOME_KEYS = ("codex_home", "codexHome")
 _COMMAND_TEXT_KEYS = ("command_text", "commandText")
-_APP_SERVER_FALLBACK_REASONS = {
-    "invalid_turn_start_response",
-    "missing_turn_start_response",
-    "socket_not_available",
-    "turn_start_error",
-    "turn_start_timeout",
-    "unsafe_socket_path",
-}
 _CODEX_EXEC_RESUME_TIMEOUT_SECONDS = 120.0
 _SAFE_CODEX_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
@@ -219,8 +211,6 @@ def _dispatch_resume_attempt(
     if app_server_result is None:
         return _resume_codex_exec_session(store=store, request_id=request_id, action=action, thread_id=thread_id)
     if str(app_server_result.get("status") or "") == "sent":
-        return app_server_result
-    if str(app_server_result.get("reason") or "") not in _APP_SERVER_FALLBACK_REASONS:
         return app_server_result
 
     exec_result = _resume_codex_exec_session(store=store, request_id=request_id, action=action, thread_id=thread_id)
@@ -471,6 +461,6 @@ def _command_available(command: list[str]) -> bool:
             text=True,
             timeout=5,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return False
     return result.returncode == 0

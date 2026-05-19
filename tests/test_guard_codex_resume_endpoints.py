@@ -525,3 +525,63 @@ def test_codex_approve_returns_failed_resume_when_exec_launch_raises_oserror(
     assert payload["codex_resume"]["status"] == "failed"
     assert payload["codex_resume"]["reason"] == "exec_resume_launch_failed"
     assert payload["codex_resume"]["last_error"] == "exec denied"
+
+
+def test_codex_approve_falls_back_to_exec_resume_after_transport_error_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: dict[str, object] = {}
+    _stub_codex_binary(monkeypatch)
+
+    def _fake_resume(**kwargs):
+        return {
+            "status": "failed",
+            "reason": "ConnectionRefusedError",
+            "thread_id": "session-transport-1",
+        }
+
+    def _fake_run(command, **kwargs):
+        recorded["command"] = command
+        return type(
+            "CompletedProcess",
+            (),
+            {
+                "returncode": 0,
+                "stdout": '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}\n',
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr(codex_resume_module, "resume_codex_thread_for_request", _fake_resume)
+    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-transport"), "2026-05-19T10:00:00+00:00")
+    socket_path = tmp_path / "codex.sock"
+    socket_path.write_text("", encoding="utf-8")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_codex_operation(
+        store,
+        request_id="req-transport",
+        socket_path=socket_path,
+        thread_id="session-transport-1",
+        workspace=str(workspace),
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-transport/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["codex_resume"]["strategy"] == "codex-exec-resume"
+    assert recorded["command"][:3] == ["codex", "exec", "resume"]
