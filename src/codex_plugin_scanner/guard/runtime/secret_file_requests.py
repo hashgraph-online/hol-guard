@@ -5978,7 +5978,7 @@ def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_pa
         with os.fdopen(file_handle, encoding="utf-8", errors="ignore") as config_file:
             file_handle = None
             config_text = config_file.read().lower()
-        if "addopts" not in config_text:
+        if "addopts" not in config_text and "log_file" not in config_text:
             return False
         return _pytest_config_text_has_unsafe_addopts(config_text)
     except (FileNotFoundError, NotADirectoryError):
@@ -5998,6 +5998,8 @@ def _pytest_config_text_has_unsafe_addopts(config_text: str) -> bool:
         line = raw_line.strip()
         if not line or line.startswith(("#", ";")):
             continue
+        if re.match(r"^log_file\s*=", line):
+            return True
         if "addopts" in line:
             in_addopts = True
             if any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
