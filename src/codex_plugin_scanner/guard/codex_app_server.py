@@ -45,6 +45,12 @@ class _WebSocketClosedError(TimeoutError):
     """Raised when the app-server closes without a websocket close frame."""
 
 
+def default_codex_app_server_socket_available() -> bool:
+    """Return whether the current Codex app-server control socket is reachable."""
+
+    return _DEFAULT_SOCKET_PATH.exists()
+
+
 def codex_resume_metadata_from_hook_payload(
     payload: Mapping[str, object],
     *,

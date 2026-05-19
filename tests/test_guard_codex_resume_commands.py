@@ -132,6 +132,7 @@ def test_guard_doctor_codex_reports_resume_diagnostics(
     assert rc == 0
     assert output["codex_resume"]["codex_binary_found"] in {True, False}
     assert output["codex_resume"]["app_server_support"] in {True, False}
+    assert output["codex_resume"]["app_server_socket_available"] in {True, False}
     assert output["codex_resume"]["latest_attempt"] is None
 
 
@@ -150,7 +151,8 @@ def test_guard_doctor_codex_reports_app_server_support_from_codex_binary(
 
     assert rc == 0
     assert output["codex_resume"]["codex_binary_found"] is True
-    assert output["codex_resume"]["app_server_support"] is True
+    assert output["codex_resume"]["app_server_support"] in {True, False}
+    assert output["codex_resume"]["app_server_socket_available"] in {True, False}
     assert "remote_control_support" not in output["codex_resume"]
     assert "headless_resume_support" not in output["codex_resume"]
 

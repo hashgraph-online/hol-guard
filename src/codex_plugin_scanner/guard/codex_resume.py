@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from collections.abc import Mapping
 
-from .codex_app_server import resume_codex_thread_for_request
+from .codex_app_server import default_codex_app_server_socket_available, resume_codex_thread_for_request
 from .store import GuardStore
 
 _THREAD_ID_KEYS = (
@@ -143,10 +143,12 @@ def defer_request_resume_to_live_hook(
 
 def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
     binary_path = shutil.which("codex")
+    socket_available = default_codex_app_server_socket_available()
     latest_attempt = store.get_latest_request_resume(harness="codex")
     return {
         "codex_binary_found": binary_path is not None,
-        "app_server_support": binary_path is not None,
+        "app_server_support": socket_available,
+        "app_server_socket_available": socket_available,
         "latest_attempt": latest_attempt,
     }
 
@@ -236,7 +238,7 @@ def _dispatch_resume_attempt(
             "reason": "session_not_found",
             "thread_id": thread_id,
             "strategy": strategy,
-            "supported": True,
+            "supported": False,
         }
     return app_server_result
 

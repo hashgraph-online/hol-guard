@@ -1507,7 +1507,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         message = str(codex_resume.get("message") or "")
         if status == "sent":
             updated["resolution_summary"] = (
-                "Decision saved. HOL Guard sent Codex a continuation message in the original chat."
+                "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
             )
             copy = {
                 "title": "Decision saved. Codex chat was notified.",
