@@ -12301,6 +12301,19 @@ def test_guard_runtime_checks_absolute_selected_test_root_pytest_config_addopts(
     assert match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_checks_selected_test_path_ancestor_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "sub" / "pytest.ini", "[pytest]\naddopts = --basetemp /tmp/guard-pytest\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest sub/pkg/test_guard.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",

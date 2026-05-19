@@ -5691,39 +5691,65 @@ def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
 def _pytest_config_may_add_unsafe_options(cwd: Path | None, module_args: list[str]) -> bool:
     if cwd is None:
         return True
-    config_dirs = _pytest_config_search_dirs(cwd, module_args)
+    config_dirs = _pytest_config_search_dirs(module_args, cwd=cwd)
     if config_dirs is None:
         return True
     for config_dir in config_dirs:
         for config_path in _PYTEST_OPTION_CONFIG_PATHS:
-            if _pytest_config_file_has_unsafe_addopts(config_dir, config_path):
+            if _pytest_config_file_has_unsafe_addopts(cwd, config_dir, config_path):
                 return True
     return False
 
 
-def _pytest_config_search_dirs(cwd: Path, module_args: list[str]) -> tuple[Path, ...] | None:
-    cwd_root = cwd.resolve(strict=False)
-    config_dirs: list[Path] = [cwd_root]
+def _pytest_config_search_dirs(module_args: list[str], *, cwd: Path) -> tuple[str, ...] | None:
+    config_dirs: list[str] = [""]
     for module_arg in _pytest_positional_args(module_args):
-        path_text = module_arg.split("::", 1)[0]
-        if not path_text:
-            continue
-        path = Path(path_text)
-        if ".." in path.parts:
+        selected_path = _pytest_selected_relative_path(module_arg, cwd=cwd)
+        if selected_path is None:
             return None
-        if path.is_absolute():
-            root = path.resolve(strict=False)
-            try:
-                root.relative_to(cwd_root)
-            except ValueError:
-                return None
-        else:
-            root = cwd_root / path
-        if path.suffix != "":
+        if selected_path == "":
+            continue
+        root = Path(selected_path)
+        if root.suffix != "":
             root = root.parent
-        if root not in config_dirs:
-            config_dirs.append(root)
+        for candidate in _pytest_config_ancestor_dirs(root):
+            if candidate not in config_dirs:
+                config_dirs.append(candidate)
     return tuple(config_dirs)
+
+
+def _pytest_selected_relative_path(module_arg: str, *, cwd: Path) -> str | None:
+    path_text = module_arg.split("::", 1)[0]
+    if not path_text:
+        return ""
+    path = Path(path_text)
+    if ".." in path.parts:
+        return None
+    if not path.is_absolute():
+        return path.as_posix()
+    cwd_text = str(cwd)
+    path_text = str(path)
+    if path_text == cwd_text:
+        return ""
+    prefix = f"{cwd_text}{os.sep}"
+    if not path_text.startswith(prefix):
+        return None
+    relative_text = path_text[len(prefix) :]
+    relative_path = Path(relative_text)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        return None
+    return relative_path.as_posix()
+
+
+def _pytest_config_ancestor_dirs(root: Path) -> tuple[str, ...]:
+    if str(root) in {"", "."}:
+        return ("",)
+    dirs: list[str] = []
+    current = root
+    while str(current) not in {"", "."}:
+        dirs.append(current.as_posix())
+        current = current.parent
+    return tuple(dirs)
 
 
 def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
@@ -5748,11 +5774,10 @@ def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
     return tuple(positional_args)
 
 
-def _pytest_config_file_has_unsafe_addopts(config_dir: Path, config_path: str) -> bool:
-    path = (config_dir / config_path).resolve(strict=False)
-    root = config_dir.resolve(strict=False)
-    if path.parent != root:
+def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_path: str) -> bool:
+    if Path(config_dir).is_absolute() or ".." in Path(config_dir).parts:
         return True
+    path = cwd / config_dir / config_path
     try:
         if not path.is_file():
             return False
