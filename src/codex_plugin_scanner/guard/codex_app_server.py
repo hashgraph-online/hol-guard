@@ -48,7 +48,15 @@ class _WebSocketClosedError(TimeoutError):
 def default_codex_app_server_socket_available() -> bool:
     """Return whether the current Codex app-server control socket is reachable."""
 
-    return _DEFAULT_SOCKET_PATH.exists()
+    if not _DEFAULT_SOCKET_PATH.exists():
+        return False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(0.2)
+            client.connect(str(_DEFAULT_SOCKET_PATH))
+    except OSError:
+        return False
+    return True
 
 
 def codex_resume_metadata_from_hook_payload(
