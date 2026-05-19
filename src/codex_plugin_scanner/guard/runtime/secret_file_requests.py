@@ -22,6 +22,7 @@ from .false_positive_rules import (
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
+    fd_arg_requests_exec,
     fd_exec_token_is_plain_sed,
     fd_search_targets,
     split_fd_args_and_exec,
@@ -4007,12 +4008,7 @@ def _read_only_lookup_search_args_are_safe(args: list[str], *, home_dir: Path | 
 
 
 def _read_only_lookup_fd_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
-    if any(
-        arg in {"-x", "-X", "--exec", "--exec-batch"}
-        or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
-        or (arg.startswith("-") and not arg.startswith("--") and ("x" in arg[1:] or "X" in arg[1:]))
-        for arg in args
-    ):
+    if any(fd_arg_requests_exec(arg) for arg in args):
         return _fd_exec_sed_read_only_args_are_safe(args, home_dir=home_dir)
     targets = fd_search_targets(args)
     if targets is None:
@@ -4281,12 +4277,7 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str], *, home_dir: Path | 
         if (
             command_name == "fd"
             and command_index is not None
-            and any(
-                arg in {"-x", "-X", "--exec", "--exec-batch"}
-                or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
-                or (arg.startswith("-") and not arg.startswith("--") and ("x" in arg[1:] or "X" in arg[1:]))
-                for arg in segment[command_index + 1 :]
-            )
+            and any(fd_arg_requests_exec(arg) for arg in segment[command_index + 1 :])
             and not _fd_exec_sed_read_only_args_are_safe(segment[command_index + 1 :], home_dir=home_dir)
         ):
             return True

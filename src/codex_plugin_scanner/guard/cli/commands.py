@@ -117,6 +117,7 @@ from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
+    fd_arg_requests_exec,
     fd_exec_token_is_plain_sed,
     fd_search_targets,
     split_fd_args_and_exec,
@@ -7156,12 +7157,7 @@ def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
 def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
     parsed = split_fd_args_and_exec(args)
     if parsed is None:
-        return not any(
-            arg in {"-x", "-X", "--exec", "--exec-batch"}
-            or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
-            or (arg.startswith("-") and not arg.startswith("--") and ("x" in arg[1:] or "X" in arg[1:]))
-            for arg in args
-        )
+        return not any(fd_arg_requests_exec(arg) for arg in args)
     _fd_args, exec_parts = parsed
     if not exec_parts or not fd_exec_token_is_plain_sed(exec_parts[0]):
         return False

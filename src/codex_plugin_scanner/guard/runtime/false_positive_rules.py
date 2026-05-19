@@ -119,14 +119,42 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
         expanded = f"{home_dir or Path.home()}{target[1:]}"
     else:
         expanded = os.path.expanduser(target)
-    try:
-        normalized = Path(expanded).resolve(strict=False).as_posix()
-        home = Path(home_dir or Path.home()).resolve(strict=False).as_posix()
-    except RuntimeError:
-        return False
+    normalized = os.path.normpath(expanded).replace("\\", "/")
+    home = os.path.normpath(str(home_dir or Path.home())).replace("\\", "/")
     for suffix in KNOWN_SKILL_DOC_ROOT_SUFFIXES:
         root = f"{home}/{suffix}"
-        if normalized == root or normalized.startswith(f"{root}/"):
+        if (normalized == root or normalized.startswith(f"{root}/")) and not _path_has_symlink_component(
+            normalized,
+            root=root,
+        ):
+            return True
+    return False
+
+
+def _path_has_symlink_component(normalized_target: str, *, root: str) -> bool:
+    if normalized_target == root:
+        return os.path.islink(root)
+    relative = normalized_target.removeprefix(f"{root}/")
+    current = root
+    for part in relative.split("/"):
+        if not part:
+            return True
+        current = f"{current}/{part}"
+        if os.path.islink(current):
+            return True
+    return False
+
+
+def fd_arg_requests_exec(arg: str) -> bool:
+    if arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("-x", "-X", "--exec=", "--exec-batch=")):
+        return True
+    if not arg.startswith("-") or arg.startswith("--"):
+        return False
+    cluster = arg[1:]
+    for flag in cluster:
+        if flag in {"d", "E", "e", "j", "o", "S", "t"}:
+            return False
+        if flag in {"x", "X"}:
             return True
     return False
 
@@ -144,13 +172,15 @@ def split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | Non
             return args[:index], [exec_token, *args[index + 1 :]]
         if arg.startswith("-") and not arg.startswith("--"):
             cluster = arg[1:]
-            if "X" in cluster:
-                return None
-            exec_flag_index = cluster.find("x")
-            if exec_flag_index != -1:
-                exec_token = cluster[exec_flag_index + 1 :]
-                exec_parts = ([exec_token] if exec_token else []) + args[index + 1 :]
-                return args[:index], exec_parts
+            for flag_index, flag in enumerate(cluster):
+                if flag in {"d", "E", "e", "j", "o", "S", "t"}:
+                    break
+                if flag == "X":
+                    return None
+                if flag == "x":
+                    exec_token = cluster[flag_index + 1 :]
+                    exec_parts = ([exec_token] if exec_token else []) + args[index + 1 :]
+                    return args[:index], exec_parts
     return None
 
 
