@@ -194,6 +194,7 @@ _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
 _RUNTIME_SYNC_TIMEOUT_SECONDS = 10
 _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
+_RECEIPT_SYNC_BATCH_SIZE = 50
 _PAIN_SIGNAL_TIMEOUT_SECONDS = 10
 _PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
 _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS = 24
@@ -817,28 +818,34 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     receipts = store.list_receipts(limit=200)
     inventory = store.list_inventory()
-    body = json.dumps({"receipts": _cloud_sync_receipts_payload(store, receipts)}).encode("utf-8")
-    request = urllib.request.Request(
-        sync_url,
-        data=body,
-        method="POST",
-        headers=_guard_sync_headers(str(credentials["token"])),
-    )
-    try:
-        payload = _urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+    payload: dict[str, object] = {}
+    receipts_stored_total = 0
+    for receipt_batch in _iter_receipt_sync_batches(receipts):
+        body = json.dumps({"receipts": _cloud_sync_receipts_payload(store, receipt_batch)}).encode("utf-8")
+        request = urllib.request.Request(
+            sync_url,
+            data=body,
+            method="POST",
+            headers=_guard_sync_headers(str(credentials["token"])),
         )
-    except urllib.error.HTTPError as error:
-        if error.code == 403:
-            _is_plan, _msg = _check_plan_restriction_403(error)
-            if _is_plan:
-                raise GuardSyncNotAvailableError(_msg) from error
-            raise RuntimeError(_msg) from error
-        raise RuntimeError(_sync_http_error_message(error)) from error
-    except OSError as error:
-        raise RuntimeError(_sync_url_error_message(error)) from error
+        try:
+            payload = _urlopen_json_with_timeout_retry(
+                request=request,
+                timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
+                retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+            )
+        except urllib.error.HTTPError as error:
+            if error.code == 403:
+                _is_plan, _msg = _check_plan_restriction_403(error)
+                if _is_plan:
+                    raise GuardSyncNotAvailableError(_msg) from error
+                raise RuntimeError(_msg) from error
+            raise RuntimeError(_sync_http_error_message(error)) from error
+        except OSError as error:
+            raise RuntimeError(_sync_url_error_message(error)) from error
+        batch_receipts_stored = payload.get("receiptsStored")
+        if isinstance(batch_receipts_stored, int):
+            receipts_stored_total += batch_receipts_stored
     now = _sync_timestamp(payload)
     advisories = payload.get("advisories")
     advisories_stored = 0
@@ -873,7 +880,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     pain_signals_uploaded = sync_pain_signals(store)
     summary = {
         "synced_at": payload.get("syncedAt"),
-        "receipts_stored": payload.get("receiptsStored"),
+        "receipts_stored": receipts_stored_total,
         "advisories_stored": advisories_stored,
         "exceptions_stored": len(exceptions) if isinstance(exceptions, list) else 0,
         "remote_policies_stored": len(remote_decisions),
@@ -1562,6 +1569,15 @@ def _completed_guard_event_ids(payload: dict[str, object]) -> list[str]:
 def _cloud_sync_receipts_payload(store: GuardStore, receipts: list[dict[str, object]]) -> list[dict[str, object]]:
     device_id, device_name = _guard_device_metadata(store)
     return [_cloud_sync_receipt_payload(receipt, device_id=device_id, device_name=device_name) for receipt in receipts]
+
+
+def _iter_receipt_sync_batches(receipts: list[dict[str, object]]) -> tuple[list[dict[str, object]], ...]:
+    if not receipts:
+        return ([],)
+    return tuple(
+        receipts[index : index + _RECEIPT_SYNC_BATCH_SIZE]
+        for index in range(0, len(receipts), _RECEIPT_SYNC_BATCH_SIZE)
+    )
 
 
 def _cloud_sync_receipt_payload(
