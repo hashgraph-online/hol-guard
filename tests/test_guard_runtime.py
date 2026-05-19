@@ -33,6 +33,7 @@ from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
@@ -12136,6 +12137,17 @@ def test_guard_runtime_allows_simple_pytest_binary_invocation(tmp_path):
     assert match is None
 
 
+def test_guard_runtime_blocks_pytest_binary_addopts(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest' pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_hook_codex_does_not_block_simple_pytest_command(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -12187,6 +12199,13 @@ def test_guard_runtime_keeps_mutating_pytest_flags_sensitive(tmp_path):
 
     assert binary_match is not None
     assert binary_match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_keeps_pytest_allowlist_disjoint_from_mutating_flags():
+    pytest_mutating_flags = secret_file_requests_module._PYTHON_MODULE_MUTATING_FLAGS["pytest"]
+
+    assert secret_file_requests_module._PYTEST_SAFE_FLAGS.isdisjoint(pytest_mutating_flags)
+    assert secret_file_requests_module._PYTEST_SAFE_FLAGS_WITH_VALUES.isdisjoint(pytest_mutating_flags)
 
 
 def test_guard_runtime_tool_action_classification_uses_exact_action_classes():

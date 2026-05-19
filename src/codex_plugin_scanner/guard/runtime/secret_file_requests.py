@@ -107,6 +107,9 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "sk-",
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
+_SAFE_PYTHON_MODULE_SHADOW_PATHS = {
+    "pytest": ("pytest.py", "pytest/__init__.py"),
+}
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
@@ -5436,6 +5439,8 @@ def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
             return False
         segment_args = segment[command_index + 1 :]
         if command_name == "pytest":
+            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
+                return False
             if not _pytest_binary_segment_is_safe(segment[command_index], segment_args, cwd=cwd):
                 return False
             saw_pytest = True
@@ -5456,6 +5461,8 @@ def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name != "pytest" or command_index is None:
             continue
+        if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
+            return True
         if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
             return True
     return False
@@ -5554,7 +5561,10 @@ def _python_module_args_are_safe(module: str, module_args: list[str], *, cwd: Pa
 def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
     if cwd is None:
         return True
-    return (cwd / f"{module_root}.py").exists() or (cwd / module_root / "__init__.py").exists()
+    shadow_paths = _SAFE_PYTHON_MODULE_SHADOW_PATHS.get(module_root)
+    if shadow_paths is None:
+        return True
+    return any((cwd / shadow_path).exists() for shadow_path in shadow_paths)
 
 
 def _pytest_module_args_are_safe(module_args: list[str]) -> bool:
