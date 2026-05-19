@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from collections.abc import Mapping
 
 from .codex_app_server import resume_codex_thread_for_request
@@ -144,17 +143,10 @@ def defer_request_resume_to_live_hook(
 
 def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
     binary_path = shutil.which("codex")
-    app_server_support = (
-        _command_available(["codex", "debug", "app-server", "send-message-v2", "--help"]) if binary_path else False
-    )
-    remote_control_support = _command_available(["codex", "remote-control", "--help"]) if binary_path else False
-    headless_resume_support = _command_available(["codex", "exec", "resume", "--help"]) if binary_path else False
     latest_attempt = store.get_latest_request_resume(harness="codex")
     return {
         "codex_binary_found": binary_path is not None,
-        "app_server_support": app_server_support,
-        "remote_control_support": remote_control_support,
-        "headless_resume_support": headless_resume_support,
+        "app_server_support": binary_path is not None,
         "latest_attempt": latest_attempt,
     }
 
@@ -244,7 +236,7 @@ def _dispatch_resume_attempt(
             "reason": "session_not_found",
             "thread_id": thread_id,
             "strategy": strategy,
-            "supported": False,
+            "supported": True,
         }
     return app_server_result
 
@@ -336,17 +328,3 @@ def _first_string(mapping: Mapping[str, object], keys: tuple[str, ...]) -> str |
         if isinstance(value, str) and value.strip():
             return value
     return None
-
-
-def _command_available(command: list[str]) -> bool:
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            check=False,
-            text=True,
-            timeout=5,
-        )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return False
-    return result.returncode == 0

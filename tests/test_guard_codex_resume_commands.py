@@ -132,12 +132,10 @@ def test_guard_doctor_codex_reports_resume_diagnostics(
     assert rc == 0
     assert output["codex_resume"]["codex_binary_found"] in {True, False}
     assert output["codex_resume"]["app_server_support"] in {True, False}
-    assert output["codex_resume"]["remote_control_support"] in {True, False}
-    assert output["codex_resume"]["headless_resume_support"] in {True, False}
     assert output["codex_resume"]["latest_attempt"] is None
 
 
-def test_guard_doctor_codex_handles_launch_oserror(
+def test_guard_doctor_codex_reports_app_server_support_from_codex_binary(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -147,19 +145,14 @@ def test_guard_doctor_codex_handles_launch_oserror(
     GuardStore(guard_home)
     _stub_codex_binary(monkeypatch)
 
-    def _raise_oserror(command, **kwargs):
-        raise PermissionError("exec denied")
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _raise_oserror)
-
     rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
     assert output["codex_resume"]["codex_binary_found"] is True
-    assert output["codex_resume"]["app_server_support"] is False
-    assert output["codex_resume"]["remote_control_support"] is False
-    assert output["codex_resume"]["headless_resume_support"] is False
+    assert output["codex_resume"]["app_server_support"] is True
+    assert "remote_control_support" not in output["codex_resume"]
+    assert "headless_resume_support" not in output["codex_resume"]
 
 
 def test_guard_approvals_resume_reports_missing_same_thread_channel(
@@ -200,13 +193,7 @@ def test_guard_approvals_resume_reports_missing_same_thread_channel(
 def test_guard_approvals_resume_does_not_start_headless_codex_when_app_server_unavailable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _fake_run(command, **kwargs):
-        raise AssertionError("same-thread resume must not start a separate headless Codex run")
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
-
     home_dir = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()

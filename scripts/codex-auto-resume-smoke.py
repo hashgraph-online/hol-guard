@@ -142,7 +142,9 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
     original_send = codex_app_server_module._send_app_server_websocket_messages
 
     def _fake_send(**kwargs):
-        payloads = kwargs["payloads"]
+        payloads = kwargs.get("payloads")
+        if not isinstance(payloads, list):
+            raise AssertionError("fake Codex app-server expected a payloads list")
         captured_payloads.extend(payloads)
         return {"id": 2, "result": {"turnId": "turn-smoke"}}, "turn_completed"
 
