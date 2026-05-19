@@ -102,6 +102,7 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
             return True
     return False
 
+
 _FIND_MUTATING_FLAGS = re.compile(
     r"(?:^|[\s])-(?:delete|exec\s+rm|exec\s+unlink|exec\s+shred|execdir\s+rm)\b"
     r"|(?:^|[\s])-exec\s+\S+[^\r\n;&|]{0,100}\{.*\}\s*(?:\\;|;|\+)",
