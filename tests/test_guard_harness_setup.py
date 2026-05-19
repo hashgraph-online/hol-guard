@@ -13,6 +13,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import HarnessSetupContract
+from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -324,6 +325,102 @@ def test_apps_subcommand_preserves_parent_flags(tmp_path: Path) -> None:
     assert args.workspace == str(tmp_path / "workspace")
     assert args.json is True
     assert args.apps_command == "connect"
+
+
+def test_apps_connect_opens_guard_cloud_app_page(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    opened_urls: list[str] = []
+
+    monkeypatch.setattr(
+        guard_commands_module,
+        "apply_managed_install",
+        lambda *_args, **_kwargs: {
+            "managed_install": {"harness": "codex", "active": True, "manifest": {}},
+            "managed_installs": [{"harness": "codex", "active": True, "manifest": {}}],
+            "auto_detected": False,
+        },
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:5474",
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "load_guard_daemon_auth_token",
+        lambda _guard_home: "local-daemon-token-1234567890",
+    )
+    monkeypatch.setattr(
+        guard_commands_module.webbrowser,
+        "open",
+        lambda url: opened_urls.append(url) or True,
+    )
+    args = argparse.Namespace(
+        guard_command="apps",
+        apps_command="connect",
+        harness="codex",
+        dry_run=False,
+        home=str(tmp_path / "home"),
+        guard_home=str(tmp_path / "guard-home"),
+        workspace=str(tmp_path / "workspace"),
+        json=True,
+    )
+
+    exit_code = run_guard_command(args)
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["cloud_app"]["browser_opened"] is True
+    assert payload["cloud_app"]["app_url"] == "https://hol.org/guard/apps/codex"
+    assert opened_urls == [
+        "https://hol.org/guard/apps/codex"
+        "#guardDaemon=http%3A%2F%2F127.0.0.1%3A5474"
+        "&guard-token=local-daemon-token-1234567890"
+    ]
+    assert "local-daemon-token-1234567890" not in json.dumps(payload)
+
+
+def test_apps_connect_keeps_install_payload_when_cloud_launch_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        guard_commands_module,
+        "apply_managed_install",
+        lambda *_args, **_kwargs: {
+            "managed_install": {"harness": "codex", "active": True, "manifest": {}},
+            "managed_installs": [{"harness": "codex", "active": True, "manifest": {}}],
+            "auto_detected": False,
+        },
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "ensure_guard_daemon",
+        lambda _guard_home: (_ for _ in ()).throw(RuntimeError("daemon did not start")),
+    )
+    args = argparse.Namespace(
+        guard_command="apps",
+        apps_command="connect",
+        harness="codex",
+        dry_run=False,
+        home=str(tmp_path / "home"),
+        guard_home=str(tmp_path / "guard-home"),
+        workspace=str(tmp_path / "workspace"),
+        json=True,
+    )
+
+    exit_code = run_guard_command(args)
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["managed_install"]["harness"] == "codex"
+    assert payload["cloud_app"]["status"] == "daemon_unavailable"
+    assert payload["cloud_app"]["next_action"]["target"] == "hol-guard apps connect codex"
+    assert payload["cloud_app"]["error"] == "daemon did not start"
 
 
 def test_apps_inventory_uses_adapter_command_resolution(
