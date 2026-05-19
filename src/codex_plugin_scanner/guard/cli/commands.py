@@ -23,7 +23,7 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
-from typing import TextIO
+from typing import Protocol, TextIO
 
 from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
@@ -167,6 +167,13 @@ from .install_commands import (
 )
 from .product import build_guard_start_payload, build_guard_status_payload
 from .update_commands import run_guard_update
+
+DEFAULT_GUARD_APPS_URL = "https://hol.org/guard/apps"
+
+
+class GuardBrowserOpener(Protocol):
+    def __call__(self, url: str) -> bool: ...
+
 
 _GUARD_CLIENT_VERSION = "2.0.0"
 _SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
@@ -1228,8 +1235,94 @@ def _run_apps_command(
         print(str(error), file=sys.stderr)
         return 2
     payload["action"] = apps_command
+    if apps_command in {"connect", "repair"}:
+        managed_install = payload.get("managed_install")
+        canonical_harness = (
+            str(managed_install.get("harness"))
+            if isinstance(managed_install, dict) and managed_install.get("harness")
+            else harness
+        )
+        try:
+            payload["cloud_app"] = _open_guard_cloud_app(
+                harness=canonical_harness,
+                guard_home=context.guard_home,
+                opener=webbrowser.open,
+            )
+        except (RuntimeError, OSError) as error:
+            payload["cloud_app"] = _guard_cloud_app_error_payload(
+                harness=canonical_harness,
+                error=str(error),
+            )
     _emit("apps", payload, getattr(args, "json", False))
     return 0
+
+
+def _open_guard_cloud_app(
+    *,
+    harness: str,
+    guard_home: Path,
+    opener: GuardBrowserOpener,
+) -> dict[str, object]:
+    daemon_url = ensure_guard_daemon(guard_home)
+    auth_token = load_guard_daemon_auth_token(guard_home)
+    public_url, browser_url = _guard_cloud_app_urls(
+        harness=harness,
+        daemon_url=daemon_url,
+        auth_token=auth_token,
+    )
+    browser_opened = bool(browser_url and opener(browser_url))
+    payload: dict[str, object] = {
+        "app_url": public_url,
+        "browser_opened": browser_opened,
+        "daemon_url": daemon_url,
+        "status": "opened" if browser_opened else "manual_open_required",
+    }
+    if not browser_opened:
+        payload["next_action"] = {
+            "label": f"Run hol-guard apps connect {harness}",
+            "reason": "Browser did not open automatically and the local token is never printed.",
+            "target": f"hol-guard apps connect {harness}",
+        }
+    return payload
+
+
+def _guard_cloud_app_error_payload(*, harness: str, error: str) -> dict[str, object]:
+    public_url, _browser_url = _guard_cloud_app_urls(
+        harness=harness,
+        daemon_url="",
+        auth_token=None,
+    )
+    return {
+        "app_url": public_url,
+        "browser_opened": False,
+        "daemon_url": None,
+        "error": error,
+        "next_action": {
+            "label": f"Run hol-guard apps connect {harness}",
+            "reason": "Local Guard daemon did not start, so Cloud cannot connect from the browser yet.",
+            "target": f"hol-guard apps connect {harness}",
+        },
+        "status": "daemon_unavailable",
+    }
+
+
+def _guard_cloud_app_urls(
+    *,
+    harness: str,
+    daemon_url: str,
+    auth_token: str | None,
+) -> tuple[str, str | None]:
+    safe_harness = urllib.parse.quote(harness.strip() or "codex", safe="")
+    parsed = urllib.parse.urlparse(f"{DEFAULT_GUARD_APPS_URL}/{safe_harness}")
+    public_url = urllib.parse.urlunparse(parsed._replace(fragment=""))
+    if auth_token is None:
+        return public_url, None
+    browser_url = _browser_url_with_guard_params(
+        public_url,
+        auth_token=auth_token,
+        daemon_url=daemon_url,
+    )
+    return public_url, browser_url
 
 
 def _build_cisco_scan_options(mode: str) -> ScanOptions:
@@ -4893,12 +4986,23 @@ def _open_approval_center(
 def _approval_center_browser_url(approval_center_url: str, auth_token: str | None) -> str | None:
     if auth_token is None:
         return None
-    parsed = urllib.parse.urlparse(approval_center_url)
+    return _browser_url_with_guard_params(approval_center_url, auth_token=auth_token)
+
+
+def _browser_url_with_guard_params(
+    url: str,
+    *,
+    auth_token: str,
+    daemon_url: str | None = None,
+) -> str:
+    parsed = urllib.parse.urlparse(url)
     fragment_pairs = [
         (key, value)
         for key, value in urllib.parse.parse_qsl(parsed.fragment, keep_blank_values=True)
-        if key != "guard-token"
+        if key not in {"guard-token", "guardDaemon"}
     ]
+    if daemon_url:
+        fragment_pairs.append(("guardDaemon", daemon_url))
     fragment_pairs.append(("guard-token", auth_token))
     return urllib.parse.urlunparse(parsed._replace(fragment=urllib.parse.urlencode(fragment_pairs)))
 
