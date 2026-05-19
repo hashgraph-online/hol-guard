@@ -3977,7 +3977,8 @@ def _read_only_lookup_search_args_are_safe(args: list[str]) -> bool:
 
 def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
     if any(
-        arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")) for arg in args
+        arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
+        for arg in args
     ):
         return _fd_exec_sed_read_only_args_are_safe(args)
     targets = fd_search_targets(args)
@@ -4242,7 +4243,8 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
             command_name == "fd"
             and command_index is not None
             and any(
-                arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch="))
+                arg in {"-x", "-X", "--exec", "--exec-batch"}
+                or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
                 for arg in segment[command_index + 1 :]
             )
             and not _fd_exec_sed_read_only_args_are_safe(segment[command_index + 1 :])

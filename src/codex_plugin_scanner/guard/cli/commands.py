@@ -7116,7 +7116,8 @@ def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
     parsed = split_fd_args_and_exec(args)
     if parsed is None:
         return not any(
-            arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch="))
+            arg in {"-x", "-X", "--exec", "--exec-batch"}
+            or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
             for arg in args
         )
     _fd_args, exec_parts = parsed

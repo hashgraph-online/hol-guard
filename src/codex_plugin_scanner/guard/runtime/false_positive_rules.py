@@ -127,10 +127,15 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
 
 def split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | None:
     for index, arg in enumerate(args):
-        if arg in {"-X", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")):
+        if arg == "-X" or arg.startswith("-X") or arg == "--exec-batch" or arg.startswith(("--exec=", "--exec-batch=")):
             return None
         if arg in {"-x", "--exec"}:
             return args[:index], args[index + 1 :]
+        if arg.startswith("-x"):
+            exec_token = arg[2:]
+            if not exec_token:
+                return None
+            return args[:index], [exec_token, *args[index + 1 :]]
     return None
 
 
