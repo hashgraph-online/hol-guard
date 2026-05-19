@@ -237,9 +237,65 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "in_progress"
+    assert payload["codex_resume"]["status"] == "pending"
     assert payload["codex_resume"]["reason"] == "live_hook_waiting"
     assert "original Codex action continue" in payload["codex_resume"]["message"]
+
+
+def test_codex_deferred_live_hook_resume_can_recover_with_manual_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: dict[str, object] = {}
+    _stub_codex_binary(monkeypatch)
+
+    def _fake_run(command, **kwargs):
+        recorded["command"] = command
+        return type(
+            "CompletedProcess",
+            (),
+            {
+                "returncode": 0,
+                "stdout": '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}\n',
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-live-retry"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    _seed_codex_operation(
+        store,
+        request_id="req-live-retry",
+        socket_path=missing_socket,
+        thread_id="live-session-retry-1",
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        approved = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-live-retry/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+        retried = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-live-retry/resume",
+            {},
+        )
+    finally:
+        daemon.stop()
+
+    assert approved["codex_resume"]["status"] == "pending"
+    assert retried["status"] == "sent"
+    assert retried["strategy"] == "codex-exec-resume"
+    assert recorded["command"][:3] == ["codex", "exec", "resume"]
 
 
 def test_request_resume_status_endpoint_returns_persisted_result(tmp_path: Path) -> None:

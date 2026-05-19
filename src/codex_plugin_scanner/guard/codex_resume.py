@@ -138,7 +138,7 @@ def defer_request_resume_to_live_hook(
         resolution_action=action,
         strategy=str(resume.get("strategy")) if isinstance(resume.get("strategy"), str) else None,
         supported=bool(resume.get("supported")) if resume.get("supported") is not None else None,
-        status="in_progress",
+        status="pending",
         reason="live_hook_waiting",
         message=message,
         last_error=None,

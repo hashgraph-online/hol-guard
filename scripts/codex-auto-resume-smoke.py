@@ -4,12 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import errno
 import json
 import os
-import pty
-import re
-import select
 import shutil
 import subprocess
 import sys
@@ -27,11 +23,8 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from codex_plugin_scanner.guard.store import GuardStore  # noqa: E402
-
 ALLOW_SENTINEL = "HOL_GUARD_ALLOW_PROOF_PRESENT"
 PROOF_FILE_NAME = "guard-proof.txt"
-_APPROVAL_URL_PATTERN = re.compile(r"http://127\.0\.0\.1:(?P<port>\d+)/approvals/(?P<request_id>[0-9a-f]+)")
 
 
 @dataclass
@@ -121,7 +114,6 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
     guard_home = home_dir
     stdout_path = temp_dir / f"{decision}-codex.stdout.jsonl"
     stderr_path = temp_dir / f"{decision}-codex.stderr.txt"
-    message_path = temp_dir / f"{decision}-last-message.txt"
     proof_path = workspace_dir / PROOF_FILE_NAME
 
     _write_text(home_dir / ".codex" / "config.toml", 'model = "gpt-5"\n')
@@ -180,12 +172,12 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
         daemon.stop()
 
     transcript = initial_transcript
-    final_message = message_path.read_text(encoding="utf-8").strip() if message_path.is_file() else ""
     proof_created = _wait_for_proof_state(proof_path=proof_path, should_exist=decision == "allow", timeout_seconds=20.0)
     stderr_text = stderr_path.read_text(encoding="utf-8")
+    resume_message = str(resume_payload.get("message") or "")
     _assert_expected_outcome(
         decision=decision,
-        final_message=str(resume_payload.get("message") or final_message),
+        final_message=resume_message,
         approval_payload=approval_payload,
         proof_created=proof_created,
         stderr_text=stderr_text,
@@ -197,58 +189,9 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
         resume_status=str(resume_payload["status"]),
         resume_strategy=_optional_string(resume_payload.get("strategy")),
         proof_created=proof_created,
-        assistant_message=str(resume_payload.get("message") or final_message),
+        assistant_message=resume_message,
         transcript_excerpt=_sanitize_excerpt(transcript),
     )
-
-
-def _start_codex_exec(
-    *,
-    decision: str,
-    home_dir: Path,
-    workspace_dir: Path,
-    message_path: Path,
-    codex_home: str | None,
-    guard_daemon_port: int,
-    prompt_marker: str,
-) -> tuple[subprocess.Popen[bytes], int]:
-    prompt = _codex_prompt(decision, prompt_marker=prompt_marker)
-    command = [
-        "codex",
-        "exec",
-        "--json",
-        "--skip-git-repo-check",
-        "--dangerously-bypass-approvals-and-sandbox",
-        "--dangerously-bypass-hook-trust",
-        "--enable",
-        "hooks",
-        "-c",
-        f'projects."{workspace_dir.resolve()}".trust_level="trusted"',
-        "--output-last-message",
-        str(message_path),
-        prompt,
-    ]
-    master_fd, slave_fd = pty.openpty()
-    try:
-        process = subprocess.Popen(
-            command,
-            cwd=workspace_dir.resolve(),
-            env=_scenario_env(
-                home_dir=home_dir,
-                codex_home=codex_home,
-                guard_daemon_port=guard_daemon_port,
-            ),
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            close_fds=True,
-        )
-        return process, master_fd
-    except Exception:
-        os.close(master_fd)
-        raise
-    finally:
-        os.close(slave_fd)
 
 
 def _start_headless_codex_thread(
@@ -329,82 +272,6 @@ def _run_guard_cli(argv: list[str], *, home_dir: Path, codex_home: str | None) -
         raise RuntimeError(f"guard CLI returned non-JSON output:\n{stdout}") from error
 
 
-def _wait_for_pending_request(
-    *,
-    guard_home: Path,
-    process: subprocess.Popen[bytes],
-    master_fd: int,
-    transcript_chunks: list[str],
-    timeout_seconds: float,
-) -> dict[str, object]:
-    store = GuardStore(guard_home)
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        _drain_pty(master_fd=master_fd, transcript_chunks=transcript_chunks, block=False)
-        if process.poll() is not None:
-            raise RuntimeError(
-                f"codex exec exited before Guard queued a pending request\nstdout:\n{''.join(transcript_chunks)}\n"
-            )
-        pending = store.list_approval_requests(status="pending", limit=10)
-        if pending:
-            return pending[0]
-        time.sleep(0.5)
-    raise TimeoutError(f"Codex did not queue a pending Guard request within {timeout_seconds:.1f}s")
-
-
-def _wait_for_process_exit(
-    *,
-    process: subprocess.Popen[bytes],
-    master_fd: int,
-    transcript_chunks: list[str],
-    timeout_seconds: float,
-) -> None:
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        _drain_pty(master_fd=master_fd, transcript_chunks=transcript_chunks, block=False)
-        if process.poll() is not None:
-            return
-        time.sleep(0.2)
-    raise TimeoutError(f"codex exec did not finish within {timeout_seconds:.1f}s")
-
-
-def _drain_pty(*, master_fd: int, transcript_chunks: list[str], block: bool) -> None:
-    timeout = 0.2 if block else 0.0
-    while True:
-        ready, _, _ = select.select([master_fd], [], [], timeout)
-        if not ready:
-            return
-        try:
-            data = os.read(master_fd, 4096)
-        except OSError as error:
-            if error.errno == errno.EIO:
-                return
-            raise
-        if not data:
-            return
-        transcript_chunks.append(data.decode("utf-8", errors="ignore"))
-        timeout = 0.0
-
-
-def _request_from_transcript(transcript: str) -> dict[str, object] | None:
-    match = None
-    for candidate in _APPROVAL_URL_PATTERN.finditer(transcript):
-        match = candidate
-    if match is None:
-        return None
-    return {
-        "request_id": match.group("request_id"),
-        "approval_port": int(match.group("port")),
-    }
-
-
-def _approval_port_from_transcript(transcript: str) -> int | None:
-    request = _request_from_transcript(transcript)
-    if request is None:
-        return None
-    return int(request["approval_port"])
-
-
 def _post_json(
     *,
     port: int,
@@ -421,43 +288,6 @@ def _post_json(
     )
     with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
         return json.loads(response.read().decode("utf-8"))
-
-
-def _get_json(*, port: int, token: str, path: str, timeout_seconds: float = 10.0) -> dict[str, object]:
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{port}{path}",
-        headers={"X-Guard-Token": token},
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        body = error.read().decode("utf-8")
-        raise RuntimeError(f"resume status request failed: {error.code} {body}") from error
-
-
-def _daemon_auth_token(guard_home: Path) -> str | None:
-    try:
-        token = (guard_home / "daemon-auth-token").read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    return token or None
-
-
-def _codex_prompt(decision: str, *, prompt_marker: str) -> str:
-    command = _proof_command()
-    if decision == "allow":
-        return (
-            f"Run this exact shell command now for HOL Guard smoke marker `{prompt_marker}`:\n"
-            f"{command}\n"
-            f"After the command succeeds, respond with ONLY {ALLOW_SENTINEL}."
-        )
-    return (
-        f"Run this exact shell command now for HOL Guard smoke marker `{prompt_marker}`:\n"
-        f"{command}\n"
-        "If HOL Guard blocks the command, do not retry it. Explain one safe alternative in one short sentence."
-    )
 
 
 def _assert_expected_outcome(
