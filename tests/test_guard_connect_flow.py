@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.cli.connect_flow import (
 )
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.client import GuardDaemonTransportError
-from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.models import GuardReceipt, PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -974,3 +974,150 @@ def test_guard_connect_registers_runtime_session_before_first_sync(
     guard_event = observed_requests[2][1]["events"][0]
     assert guard_event["eventType"] == "runtime.session"
     assert guard_event["payload"]["sessionId"] == runtime_session["sessionId"]
+
+
+def test_guard_connect_batches_receipts_for_first_sync(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    observed_requests: list[tuple[str, dict[str, object]]] = []
+
+    class SyncHandler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+            observed_requests.append((self.path, payload))
+            if self.path == "/api/guard/runtime/sessions/sync":
+                response = {
+                    "generatedAt": "2026-04-16T00:00:02.000Z",
+                    "items": [payload["session"]],
+                }
+                status = 200
+            elif self.path == "/api/guard/receipts/sync":
+                receipt_count = len(payload.get("receipts", []))
+                if receipt_count > 50:
+                    response = {"error": "Invalid Guard receipt sync payload."}
+                    status = 400
+                else:
+                    response = {
+                        "syncedAt": "2026-04-16T00:00:03.000Z",
+                        "receiptsStored": receipt_count,
+                        "advisories": [],
+                        "policy": {},
+                        "alertPreferences": {},
+                        "teamPolicyPack": {},
+                        "exceptions": [],
+                    }
+                    status = 200
+            elif self.path == "/api/v1/guard/events":
+                response = {
+                    "accepted": len(payload.get("events", [])),
+                    "rejected": 0,
+                    "statuses": [
+                        {
+                            "eventId": event["eventId"],
+                            "status": "accepted",
+                        }
+                        for event in payload.get("events", [])
+                    ],
+                }
+                status = 200
+            else:
+                self.send_response(404)
+                self.end_headers()
+                return
+            body = json.dumps(response).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, message_format: str, *args: object) -> None:
+            return
+
+    sync_server = ThreadingHTTPServer(("127.0.0.1", 0), SyncHandler)
+    sync_thread = threading.Thread(target=sync_server.serve_forever, daemon=True)
+    sync_thread.start()
+
+    store = GuardStore(home_dir)
+    for index in range(51):
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-{index}",
+                timestamp="2026-04-16T00:00:00+00:00",
+                harness="codex",
+                artifact_id=f"artifact-{index}",
+                artifact_hash=f"sha256:{index:064x}",
+                policy_decision="review",
+                capabilities_summary="requests file write",
+                changed_capabilities=("fs_write",),
+                provenance_summary="local codex workspace",
+                artifact_name=f"artifact-{index}",
+                source_scope="workspace",
+            )
+        )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.ensure_guard_daemon",
+        lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+    )
+
+    def open_browser(url: str) -> bool:
+        parsed = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(parsed.query)
+        fragment = urllib.parse.parse_qs(parsed.fragment)
+        request_id = query["guardPairRequest"][-1]
+        daemon_url = query["guardDaemon"][-1]
+        pairing_secret = fragment["guardPairSecret"][-1]
+
+        def complete_pairing() -> None:
+            request = urllib.request.Request(
+                f"{daemon_url}/v1/connect/complete",
+                data=urllib.parse.urlencode(
+                    {
+                        "request_id": request_id,
+                        "pairing_secret": pairing_secret,
+                        "token": "session-token-123",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Origin": f"http://127.0.0.1:{sync_server.server_port}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5):
+                pass
+
+        threading.Thread(target=complete_pairing, daemon=True).start()
+        return True
+
+    try:
+        payload = run_guard_connect_command(
+            guard_home=home_dir,
+            store=store,
+            sync_url=f"http://127.0.0.1:{sync_server.server_port}/api/guard/receipts/sync",
+            connect_url=f"http://127.0.0.1:{sync_server.server_port}/guard/connect",
+            opener=open_browser,
+            wait_timeout_seconds=5,
+        )
+    finally:
+        daemon.stop()
+        sync_server.shutdown()
+        sync_server.server_close()
+
+    receipt_batches = [
+        len(request_payload.get("receipts", []))
+        for path, request_payload in observed_requests
+        if path == "/api/guard/receipts/sync"
+    ]
+    assert payload["connected"] is True
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_succeeded"
+    assert receipt_batches == [50, 1]
