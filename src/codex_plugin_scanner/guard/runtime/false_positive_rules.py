@@ -22,7 +22,20 @@ _SOURCE_SEARCH_TOOLS = frozenset(
 
 _READ_ONLY_INLINE_TOOLS = frozenset({"jq", "yq", "awk", "sed"})
 SOURCE_INSPECTION_PARTS = frozenset(
-    {"__tests__", "app", "dashboard", "docs", "lib", "packages", "scripts", "src", "test", "tests", "workers"}
+    {
+        "__tests__",
+        "app",
+        "constants",
+        "dashboard",
+        "docs",
+        "lib",
+        "packages",
+        "scripts",
+        "src",
+        "test",
+        "tests",
+        "workers",
+    }
 )
 SOURCE_INSPECTION_EXTENSIONS = frozenset(
     {
