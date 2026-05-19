@@ -126,6 +126,8 @@ _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = (
     "--junit-xml",
     "-p",
 )
+_PYTEST_UNSAFE_ENV_KEYS = frozenset({"PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE"})
+_SHELL_STARTUP_ENV_KEYS = frozenset({"BASH_ENV", "ENV", "ZDOTDIR"})
 _MAX_PYTEST_CONFIG_FILE_BYTES = 1_000_000
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
@@ -5353,10 +5355,11 @@ def _contains_pytest_env_shell_script_wrapper(parts: list[str]) -> bool:
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS or command_index is None:
             continue
-        if not any(
+        has_unsafe_env = any(
             _shell_segment_sets_env_key(segment, command_index, env_key)
-            for env_key in ("BASH_ENV", "ENV", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH", "ZDOTDIR")
-        ):
+            for env_key in _PYTEST_UNSAFE_ENV_KEYS | _SHELL_STARTUP_ENV_KEYS
+        )
+        if not has_unsafe_env:
             continue
         index = command_index + 1
         while index < len(segment):
@@ -5472,11 +5475,7 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
             return False
         segment_args = segment[command_index + 1 :]
         if _is_python_interpreter_command(command_name):
-            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
-                return False
-            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_PLUGINS"):
-                return False
-            if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
+            if any(_shell_segment_sets_env_key(segment, command_index, env_key) for env_key in _PYTEST_UNSAFE_ENV_KEYS):
                 return False
             if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
                 return False
@@ -5554,7 +5553,7 @@ def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
         if command_name == "export":
             for token in segment[command_index + 1 :]:
                 env_key = _shell_declared_env_key(token)
-                if env_key not in {"PATH", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH"}:
+                if env_key not in {"PATH", *_PYTEST_UNSAFE_ENV_KEYS}:
                     continue
                 exported_pytest_env_keys.add(env_key)
                 if "=" in token:
@@ -5564,7 +5563,7 @@ def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
                 if token.startswith("-") or token == "--":
                     continue
                 env_key = _shell_declared_env_key(token)
-                if env_key not in {"PATH", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH"}:
+                if env_key not in {"PATH", *_PYTEST_UNSAFE_ENV_KEYS}:
                     continue
                 exported_pytest_env_keys.add(env_key)
                 if "=" in token:
@@ -5646,11 +5645,7 @@ def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
         if command_name == "pytest":
             if _shell_segment_sets_env_key(segment, command_index, "PATH"):
                 return False
-            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
-                return False
-            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_PLUGINS"):
-                return False
-            if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
+            if any(_shell_segment_sets_env_key(segment, command_index, env_key) for env_key in _PYTEST_UNSAFE_ENV_KEYS):
                 return False
             if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
                 return False
@@ -5678,11 +5673,7 @@ def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
             continue
         if _shell_segment_sets_env_key(segment, command_index, "PATH"):
             return True
-        if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
-            return True
-        if _shell_segment_sets_env_key(segment, command_index, "PYTEST_PLUGINS"):
-            return True
-        if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
+        if any(_shell_segment_sets_env_key(segment, command_index, env_key) for env_key in _PYTEST_UNSAFE_ENV_KEYS):
             return True
         if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
             return True

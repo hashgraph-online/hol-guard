@@ -12195,6 +12195,24 @@ def test_guard_runtime_blocks_pythonpath_pytest_module_override(tmp_path):
     assert match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_pythonuserbase_pytest_module_override(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTHONUSERBASE=./ub python3 -m pytest -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTHONUSERBASE=./ub pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_pytest_plugin_env_override(tmp_path):
     module_match = extract_sensitive_tool_action_request(
         "Bash",
