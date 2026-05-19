@@ -14286,25 +14286,29 @@ function isCodexHarness(harness) {
 }
 function buildCodexResumeUx(resume) {
   if (resume.status === "pending" || resume.status === "in_progress") {
-    return { headline: "Resuming Codex...", body: null, showRetry: false };
+    return {
+      headline: "Codex is continuing.",
+      body: resume.message ?? "HOL Guard saved your choice and the original Codex action is still waiting for it.",
+      showRetry: false
+    };
   }
   if (resume.status === "sent" || resume.status === "already_sent") {
     return {
-      headline: "Codex resumed.",
-      body: "Watch the chat for the next HOL Guard message.",
+      headline: "Codex chat notified.",
+      body: resume.message ?? "HOL Guard sent Codex a continuation message in the original chat.",
       showRetry: false
     };
   }
   if (resume.status === "failed") {
     return {
-      headline: "Guard could not resume the Codex session.",
-      body: resume.last_error ?? resume.reason ?? "Resume attempt failed.",
+      headline: "Guard could not message the Codex chat.",
+      body: resume.message ?? resume.last_error ?? resume.reason ?? "Continuation message failed.",
       showRetry: true
     };
   }
   return {
-    headline: "Guard could not locate the Codex session.",
-    body: "Return to your terminal and continue manually.",
+    headline: "Guard could not locate the Codex chat.",
+    body: resume.message ?? "Return to Codex and retry the same request.",
     showRetry: false
   };
 }

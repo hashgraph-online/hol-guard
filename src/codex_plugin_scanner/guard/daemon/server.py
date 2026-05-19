@@ -1510,7 +1510,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "Decision saved. HOL Guard sent Codex a continue prompt in the original thread."
             )
             copy = {
-                "title": "Decision saved. Codex is continuing.",
+                "title": "Decision saved. Codex chat was notified.",
                 "body": message,
             }
         elif status in {"pending", "in_progress"}:
@@ -1520,9 +1520,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "body": message or "Return to Codex; the original action should continue automatically.",
             }
         elif status == "already_sent":
-            updated["resolution_summary"] = "Decision saved. Codex was already resumed for this request."
+            updated["resolution_summary"] = "Decision saved. Codex was already notified for this request."
             copy = {
-                "title": "Decision saved. Codex already resumed.",
+                "title": "Decision saved. Codex already notified.",
                 "body": message,
             }
         else:
@@ -1531,7 +1531,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "title": (
                     "Decision saved. Return to Codex."
                     if status == "skipped"
-                    else "Decision saved. Codex could not be resumed."
+                    else "Decision saved. Codex chat could not be notified."
                 ),
                 "body": message or copy["body"],
             }
