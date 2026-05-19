@@ -14970,7 +14970,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
                         "reason": "Batch two advisory",
                     }
                 ],
-                "policy": {"mode": "enforce"},
+                "policy": {},
                 "alertPreferences": {"advisoriesEnabled": True},
                 "teamPolicyPack": {
                     "name": "Team policy",
@@ -15021,6 +15021,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     assert payload["advisories_stored"] == 2
     assert payload["exceptions_stored"] == 2
     assert payload["remote_policies_stored"] == 6
+    assert store.get_sync_payload("policy") == {"mode": "enforce"}
     assert {item["artifactId"] for item in store.list_cached_advisories(limit=None)} == {"artifact-a", "artifact-b"}
     assert {item["artifact_id"] for item in store.list_policy_decisions() if item["artifact_id"]} >= {
         "allowed-one",
