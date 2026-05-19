@@ -12274,6 +12274,33 @@ def test_guard_runtime_blocks_selected_test_root_pytest_config_addopts(tmp_path)
     assert binary_match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_multiline_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "pytest.ini", "[pytest]\naddopts =\n  --basetemp /tmp/guard-pytest\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_checks_absolute_selected_test_root_pytest_config_addopts(tmp_path):
+    test_root = tmp_path / "sub"
+    _write_text(test_root / "pytest.ini", "[pytest]\naddopts = -p evil\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f"python3 -m pytest {test_root} -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",

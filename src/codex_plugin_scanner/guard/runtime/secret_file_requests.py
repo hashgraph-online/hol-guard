@@ -5691,23 +5691,36 @@ def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
 def _pytest_config_may_add_unsafe_options(cwd: Path | None, module_args: list[str]) -> bool:
     if cwd is None:
         return True
-    for config_dir in _pytest_config_search_dirs(cwd, module_args):
+    config_dirs = _pytest_config_search_dirs(cwd, module_args)
+    if config_dirs is None:
+        return True
+    for config_dir in config_dirs:
         for config_path in _PYTEST_OPTION_CONFIG_PATHS:
             if _pytest_config_file_has_unsafe_addopts(config_dir, config_path):
                 return True
     return False
 
 
-def _pytest_config_search_dirs(cwd: Path, module_args: list[str]) -> tuple[Path, ...]:
-    config_dirs: list[Path] = [cwd]
+def _pytest_config_search_dirs(cwd: Path, module_args: list[str]) -> tuple[Path, ...] | None:
+    cwd_root = cwd.resolve(strict=False)
+    config_dirs: list[Path] = [cwd_root]
     for module_arg in _pytest_positional_args(module_args):
         path_text = module_arg.split("::", 1)[0]
         if not path_text:
             continue
         path = Path(path_text)
-        if path.is_absolute() or ".." in path.parts:
-            return (cwd,)
-        root = cwd / (path if path.suffix == "" else path.parent)
+        if ".." in path.parts:
+            return None
+        if path.is_absolute():
+            root = path.resolve(strict=False)
+            try:
+                root.relative_to(cwd_root)
+            except ValueError:
+                return None
+        else:
+            root = cwd_root / path
+        if path.suffix != "":
+            root = root.parent
         if root not in config_dirs:
             config_dirs.append(root)
     return tuple(config_dirs)
@@ -5748,12 +5761,27 @@ def _pytest_config_file_has_unsafe_addopts(config_dir: Path, config_path: str) -
         config_text = path.read_text(encoding="utf-8", errors="ignore").lower()
         if "addopts" not in config_text:
             return False
-        return any(
-            "addopts" in line and any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS)
-            for line in config_text.splitlines()
-        )
+        return _pytest_config_text_has_unsafe_addopts(config_text)
     except OSError:
         return True
+
+
+def _pytest_config_text_has_unsafe_addopts(config_text: str) -> bool:
+    in_addopts = False
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if "addopts" in line:
+            in_addopts = True
+            if any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
+                return True
+            continue
+        if in_addopts and (line.startswith("[") or re.match(r"^[a-z0-9_.-]+\s*=", line)):
+            in_addopts = False
+        if in_addopts and any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
+            return True
+    return False
 
 
 def _pytest_module_args_are_safe(module_args: list[str]) -> bool:
