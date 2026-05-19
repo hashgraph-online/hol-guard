@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import re
 import shutil
 import subprocess
 from collections.abc import Mapping
-from pathlib import Path
 
-from .codex_app_server import build_codex_continuation_prompt, resume_codex_thread_for_request
+from .codex_app_server import resume_codex_thread_for_request
 from .store import GuardStore
 
 _THREAD_ID_KEYS = (
@@ -21,11 +18,6 @@ _THREAD_ID_KEYS = (
     "session_id",
     "sessionId",
 )
-_SOCKET_KEYS = ("codex_app_server_socket", "app_server_socket", "appServerSocket")
-_CODEX_HOME_KEYS = ("codex_home", "codexHome")
-_COMMAND_TEXT_KEYS = ("command_text", "commandText")
-_CODEX_EXEC_RESUME_TIMEOUT_SECONDS = 120.0
-_SAFE_CODEX_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 def seed_request_resume_record(store: GuardStore, *, request_id: str, now: str) -> dict[str, object] | None:
@@ -79,7 +71,7 @@ def retry_request_resume(
         return {
             **resume,
             "status": "already_sent",
-            "message": "Codex was already resumed for this request.",
+            "message": "HOL Guard already sent Codex a continuation message for this request.",
         }
     if str(resume.get("status")) == "in_progress":
         return resume
@@ -91,7 +83,7 @@ def retry_request_resume(
         supported=bool(resume.get("supported")) if resume.get("supported") is not None else None,
         status="in_progress",
         reason="attempting_resume",
-        message="Resuming Codex...",
+        message="Sending Codex a continuation message...",
         last_error=None,
         attempt_count=attempt_count,
         last_attempt_at=now,
@@ -152,7 +144,9 @@ def defer_request_resume_to_live_hook(
 
 def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
     binary_path = shutil.which("codex")
-    app_server_support = _command_available(["codex", "app-server", "--help"]) if binary_path else False
+    app_server_support = (
+        _command_available(["codex", "debug", "app-server", "send-message-v2", "--help"]) if binary_path else False
+    )
     remote_control_support = _command_available(["codex", "remote-control", "--help"]) if binary_path else False
     headless_resume_support = _command_available(["codex", "exec", "resume", "--help"]) if binary_path else False
     latest_attempt = store.get_latest_request_resume(harness="codex")
@@ -242,19 +236,17 @@ def _dispatch_resume_attempt(
 ) -> dict[str, object] | None:
     if thread_id is None:
         return None
-    if strategy == "codex-exec-resume":
-        return _resume_codex_exec_session(store=store, request_id=request_id, action=action, thread_id=thread_id)
 
     app_server_result = resume_codex_thread_for_request(store=store, request_id=request_id, action=action)
     if app_server_result is None:
-        return _resume_codex_exec_session(store=store, request_id=request_id, action=action, thread_id=thread_id)
-    if str(app_server_result.get("status") or "") == "sent":
-        return app_server_result
-
-    exec_result = _resume_codex_exec_session(store=store, request_id=request_id, action=action, thread_id=thread_id)
-    if exec_result is not None and str(exec_result.get("status") or "") == "sent":
-        return exec_result
-    return exec_result or app_server_result
+        return {
+            "status": "skipped",
+            "reason": "session_not_found",
+            "thread_id": thread_id,
+            "strategy": strategy,
+            "supported": False,
+        }
+    return app_server_result
 
 
 def _normalize_dispatch_result(
@@ -285,7 +277,7 @@ def _normalize_dispatch_result(
         return {
             "status": "sent",
             "reason": raw_reason,
-            "message": "Codex resumed. Watch the chat for the next HOL Guard message.",
+            "message": "HOL Guard sent Codex a continuation message in the original chat.",
             "last_error": None,
             "thread_id": raw_thread_id,
             "strategy": effective_strategy,
@@ -314,171 +306,27 @@ def _normalize_dispatch_result(
     }
 
 
-def _resume_codex_exec_session(
-    *,
-    store: GuardStore,
-    request_id: str,
-    action: str,
-    thread_id: str,
-) -> dict[str, object]:
-    operation = store.get_guard_operation_for_approval_request(request_id)
-    metadata = operation.get("metadata") if isinstance(operation, dict) else None
-    session_id = (
-        str(operation["session_id"])
-        if isinstance(operation, dict) and operation.get("session_id") is not None
-        else None
-    )
-    session = store.get_guard_session(session_id) if session_id is not None else None
-    workspace = (
-        str(session["workspace"]) if isinstance(session, dict) and session.get("workspace") is not None else None
-    )
-    if not _is_safe_codex_session_id(thread_id):
-        return {
-            "status": "failed",
-            "reason": "unsafe_thread_id",
-            "message": "Codex session metadata was not safe to resume automatically.",
-            "last_error": "unsafe Codex session id",
-            "thread_id": thread_id,
-            "strategy": "codex-exec-resume",
-            "supported": True,
-        }
-    if shutil.which("codex") is None:
-        return {
-            "status": "failed",
-            "reason": "codex_not_found",
-            "message": "The codex binary is not available for automatic resume.",
-            "last_error": "codex binary not found",
-            "thread_id": thread_id,
-            "strategy": "codex-exec-resume",
-            "supported": True,
-        }
-    command_text = _first_string(metadata, _COMMAND_TEXT_KEYS) if isinstance(metadata, Mapping) else None
-    if command_text is not None and not _is_safe_resume_prompt_text(command_text):
-        command_text = None
-    prompt = build_codex_continuation_prompt(
-        action,
-        request_id=request_id,
-        command_text=command_text,
-    )
-    command = [
-        "codex",
-        "exec",
-        "resume",
-        "--json",
-        "--dangerously-bypass-approvals-and-sandbox",
-        "--dangerously-bypass-hook-trust",
-        "--ignore-user-config",
-        "--skip-git-repo-check",
-        thread_id,
-        "-",
-    ]
-    env = os.environ.copy()
-    codex_home = _first_string(metadata, _CODEX_HOME_KEYS) if isinstance(metadata, Mapping) else None
-    if codex_home is not None and _is_safe_local_directory(codex_home):
-        env["CODEX_HOME"] = codex_home
-    cwd = workspace if workspace is not None and _is_safe_local_directory(workspace) else None
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            check=False,
-            cwd=cwd,
-            env=env,
-            input=prompt,
-            text=True,
-            timeout=_CODEX_EXEC_RESUME_TIMEOUT_SECONDS,
-        )
-    except FileNotFoundError:
-        return {
-            "status": "failed",
-            "reason": "codex_not_found",
-            "message": "The codex binary is not available for automatic resume.",
-            "last_error": "codex binary not found",
-            "thread_id": thread_id,
-            "strategy": "codex-exec-resume",
-            "supported": True,
-        }
-    except OSError as error:
-        return {
-            "status": "failed",
-            "reason": "exec_resume_launch_failed",
-            "message": "Guard could not start Codex for automatic resume.",
-            "last_error": str(error),
-            "thread_id": thread_id,
-            "strategy": "codex-exec-resume",
-            "supported": True,
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "failed",
-            "reason": "exec_resume_timeout",
-            "message": "Codex did not finish the automatic resume prompt in time.",
-            "last_error": "timed out waiting for codex exec resume",
-            "thread_id": thread_id,
-            "strategy": "codex-exec-resume",
-            "supported": True,
-        }
-    if result.returncode == 0:
-        return {
-            "status": "sent",
-            "reason": "exec_resume_sent",
-            "thread_id": thread_id,
-            "strategy": "codex-exec-resume",
-            "supported": True,
-        }
-    failure_output = (result.stderr or result.stdout or "").strip()
-    return {
-        "status": "failed",
-        "reason": "exec_resume_failed",
-        "message": "Codex rejected the automatic resume prompt.",
-        "last_error": failure_output or "codex exec resume exited with a non-zero status",
-        "thread_id": thread_id,
-        "strategy": "codex-exec-resume",
-        "supported": True,
-    }
-
-
-def _is_safe_codex_session_id(value: str) -> bool:
-    return bool(_SAFE_CODEX_SESSION_ID_PATTERN.fullmatch(value))
-
-
-def _is_safe_resume_prompt_text(value: str) -> bool:
-    if "\x00" in value or len(value) > 4000:
-        return False
-    return all(character in "\n\r\t" or 32 <= ord(character) <= 126 for character in value)
-
-
-def _is_safe_local_directory(raw_path: str) -> bool:
-    if "\x00" in raw_path or not raw_path.strip():
-        return False
-    try:
-        path = Path(raw_path).expanduser().resolve(strict=False)
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return path.is_dir()
-
-
 def _manual_resume_message(action: str) -> str:
     if action == "block":
         return (
-            "Decision saved. HOL Guard could not find the Codex session to resume. "
+            "Decision saved. HOL Guard could not find the original Codex chat to message. "
             "Do not retry that action in Codex. Ask for a safe alternative instead."
         )
     return (
-        "Decision saved. HOL Guard could not find the Codex session to resume. "
-        "Retry the same request in Codex; it should pass because this approval is now saved."
+        "Decision saved. HOL Guard could not find the original Codex chat to message. "
+        "Return to Codex and retry the same request; this approval is now saved."
     )
 
 
 def _failed_resume_message(action: str) -> str:
     if action == "block":
         return (
-            "Decision saved. HOL Guard could not resume Codex automatically. "
+            "Decision saved. HOL Guard could not send Codex a continuation message in the original chat. "
             "Do not retry that action in Codex. Ask for a safe alternative instead."
         )
     return (
-        "Decision saved. HOL Guard could not resume Codex automatically. "
-        "Retry the same request in Codex; it should pass because this approval is now saved."
+        "Decision saved. HOL Guard could not send Codex a continuation message in the original chat. "
+        "Return to Codex and retry the same request; this approval is now saved."
     )
 
 

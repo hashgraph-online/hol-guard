@@ -162,7 +162,7 @@ def test_guard_doctor_codex_handles_launch_oserror(
     assert output["codex_resume"]["headless_resume_support"] is False
 
 
-def test_guard_approvals_resume_rejects_unsafe_thread_id(
+def test_guard_approvals_resume_reports_missing_same_thread_channel(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -192,31 +192,18 @@ def test_guard_approvals_resume_rejects_unsafe_thread_id(
 
     assert rc == 0
     assert output["status"] == "failed"
-    assert output["reason"] == "unsafe_thread_id"
+    assert output["reason"] == "socket_not_available"
+    assert output["strategy"] == "codex-app-server-thread"
+    assert "original chat" in output["message"]
 
 
-def test_guard_approvals_resume_falls_back_to_exec_resume_when_app_server_unavailable(
+def test_guard_approvals_resume_does_not_start_headless_codex_when_app_server_unavailable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    recorded: dict[str, object] = {}
-    _stub_codex_binary(monkeypatch)
-
     def _fake_run(command, **kwargs):
-        recorded["command"] = command
-        recorded["cwd"] = kwargs.get("cwd")
-        recorded["env"] = kwargs.get("env")
-        recorded["input"] = kwargs.get("input")
-        return type(
-            "CompletedProcess",
-            (),
-            {
-                "returncode": 0,
-                "stdout": '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}\n',
-                "stderr": "",
-            },
-        )()
+        raise AssertionError("same-thread resume must not start a separate headless Codex run")
 
     monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
 
@@ -244,12 +231,7 @@ def test_guard_approvals_resume_falls_back_to_exec_resume_when_app_server_unavai
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["status"] == "sent"
-    assert output["strategy"] == "codex-exec-resume"
-    assert recorded["command"][:3] == ["codex", "exec", "resume"]
-    assert "--dangerously-bypass-approvals-and-sandbox" in recorded["command"]
-    assert "thread-1" in recorded["command"]
-    assert recorded["command"][-1] == "-"
-    assert isinstance(recorded["input"], str)
-    assert "approved request `req-cli-exec`" in recorded["input"]
-    assert recorded["cwd"] == str(workspace)
+    assert output["status"] == "failed"
+    assert output["reason"] == "socket_not_available"
+    assert output["strategy"] == "codex-app-server-thread"
+    assert "retry the same request" in output["message"]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real headless Codex browser-approval auto-resume smoke test."""
+"""Codex app-server browser-approval continuation smoke test."""
 
 from __future__ import annotations
 
@@ -51,8 +51,6 @@ class SmokeScenarioResult:
 
 def main() -> int:
     args = _parse_args()
-    if shutil.which("codex") is None:
-        raise SystemExit("codex binary not found in PATH")
     allow_result = _run_scenario(decision="allow", args=args)
     block_result = _run_scenario(decision="block", args=args)
     payload = {
@@ -66,7 +64,7 @@ def main() -> int:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the real Codex browser-approval auto-resume smoke flow.")
+    parser = argparse.ArgumentParser(description="Run the Codex same-thread browser-approval continuation smoke flow.")
     parser.add_argument(
         "--codex-home",
         help="Optional CODEX_HOME override. Leave unset to keep the current authenticated Codex home.",
@@ -106,14 +104,13 @@ def _run_scenario(*, decision: str, args: argparse.Namespace) -> SmokeScenarioRe
 
 
 def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: Path) -> SmokeScenarioResult:
+    from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
     from codex_plugin_scanner.guard.daemon import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
 
     home_dir = temp_dir / "home"
     workspace_dir = temp_dir / "workspace"
     guard_home = home_dir
-    stdout_path = temp_dir / f"{decision}-codex.stdout.jsonl"
-    stderr_path = temp_dir / f"{decision}-codex.stderr.txt"
     proof_path = workspace_dir / PROOF_FILE_NAME
 
     _write_text(home_dir / ".codex" / "config.toml", 'model = "gpt-5"\n')
@@ -138,15 +135,21 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
 
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    captured_payloads: list[dict[str, object]] = []
+    socket_path = workspace_dir / "codex-app-server.sock"
+    socket_path.write_text("", encoding="utf-8")
+
+    original_send = codex_app_server_module._send_app_server_websocket_messages
+
+    def _fake_send(**kwargs):
+        payloads = kwargs["payloads"]
+        captured_payloads.extend(payloads)
+        return {"id": 2, "result": {"turnId": "turn-smoke"}}, "turn_completed"
+
+    codex_app_server_module._send_app_server_websocket_messages = _fake_send
     daemon.start()
     try:
-        thread_id, initial_transcript = _start_headless_codex_thread(
-            workspace_dir=workspace_dir,
-            home_dir=home_dir,
-            codex_home=args.codex_home,
-            stdout_path=stdout_path,
-            stderr_path=stderr_path,
-        )
+        thread_id = f"thread-smoke-{decision}"
         request_id = uuid.uuid4().hex
         _queue_pending_request(
             store=store,
@@ -155,6 +158,7 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
             workspace_dir=workspace_dir,
             daemon_port=daemon.port,
             codex_home=args.codex_home,
+            socket_path=socket_path,
             operation_status="approval_wait_timeout",
         )
         action_path = "approve" if decision == "allow" else "block"
@@ -170,17 +174,17 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
             raise RuntimeError(f"approval response did not include codex_resume: {approval_payload}")
     finally:
         daemon.stop()
+        codex_app_server_module._send_app_server_websocket_messages = original_send
 
-    transcript = initial_transcript
-    proof_created = _wait_for_proof_state(proof_path=proof_path, should_exist=decision == "allow", timeout_seconds=20.0)
-    stderr_text = stderr_path.read_text(encoding="utf-8")
+    transcript = "\n".join(json.dumps(payload, sort_keys=True) for payload in captured_payloads)
+    proof_created = proof_path.is_file()
     resume_message = str(resume_payload.get("message") or "")
     _assert_expected_outcome(
         decision=decision,
         final_message=resume_message,
         approval_payload=approval_payload,
         proof_created=proof_created,
-        stderr_text=stderr_text,
+        transcript=transcript,
     )
 
     return SmokeScenarioResult(
@@ -296,7 +300,7 @@ def _assert_expected_outcome(
     final_message: str,
     approval_payload: dict[str, object],
     proof_created: bool,
-    stderr_text: str,
+    transcript: str,
 ) -> None:
     codex_resume = approval_payload.get("codex_resume")
     if not isinstance(codex_resume, dict):
@@ -304,16 +308,18 @@ def _assert_expected_outcome(
     status = str(codex_resume.get("status") or "")
     if status not in {"in_progress", "sent", "already_sent"}:
         raise AssertionError(f"expected codex_resume status to show live continuation, got {status!r}")
+    if "turn/start" not in transcript:
+        raise AssertionError(f"same-thread Codex app-server prompt was not sent:\n{transcript}")
     if decision == "allow":
-        if not proof_created:
-            raise AssertionError("allow flow did not create the proof file")
+        if proof_created:
+            raise AssertionError("allow smoke must not start a separate headless Codex proof run")
         if not final_message.strip():
             raise AssertionError("allow flow returned an empty resume message")
         return
     if proof_created:
         raise AssertionError("block flow unexpectedly created the proof file")
     if not final_message.strip():
-        raise AssertionError(f"block flow returned an empty message\nstderr:\n{stderr_text}")
+        raise AssertionError(f"block flow returned an empty message\ntranscript:\n{transcript}")
     normalized = final_message.lower()
     if not any(keyword in normalized for keyword in ("codex", "guard", "retry", "alternative", "blocked")):
         raise AssertionError(f"block flow did not return resume guidance: {final_message!r}")
@@ -355,6 +361,7 @@ def _queue_pending_request(
     workspace_dir: Path,
     daemon_port: int,
     codex_home: str | None,
+    socket_path: Path,
     operation_status: str = "waiting_on_approval",
 ) -> None:
     from codex_plugin_scanner.guard.consumer import artifact_hash
@@ -404,7 +411,7 @@ def _queue_pending_request(
             "codex_thread_id": thread_id,
             "session_id": thread_id,
             "codex_home": codex_home,
-            "codex_app_server_socket": str(workspace_dir / "missing-codex-app-server.sock"),
+            "codex_app_server_socket": str(socket_path),
             "command_text": _proof_command(),
             "tool_name": "Bash",
             "event": "PreToolUse",
@@ -437,7 +444,7 @@ def _queue_pending_request(
             artifact_label="Native shell action",
             source_label="Codex remembered command",
             trigger_summary=str(
-                artifact.metadata.get("request_summary") or "Queued for Codex exec resume verification."
+                artifact.metadata.get("request_summary") or "Queued for Codex same-thread continuation verification."
             ),
             why_now="This verifies browser approval auto-resume for Codex exec sessions.",
             launch_summary="Writes a proof file only after approval.",
@@ -469,6 +476,8 @@ def _write_text(path: Path, text: str) -> None:
 
 
 def _codex_version() -> str:
+    if shutil.which("codex") is None:
+        return "codex not found"
     result = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=10, check=False)
     return result.stdout.strip() or result.stderr.strip() or "unknown"
 
