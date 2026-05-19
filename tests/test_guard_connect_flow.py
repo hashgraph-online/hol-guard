@@ -86,6 +86,33 @@ def test_guard_daemon_exposes_canonical_connect_state_endpoint(tmp_path) -> None
     assert state_payload["state"]["milestone"] == "waiting_for_browser"
 
 
+def test_guard_daemon_allows_hosted_connect_complete_preflight(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        preflight_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/connect/complete",
+            headers={
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Private-Network": "true",
+                "Origin": "https://hol.org",
+            },
+            method="OPTIONS",
+        )
+        with urllib.request.urlopen(preflight_request, timeout=5) as response:
+            status = response.status
+            allow_origin = response.headers.get("Access-Control-Allow-Origin")
+            allow_private_network = response.headers.get("Access-Control-Allow-Private-Network")
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert allow_origin == "https://hol.org"
+    assert allow_private_network == "true"
+
+
 def test_guard_connect_preserves_pairing_when_first_sync_fails(
     tmp_path,
     monkeypatch,
