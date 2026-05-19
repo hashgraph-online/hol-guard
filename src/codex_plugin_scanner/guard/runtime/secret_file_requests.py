@@ -5466,7 +5466,7 @@ def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
     exported_pytest_env_keys: set[str] = set()
     for segment in _iter_shell_command_segments(parts):
         if any(
-            _shell_env_assignment_key(token) in exported_pytest_env_keys
+            _shell_env_assignment_key(token) == "PATH" or _shell_env_assignment_key(token) in exported_pytest_env_keys
             for token in segment
             if _shell_env_assignment_key(token) is not None
         ):
@@ -5839,7 +5839,7 @@ def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_pa
     dir_fd: int | None = None
     file_handle: int | None = None
     try:
-        dir_fd = os.open(cwd / config_dir, os.O_RDONLY)
+        dir_fd = os.open(cwd / config_dir, os.O_RDONLY)  # lgtm[py/path-injection]
         file_stat = os.stat(config_path, dir_fd=dir_fd)
         if not stat.S_ISREG(file_stat.st_mode):
             return False

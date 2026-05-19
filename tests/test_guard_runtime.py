@@ -12356,6 +12356,17 @@ def test_guard_runtime_blocks_split_exported_pytest_environment(tmp_path):
     assert match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_prior_path_assignment_before_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PATH=./tools:$PATH; pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
