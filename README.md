@@ -97,7 +97,7 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
   Guard can wrap the `copilot` CLI, detect `~/.copilot/config.json`, `~/.copilot/mcp-config.json`, workspace `.vscode/mcp.json`, and install Guard-managed Copilot hook wiring for documented `preToolUse` and `postToolUse` events.
   Guard does not treat a VS Code Copilot inline permission sheet by itself as proof of Guard interception; current proof should come from Guard hook responses, Guard receipts, or an MCP client that explicitly answers Guard elicitation.
 - `codex`
-  Guard asks inline in the same Codex chat when the interactive CLI or Codex App can answer MCP elicitations, and falls back to the local approval center only for `codex exec` or any other nonresponsive session.
+  Guard asks inline in the same Codex chat when the interactive CLI or Codex App can answer MCP elicitations, and falls back to the local approval center only for `codex exec` or any other nonresponsive session. When Guard has the right Codex thread binding, approving or blocking in the browser resumes the same Codex thread with HOL Guard-branded continuation copy. Live app-server sessions continue in place, and headless `codex exec` sessions resume through `codex exec resume` with the exact blocked command context. If the session cannot be identified, Guard says so plainly and tells you the manual next step instead of pretending it resumed.
 - `cursor`
   Guard respects Cursor’s native tool approval and focuses on artifact trust before launch.
 - `opencode`
