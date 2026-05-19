@@ -5355,7 +5355,7 @@ def _contains_pytest_env_shell_script_wrapper(parts: list[str]) -> bool:
             continue
         if not any(
             _shell_segment_sets_env_key(segment, command_index, env_key)
-            for env_key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH")
+            for env_key in ("BASH_ENV", "ENV", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH", "ZDOTDIR")
         ):
             continue
         index = command_index + 1

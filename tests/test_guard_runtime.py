@@ -12534,6 +12534,17 @@ def test_guard_runtime_blocks_pytest_env_shell_script_wrapper(tmp_path):
     assert sh_match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_shell_startup_env_before_wrapped_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "BASH_ENV=./evil bash -c 'pytest -q'"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_split_exported_pytest_environment(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
