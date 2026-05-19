@@ -16,12 +16,6 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _stub_codex_binary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        codex_resume_module.shutil, "which", lambda command: "/usr/bin/codex" if command == "codex" else None
-    )
-
-
 def _request(request_id: str) -> GuardApprovalRequest:
     return GuardApprovalRequest(
         request_id=request_id,
@@ -157,7 +151,7 @@ def test_codex_approve_without_resume_binding_returns_honest_manual_fallback(tmp
     assert payload["codex_resume"]["status"] == "skipped"
     assert payload["codex_resume"]["supported"] is False
     assert payload["codex_resume"]["strategy"] == "manual-only"
-    assert "could not find the Codex session to resume" in payload["resolution_summary"]
+    assert "could not find the original Codex chat" in payload["resolution_summary"]
     assert "approval is now saved" in payload["copy"]["body"]
 
 
@@ -204,15 +198,7 @@ def test_codex_block_resume_prompt_includes_request_id_and_safe_alternative(
 
 def test_codex_approve_defers_headless_resume_while_live_hook_waits(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _stub_codex_binary(monkeypatch)
-
-    def _fail_run(command, **kwargs):
-        raise AssertionError("browser approval must not launch headless Codex while the live hook is waiting")
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fail_run)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-live"), "2026-05-19T10:00:00+00:00")
     missing_socket = tmp_path / "missing-codex.sock"
@@ -242,27 +228,9 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
     assert "original Codex action continue" in payload["codex_resume"]["message"]
 
 
-def test_codex_deferred_live_hook_resume_can_recover_with_manual_retry(
+def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    recorded: dict[str, object] = {}
-    _stub_codex_binary(monkeypatch)
-
-    def _fake_run(command, **kwargs):
-        recorded["command"] = command
-        return type(
-            "CompletedProcess",
-            (),
-            {
-                "returncode": 0,
-                "stdout": '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}\n',
-                "stderr": "",
-            },
-        )()
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-live-retry"), "2026-05-19T10:00:00+00:00")
     missing_socket = tmp_path / "missing-codex.sock"
@@ -293,9 +261,10 @@ def test_codex_deferred_live_hook_resume_can_recover_with_manual_retry(
         daemon.stop()
 
     assert approved["codex_resume"]["status"] == "pending"
-    assert retried["status"] == "sent"
-    assert retried["strategy"] == "codex-exec-resume"
-    assert recorded["command"][:3] == ["codex", "exec", "resume"]
+    assert retried["status"] == "failed"
+    assert retried["reason"] == "socket_not_available"
+    assert retried["strategy"] == "codex-app-server-thread"
+    assert "original chat" in retried["message"]
 
 
 def test_request_resume_status_endpoint_returns_persisted_result(tmp_path: Path) -> None:
@@ -403,38 +372,9 @@ def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_prese
     assert "Retry that exact command now using the existing saved approval." in prompt
 
 
-def test_request_resume_retry_endpoint_can_recover_after_socket_missing(
+def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_missing(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    resume_calls = 0
-    _stub_codex_binary(monkeypatch)
-
-    def _fake_run(command, **kwargs):
-        nonlocal resume_calls
-        resume_calls += 1
-        if resume_calls == 1:
-            return type(
-                "CompletedProcess",
-                (),
-                {
-                    "returncode": 1,
-                    "stdout": "",
-                    "stderr": "session unavailable",
-                },
-            )()
-        return type(
-            "CompletedProcess",
-            (),
-            {
-                "returncode": 0,
-                "stdout": '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}\n',
-                "stderr": "",
-            },
-        )()
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-retry"), "2026-05-19T10:00:00+00:00")
     workspace = tmp_path / "workspace"
@@ -457,7 +397,7 @@ def test_request_resume_retry_endpoint_can_recover_after_socket_missing(
             "/v1/requests/req-retry/approve",
             {"scope": "artifact", "reason": "reviewed"},
         )
-        assert initial["codex_resume"]["reason"] == "exec_resume_failed"
+        assert initial["codex_resume"]["reason"] == "socket_not_available"
 
         retried = _post_json(
             daemon.port,
@@ -473,12 +413,11 @@ def test_request_resume_retry_endpoint_can_recover_after_socket_missing(
     finally:
         daemon.stop()
 
-    assert retried["status"] == "sent"
-    assert retried["strategy"] == "codex-exec-resume"
+    assert retried["status"] == "failed"
+    assert retried["strategy"] == "codex-app-server-thread"
     assert retried["attempt_count"] == 2
     assert status_code == 200
-    assert current["status"] == "sent"
-    assert resume_calls == 2
+    assert current["status"] == "failed"
 
 
 def test_request_resume_retry_is_idempotent_after_success(
@@ -527,30 +466,9 @@ def test_request_resume_retry_is_idempotent_after_success(
     assert send_calls == 1
 
 
-def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
+def test_codex_approve_does_not_fall_back_to_exec_resume_when_socket_binding_is_missing(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    recorded: dict[str, object] = {}
-    _stub_codex_binary(monkeypatch)
-
-    def _fake_run(command, **kwargs):
-        recorded["command"] = command
-        recorded["cwd"] = kwargs.get("cwd")
-        recorded["env"] = kwargs.get("env")
-        recorded["input"] = kwargs.get("input")
-        return type(
-            "CompletedProcess",
-            (),
-            {
-                "returncode": 0,
-                "stdout": '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}\n',
-                "stderr": "",
-            },
-        )()
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-exec"), "2026-05-19T10:00:00+00:00")
     missing_socket = tmp_path / "missing-codex.sock"
@@ -580,19 +498,10 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     finally:
         daemon.stop()
 
-    command = recorded["command"]
-    assert payload["codex_resume"]["status"] == "sent"
-    assert payload["codex_resume"]["strategy"] == "codex-exec-resume"
-    assert command[:3] == ["codex", "exec", "resume"]
-    assert "--dangerously-bypass-approvals-and-sandbox" in command
-    assert "session-exec-1" in command
-    assert "--dangerously-bypass-hook-trust" in command
-    assert command[-1] == "-"
-    assert recorded["cwd"] == str(workspace)
-    assert isinstance(recorded["env"], dict)
-    assert recorded["env"]["CODEX_HOME"] == str(codex_home)
-    assert isinstance(recorded["input"], str)
-    assert "approved request `req-exec`" in recorded["input"]
+    assert payload["codex_resume"]["status"] == "failed"
+    assert payload["codex_resume"]["reason"] == "socket_not_available"
+    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert "original chat" in payload["codex_resume"]["message"]
 
 
 def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
@@ -612,11 +521,7 @@ def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
             "supported": True,
         }
 
-    def _fail_run(command, **kwargs):
-        raise AssertionError("app-server resume should be attempted before headless exec")
-
     monkeypatch.setattr(codex_resume_module, "resume_codex_thread_for_request", _fake_resume)
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fail_run)
 
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-default-socket"), "2026-05-19T10:00:00+00:00")
@@ -648,17 +553,9 @@ def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
     assert send_calls == 1
 
 
-def test_codex_approve_returns_failed_resume_when_exec_launch_raises_oserror(
+def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _stub_codex_binary(monkeypatch)
-
-    def _raise_oserror(command, **kwargs):
-        raise PermissionError("exec denied")
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _raise_oserror)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-oserror"), "2026-05-19T10:00:00+00:00")
     missing_socket = tmp_path / "missing-codex.sock"
@@ -687,17 +584,14 @@ def test_codex_approve_returns_failed_resume_when_exec_launch_raises_oserror(
 
     assert payload["resolved"] is True
     assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["reason"] == "exec_resume_launch_failed"
-    assert payload["codex_resume"]["last_error"] == "exec denied"
+    assert payload["codex_resume"]["reason"] == "socket_not_available"
+    assert "socket_not_available" in payload["codex_resume"]["last_error"]
 
 
-def test_codex_approve_falls_back_to_exec_resume_after_transport_error_reason(
+def test_codex_approve_returns_app_server_failure_after_transport_error_reason(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    recorded: dict[str, object] = {}
-    _stub_codex_binary(monkeypatch)
-
     def _fake_resume(**kwargs):
         return {
             "status": "failed",
@@ -705,20 +599,7 @@ def test_codex_approve_falls_back_to_exec_resume_after_transport_error_reason(
             "thread_id": "session-transport-1",
         }
 
-    def _fake_run(command, **kwargs):
-        recorded["command"] = command
-        return type(
-            "CompletedProcess",
-            (),
-            {
-                "returncode": 0,
-                "stdout": '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}\n',
-                "stderr": "",
-            },
-        )()
-
     monkeypatch.setattr(codex_resume_module, "resume_codex_thread_for_request", _fake_resume)
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
 
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-transport"), "2026-05-19T10:00:00+00:00")
@@ -747,6 +628,6 @@ def test_codex_approve_falls_back_to_exec_resume_after_transport_error_reason(
     finally:
         daemon.stop()
 
-    assert payload["codex_resume"]["status"] == "sent"
-    assert payload["codex_resume"]["strategy"] == "codex-exec-resume"
-    assert recorded["command"][:3] == ["codex", "exec", "resume"]
+    assert payload["codex_resume"]["status"] == "failed"
+    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert payload["codex_resume"]["reason"] == "ConnectionRefusedError"
