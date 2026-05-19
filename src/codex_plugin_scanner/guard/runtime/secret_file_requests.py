@@ -5836,18 +5836,31 @@ def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
 def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_path: str) -> bool:
     if Path(config_dir).is_absolute() or ".." in Path(config_dir).parts:
         return True
-    path = cwd / config_dir / config_path
+    dir_fd: int | None = None
+    file_handle: int | None = None
     try:
-        if not path.is_file():
+        dir_fd = os.open(cwd / config_dir, os.O_RDONLY)
+        file_stat = os.stat(config_path, dir_fd=dir_fd)
+        if not stat.S_ISREG(file_stat.st_mode):
             return False
-        if path.stat().st_size > _MAX_PYTEST_CONFIG_FILE_BYTES:
+        if file_stat.st_size > _MAX_PYTEST_CONFIG_FILE_BYTES:
             return True
-        config_text = path.read_text(encoding="utf-8", errors="ignore").lower()
+        file_handle = os.open(config_path, os.O_RDONLY, dir_fd=dir_fd)
+        with os.fdopen(file_handle, encoding="utf-8", errors="ignore") as config_file:
+            file_handle = None
+            config_text = config_file.read().lower()
         if "addopts" not in config_text:
             return False
         return _pytest_config_text_has_unsafe_addopts(config_text)
+    except FileNotFoundError:
+        return False
     except OSError:
         return True
+    finally:
+        if file_handle is not None:
+            os.close(file_handle)
+        if dir_fd is not None:
+            os.close(dir_fd)
 
 
 def _pytest_config_text_has_unsafe_addopts(config_text: str) -> bool:
