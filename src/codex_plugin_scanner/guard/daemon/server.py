@@ -1562,6 +1562,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _is_hosted_dashboard_api_path(path: str, path_parts: list[str]) -> bool:
         if path in {
             "/v1/capabilities",
+            "/v1/connect/complete",
             "/v1/inventory",
             "/v1/connect/state",
             "/v1/daemon/repair",
