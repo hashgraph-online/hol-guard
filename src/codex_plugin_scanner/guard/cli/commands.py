@@ -118,6 +118,11 @@ from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
+    fd_arg_requests_exec,
+    fd_exec_token_is_plain_sed,
+    fd_search_targets,
+    split_fd_args_and_exec,
+    target_is_known_skill_doc_path,
 )
 from ..runtime.runner import (
     GuardSyncNotConfiguredError,
@@ -5287,10 +5292,11 @@ def _hook_runtime_artifact(
             config_path=str(_runtime_policy_path(harness, home_dir, workspace)),
             source_scope=_coalesce_string(payload.get("source_scope"), "project"),
             cwd=workspace,
+            home_dir=home_dir,
         )
         if output_artifact is not None:
             return output_artifact
-        if _codex_post_tool_command_is_read_only_source_inspection(payload=payload, cwd=workspace):
+        if _codex_post_tool_command_is_read_only_source_inspection(payload=payload, cwd=workspace, home_dir=home_dir):
             return None
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
@@ -5427,6 +5433,7 @@ def _codex_post_tool_output_artifact(
     config_path: str,
     source_scope: str,
     cwd: Path | None,
+    home_dir: Path | None = None,
 ) -> GuardArtifact | None:
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
@@ -5447,6 +5454,7 @@ def _codex_post_tool_output_artifact(
         response_text=response_text,
         content_matches=content_matches,
         cwd=cwd,
+        home_dir=home_dir,
     ):
         return None
     fingerprint = hashlib.sha256(
@@ -5656,9 +5664,9 @@ def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, 
             parts,
             cwd=cwd,
         )
-    return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
-        segment, cwd=cwd
-    )
+    return _codex_command_is_read_only_source_search(
+        segment, cwd=cwd, home_dir=None
+    ) or _codex_command_is_read_only_source_view(segment, cwd=cwd, home_dir=None)
 
 
 def _codex_command_parts_may_read_local_content(parts: list[str], *, cwd: Path | None) -> bool:
@@ -5694,9 +5702,9 @@ def _codex_command_sequence_is_read_only_source_inspection(parts: list[str], *, 
     if not command_parts:
         return False
     segment = shlex.join(command_parts)
-    return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
-        segment, cwd=cwd
-    )
+    return _codex_command_is_read_only_source_search(
+        segment, cwd=cwd, home_dir=None
+    ) or _codex_command_is_read_only_source_view(segment, cwd=cwd, home_dir=None)
 
 
 def _codex_command_sequence_starts_with_local_reader(parts: list[str], *, cwd: Path | None) -> bool:
@@ -5869,9 +5877,9 @@ def _codex_command_part_is_local_reader(parts: list[str], index: int, *, cwd: Pa
         return True
     if parts[index - 1] == "|":
         segment = shlex.join(parts[index:])
-        return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
-            segment, cwd=cwd
-        )
+        return _codex_command_is_read_only_source_search(
+            segment, cwd=cwd, home_dir=None
+        ) or _codex_command_is_read_only_source_view(segment, cwd=cwd, home_dir=None)
     return parts[index - 1] in {"&&", "||", ";", "&", "|&"}
 
 
@@ -5879,9 +5887,14 @@ def _codex_post_tool_command_is_read_only_source_inspection(
     *,
     payload: dict[str, object],
     cwd: Path | None,
+    home_dir: Path | None,
 ) -> bool:
     command_text = _codex_post_tool_command_text(payload)
-    return bool(command_text) and _codex_command_is_read_only_source_inspection(command_text, cwd=cwd)
+    return bool(command_text) and _codex_command_is_read_only_source_inspection(
+        command_text,
+        cwd=cwd,
+        home_dir=home_dir,
+    )
 
 
 def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
@@ -5893,7 +5906,7 @@ def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
     return ""
 
 
-_CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"rg", "grep", "egrep", "fgrep"})
+_CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"fd", "rg", "grep", "egrep", "fgrep"})
 _CODEX_READ_ONLY_VIEW_COMMANDS = frozenset({"cat", "head", "tail", "sed"})
 _CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "tail", "sed"})
 _CODEX_READ_ONLY_SEARCH_WRAPPERS = frozenset({"bash", "sh", "zsh"})
@@ -6027,8 +6040,9 @@ def _codex_source_inspection_can_skip_secret_output(
     response_text: str,
     content_matches: tuple[SecretContentMatch, ...],
     cwd: Path | None,
+    home_dir: Path | None = None,
 ) -> bool:
-    if not _codex_command_is_read_only_source_inspection(command_text, cwd=cwd):
+    if not _codex_command_is_read_only_source_inspection(command_text, cwd=cwd, home_dir=home_dir):
         return False
     if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
         return False
@@ -6103,6 +6117,8 @@ def _codex_source_inspection_target_tokens(parts: list[str]) -> tuple[str, ...]:
             return tuple(targets) if valid and not skip_next else ()
         return tuple(_codex_cat_targets(args))
     if executable in _CODEX_READ_ONLY_SEARCH_COMMANDS:
+        if executable == "fd":
+            return _codex_fd_targets(args)
         return _codex_search_targets(args, executable=executable)
     if executable == "git":
         git_grep_args = _git_grep_search_args(args)
@@ -6136,7 +6152,12 @@ def _codex_cat_targets(args: list[str]) -> list[str]:
     return targets
 
 
-def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Path | None) -> bool:
+def _codex_command_is_read_only_source_inspection(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None = None,
+) -> bool:
     command = command_text.strip()
     if not command:
         return False
@@ -6144,18 +6165,23 @@ def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Pat
         return False
     chained_segments = _split_codex_safe_read_only_chain(command)
     if chained_segments is not None:
-        return all(_codex_command_is_read_only_source_inspection(segment, cwd=cwd) for segment in chained_segments)
+        return all(
+            _codex_command_is_read_only_source_inspection(segment, cwd=cwd, home_dir=home_dir)
+            for segment in chained_segments
+        )
     segments = _split_codex_safe_read_only_pipeline(command)
     if segments is None:
-        return _codex_command_is_read_only_source_search(command, cwd=cwd) or _codex_command_is_read_only_source_view(
-            command, cwd=cwd
-        )
+        return _codex_command_is_read_only_source_search(
+            command,
+            cwd=cwd,
+            home_dir=home_dir,
+        ) or _codex_command_is_read_only_source_view(command, cwd=cwd, home_dir=home_dir)
     if not segments:
         return False
     first_segment, *filter_segments = segments
     if not (
-        _codex_command_is_read_only_source_search(first_segment, cwd=cwd)
-        or _codex_command_is_read_only_source_view(first_segment, cwd=cwd)
+        _codex_command_is_read_only_source_search(first_segment, cwd=cwd, home_dir=home_dir)
+        or _codex_command_is_read_only_source_view(first_segment, cwd=cwd, home_dir=home_dir)
     ):
         return False
     return all(_codex_command_is_bounded_read_only_filter(segment) for segment in filter_segments)
@@ -6211,22 +6237,32 @@ def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
 def _codex_command_has_unquoted_glob_metachar(command: str) -> bool:
     quote: str | None = None
     escaped = False
-    for char in command:
+    index = 0
+    while index < len(command):
+        char = command[index]
         if escaped:
             escaped = False
+            index += 1
             continue
         if char == "\\":
             escaped = True
+            index += 1
             continue
         if quote is not None:
             if char == quote:
                 quote = None
+            index += 1
             continue
         if char in {"'", '"'}:
             quote = char
+            index += 1
+            continue
+        if command.startswith("{}", index):
+            index += 2
             continue
         if char in {"*", "?", "[", "]", "{", "}"}:
             return True
+        index += 1
     return False
 
 
@@ -6359,7 +6395,12 @@ def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
     return _codex_head_tail_args_are_bounded_filter(parts[1:])
 
 
-def _codex_command_is_read_only_source_view(command_text: str, *, cwd: Path | None) -> bool:
+def _codex_command_is_read_only_source_view(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None = None,
+) -> bool:
     command = command_text.strip()
     if not command:
         return False
@@ -6375,15 +6416,20 @@ def _codex_command_is_read_only_source_view(command_text: str, *, cwd: Path | No
         return False
     executable = Path(parts[0]).name
     if executable not in _CODEX_READ_ONLY_VIEW_COMMANDS:
-        return executable == "git" and _codex_git_diff_targets_are_source_like(parts[1:], cwd=cwd)
+        return executable == "git" and _codex_git_diff_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
     if executable == "sed":
-        return _codex_sed_targets_are_read_only_source_like(parts[1:], cwd=cwd)
+        return _codex_sed_targets_are_read_only_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
     if executable in {"head", "tail"}:
-        return _codex_head_tail_targets_are_source_like(parts[1:], cwd=cwd)
-    return _codex_cat_targets_are_source_like(parts[1:], cwd=cwd)
+        return _codex_head_tail_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
+    return _codex_cat_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir)
 
 
-def _codex_command_is_read_only_source_search(command_text: str, *, cwd: Path | None) -> bool:
+def _codex_command_is_read_only_source_search(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None = None,
+) -> bool:
     command = command_text.strip()
     if not command:
         return False
@@ -6399,17 +6445,23 @@ def _codex_command_is_read_only_source_search(command_text: str, *, cwd: Path | 
         return False
     executable = Path(parts[0]).name
     if executable in _CODEX_READ_ONLY_SEARCH_COMMANDS:
+        if executable == "fd":
+            return _codex_fd_targets_are_source_like(
+                parts[1:],
+                cwd=cwd,
+                home_dir=home_dir,
+            ) and _codex_fd_exec_is_bounded_read_only(parts[1:])
         if executable == "rg" and "--no-config" not in parts and os.environ.get("RIPGREP_CONFIG_PATH"):
             return False
-        return _codex_search_targets_are_source_like(parts[1:], cwd=cwd, executable=executable)
+        return _codex_search_targets_are_source_like(parts[1:], cwd=cwd, home_dir=home_dir, executable=executable)
     git_grep_args = _git_grep_search_args(parts[1:]) if executable == "git" else None
     if git_grep_args is not None:
         if _git_grep_uses_external_execution(git_grep_args):
             return False
-        return _codex_search_targets_are_source_like(git_grep_args, cwd=cwd, executable=executable)
+        return _codex_search_targets_are_source_like(git_grep_args, cwd=cwd, home_dir=home_dir, executable=executable)
     script_index = _shell_wrapper_script_index(parts) if executable in _CODEX_READ_ONLY_SEARCH_WRAPPERS else None
     if script_index is not None and script_index < len(parts):
-        return _codex_command_is_read_only_source_search(parts[script_index], cwd=cwd)
+        return _codex_command_is_read_only_source_search(parts[script_index], cwd=cwd, home_dir=home_dir)
     return False
 
 
@@ -6417,7 +6469,7 @@ def _codex_command_uses_untrusted_search_binary(executable_token: str) -> bool:
     return executable_token.startswith(".") or "/" in executable_token or "\\" in executable_token
 
 
-def _codex_cat_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+def _codex_cat_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     targets: list[str] = []
     after_option_terminator = False
     for arg in args:
@@ -6432,7 +6484,9 @@ def _codex_cat_targets_are_source_like(args: list[str], *, cwd: Path | None) -> 
         if arg.startswith("-"):
             continue
         targets.append(arg)
-    return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+    return bool(targets) and all(
+        _codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets
+    )
 
 
 def _codex_head_tail_args_are_bounded_filter(args: list[str]) -> bool:
@@ -6440,13 +6494,13 @@ def _codex_head_tail_args_are_bounded_filter(args: list[str]) -> bool:
     return valid and not skip_next and not targets
 
 
-def _codex_head_tail_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+def _codex_head_tail_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     targets, valid, skip_next = _parse_codex_head_tail_args(args)
     return (
         valid
         and not skip_next
         and bool(targets)
-        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
     )
 
 
@@ -6484,7 +6538,7 @@ def _parse_codex_head_tail_args(args: list[str]) -> tuple[list[str], bool, bool]
     return targets, True, skip_next
 
 
-def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path | None) -> bool:
+def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     parsed = _parse_codex_sed_read_only_args(args)
     if parsed is None:
         return False
@@ -6492,7 +6546,7 @@ def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path |
         bool(parsed.targets)
         and parsed.saw_print_suppression
         and all(sed_script_is_bounded_print(script) for script in parsed.scripts)
-        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in parsed.targets)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in parsed.targets)
     )
 
 
@@ -6578,14 +6632,14 @@ def _git_grep_search_args(args: list[str]) -> list[str] | None:
     return None
 
 
-def _codex_git_diff_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+def _codex_git_diff_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     diff_args = _git_diff_args(args)
     if diff_args is None:
         return False
     targets = _git_diff_path_args(diff_args)
     return (
         bool(targets)
-        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
         and _git_diff_external_helpers_are_disabled_or_unconfigured(diff_args, cwd=cwd)
     )
 
@@ -7095,11 +7149,43 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
     return False
 
 
-def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, executable: str) -> bool:
+def _codex_search_targets_are_source_like(
+    args: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    executable: str,
+) -> bool:
     targets = _codex_search_targets(args, executable=executable)
     if not targets:
         return False
-    return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+    return bool(targets) and all(
+        _codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets
+    )
+
+
+def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
+    targets = _codex_fd_targets(args)
+    if not targets:
+        return False
+    return all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
+
+
+def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
+    return fd_search_targets(args) or ("__guard_unsafe_fd_args__",)
+
+
+def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
+    parsed = split_fd_args_and_exec(args)
+    if parsed is None:
+        return not any(fd_arg_requests_exec(arg) for arg in args)
+    _fd_args, exec_parts = parsed
+    if not exec_parts or not fd_exec_token_is_plain_sed(exec_parts[0]):
+        return False
+    if exec_parts.count("{}") != 1:
+        return False
+    sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
+    return _codex_sed_args_are_bounded_filter(sed_args)
 
 
 def _codex_search_targets(args: list[str], *, executable: str) -> tuple[str, ...]:
@@ -7163,10 +7249,12 @@ def _codex_search_arg_is_unsafe(arg: str, *, executable: str, option_value_flags
     return False
 
 
-def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> bool:
+def _codex_search_target_is_source_like(target: str, *, cwd: Path | None, home_dir: Path | None) -> bool:
     stripped = target.strip().strip("'\"")
     if not stripped:
         return False
+    if target_is_known_skill_doc_path(stripped, home_dir=home_dir):
+        return True
     if stripped.startswith("~"):
         return False
     if any(char in stripped for char in ("*", "?", "{", "}")):
