@@ -5416,6 +5416,8 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
         if _is_python_interpreter_command(command_name):
             if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
                 return False
+            if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
+                return False
             if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
                 return False
             saw_python_module = True
@@ -5439,7 +5441,11 @@ def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
             return False
         segment_args = segment[command_index + 1 :]
         if command_name == "pytest":
+            if _shell_segment_sets_env_key(segment, command_index, "PATH"):
+                return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
+                return False
+            if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
                 return False
             if not _pytest_binary_segment_is_safe(segment[command_index], segment_args, cwd=cwd):
                 return False
@@ -5461,7 +5467,11 @@ def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name != "pytest" or command_index is None:
             continue
+        if _shell_segment_sets_env_key(segment, command_index, "PATH"):
+            return True
         if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
+            return True
+        if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
             return True
         if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
             return True
