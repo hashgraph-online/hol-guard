@@ -791,7 +791,7 @@ def _destructive_shell_tool_action_request(
                 "`--body-file` for PR descriptions."
             ),
         )
-    if not _looks_destructive_shell_command(command_text, cwd=cwd):
+    if not _looks_destructive_shell_command(command_text, cwd=cwd, home_dir=home_dir):
         return None
     return ToolActionRequestMatch(
         tool_name=tool_name,
@@ -2999,7 +2999,7 @@ def _decoded_payload_looks_sensitive(
     visited_script_paths: frozenset[str],
 ) -> bool:
     lowered = payload.lower()
-    if _looks_destructive_shell_command(payload, cwd=cwd):
+    if _looks_destructive_shell_command(payload, cwd=cwd, home_dir=home_dir):
         return True
     if any(token in lowered for token in _SENSITIVE_DECODED_PAYLOAD_TOKENS):
         return True
@@ -3711,12 +3711,17 @@ def _docker_config_path_from_command(
     return match.normalized_path
 
 
-def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = None) -> bool:
+def _looks_destructive_shell_command(
+    command_text: str,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
     for substitution_payload in _shell_command_substitution_payloads(normalized):
-        if _looks_destructive_shell_command(substitution_payload, cwd=cwd):
+        if _looks_destructive_shell_command(substitution_payload, cwd=cwd, home_dir=home_dir):
             return True
     node_heredoc_script = _single_node_heredoc_script(normalized)
     if node_heredoc_script is not None:
@@ -3742,7 +3747,7 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
         return True
     if _contains_unsafe_pytest_environment_wrapper(parts, cwd=cwd):
         return True
-    if _looks_like_safe_read_only_lookup_command(normalized, parts):
+    if _looks_like_safe_read_only_lookup_command(normalized, parts, home_dir=home_dir):
         return False
     raw_command_names = list(_shell_command_names(redacted_command_text))
     parsed_command_names = list(_shell_command_names_from_parts(parts))
@@ -3764,7 +3769,7 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
         return True
     if _contains_destructive_git_command(parts):
         return True
-    if _find_or_fd_uses_write_or_exec_action(parts):
+    if _find_or_fd_uses_write_or_exec_action(parts, home_dir=home_dir):
         return True
     command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
@@ -3773,10 +3778,10 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
     if _find_command_uses_delete(parts):
         return True
     for env_split_string in _env_split_string_payloads(parts):
-        if _looks_destructive_shell_command(env_split_string, cwd=cwd):
+        if _looks_destructive_shell_command(env_split_string, cwd=cwd, home_dir=home_dir):
             return True
     for shell_script in _shell_command_scripts(parts):
-        if _looks_destructive_shell_command(shell_script, cwd=cwd):
+        if _looks_destructive_shell_command(shell_script, cwd=cwd, home_dir=home_dir):
             return True
     return any(
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
@@ -3784,7 +3789,12 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
     )
 
 
-def _looks_like_safe_read_only_lookup_command(command_text: str, parts: list[str]) -> bool:
+def _looks_like_safe_read_only_lookup_command(
+    command_text: str,
+    parts: list[str],
+    *,
+    home_dir: Path | None,
+) -> bool:
     if "$(" in command_text or "`" in command_text or "<(" in command_text or ">(" in command_text:
         return False
     if any(token in parts for token in {";", "&", "||", "|&"}):
@@ -3803,7 +3813,7 @@ def _looks_like_safe_read_only_lookup_command(command_text: str, parts: list[str
         if index == 0:
             if command not in _READ_ONLY_LOOKUP_COMMANDS:
                 return False
-            if not _read_only_lookup_primary_segment_is_safe(command, segment[1:]):
+            if not _read_only_lookup_primary_segment_is_safe(command, segment[1:], home_dir=home_dir):
                 return False
         elif not _read_only_lookup_filter_segment_is_safe(command, segment[1:]):
             return False
@@ -3835,21 +3845,21 @@ def _read_only_lookup_token_is_safe_stderr_discard(token: str) -> bool:
     return not prefix and fd == "2" and _normalized_redirect_target(target).lower() in _SAFE_SHELL_REDIRECT_TARGETS
 
 
-def _read_only_lookup_primary_segment_is_safe(command: str, args: list[str]) -> bool:
+def _read_only_lookup_primary_segment_is_safe(command: str, args: list[str], *, home_dir: Path | None) -> bool:
     if command == "sed":
-        return _read_only_lookup_sed_args_are_safe(args, require_target=True)
+        return _read_only_lookup_sed_args_are_safe(args, require_target=True, home_dir=home_dir)
     if command in {"head", "tail"}:
-        return _read_only_lookup_head_tail_args_are_safe(args, require_target=True)
+        return _read_only_lookup_head_tail_args_are_safe(args, require_target=True, home_dir=home_dir)
     if command == "cat":
-        return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=False)
+        return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=False, home_dir=home_dir)
     if command == "ls":
-        return _read_only_lookup_ls_args_are_safe(args)
+        return _read_only_lookup_ls_args_are_safe(args, home_dir=home_dir)
     if command in {"grep", "egrep", "fgrep", "rg"}:
-        return _read_only_lookup_search_args_are_safe(args)
+        return _read_only_lookup_search_args_are_safe(args, home_dir=home_dir)
     if command == "fd":
-        return _read_only_lookup_fd_args_are_safe(args)
+        return _read_only_lookup_fd_args_are_safe(args, home_dir=home_dir)
     if command == "find":
-        return _read_only_lookup_find_args_are_safe(args)
+        return _read_only_lookup_find_args_are_safe(args, home_dir=home_dir)
     return False
 
 
@@ -3863,7 +3873,12 @@ def _read_only_lookup_filter_segment_is_safe(command: str, args: list[str]) -> b
     return False
 
 
-def _read_only_lookup_sed_args_are_safe(args: list[str], *, require_target: bool) -> bool:
+def _read_only_lookup_sed_args_are_safe(
+    args: list[str],
+    *,
+    require_target: bool,
+    home_dir: Path | None = None,
+) -> bool:
     scripts: list[str] = []
     targets: list[str] = []
     saw_print_suppression = False
@@ -3905,7 +3920,9 @@ def _read_only_lookup_sed_args_are_safe(args: list[str], *, require_target: bool
     if not all(_read_only_lookup_sed_script_is_print_only(script) for script in scripts):
         return False
     if require_target:
-        return bool(targets) and all(_read_only_lookup_target_is_safe(target, allow_dirs=False) for target in targets)
+        return bool(targets) and all(
+            _read_only_lookup_target_is_safe(target, allow_dirs=False, home_dir=home_dir) for target in targets
+        )
     return not targets
 
 
@@ -3913,7 +3930,12 @@ def _read_only_lookup_sed_script_is_print_only(script: str) -> bool:
     return sed_script_is_bounded_print(script)
 
 
-def _read_only_lookup_head_tail_args_are_safe(args: list[str], *, require_target: bool) -> bool:
+def _read_only_lookup_head_tail_args_are_safe(
+    args: list[str],
+    *,
+    require_target: bool,
+    home_dir: Path | None = None,
+) -> bool:
     targets: list[str] = []
     skip_count = False
     after_options = False
@@ -3944,11 +3966,18 @@ def _read_only_lookup_head_tail_args_are_safe(args: list[str], *, require_target
     if skip_count:
         return False
     if require_target:
-        return bool(targets) and all(_read_only_lookup_target_is_safe(target, allow_dirs=False) for target in targets)
+        return bool(targets) and all(
+            _read_only_lookup_target_is_safe(target, allow_dirs=False, home_dir=home_dir) for target in targets
+        )
     return not targets
 
 
-def _read_only_lookup_plain_targets_are_safe(args: list[str], *, allow_dirs: bool) -> bool:
+def _read_only_lookup_plain_targets_are_safe(
+    args: list[str],
+    *,
+    allow_dirs: bool,
+    home_dir: Path | None = None,
+) -> bool:
     targets: list[str] = []
     after_options = False
     for arg in args:
@@ -3963,33 +3992,35 @@ def _read_only_lookup_plain_targets_are_safe(args: list[str], *, allow_dirs: boo
         if arg.startswith("-"):
             continue
         targets.append(arg)
-    return all(_read_only_lookup_target_is_safe(target, allow_dirs=allow_dirs) for target in targets)
+    return all(_read_only_lookup_target_is_safe(target, allow_dirs=allow_dirs, home_dir=home_dir) for target in targets)
 
 
-def _read_only_lookup_ls_args_are_safe(args: list[str]) -> bool:
-    return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=True)
+def _read_only_lookup_ls_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
+    return _read_only_lookup_plain_targets_are_safe(args, allow_dirs=True, home_dir=home_dir)
 
 
-def _read_only_lookup_search_args_are_safe(args: list[str]) -> bool:
+def _read_only_lookup_search_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
     targets = [arg for arg in args if arg and not arg.startswith("-")]
-    return len(targets) < 2 or all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets[1:])
+    return len(targets) < 2 or all(
+        _read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in targets[1:]
+    )
 
 
-def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
+def _read_only_lookup_fd_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
     if any(
         arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
         for arg in args
     ):
-        return _fd_exec_sed_read_only_args_are_safe(args)
+        return _fd_exec_sed_read_only_args_are_safe(args, home_dir=home_dir)
     targets = fd_search_targets(args)
     if targets is None:
         return False
     if not targets:
         return True
-    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets)
+    return all(_read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in targets)
 
 
-def _fd_exec_sed_read_only_args_are_safe(args: list[str]) -> bool:
+def _fd_exec_sed_read_only_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
     parsed = split_fd_args_and_exec(args)
     if parsed is None:
         return False
@@ -3999,13 +4030,14 @@ def _fd_exec_sed_read_only_args_are_safe(args: list[str]) -> bool:
     if exec_parts.count("{}") != 1:
         return False
     sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
-    return _read_only_lookup_fd_args_are_safe(fd_args) and _read_only_lookup_sed_args_are_safe(
+    return _read_only_lookup_fd_args_are_safe(fd_args, home_dir=home_dir) and _read_only_lookup_sed_args_are_safe(
         sed_args,
         require_target=False,
+        home_dir=home_dir,
     )
 
 
-def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
+def _read_only_lookup_find_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
     if any(_read_only_lookup_arg_is_redirection(arg) for arg in args):
         return False
     if _find_args_use_write_or_unsafe_exec_action(args):
@@ -4013,7 +4045,7 @@ def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
     targets = [arg for arg in args if arg and not arg.startswith("-")]
     if not targets:
         return False
-    return _read_only_lookup_target_is_safe(targets[0], allow_dirs=True)
+    return _read_only_lookup_target_is_safe(targets[0], allow_dirs=True, home_dir=home_dir)
 
 
 def _read_only_lookup_filter_grep_args_are_safe(args: list[str]) -> bool:
@@ -4030,7 +4062,7 @@ def _read_only_lookup_arg_is_redirection(arg: str) -> bool:
     return _split_attached_redirection_token(arg) is not None
 
 
-def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
+def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir: Path | None = None) -> bool:
     stripped = target.strip().strip("'\"")
     if stripped in {"", "."}:
         return allow_dirs
@@ -4043,7 +4075,7 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
     lowered_parts = [part.lower() for part in parts]
     if not parts:
         return allow_dirs
-    if target_is_known_skill_doc_path(stripped):
+    if target_is_known_skill_doc_path(stripped, home_dir=home_dir):
         return True
     if any(part in SOURCE_INSPECTION_SENSITIVE_PARTS for part in lowered_parts):
         return False
@@ -4230,7 +4262,7 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
     return False
 
 
-def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
+def _find_or_fd_uses_write_or_exec_action(parts: list[str], *, home_dir: Path | None = None) -> bool:
     for segment in _iter_shell_command_segments(parts):
         command_name, command_index = _shell_segment_primary_command(segment)
         if (
@@ -4247,7 +4279,7 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
                 or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
                 for arg in segment[command_index + 1 :]
             )
-            and not _fd_exec_sed_read_only_args_are_safe(segment[command_index + 1 :])
+            and not _fd_exec_sed_read_only_args_are_safe(segment[command_index + 1 :], home_dir=home_dir)
         ):
             return True
     return False

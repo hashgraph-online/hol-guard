@@ -700,7 +700,10 @@ clearer UX and an implementation plan with technical references.
     ) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
+        process_home_dir = tmp_path / "process-home"
         _build_guard_fixture(home_dir, workspace_dir)
+        process_home_dir.mkdir(parents=True)
+        monkeypatch.setenv("HOME", str(process_home_dir))
         command = (
             "fd -a 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees "
             "~/.codex/superpowers/skills/test-driven-development "

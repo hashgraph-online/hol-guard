@@ -115,7 +115,10 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
     """Return true for known local skill-doc roots without resolving user path text."""
     if any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&")):
         return False
-    expanded = os.path.expanduser(target)
+    if target == "~" or target.startswith("~/"):
+        expanded = f"{home_dir or Path.home()}{target[1:]}"
+    else:
+        expanded = os.path.expanduser(target)
     normalized = os.path.normpath(expanded).replace("\\", "/")
     home = os.path.normpath(str(home_dir or Path.home())).replace("\\", "/")
     for suffix in KNOWN_SKILL_DOC_ROOT_SUFFIXES:
