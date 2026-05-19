@@ -5422,7 +5422,7 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
                 return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
                 return False
-            if _shell_segment_uses_env_chdir(segment, command_index):
+            if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
                 return False
             if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
                 return False
@@ -5444,7 +5444,7 @@ def _contains_unsafe_pytest_environment_wrapper(parts: list[str]) -> bool:
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name is None or command_index is None:
             continue
-        if not _shell_segment_uses_env_chdir(segment, command_index):
+        if not _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
             continue
         if command_name == "pytest":
             return True
@@ -5472,7 +5472,7 @@ def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
                 return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
                 return False
-            if _shell_segment_uses_env_chdir(segment, command_index):
+            if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
                 return False
             if not _pytest_binary_segment_is_safe(segment[command_index], segment_args, cwd=cwd):
                 return False
@@ -5502,7 +5502,7 @@ def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
             return True
         if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
             return True
-        if _shell_segment_uses_env_chdir(segment, command_index):
+        if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
             return True
         if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
             return True
@@ -5544,6 +5544,32 @@ def _shell_segment_uses_env_chdir(segment: list[str], command_index: int) -> boo
                 break
             index += _wrapper_option_tokens_consumed("env", token)
     return False
+
+
+def _shell_segment_uses_sudo_chdir(segment: list[str], command_index: int) -> bool:
+    index = 0
+    while index < command_index:
+        normalized_token = _shell_command_token_without_attached_redirection(segment[index])
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name != "sudo":
+            index += 1
+            continue
+        index += 1
+        while index < command_index:
+            token = segment[index]
+            if token in {"-D", "--chdir"} or token.startswith(("-D", "--chdir=")):
+                return True
+            if not token.startswith("-"):
+                break
+            index += _wrapper_option_tokens_consumed("sudo", token)
+    return False
+
+
+def _shell_segment_uses_cwd_changing_wrapper(segment: list[str], command_index: int) -> bool:
+    return _shell_segment_uses_env_chdir(segment, command_index) or _shell_segment_uses_sudo_chdir(
+        segment,
+        command_index,
+    )
 
 
 def _parts_use_python_module_mode(parts: list[str]) -> bool:
