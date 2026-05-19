@@ -5,8 +5,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import pytest
-
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "codex-auto-resume-smoke.py"
 MODULE_NAME = "guard_codex_auto_resume_smoke"
 
@@ -21,8 +19,7 @@ def _load_smoke_module():
     return module
 
 
-@pytest.mark.slow
-def test_codex_auto_resume_smoke_script_runs_real_allow_and_block_flows() -> None:
+def test_codex_auto_resume_smoke_script_sends_same_thread_app_server_messages() -> None:
     module = _load_smoke_module()
     args = argparse.Namespace(
         codex_home=None,
@@ -36,9 +33,13 @@ def test_codex_auto_resume_smoke_script_runs_real_allow_and_block_flows() -> Non
 
     assert allow_result.resume_status == "sent"
     assert allow_result.request_id
-    assert allow_result.proof_created is True
+    assert allow_result.resume_strategy == "codex-app-server-thread"
+    assert allow_result.proof_created is False
     assert allow_result.assistant_message
+    assert "turn/start" in allow_result.transcript_excerpt
     assert block_result.resume_status == "sent"
     assert block_result.request_id
+    assert block_result.resume_strategy == "codex-app-server-thread"
     assert block_result.proof_created is False
     assert block_result.assistant_message
+    assert "turn/start" in block_result.transcript_excerpt
