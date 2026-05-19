@@ -12254,6 +12254,26 @@ def test_guard_runtime_allows_pytest_config_without_addopts(tmp_path):
     assert match is None
 
 
+def test_guard_runtime_blocks_selected_test_root_pytest_config_addopts(tmp_path):
+    _write_text(tmp_path / "sub" / "pytest.ini", "[pytest]\naddopts = -p evil\n")
+
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest sub -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest sub -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",

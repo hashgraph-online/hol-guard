@@ -111,6 +111,8 @@ _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
     "pytest": ("pytest.py", "pytest.pyc", "pytest/__init__.py"),
 }
 _PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
+_PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = ("--basetemp", "--debug", "--junitxml", "-p")
+_MAX_PYTEST_CONFIG_FILE_BYTES = 1_000_000
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
@@ -5515,7 +5517,7 @@ def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *
         return False
     if _python_module_may_be_shadowed("pytest", cwd):
         return False
-    if _pytest_config_may_add_options(cwd):
+    if _pytest_config_may_add_unsafe_options(cwd, module_args):
         return False
     return _pytest_module_args_are_safe(module_args)
 
@@ -5664,7 +5666,7 @@ def _python_module_args_are_safe(module: str, module_args: list[str], *, cwd: Pa
         return False
     if _python_module_may_be_shadowed(module_root, cwd):
         return False
-    if module_root == "pytest" and _pytest_config_may_add_options(cwd):
+    if module_root == "pytest" and _pytest_config_may_add_unsafe_options(cwd, module_args):
         return False
     if module_root == "pytest" and not _pytest_module_args_are_safe(module_args):
         return False
@@ -5686,21 +5688,72 @@ def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
     return any((cwd / shadow_path).exists() for shadow_path in shadow_paths)
 
 
-def _pytest_config_may_add_options(cwd: Path | None) -> bool:
+def _pytest_config_may_add_unsafe_options(cwd: Path | None, module_args: list[str]) -> bool:
     if cwd is None:
         return True
-    for config_path in _PYTEST_OPTION_CONFIG_PATHS:
-        path = cwd / config_path
-        try:
-            if not path.is_file():
-                continue
-            if path.stat().st_size > 1_000_000:
+    for config_dir in _pytest_config_search_dirs(cwd, module_args):
+        for config_path in _PYTEST_OPTION_CONFIG_PATHS:
+            if _pytest_config_file_has_unsafe_addopts(config_dir, config_path):
                 return True
-            if "addopts" in path.read_text(encoding="utf-8", errors="ignore").lower():
-                return True
-        except OSError:
-            return True
     return False
+
+
+def _pytest_config_search_dirs(cwd: Path, module_args: list[str]) -> tuple[Path, ...]:
+    config_dirs: list[Path] = [cwd]
+    for module_arg in _pytest_positional_args(module_args):
+        path_text = module_arg.split("::", 1)[0]
+        if not path_text:
+            continue
+        path = Path(path_text)
+        if path.is_absolute() or ".." in path.parts:
+            return (cwd,)
+        root = cwd / (path if path.suffix == "" else path.parent)
+        if root not in config_dirs:
+            config_dirs.append(root)
+    return tuple(config_dirs)
+
+
+def _pytest_positional_args(module_args: list[str]) -> tuple[str, ...]:
+    positional_args: list[str] = []
+    index = 0
+    while index < len(module_args):
+        arg = module_args[index]
+        if arg == "--":
+            return tuple(positional_args)
+        if arg in _PYTEST_SAFE_FLAGS:
+            index += 1
+            continue
+        if arg in _PYTEST_SAFE_FLAGS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in _PYTEST_SAFE_FLAGS_WITH_VALUES):
+            index += 1
+            continue
+        if not arg.startswith("-"):
+            positional_args.append(arg)
+        index += 1
+    return tuple(positional_args)
+
+
+def _pytest_config_file_has_unsafe_addopts(config_dir: Path, config_path: str) -> bool:
+    path = (config_dir / config_path).resolve(strict=False)
+    root = config_dir.resolve(strict=False)
+    if path.parent != root:
+        return True
+    try:
+        if not path.is_file():
+            return False
+        if path.stat().st_size > _MAX_PYTEST_CONFIG_FILE_BYTES:
+            return True
+        config_text = path.read_text(encoding="utf-8", errors="ignore").lower()
+        if "addopts" not in config_text:
+            return False
+        return any(
+            "addopts" in line and any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS)
+            for line in config_text.splitlines()
+        )
+    except OSError:
+        return True
 
 
 def _pytest_module_args_are_safe(module_args: list[str]) -> bool:
