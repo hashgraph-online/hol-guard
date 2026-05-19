@@ -12186,6 +12186,24 @@ def test_guard_runtime_blocks_pytest_plugin_env_override(tmp_path):
     assert binary_match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_env_chdir_pytest_shadow_bypass(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "env --chdir ./shadow python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "env -C ./shadow pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",

@@ -3711,6 +3711,8 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
     redacted_command_text = _redacted_shell_text_for_command_names(lowered)
     if _contains_mutating_shell_redirection(parts):
         return True
+    if _contains_unsafe_pytest_environment_wrapper(parts):
+        return True
     if _looks_like_safe_read_only_lookup_command(normalized, parts):
         return False
     raw_command_names = list(_shell_command_names(redacted_command_text))
@@ -5420,6 +5422,8 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
                 return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
                 return False
+            if _shell_segment_uses_env_chdir(segment, command_index):
+                return False
             if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
                 return False
             saw_python_module = True
@@ -5433,6 +5437,23 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
             continue
         return False
     return saw_python_module
+
+
+def _contains_unsafe_pytest_environment_wrapper(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if not _shell_segment_uses_env_chdir(segment, command_index):
+            continue
+        if command_name == "pytest":
+            return True
+        if _is_python_interpreter_command(command_name) and _python_segment_targets_module(
+            segment[command_index + 1 :],
+            "pytest",
+        ):
+            return True
+    return False
 
 
 def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | None) -> bool:
@@ -5450,6 +5471,8 @@ def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
             if _shell_segment_sets_env_key(segment, command_index, "PYTEST_PLUGINS"):
                 return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
+                return False
+            if _shell_segment_uses_env_chdir(segment, command_index):
                 return False
             if not _pytest_binary_segment_is_safe(segment[command_index], segment_args, cwd=cwd):
                 return False
@@ -5479,6 +5502,8 @@ def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
             return True
         if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
             return True
+        if _shell_segment_uses_env_chdir(segment, command_index):
+            return True
         if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
             return True
     return False
@@ -5497,6 +5522,28 @@ def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key:
     return any(
         token.split("=", 1)[0].upper() == normalized_env_key for token in segment[:command_index] if "=" in token
     )
+
+
+def _shell_segment_uses_env_chdir(segment: list[str], command_index: int) -> bool:
+    index = 0
+    while index < command_index:
+        normalized_token = _shell_command_token_without_attached_redirection(segment[index])
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name != "env":
+            index += 1
+            continue
+        index += 1
+        while index < command_index:
+            token = segment[index]
+            if _SHELL_ASSIGNMENT_PATTERN.match(token):
+                index += 1
+                continue
+            if token in {"-C", "--chdir"} or token.startswith(("-C", "--chdir=")):
+                return True
+            if not token.startswith("-"):
+                break
+            index += _wrapper_option_tokens_consumed("env", token)
+    return False
 
 
 def _parts_use_python_module_mode(parts: list[str]) -> bool:
@@ -5545,6 +5592,31 @@ def _python_segment_runs_safe_module(args: list[str], *, cwd: Path | None = None
         if arg.startswith("-m") and len(arg) > 2:
             module = arg[2:]
             return _python_module_args_are_safe(module, args[index + 1 :], cwd=cwd)
+        if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(option) and len(arg) > len(option) for option in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES):
+            index += 1
+            continue
+        if not arg.startswith("-"):
+            return False
+        index += 1
+    return False
+
+
+def _python_segment_targets_module(args: list[str], module_root: str) -> bool:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            return False
+        if arg in {"-c", "--command"} or arg.startswith(("-c", "--command=")):
+            return False
+        if arg == "-m":
+            module = args[index + 1] if index + 1 < len(args) else ""
+            return module.split(".", 1)[0] == module_root
+        if arg.startswith("-m") and len(arg) > 2:
+            return arg[2:].split(".", 1)[0] == module_root
         if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
             index += 2
             continue
