@@ -641,6 +641,57 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    def test_codex_post_tool_use_allows_read_only_constants_source_search_with_fixture_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": (
+                    'rg -n "guardLead|GOOGLE_ADS_CONVERSION|Dbd2|AW-175|send_to|conversion" '
+                    "__tests__ src constants scripts/guard-tracking -g '*.ts' -g '*.tsx'"
+                )
+            },
+            "tool_response": {
+                "stdout": (
+                    "__tests__/ayet-adapter.test.ts:118:"
+                    "'https://example.test/offers?apiKey=static-key&conversion_type%5B%5D=cpe'\n"
+                    "constants/analytics.ts:3:"
+                    "export const DEFAULT_GUARD_GOOGLE_ADS_CONVERSION_ID = 'AW-17512816237';\n"
+                    "src/lib/analytics-client.ts:1322:"
+                    "send_to: `${GOOGLE_ADS_CONVERSION_ID}/${config.label}`,\n"
+                ),
+            },
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
     def test_codex_post_tool_use_allows_read_only_source_view_with_secret_like_output(
         self,
         monkeypatch,
