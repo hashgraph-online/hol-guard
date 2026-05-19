@@ -16,6 +16,12 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _stub_codex_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        codex_resume_module.shutil, "which", lambda command: "/usr/bin/codex" if command == "codex" else None
+    )
+
+
 def _request(request_id: str) -> GuardApprovalRequest:
     return GuardApprovalRequest(
         request_id=request_id,
@@ -299,6 +305,7 @@ def test_request_resume_retry_endpoint_can_recover_after_socket_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     resume_calls = 0
+    _stub_codex_binary(monkeypatch)
 
     def _fake_run(command, **kwargs):
         nonlocal resume_calls
@@ -416,6 +423,7 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     recorded: dict[str, object] = {}
+    _stub_codex_binary(monkeypatch)
 
     def _fake_run(command, **kwargs):
         recorded["command"] = command
@@ -481,6 +489,8 @@ def test_codex_approve_returns_failed_resume_when_exec_launch_raises_oserror(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _stub_codex_binary(monkeypatch)
+
     def _raise_oserror(command, **kwargs):
         raise PermissionError("exec denied")
 

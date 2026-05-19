@@ -14,6 +14,12 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _stub_codex_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        codex_resume_module.shutil, "which", lambda command: "/usr/bin/codex" if command == "codex" else None
+    )
+
+
 def _request(request_id: str) -> GuardApprovalRequest:
     return GuardApprovalRequest(
         request_id=request_id,
@@ -170,6 +176,7 @@ def test_guard_approvals_resume_uses_exec_resume_when_only_session_binding_exist
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     recorded: dict[str, object] = {}
+    _stub_codex_binary(monkeypatch)
 
     def _fake_run(command, **kwargs):
         recorded["command"] = command

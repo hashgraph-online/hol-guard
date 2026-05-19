@@ -293,16 +293,6 @@ def _resume_codex_exec_session(
     action: str,
     thread_id: str,
 ) -> dict[str, object]:
-    if shutil.which("codex") is None:
-        return {
-            "status": "failed",
-            "reason": "codex_not_found",
-            "message": "The codex binary is not available for automatic resume.",
-            "last_error": "codex binary not found",
-            "thread_id": thread_id,
-            "strategy": "codex-exec-resume",
-            "supported": True,
-        }
     operation = store.get_guard_operation_for_approval_request(request_id)
     metadata = operation.get("metadata") if isinstance(operation, dict) else None
     session_id = (
@@ -320,6 +310,16 @@ def _resume_codex_exec_session(
             "reason": "unsafe_thread_id",
             "message": "Codex session metadata was not safe to resume automatically.",
             "last_error": "unsafe Codex session id",
+            "thread_id": thread_id,
+            "strategy": "codex-exec-resume",
+            "supported": True,
+        }
+    if shutil.which("codex") is None:
+        return {
+            "status": "failed",
+            "reason": "codex_not_found",
+            "message": "The codex binary is not available for automatic resume.",
+            "last_error": "codex binary not found",
             "thread_id": thread_id,
             "strategy": "codex-exec-resume",
             "supported": True,
