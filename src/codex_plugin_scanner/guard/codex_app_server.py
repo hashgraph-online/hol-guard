@@ -45,6 +45,31 @@ class _WebSocketClosedError(TimeoutError):
     """Raised when the app-server closes without a websocket close frame."""
 
 
+def default_codex_app_server_socket_path(*, environ: Mapping[str, str] | None = None) -> Path:
+    """Return the default Codex app-server socket path for the active Codex home."""
+
+    env = environ or os.environ
+    codex_home = env.get("CODEX_HOME", "").strip()
+    if not codex_home:
+        return _DEFAULT_SOCKET_PATH
+    return Path(codex_home).expanduser() / "app-server-control" / "app-server-control.sock"
+
+
+def default_codex_app_server_socket_available(*, environ: Mapping[str, str] | None = None) -> bool:
+    """Return whether the current Codex app-server control socket is reachable."""
+
+    socket_path = default_codex_app_server_socket_path(environ=environ)
+    if not socket_path.exists():
+        return False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(0.2)
+            client.connect(str(socket_path))
+    except OSError:
+        return False
+    return True
+
+
 def codex_resume_metadata_from_hook_payload(
     payload: Mapping[str, object],
     *,
@@ -92,7 +117,10 @@ def resume_codex_thread_for_request(
     thread_id = _first_string(metadata, ("codex_thread_id", "thread_id", "threadId", "session_id", "sessionId"))
     if thread_id is None:
         return None
-    socket_path = _first_string(metadata, _SOCKET_KEYS) or str(_DEFAULT_SOCKET_PATH)
+    codex_home = _first_string(metadata, _CODEX_HOME_KEYS)
+    socket_path = _first_string(metadata, _SOCKET_KEYS) or str(
+        default_codex_app_server_socket_path(environ={"CODEX_HOME": codex_home or ""})
+    )
     if not _is_safe_local_socket_path(socket_path):
         return {
             "status": "skipped",

@@ -118,6 +118,83 @@ def test_guard_approvals_resume_retries_failed_codex_resume(
     assert send_calls == 1
 
 
+def test_guard_approvals_resume_uses_codex_home_default_socket(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    socket_paths: list[str] = []
+
+    def _fake_send(**kwargs):
+        socket_paths.append(str(kwargs["socket_path"]))
+        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
+
+    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+
+    home_dir = tmp_path / "guard-home"
+    codex_home = tmp_path / "codex-home"
+    socket_path = codex_home / "app-server-control" / "app-server-control.sock"
+    socket_path.parent.mkdir(parents=True)
+    socket_path.write_text("", encoding="utf-8")
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-home"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-home",
+        socket_path=None,
+        codex_home=str(codex_home),
+    )
+    store.resolve_approval_request(
+        "req-cli-home",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-home", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "sent"
+    assert socket_paths == [str(socket_path)]
+
+
+def test_default_codex_app_server_socket_probe_uses_codex_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    codex_home = tmp_path / "custom-codex-home"
+    socket_path = codex_home / "app-server-control" / "app-server-control.sock"
+    socket_path.parent.mkdir(parents=True)
+    socket_path.write_text("", encoding="utf-8")
+    connect_paths: list[str] = []
+
+    class _FakeSocket:
+        def __enter__(self) -> _FakeSocket:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def settimeout(self, _timeout: float) -> None:
+            return None
+
+        def connect(self, path: str) -> None:
+            connect_paths.append(path)
+
+    monkeypatch.setattr(codex_app_server_module.socket, "socket", lambda *_args, **_kwargs: _FakeSocket())
+
+    assert (
+        codex_app_server_module.default_codex_app_server_socket_path(environ={"CODEX_HOME": str(codex_home)})
+        == socket_path
+    )
+    assert codex_app_server_module.default_codex_app_server_socket_available(
+        environ={"CODEX_HOME": str(codex_home)}
+    )
+    assert connect_paths == [str(socket_path)]
+
+
 def test_guard_doctor_codex_reports_resume_diagnostics(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -131,13 +208,13 @@ def test_guard_doctor_codex_reports_resume_diagnostics(
 
     assert rc == 0
     assert output["codex_resume"]["codex_binary_found"] in {True, False}
-    assert output["codex_resume"]["app_server_support"] in {True, False}
-    assert output["codex_resume"]["remote_control_support"] in {True, False}
-    assert output["codex_resume"]["headless_resume_support"] in {True, False}
+    assert output["codex_resume"]["app_server_support"] is None
+    assert "stable public app-server capability probe" in output["codex_resume"]["app_server_support_reason"]
+    assert output["codex_resume"]["app_server_socket_available"] in {True, False}
     assert output["codex_resume"]["latest_attempt"] is None
 
 
-def test_guard_doctor_codex_handles_launch_oserror(
+def test_guard_doctor_codex_reports_app_server_support_from_codex_binary(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -147,22 +224,19 @@ def test_guard_doctor_codex_handles_launch_oserror(
     GuardStore(guard_home)
     _stub_codex_binary(monkeypatch)
 
-    def _raise_oserror(command, **kwargs):
-        raise PermissionError("exec denied")
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _raise_oserror)
-
     rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
     assert output["codex_resume"]["codex_binary_found"] is True
-    assert output["codex_resume"]["app_server_support"] is False
-    assert output["codex_resume"]["remote_control_support"] is False
-    assert output["codex_resume"]["headless_resume_support"] is False
+    assert output["codex_resume"]["app_server_support"] is None
+    assert "stable public app-server capability probe" in output["codex_resume"]["app_server_support_reason"]
+    assert output["codex_resume"]["app_server_socket_available"] in {True, False}
+    assert "remote_control_support" not in output["codex_resume"]
+    assert "headless_resume_support" not in output["codex_resume"]
 
 
-def test_guard_approvals_resume_rejects_unsafe_thread_id(
+def test_guard_approvals_resume_reports_missing_same_thread_channel(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -192,34 +266,15 @@ def test_guard_approvals_resume_rejects_unsafe_thread_id(
 
     assert rc == 0
     assert output["status"] == "failed"
-    assert output["reason"] == "unsafe_thread_id"
+    assert output["reason"] == "socket_not_available"
+    assert output["strategy"] == "codex-app-server-thread"
+    assert "original chat" in output["message"]
 
 
-def test_guard_approvals_resume_falls_back_to_exec_resume_when_app_server_unavailable(
+def test_guard_approvals_resume_does_not_start_headless_codex_when_app_server_unavailable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    recorded: dict[str, object] = {}
-    _stub_codex_binary(monkeypatch)
-
-    def _fake_run(command, **kwargs):
-        recorded["command"] = command
-        recorded["cwd"] = kwargs.get("cwd")
-        recorded["env"] = kwargs.get("env")
-        recorded["input"] = kwargs.get("input")
-        return type(
-            "CompletedProcess",
-            (),
-            {
-                "returncode": 0,
-                "stdout": '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}\n',
-                "stderr": "",
-            },
-        )()
-
-    monkeypatch.setattr(codex_resume_module.subprocess, "run", _fake_run)
-
     home_dir = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -244,12 +299,7 @@ def test_guard_approvals_resume_falls_back_to_exec_resume_when_app_server_unavai
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["status"] == "sent"
-    assert output["strategy"] == "codex-exec-resume"
-    assert recorded["command"][:3] == ["codex", "exec", "resume"]
-    assert "--dangerously-bypass-approvals-and-sandbox" in recorded["command"]
-    assert "thread-1" in recorded["command"]
-    assert recorded["command"][-1] == "-"
-    assert isinstance(recorded["input"], str)
-    assert "approved request `req-cli-exec`" in recorded["input"]
-    assert recorded["cwd"] == str(workspace)
+    assert output["status"] == "failed"
+    assert output["reason"] == "socket_not_available"
+    assert output["strategy"] == "codex-app-server-thread"
+    assert "retry the same request" in output["message"]
