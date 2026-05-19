@@ -7159,6 +7159,7 @@ def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
         return not any(
             arg in {"-x", "-X", "--exec", "--exec-batch"}
             or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
+            or (arg.startswith("-") and not arg.startswith("--") and ("x" in arg[1:] or "X" in arg[1:]))
             for arg in args
         )
     _fd_args, exec_parts = parsed

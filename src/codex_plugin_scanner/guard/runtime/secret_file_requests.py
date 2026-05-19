@@ -4008,7 +4008,9 @@ def _read_only_lookup_search_args_are_safe(args: list[str], *, home_dir: Path | 
 
 def _read_only_lookup_fd_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
     if any(
-        arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
+        arg in {"-x", "-X", "--exec", "--exec-batch"}
+        or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
+        or (arg.startswith("-") and not arg.startswith("--") and ("x" in arg[1:] or "X" in arg[1:]))
         for arg in args
     ):
         return _fd_exec_sed_read_only_args_are_safe(args, home_dir=home_dir)
@@ -4030,7 +4032,12 @@ def _fd_exec_sed_read_only_args_are_safe(args: list[str], *, home_dir: Path | No
     if exec_parts.count("{}") != 1:
         return False
     sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
-    return _read_only_lookup_fd_args_are_safe(fd_args, home_dir=home_dir) and _read_only_lookup_sed_args_are_safe(
+    fd_targets = fd_search_targets(fd_args)
+    if fd_targets is None or not fd_targets:
+        return False
+    return all(
+        _read_only_lookup_target_is_safe(target, allow_dirs=True, home_dir=home_dir) for target in fd_targets
+    ) and _read_only_lookup_sed_args_are_safe(
         sed_args,
         require_target=False,
         home_dir=home_dir,
@@ -4277,6 +4284,7 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str], *, home_dir: Path | 
             and any(
                 arg in {"-x", "-X", "--exec", "--exec-batch"}
                 or arg.startswith(("-x", "-X", "--exec=", "--exec-batch="))
+                or (arg.startswith("-") and not arg.startswith("--") and ("x" in arg[1:] or "X" in arg[1:]))
                 for arg in segment[command_index + 1 :]
             )
             and not _fd_exec_sed_read_only_args_are_safe(segment[command_index + 1 :], home_dir=home_dir)

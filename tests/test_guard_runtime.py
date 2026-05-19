@@ -852,6 +852,125 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "require-reapproval"
         assert "destructive shell command" in output["artifact_name"]
 
+    def test_codex_pre_tool_use_blocks_fd_skill_docs_clustered_shell_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        command = "fd -a 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees -d 1 -Hx sh -c 'echo blocked' {}"
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert "destructive shell command" in output["artifact_name"]
+
+    def test_codex_pre_tool_use_blocks_fd_implicit_root_sed_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        command = "fd 'SKILL.md' -x sed -n '1,20p' {}"
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert "destructive shell command" in output["artifact_name"]
+
+    def test_codex_pre_tool_use_blocks_fd_skill_doc_symlink_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        ssh_dir = home_dir / ".ssh"
+        ssh_dir.mkdir(parents=True)
+        symlink_target = home_dir / ".codex" / "superpowers" / "skills" / "ssh-link"
+        symlink_target.parent.mkdir(parents=True, exist_ok=True)
+        symlink_target.symlink_to(ssh_dir, target_is_directory=True)
+        command = "fd -a 'SKILL.md' ~/.codex/superpowers/skills/ssh-link -d 1 -x sed -n '1,20p' {}"
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert "destructive shell command" in output["artifact_name"]
+
     def test_codex_pre_tool_use_blocks_fd_search_path_sensitive_dir_exec(
         self,
         monkeypatch,
