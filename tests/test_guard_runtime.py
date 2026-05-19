@@ -12154,6 +12154,15 @@ def test_guard_runtime_blocks_pytest_package_bytecode_shadow(tmp_path):
     assert match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_local_pytest_entry_point_metadata(tmp_path):
+    _write_text(tmp_path / "evil-1.0.dist-info" / "entry_points.txt", "[pytest11]\nevil = evil\n")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_allows_simple_pytest_binary_invocation(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",

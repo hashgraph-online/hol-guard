@@ -3732,7 +3732,7 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
         return True
     if _contains_pytest_env_shell_script_wrapper(parts):
         return True
-    if _contains_unsafe_pytest_environment_wrapper(parts):
+    if _contains_unsafe_pytest_environment_wrapper(parts, cwd=cwd):
         return True
     if _looks_like_safe_read_only_lookup_command(normalized, parts):
         return False
@@ -5495,7 +5495,7 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
     return saw_python_module
 
 
-def _contains_unsafe_pytest_environment_wrapper(parts: list[str]) -> bool:
+def _contains_unsafe_pytest_environment_wrapper(parts: list[str], *, cwd: Path | None) -> bool:
     for segment in _iter_shell_command_segments(parts):
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name is None or command_index is None:
@@ -5870,7 +5870,21 @@ def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
     shadow_paths = _SAFE_PYTHON_MODULE_SHADOW_PATHS.get(module_root)
     if shadow_paths is None:
         return True
+    if module_root == "pytest" and _pytest_local_entry_point_metadata_exists(cwd):
+        return True
     return any((cwd / shadow_path).exists() for shadow_path in shadow_paths)
+
+
+def _pytest_local_entry_point_metadata_exists(cwd: Path) -> bool:
+    try:
+        return any(
+            child.is_dir()
+            and child.name.endswith((".dist-info", ".egg-info"))
+            and (child / "entry_points.txt").exists()
+            for child in cwd.iterdir()
+        )
+    except OSError:
+        return True
 
 
 def _pytest_config_may_add_unsafe_options(cwd: Path | None, module_args: list[str]) -> bool:
