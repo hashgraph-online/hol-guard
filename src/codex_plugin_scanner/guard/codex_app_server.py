@@ -37,6 +37,8 @@ _THREAD_ID_KEYS = (
 )
 _TURN_ID_KEYS = ("codex_turn_id", "turn_id", "turnId")
 _SOCKET_KEYS = ("codex_app_server_socket", "app_server_socket", "appServerSocket")
+_CODEX_HOME_KEYS = ("codex_home", "codexHome")
+_COMMAND_TEXT_KEYS = ("command_text", "commandText")
 
 
 class _WebSocketClosedError(TimeoutError):
@@ -66,6 +68,9 @@ def codex_resume_metadata_from_hook_payload(
     )
     if socket_path is not None:
         metadata["codex_app_server_socket"] = socket_path
+    codex_home = _first_string(payload, _CODEX_HOME_KEYS) or _first_string_from_env(env, ("CODEX_HOME",))
+    if codex_home is not None:
+        metadata["codex_home"] = codex_home
     return metadata
 
 
@@ -99,9 +104,9 @@ def resume_codex_thread_for_request(
             "status": "skipped",
             "reason": "socket_not_available",
             "thread_id": thread_id,
-            "socket_path": socket_path,
         }
-    prompt = _continuation_prompt(action)
+    command_text = _first_string(metadata, _COMMAND_TEXT_KEYS)
+    prompt = build_codex_continuation_prompt(action, request_id=request_id, command_text=command_text)
     request_payloads = [
         {
             "jsonrpc": "2.0",
@@ -161,7 +166,6 @@ def resume_codex_thread_for_request(
             "status": "failed",
             "reason": "turn_start_timeout",
             "thread_id": thread_id,
-            "socket_path": socket_path,
         }
     error = result.get("error")
     if isinstance(error, BaseException):
@@ -169,7 +173,6 @@ def resume_codex_thread_for_request(
             "status": "failed",
             "reason": type(error).__name__,
             "thread_id": thread_id,
-            "socket_path": socket_path,
         }
     response = result.get("response")
     if response is None:
@@ -177,14 +180,12 @@ def resume_codex_thread_for_request(
             "status": "failed",
             "reason": "missing_turn_start_response",
             "thread_id": thread_id,
-            "socket_path": socket_path,
         }
     if not isinstance(response, dict):
         return {
             "status": "failed",
             "reason": "invalid_turn_start_response",
             "thread_id": thread_id,
-            "socket_path": socket_path,
         }
     if isinstance(response.get("error"), dict):
         error = response["error"]
@@ -194,13 +195,11 @@ def resume_codex_thread_for_request(
             "reason": "turn_start_error",
             "message": str(message) if isinstance(message, str) else "Codex app-server rejected the continuation.",
             "thread_id": thread_id,
-            "socket_path": socket_path,
         }
     return {
         "status": "sent",
         "reason": "turn_start_sent",
         "thread_id": thread_id,
-        "socket_path": socket_path,
     }
 
 
@@ -247,16 +246,25 @@ def _find_codex_operation_for_request(store: _OperationStore, request_id: str) -
     return None
 
 
-def _continuation_prompt(action: str) -> str:
+def build_codex_continuation_prompt(action: str, *, request_id: str, command_text: str | None = None) -> str:
     if action == "allow":
+        if command_text is not None:
+            return (
+                f"HOL Guard approved request `{request_id}` for this exact command:\n"
+                f"{command_text}\n"
+                "Retry that exact command now using the existing saved approval."
+            )
         return (
-            "HOL Guard approved the paused action. Continue from where you stopped, retry the same "
-            "blocked action once, and do not repeat work that already succeeded."
+            f"HOL Guard approved request `{request_id}`. "
+            "Retry the blocked action now using the existing saved approval."
         )
-    return (
-        "HOL Guard kept the paused action blocked. Continue from where you stopped with a safe "
-        "alternative and do not retry the blocked action."
-    )
+    if command_text is not None:
+        return (
+            f"HOL Guard blocked request `{request_id}` for this exact command:\n"
+            f"{command_text}\n"
+            "Do not retry it. Explain a safe alternative."
+        )
+    return f"HOL Guard blocked request `{request_id}`. Do not retry that action. Explain a safe alternative."
 
 
 def _send_app_server_websocket_messages(

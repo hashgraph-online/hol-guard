@@ -323,7 +323,11 @@ When Guard blocks a launch, it opens a persistent approval link in the terminal 
    hol-guard approvals deny <request-id>
    ```
 
-5. After you resolve the request, Guard emits copy telling you to return to your AI assistant and retry. No page reload or session restart is needed.
+5. After you resolve the request, Guard reports one of two honest outcomes:
+   - Codex resumed, Guard sent the exact blocked command context back into the same session, so watch the same chat for the next HOL Guard message.
+   - Guard could not find the Codex session to resume, return to Codex manually and follow the saved approval or block guidance.
+
+   For harnesses without resume support, Guard still saves the decision and shows the manual next step. No page reload is required.
 
 To inspect a pending request's details or get the approval URL, pass the request-id to the `approve` command with `--dry-run`, or visit the approval center URL shown in the block message directly.
 

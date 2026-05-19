@@ -427,7 +427,9 @@ def test_resolving_active_item_with_two_remaining_returns_next_hint(tmp_path: Pa
     assert payload["remaining_pending_count"] == 2
     assert payload["next_selectable_request_id"] == "req-newest"
     assert {item["request_id"] for item in payload["remaining_pending_summaries"]} == {"req-newest", "req-old"}
-    assert payload["copy"]["body"] == "Return to Codex and retry"
+    assert payload["copy"]["title"] == "Decision saved. Return to Codex."
+    assert "could not find the Codex session to resume" in payload["copy"]["body"]
+    assert "approval is now saved" in payload["copy"]["body"]
     assert store.get_approval_request("req-active")["resolution_action"] == "allow"
 
 
@@ -613,7 +615,9 @@ def test_resolving_last_item_returns_empty_queue_hint(tmp_path: Path) -> None:
     assert payload["remaining_pending_count"] == 0
     assert payload["next_selectable_request_id"] is None
     assert payload["remaining_pending_summaries"] == []
-    assert payload["copy"]["title"] == "Blocked. Guard will remember this decision."
+    assert payload["copy"]["title"] == "Decision saved. Return to Codex."
+    assert "Do not retry that action in Codex." in payload["copy"]["body"]
+    assert "safe alternative" in payload["copy"]["body"]
     assert store.get_approval_request("req-only")["resolution_action"] == "block"
 
 
@@ -794,7 +798,8 @@ def test_authenticated_hosted_origin_request_resolution_does_not_401(tmp_path: P
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["copy"]["body"] == "Return to Codex and retry"
+    assert payload["copy"]["title"] == "Decision saved. Return to Codex."
+    assert "could not find the Codex session to resume" in payload["copy"]["body"]
     assert allow_origin == "https://hol.org"
     assert store.get_approval_request("req-hosted-auth")["resolution_action"] == "allow"
 

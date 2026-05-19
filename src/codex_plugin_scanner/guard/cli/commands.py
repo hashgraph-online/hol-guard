@@ -45,6 +45,7 @@ from ..bridge import (
     WebhookBackend,
 )
 from ..codex_app_server import codex_resume_metadata_from_hook_payload
+from ..codex_resume import inspect_codex_resume_capabilities
 from ..config import (
     DEFAULT_SECURITY_LEVEL,
     VALID_RISK_ACTION_KEYS,
@@ -148,6 +149,7 @@ from .approval_commands import (
     add_approval_parser,
     run_approval_command,
     run_approval_open_command,
+    run_approval_resume_command,
     run_approval_retry_hint_command,
 )
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
@@ -246,6 +248,17 @@ def _guard_risk_action_key(value: str) -> str:
     if normalized not in VALID_RISK_ACTION_KEYS:
         raise argparse.ArgumentTypeError(f"invalid risk class: {value}")
     return normalized
+
+
+def _hook_command_text(payload: Mapping[str, object]) -> str | None:
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, Mapping):
+        return None
+    for key in ("command", "cmd", "shell_command", "shellCommand"):
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
 
 
 _CLAUDE_GUARD_APPROVAL_HEADER = "HOL Guard"
@@ -1859,6 +1872,10 @@ def run_guard_command(
             payload, exit_code = run_approval_retry_hint_command(args, store=store)
             _emit("approvals", payload, getattr(args, "json", False))
             return exit_code
+        if approvals_command == "resume":
+            payload, exit_code = run_approval_resume_command(args, store=store)
+            _emit("approvals", payload, getattr(args, "json", False))
+            return exit_code
         payload = run_approval_command(args, store=store, workspace=workspace)
         _emit("approvals", payload, getattr(args, "json", False))
         return int(payload.get("exit_code", 0))
@@ -1933,6 +1950,8 @@ def run_guard_command(
             adapter = get_adapter(args.harness)
             payload = adapter.diagnostics(context)
             payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
+            if args.harness == "codex":
+                payload["codex_resume"] = inspect_codex_resume_capabilities(store)
         else:
             payload = {
                 "tables": store.list_table_names(),
@@ -2325,6 +2344,7 @@ def run_guard_command(
                     metadata={
                         "tool_name": str(payload.get("tool_name", "")),
                         "hook_name": "permissionRequest",
+                        "command_text": _hook_command_text(payload),
                         **codex_resume_metadata_from_hook_payload(payload),
                     },
                     detection=runtime_detection.to_dict(),
@@ -2729,6 +2749,7 @@ def run_guard_command(
                             metadata={
                                 "tool_name": str(payload.get("tool_name", "")),
                                 "event": str(payload.get("event", "")),
+                                "command_text": _hook_command_text(payload),
                                 **codex_resume_metadata_from_hook_payload(payload),
                             },
                             detection=runtime_detection.to_dict(),

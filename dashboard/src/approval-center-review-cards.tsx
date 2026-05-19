@@ -40,13 +40,16 @@ export function WhyThisPaused(props: WhyThisPausedProps) {
 
 type ApproveConsequenceProps = {
   retryInstruction: string | null;
+  isCodex?: boolean;
 };
 
 export function ApproveConsequence(props: ApproveConsequenceProps) {
   const text =
-    props.retryInstruction !== null
-      ? `If you approve: ${props.retryInstruction}`
-      : "If you approve: HOL Guard will let this action run and remember your choice within the selected scope.";
+    props.isCodex === true
+      ? "If you approve: Codex will continue the blocked action automatically."
+      : props.retryInstruction !== null
+        ? `If you approve: ${props.retryInstruction}`
+        : "If you approve: HOL Guard will let this action run and remember your choice within the selected scope.";
   return (
     <div className="flex items-start gap-2">
       <HiMiniCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green" aria-hidden="true" />
@@ -55,13 +58,16 @@ export function ApproveConsequence(props: ApproveConsequenceProps) {
   );
 }
 
-export function BlockConsequence() {
+export function BlockConsequence(props: { isCodex?: boolean }) {
+  const text =
+    props.isCodex === true
+      ? "If you block: Codex will stop here. Return to your terminal to continue with a different approach."
+      : "If you block: HOL Guard will stop this action and you can allow it again any time from the Review Queue.";
   return (
     <div className="flex items-start gap-2">
       <HiMiniXMark className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-purple" aria-hidden="true" />
       <p className="text-xs leading-5 text-muted-foreground">
-        If you block: HOL Guard will stop this action and you can allow it again any time from the
-        Review Queue.
+        {text}
       </p>
     </div>
   );

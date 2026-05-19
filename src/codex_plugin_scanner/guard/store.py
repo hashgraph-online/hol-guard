@@ -105,6 +105,24 @@ from .store_evidence import (
 from .store_evidence import (
     list_evidence as _list_evidence_impl,
 )
+from .store_resume import (
+    delete_request_resumes as purge_request_resumes,
+)
+from .store_resume import (
+    get_latest_request_resume as load_latest_request_resume,
+)
+from .store_resume import (
+    get_request_resume as load_request_resume,
+)
+from .store_resume import (
+    resume_schema_statement,
+)
+from .store_resume import (
+    seed_request_resume as persist_request_resume_seed,
+)
+from .store_resume import (
+    update_request_resume as persist_request_resume_update,
+)
 from .store_threat_intel import (
     threat_intel_bundle_schema_statement,
     threat_intel_index_statements,
@@ -716,6 +734,7 @@ class GuardStore:
               primary key (surface, open_key)
             )
             """,
+            resume_schema_statement(),
             connect_state_schema_statement(),
             connect_request_schema_statement(),
             connect_state_schema_statement(),
@@ -2093,6 +2112,12 @@ class GuardStore:
         if conditions:
             query += " where " + " and ".join(conditions)
         with self._connect() as connection:
+            request_rows = connection.execute(
+                f"select request_id from approval_requests{' where ' + ' and '.join(conditions) if conditions else ''}",
+                tuple(params),
+            ).fetchall()
+            request_ids = [str(row["request_id"]) for row in request_rows]
+            purge_request_resumes(connection, request_ids)
             cursor = connection.execute(query, tuple(params))
             return int(cursor.rowcount if cursor.rowcount is not None else 0)
 
@@ -3101,6 +3126,70 @@ class GuardStore:
                 "updated_at": str(row["updated_at"]),
             }
         return None
+
+    def seed_request_resume(
+        self,
+        *,
+        request_id: str,
+        operation_id: str | None,
+        harness: str,
+        strategy: str,
+        supported: bool,
+        thread_id: str | None,
+        now: str,
+    ) -> None:
+        with self._connect() as connection:
+            persist_request_resume_seed(
+                connection,
+                request_id=request_id,
+                operation_id=operation_id,
+                harness=harness,
+                strategy=strategy,
+                supported=supported,
+                thread_id=thread_id,
+                now=now,
+            )
+
+    def get_request_resume(self, request_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_request_resume(connection, request_id)
+
+    def get_latest_request_resume(self, *, harness: str | None = None) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_latest_request_resume(connection, harness=harness)
+
+    def update_request_resume(
+        self,
+        *,
+        request_id: str,
+        resolution_action: str | None,
+        strategy: str | None,
+        supported: bool | None,
+        status: str,
+        reason: str | None,
+        message: str | None,
+        last_error: str | None,
+        attempt_count: int,
+        last_attempt_at: str | None,
+        sent_at: str | None,
+        now: str,
+    ) -> None:
+        with self._connect() as connection:
+            persist_request_resume_update(
+                connection,
+                request_id=request_id,
+                resolution_action=resolution_action,
+                strategy=strategy,
+                supported=supported,
+                status=status,
+                reason=reason,
+                message=message,
+                last_error=last_error,
+                attempt_count=attempt_count,
+                last_attempt_at=last_attempt_at,
+                sent_at=sent_at,
+                now=now,
+            )
 
     def add_guard_operation_item(
         self,

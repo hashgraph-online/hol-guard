@@ -12570,6 +12570,7 @@ const GUARD_RISK_SIGNAL_V2_CATEGORIES = [
 ];
 const GUARD_RISK_SIGNAL_V2_SEVERITIES = ["info", "low", "medium", "high", "critical"];
 const GUARD_RISK_SIGNAL_V2_REDACTION_LEVELS = ["none", "summary", "redacted"];
+const CODEX_RESUME_STATUSES = ["pending", "in_progress", "sent", "already_sent", "failed", "skipped"];
 const now = "2026-04-11T12:00:00Z";
 const demoRequests = [
   {
@@ -13048,18 +13049,35 @@ function normalizeQueueCopy(raw) {
   }
   return { title, body };
 }
+function isCodexResumeStatus(value) {
+  return typeof value === "string" && CODEX_RESUME_STATUSES.some((s) => s === value);
+}
 function normalizeCodexResume(raw) {
   if (!isRecord(raw)) {
     return null;
   }
   const status = raw["status"];
-  const reason = raw["reason"];
-  const threadId = raw["thread_id"];
-  const isKnownStatus = status === "sent" || status === "skipped" || status === "failed";
-  if (!isKnownStatus || typeof reason !== "string" || typeof threadId !== "string") {
+  if (!isCodexResumeStatus(status)) {
     return null;
   }
-  return { status, reason, thread_id: threadId };
+  return {
+    request_id: isStringOrNull(raw["request_id"]) ? raw["request_id"] : null,
+    operation_id: isStringOrNull(raw["operation_id"]) ? raw["operation_id"] : null,
+    harness: isStringOrNull(raw["harness"]) ? raw["harness"] : null,
+    resolution_action: isStringOrNull(raw["resolution_action"]) ? raw["resolution_action"] : null,
+    strategy: isStringOrNull(raw["strategy"]) ? raw["strategy"] : null,
+    supported: raw["supported"] === true,
+    status,
+    thread_id: isStringOrNull(raw["thread_id"]) ? raw["thread_id"] : null,
+    reason: isStringOrNull(raw["reason"]) ? raw["reason"] : null,
+    message: isStringOrNull(raw["message"]) ? raw["message"] : null,
+    last_error: isStringOrNull(raw["last_error"]) ? raw["last_error"] : null,
+    attempt_count: isNonNegativeNumber(raw["attempt_count"]) ? raw["attempt_count"] : 0,
+    created_at: isStringOrNull(raw["created_at"]) ? raw["created_at"] : null,
+    updated_at: isStringOrNull(raw["updated_at"]) ? raw["updated_at"] : null,
+    last_attempt_at: isStringOrNull(raw["last_attempt_at"]) ? raw["last_attempt_at"] : null,
+    sent_at: isStringOrNull(raw["sent_at"]) ? raw["sent_at"] : null
+  };
 }
 function normalizeQueueResolution(payload) {
   return {
@@ -13500,6 +13518,32 @@ async function setupDesktopNotifications() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({})
   });
+}
+async function retryResume(requestId) {
+  if (isGuardDemoMode()) {
+    return null;
+  }
+  const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
+  const init = (guardToken = readGuardToken()) => ({
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeadersForToken(guardToken)
+    },
+    body: JSON.stringify({})
+  });
+  let response = await fetchGuardApi(path, init());
+  if (response.status === 401) {
+    const refreshedToken = await refreshGuardToken();
+    if (refreshedToken !== null) {
+      response = await fetchGuardApi(path, init(refreshedToken));
+    }
+  }
+  if (!response.ok) {
+    throw new Error(`Resume retry failed with ${response.status}`);
+  }
+  const payload = await response.json();
+  return normalizeCodexResume(payload);
 }
 var DefaultContext = {
   color: void 0,
@@ -14236,6 +14280,33 @@ function resolveTerminalLabel(item) {
   if (item.artifact_type === "prompt_request") return "Prompt excerpt";
   if (item.artifact_type === "tool_action_request") return "Tool action";
   return "Stopped command";
+}
+function isCodexHarness(harness) {
+  return normalizeHarnessSlug(harness) === "codex";
+}
+function buildCodexResumeUx(resume) {
+  if (resume.status === "pending" || resume.status === "in_progress") {
+    return { headline: "Resuming Codex...", body: null, showRetry: false };
+  }
+  if (resume.status === "sent" || resume.status === "already_sent") {
+    return {
+      headline: "Codex resumed.",
+      body: "Watch the chat for the next HOL Guard message.",
+      showRetry: false
+    };
+  }
+  if (resume.status === "failed") {
+    return {
+      headline: "Guard could not resume the Codex session.",
+      body: resume.last_error ?? resume.reason ?? "Resume attempt failed.",
+      showRetry: true
+    };
+  }
+  return {
+    headline: "Guard could not locate the Codex session.",
+    body: "Return to your terminal and continue manually.",
+    showRetry: false
+  };
 }
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
@@ -18574,7 +18645,7 @@ function ReviewWorkspace(props) {
     }
   }, [currentPage, pagedRequests, activeRequestId, props.onOpenRequest]);
   if (requests.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewEmptyState, { runtime: props.runtime, resolutionMessage: props.resolutionMessage });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewEmptyState, { runtime: props.runtime, resolutionMessage: props.resolutionMessage, codexResume: props.codexResume, onRetryResume: props.onRetryResume });
   }
   const activeItem = activeRequest ?? filteredRequests[0] ?? requests[0];
   const progressIndex = filteredRequests.findIndex((r) => r.request_id === activeItem.request_id);
@@ -19316,7 +19387,26 @@ function allowButtonLabel(scope) {
   }
   return "Approve and remember";
 }
-function ReviewEmptyState({ runtime, resolutionMessage }) {
+function ReviewCodexResumePanel({ resume, onRetry }) {
+  const ux = buildCodexResumeUx(resume);
+  const isPending = resume.status === "pending" || resume.status === "in_progress";
+  const isSuccess = resume.status === "sent" || resume.status === "already_sent";
+  const isFailed = resume.status === "failed";
+  const borderClass = isFailed ? "border-brand-purple/25 bg-brand-purple/[0.05]" : isSuccess ? "border-brand-green/25 bg-brand-green-bg/30" : isPending ? "border-brand-blue/25 bg-brand-blue/[0.04]" : "border-slate-200/60 bg-slate-50/40";
+  const iconClass = isFailed ? "text-brand-purple" : isSuccess ? "text-brand-green" : "text-brand-blue";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-start gap-3 rounded-2xl border px-4 py-3 ${borderClass}`, children: [
+    isPending && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: `mt-0.5 h-4 w-4 shrink-0 animate-spin ${iconClass}`, "aria-hidden": "true" }),
+    isSuccess && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
+    isFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
+    !isPending && !isSuccess && !isFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-500", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: ux.headline }),
+      ux.body !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: ux.body }),
+      isFailed && onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry resume" }) })
+    ] })
+  ] });
+}
+function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }) {
   const appsCount = runtime?.managed_installs?.filter((i) => i.active).length ?? 0;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19336,7 +19426,8 @@ function ReviewEmptyState({ runtime, resolutionMessage }) {
         ]
       }
     ),
-    resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
+    codexResume !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewCodexResumePanel, { resume: codexResume, onRetry: onRetryResume }),
+    codexResume === null && resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: resolutionMessage })
     ] }),
@@ -19521,16 +19612,17 @@ function WhyThisPaused(props) {
   ] });
 }
 function ApproveConsequence(props) {
-  const text = props.retryInstruction !== null ? `If you approve: ${props.retryInstruction}` : "If you approve: HOL Guard will let this action run and remember your choice within the selected scope.";
+  const text = props.isCodex === true ? "If you approve: Codex will continue the blocked action automatically." : props.retryInstruction !== null ? `If you approve: ${props.retryInstruction}` : "If you approve: HOL Guard will let this action run and remember your choice within the selected scope.";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green", "aria-hidden": "true" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: text })
   ] });
 }
-function BlockConsequence() {
+function BlockConsequence(props) {
+  const text = props.isCodex === true ? "If you block: Codex will stop here. Return to your terminal to continue with a different approach." : "If you block: HOL Guard will stop this action and you can allow it again any time from the Review Queue.";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-purple", "aria-hidden": "true" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: "If you block: HOL Guard will stop this action and you can allow it again any time from the Review Queue." })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: text })
   ] });
 }
 const scopeOptions = [
@@ -19610,9 +19702,11 @@ function ApprovalCenterLayout(props) {
         } : null,
         runtime: props.runtime.kind === "ready" ? props.runtime.snapshot : null,
         resolutionMessage: props.resolutionMessage,
+        codexResume: props.codexResume,
         onOpenRequest: props.onOpenRequest,
         onResolve: props.onResolve,
-        onGoHome: props.onGoHome
+        onGoHome: props.onGoHome,
+        onRetryResume: props.onRetryResume
       }
     ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
       QueueWorkspace,
@@ -19622,13 +19716,15 @@ function ApprovalCenterLayout(props) {
         runtime: props.runtime,
         activeRequestId: props.activeRequestId,
         resolutionMessage: props.resolutionMessage,
+        codexResume: props.codexResume,
         onOpenRequest: props.onOpenRequest,
         onGoHome: props.onGoHome,
         onResolve: props.onResolve,
         onBulkApprove: props.onBulkApprove,
         onBulkBlock: props.onBulkBlock,
         onRetry: props.onRetry,
-        onRepair: props.onRepair
+        onRepair: props.onRepair,
+        onRetryResume: props.onRetryResume
       }
     ) }) }) })
   ] });
@@ -19716,16 +19812,19 @@ function QueueWorkspace(props) {
     ] }) });
   }
   if (props.requests.items.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      WelcomeState,
-      {
-        connectUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.connect_url : null,
-        dashboardUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.dashboard_url : null,
-        fleetUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.fleet_url : null,
-        inboxUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.inbox_url : null,
-        resolutionMessage: props.resolutionMessage
-      }
-    );
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      props.codexResume !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CodexResumePanel, { resume: props.codexResume, onRetry: props.onRetryResume }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        WelcomeState,
+        {
+          connectUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.connect_url : null,
+          dashboardUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.dashboard_url : null,
+          fleetUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.fleet_url : null,
+          inboxUrl: props.runtime.kind === "ready" ? props.runtime.snapshot.inbox_url : null,
+          resolutionMessage: props.codexResume === null ? props.resolutionMessage : null
+        }
+      )
+    ] });
   }
   const showSideBySide = props.requests.items.length > 1;
   const activeIndex = props.requests.items.findIndex(
@@ -19736,7 +19835,8 @@ function QueueWorkspace(props) {
     props.requests.items.length
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-    props.resolutionMessage && props.requests.items.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
+    props.codexResume !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CodexResumePanel, { resume: props.codexResume, onRetry: props.onRetryResume }),
+    props.resolutionMessage && props.codexResume === null && props.requests.items.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: props.resolutionMessage })
     ] }),
@@ -20135,6 +20235,68 @@ function queueCardStatusDotClass(active, blocked) {
   }
   return "bg-slate-200";
 }
+function CodexResumePanel(props) {
+  const ux = buildCodexResumeUx(props.resume);
+  const isPending = props.resume.status === "pending" || props.resume.status === "in_progress";
+  const isSuccess = props.resume.status === "sent" || props.resume.status === "already_sent";
+  const isFailed = props.resume.status === "failed";
+  if (isPending) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "flex items-center gap-3 rounded-2xl border border-brand-blue/25 bg-brand-blue/[0.05] px-4 py-3",
+        role: "status",
+        "aria-live": "polite",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0 animate-spin text-brand-blue", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-blue", children: ux.headline })
+        ]
+      }
+    );
+  }
+  if (isSuccess) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3",
+        role: "status",
+        "aria-live": "polite",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: ux.headline }),
+            ux.body !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-brand-green-text/80", children: ux.body })
+          ] })
+        ]
+      }
+    );
+  }
+  if (isFailed) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "rounded-2xl border border-brand-purple/25 bg-brand-purple/[0.05] px-4 py-3 space-y-2",
+        role: "alert",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-purple", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-purple", children: ux.headline })
+          ] }),
+          ux.body !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "ml-7 text-xs text-brand-purple/80", children: ux.body }),
+          ux.showRetry && props.onRetry !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ml-7", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Try again" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "ml-7 text-xs text-muted-foreground", children: "You can also return to your terminal and retry manually." })
+        ]
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-slate-50 px-4 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: ux.headline }),
+      ux.body !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-muted-foreground", children: ux.body })
+    ] })
+  ] });
+}
 function StickyMobileActions(props) {
   const allowText = resolveAllowButtonText(props.submitting, props.isBlocked, props.allowLabel);
   const blockText = resolveBlockButtonText(props.submitting, props.isBlocked);
@@ -20428,6 +20590,7 @@ function RuleBuilder(props) {
   const previewText = getRulePreviewText(props.item, props.scope);
   const allowLabel = resolveAllowScopeLabel(props.scope);
   const retryInstruction = props.item.decision_v2_json?.retry_instruction ?? null;
+  const isCodex = isCodexHarness(props.item.harness);
   const handleAllow = reactExports.useCallback(() => props.onResolve("allow"), [props.onResolve]);
   const handleBlock = reactExports.useCallback(() => props.onResolve("block"), [props.onResolve]);
   const handleReasonChange = reactExports.useCallback((e) => {
@@ -20454,6 +20617,7 @@ function RuleBuilder(props) {
         previewText,
         submitting: props.submitting,
         isBlocked: props.item.policy_action === "block",
+        isCodex,
         retryInstruction,
         onAllow: handleAllow,
         onBlock: handleBlock
@@ -20531,18 +20695,19 @@ function RuleBuilder(props) {
 function DecisionActionPanel(props) {
   const allowText = resolveAllowButtonText(props.submitting, props.isBlocked, props.allowLabel);
   const blockText = resolveBlockButtonText(props.submitting, props.isBlocked);
+  const footerCopy = props.isCodex ? "Codex will continue automatically after you approve." : "After saving, retry the same request in your chat.";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-white/80 bg-white/80 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Decision" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/70", children: props.previewText }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 grid gap-1.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ApproveConsequence, { retryInstruction: props.retryInstruction }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(BlockConsequence, {})
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ApproveConsequence, { retryInstruction: props.retryInstruction, isCodex: props.isCodex }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BlockConsequence, { isCodex: props.isCodex })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "success", onClick: props.onAllow, disabled: props.submitting !== null, children: allowText }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onBlock, disabled: props.submitting !== null, children: blockText })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs leading-5 text-muted-foreground", children: "After saving, retry the same request in your chat." })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs leading-5 text-muted-foreground", children: footerCopy })
   ] });
 }
 function resolveAllowButtonText(submitting, blocked, allowLabel) {
@@ -21047,6 +21212,8 @@ function App() {
   const [policies, setPolicies] = reactExports.useState({ kind: "loading" });
   const [inventory, setInventory] = reactExports.useState({ kind: "idle" });
   const [resolutionMessage, setResolutionMessage] = reactExports.useState(null);
+  const [codexResume, setCodexResume] = reactExports.useState(null);
+  const [resolvedRequestId, setResolvedRequestId] = reactExports.useState(null);
   const [helpOpen, setHelpOpen] = reactExports.useState(false);
   const [clearConfirm, setClearConfirm] = reactExports.useState(null);
   const resolutionInFlight = reactExports.useRef(false);
@@ -21300,11 +21467,14 @@ function App() {
     try {
       const result = await resolveRequestWithQueueResult(payload);
       const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
+      const resume = result.codex_resume ?? null;
+      setCodexResume(resume);
+      setResolvedRequestId(resume !== null ? payload.requestId : null);
       if (nextId !== null) {
         setResolutionMessage(null);
         navigate(`/requests/${nextId}`);
       } else {
-        setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
+        setResolutionMessage(resume !== null ? null : result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
         navigate("/inbox");
       }
       await refreshStateAfterAction();
@@ -21312,6 +21482,11 @@ function App() {
       resolutionInFlight.current = false;
     }
   }, [requests, refreshStateAfterAction, setResolutionMessage]);
+  const handleRetryResume = reactExports.useCallback(async () => {
+    if (resolvedRequestId === null) return;
+    const updated = await retryResume(resolvedRequestId);
+    setCodexResume(updated);
+  }, [resolvedRequestId]);
   const handleBulkApprove = reactExports.useCallback(async (ids) => {
     const results = await Promise.allSettled(
       ids.map(
@@ -21422,6 +21597,8 @@ function App() {
         inventory: inventory.kind === "ready" ? inventory.items : [],
         activeRequestId,
         resolutionMessage,
+        codexResume,
+        onRetryResume: handleRetryResume,
         homeContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           HomeWorkspace,
           {

@@ -25,13 +25,21 @@ Run them via the harness under test and confirm HOL Guard pauses before any netw
 
 **Prerequisites:** `hol-guard` installed; Codex CLI installed via `npm install -g @openai/codex`.
 
+Manual proof helper:
+
+```bash
+python scripts/codex-auto-resume-smoke.py
+```
+
+The smoke helper emits JSON with the allow and block request IDs, resume status, resume strategy, whether the proof file was created, the final resume message, and a sanitized transcript excerpt. It reuses your current authenticated Codex home unless you pass `--codex-home`.
+
 1. Run `hol-guard bootstrap codex` and confirm the hook is active.
-2. Ask Codex: `"Read the file ~/.npmrc and show its contents."`
-   - **Expected (T588):** HOL Guard pauses the action and prints an approval link or native prompt.
-3. Approve the action in the approval center.
-   - **Expected (T589):** Codex resumes and completes the read.
-4. Run the same prompt again and deny in the approval center.
-   - **Expected (T590):** Codex receives a blocked result; the file is not read.
+2. Run the smoke helper and resolve the allow request in the approval center.
+   - **Expected (T588):** HOL Guard records a pending Codex approval request and prints the browser review path.
+3. Approve the allow request in the approval center.
+   - **Expected (T589):** Guard reports `resume_status = sent`, the resume strategy reflects the active Codex path, and the proof file is created after the saved approval is replayed.
+4. Re-run the smoke helper and deny the block request in the approval center.
+   - **Expected (T590):** Guard reports `resume_status = sent`, the proof file is still absent, and the resumed Codex session gets block guidance instead of rerunning the command.
 
 ---
 

@@ -9,8 +9,9 @@ import {
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
   buildRecommendation,
   scopeLabel,
+  buildCodexResumeUx,
 } from "./approval-center-utils";
-import type { GuardActionEnvelope, GuardApprovalRequest } from "./guard-types";
+import type { GuardActionEnvelope, GuardApprovalRequest, GuardCodexResumeResult } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -257,3 +258,57 @@ assert(
   scopeLabel("global") !== "Remember for project",
   "C12: scopeLabel for global is not the project-scoped label"
 );
+
+function makeResume(status: GuardCodexResumeResult["status"], extras?: Partial<GuardCodexResumeResult>): GuardCodexResumeResult {
+  return {
+    status,
+    supported: true,
+    attempt_count: 0,
+    request_id: null,
+    operation_id: null,
+    harness: null,
+    resolution_action: null,
+    strategy: null,
+    thread_id: null,
+    reason: null,
+    message: null,
+    last_error: null,
+    created_at: null,
+    updated_at: null,
+    last_attempt_at: null,
+    sent_at: null,
+    ...extras,
+  };
+}
+
+const uxPending = buildCodexResumeUx(makeResume("pending"));
+assert(uxPending.showRetry === false, "C13: pending status has showRetry false");
+assert(uxPending.headline.toLowerCase().includes("resum"), "C13: pending headline mentions resuming");
+
+const uxInProgress = buildCodexResumeUx(makeResume("in_progress"));
+assert(uxInProgress.showRetry === false, "C13: in_progress status has showRetry false");
+assert(uxInProgress.headline.toLowerCase().includes("resum"), "C13: in_progress headline mentions resuming");
+
+const uxSent = buildCodexResumeUx(makeResume("sent"));
+assert(uxSent.showRetry === false, "C13: sent status has showRetry false");
+assert(uxSent.headline.toLowerCase().includes("codex"), "C13: sent headline mentions Codex");
+
+const uxAlreadySent = buildCodexResumeUx(makeResume("already_sent"));
+assert(uxAlreadySent.showRetry === false, "C13: already_sent status has showRetry false");
+assert(uxAlreadySent.headline === uxSent.headline, "C13: already_sent and sent have same headline");
+
+const uxFailed = buildCodexResumeUx(makeResume("failed", { last_error: "connection lost" }));
+assert(uxFailed.showRetry === true, "C13: failed status has showRetry true");
+assert(uxFailed.body === "connection lost", "C13: failed uses last_error for body");
+
+const uxFailedFallback = buildCodexResumeUx(makeResume("failed", { reason: "timeout" }));
+assert(uxFailedFallback.body === "timeout", "C13: failed falls back to reason when no last_error");
+
+const uxFailedDefault = buildCodexResumeUx(makeResume("failed"));
+assert(uxFailedDefault.body !== null, "C13: failed has non-null body even without error details");
+
+const uxSkipped = buildCodexResumeUx(makeResume("skipped"));
+assert(uxSkipped.showRetry === false, "C13: skipped status has showRetry false");
+assert(uxSkipped.body !== null && uxSkipped.body.toLowerCase().includes("terminal"), "C13: skipped body mentions terminal");
+
+console.log("approval-center-layout.test.ts: all tests passed");
