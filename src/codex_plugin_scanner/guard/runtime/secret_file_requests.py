@@ -765,7 +765,7 @@ def _destructive_shell_tool_action_request(
                 "`--body-file` for PR descriptions."
             ),
         )
-    if not _looks_destructive_shell_command(command_text):
+    if not _looks_destructive_shell_command(command_text, cwd=cwd):
         return None
     return ToolActionRequestMatch(
         tool_name=tool_name,
@@ -2973,7 +2973,7 @@ def _decoded_payload_looks_sensitive(
     visited_script_paths: frozenset[str],
 ) -> bool:
     lowered = payload.lower()
-    if _looks_destructive_shell_command(payload):
+    if _looks_destructive_shell_command(payload, cwd=cwd):
         return True
     if any(token in lowered for token in _SENSITIVE_DECODED_PAYLOAD_TOKENS):
         return True
@@ -3685,12 +3685,12 @@ def _docker_config_path_from_command(
     return match.normalized_path
 
 
-def _looks_destructive_shell_command(command_text: str) -> bool:
+def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = None) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
     for substitution_payload in _shell_command_substitution_payloads(normalized):
-        if _looks_destructive_shell_command(substitution_payload):
+        if _looks_destructive_shell_command(substitution_payload, cwd=cwd):
             return True
     node_heredoc_script = _single_node_heredoc_script(normalized)
     if node_heredoc_script is not None:
@@ -3716,10 +3716,14 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     if _looks_like_read_only_interpreter_command(normalized, parts, parsed_command_names):
         return False
+    if _looks_like_safe_pytest_binary_invocation(parts, cwd=cwd):
+        return False
+    if _contains_unsafe_pytest_binary_invocation(parts, cwd=cwd):
+        return True
     if _single_interpreter_heredoc_script(normalized) is not None or any(
         _is_python_interpreter_command(command_name) for command_name in parsed_command_names
     ):
-        return not _looks_like_safe_python_module_invocation(parts)
+        return not _looks_like_safe_python_module_invocation(parts, cwd=cwd)
     if _contains_unmodeled_inline_interpreter_eval(normalized, parts, parsed_command_names):
         return True
     if _contains_destructive_node_inline_eval(parts):
@@ -3735,10 +3739,10 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     if _find_command_uses_delete(parts):
         return True
     for env_split_string in _env_split_string_payloads(parts):
-        if _looks_destructive_shell_command(env_split_string):
+        if _looks_destructive_shell_command(env_split_string, cwd=cwd):
             return True
     for shell_script in _shell_command_scripts(parts):
-        if _looks_destructive_shell_command(shell_script):
+        if _looks_destructive_shell_command(shell_script, cwd=cwd):
             return True
     return any(
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
@@ -5396,7 +5400,7 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
     return all(_script_is_read_only_observer(script_text) for script_text in scripts)
 
 
-def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
+def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | None = None) -> bool:
     segments = _iter_shell_command_segments(parts)
     if not segments:
         return False
@@ -5409,7 +5413,7 @@ def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
         if _is_python_interpreter_command(command_name):
             if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
                 return False
-            if not _python_segment_runs_safe_module(segment_args):
+            if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
                 return False
             saw_python_module = True
             continue
@@ -5422,6 +5426,47 @@ def _looks_like_safe_python_module_invocation(parts: list[str]) -> bool:
             continue
         return False
     return saw_python_module
+
+
+def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | None) -> bool:
+    saw_pytest = False
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            return False
+        segment_args = segment[command_index + 1 :]
+        if command_name == "pytest":
+            if not _pytest_binary_segment_is_safe(segment[command_index], segment_args, cwd=cwd):
+                return False
+            saw_pytest = True
+            continue
+        if command_name in _READ_ONLY_LOOKUP_FILTERS and _read_only_lookup_filter_segment_is_safe(
+            command_name,
+            segment_args,
+        ):
+            continue
+        if command_name in _SAFE_STATIC_SHELL_COMMANDS and _static_shell_segment_is_safe(segment_args):
+            continue
+        return False
+    return saw_pytest
+
+
+def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | None) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "pytest" or command_index is None:
+            continue
+        if not _pytest_binary_segment_is_safe(segment[command_index], segment[command_index + 1 :], cwd=cwd):
+            return True
+    return False
+
+
+def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *, cwd: Path | None) -> bool:
+    if "/" in command_token or "\\" in command_token:
+        return False
+    if _python_module_may_be_shadowed("pytest", cwd):
+        return False
+    return _pytest_module_args_are_safe(module_args)
 
 
 def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key: str) -> bool:
@@ -5461,7 +5506,7 @@ def _python_args_use_module_mode(args: list[str]) -> bool:
     return False
 
 
-def _python_segment_runs_safe_module(args: list[str]) -> bool:
+def _python_segment_runs_safe_module(args: list[str], *, cwd: Path | None = None) -> bool:
     if not args:
         return False
     index = 0
@@ -5473,10 +5518,10 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
             return False
         if arg == "-m":
             module = args[index + 1] if index + 1 < len(args) else ""
-            return _python_module_args_are_safe(module, args[index + 2 :])
+            return _python_module_args_are_safe(module, args[index + 2 :], cwd=cwd)
         if arg.startswith("-m") and len(arg) > 2:
             module = arg[2:]
-            return _python_module_args_are_safe(module, args[index + 1 :])
+            return _python_module_args_are_safe(module, args[index + 1 :], cwd=cwd)
         if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
             index += 2
             continue
@@ -5489,9 +5534,11 @@ def _python_segment_runs_safe_module(args: list[str]) -> bool:
     return False
 
 
-def _python_module_args_are_safe(module: str, module_args: list[str]) -> bool:
+def _python_module_args_are_safe(module: str, module_args: list[str], *, cwd: Path | None = None) -> bool:
     module_root = module.split(".", 1)[0]
     if module_root not in _SAFE_PYTHON_MODULE_COMMANDS:
+        return False
+    if _python_module_may_be_shadowed(module_root, cwd):
         return False
     if module_root == "pytest" and not _pytest_module_args_are_safe(module_args):
         return False
@@ -5502,6 +5549,12 @@ def _python_module_args_are_safe(module: str, module_args: list[str]) -> bool:
     return not any(
         arg in mutating_flags or any(arg.startswith(f"{flag}=") for flag in mutating_flags) for arg in module_args
     )
+
+
+def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
+    if cwd is None:
+        return True
+    return (cwd / f"{module_root}.py").exists() or (cwd / module_root / "__init__.py").exists()
 
 
 def _pytest_module_args_are_safe(module_args: list[str]) -> bool:

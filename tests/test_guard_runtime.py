@@ -12101,7 +12101,7 @@ def test_guard_hook_codex_user_prompt_submit_applies_destructive_prompt_policy(
     assert "HOL Guard" in payload["reason"]
 
 
-def test_guard_runtime_allows_simple_pytest_module_invocation():
+def test_guard_runtime_allows_simple_pytest_module_invocation(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
         {
@@ -12111,6 +12111,26 @@ def test_guard_runtime_allows_simple_pytest_module_invocation():
                 "test_release_checklist_references_smoke_evidence -q"
             )
         },
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
+def test_guard_runtime_blocks_shadowed_pytest_module_invocation(tmp_path):
+    _write_text(tmp_path / "pytest.py", "from pathlib import Path; Path('marker').write_text('owned')\n")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_allows_simple_pytest_binary_invocation(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
     )
 
     assert match is None
@@ -12149,14 +12169,24 @@ def test_guard_hook_codex_does_not_block_simple_pytest_command(tmp_path, capsys,
     assert "approval_requests" not in output
 
 
-def test_guard_runtime_keeps_mutating_pytest_flags_sensitive():
+def test_guard_runtime_keeps_mutating_pytest_flags_sensitive(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "python3 -m pytest --basetemp /tmp/guard-pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
     )
 
     assert match is not None
     assert match.action_class == "destructive shell command"
+
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pytest --basetemp /tmp/guard-pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
 
 
 def test_guard_runtime_tool_action_classification_uses_exact_action_classes():
