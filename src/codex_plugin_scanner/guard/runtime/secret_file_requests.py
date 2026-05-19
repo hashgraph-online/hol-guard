@@ -108,7 +108,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
 _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
-    "pytest": ("pytest.py", "pytest/__init__.py"),
+    "pytest": ("pytest.py", "pytest.pyc", "pytest/__init__.py"),
 }
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
@@ -5416,6 +5416,8 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
         if _is_python_interpreter_command(command_name):
             if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
                 return False
+            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_PLUGINS"):
+                return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
                 return False
             if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
@@ -5445,6 +5447,8 @@ def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
                 return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
                 return False
+            if _shell_segment_sets_env_key(segment, command_index, "PYTEST_PLUGINS"):
+                return False
             if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
                 return False
             if not _pytest_binary_segment_is_safe(segment[command_index], segment_args, cwd=cwd):
@@ -5470,6 +5474,8 @@ def _contains_unsafe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
         if _shell_segment_sets_env_key(segment, command_index, "PATH"):
             return True
         if _shell_segment_sets_env_key(segment, command_index, "PYTEST_ADDOPTS"):
+            return True
+        if _shell_segment_sets_env_key(segment, command_index, "PYTEST_PLUGINS"):
             return True
         if _shell_segment_sets_env_key(segment, command_index, "PYTHONPATH"):
             return True

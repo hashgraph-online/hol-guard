@@ -12127,6 +12127,15 @@ def test_guard_runtime_blocks_shadowed_pytest_module_invocation(tmp_path):
     assert match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_sourceless_pytest_bytecode_shadow(tmp_path):
+    _write_text(tmp_path / "pytest.pyc", "not-real-bytecode")
+
+    match = extract_sensitive_tool_action_request("Bash", {"command": "python3 -m pytest -q"}, cwd=tmp_path)
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_allows_simple_pytest_binary_invocation(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
@@ -12157,6 +12166,24 @@ def test_guard_runtime_blocks_pythonpath_pytest_module_override(tmp_path):
 
     assert match is not None
     assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pytest_plugin_env_override(tmp_path):
+    module_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_PLUGINS=evil python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+    binary_match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTEST_PLUGINS=evil pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert module_match is not None
+    assert module_match.action_class == "destructive shell command"
+    assert binary_match is not None
+    assert binary_match.action_class == "destructive shell command"
 
 
 def test_guard_runtime_blocks_path_overridden_pytest_binary(tmp_path):
