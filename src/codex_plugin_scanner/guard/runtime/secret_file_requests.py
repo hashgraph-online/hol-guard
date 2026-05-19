@@ -108,7 +108,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
 )
 _SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
 _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
-    "pytest": ("pytest.py", "pytest.pyc", "pytest/__init__.py"),
+    "pytest": ("pytest.py", "pytest.pyc", "pytest/__init__.py", "pytest/__main__.py"),
 }
 _PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
 _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = ("--basetemp", "--debug", "--junitxml", "-p")
@@ -5463,7 +5463,14 @@ def _contains_unsafe_pytest_environment_wrapper(parts: list[str]) -> bool:
 
 def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
     saw_state_mutation = False
+    exported_pytest_env_keys: set[str] = set()
     for segment in _iter_shell_command_segments(parts):
+        if any(
+            _shell_env_assignment_key(token) in exported_pytest_env_keys
+            for token in segment
+            if _shell_env_assignment_key(token) is not None
+        ):
+            saw_state_mutation = True
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name is None or command_index is None:
             continue
@@ -5472,12 +5479,14 @@ def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
         if command_name == "cd":
             saw_state_mutation = True
             continue
-        if command_name == "export" and any(
-            _shell_env_assignment_targets_key(token, key)
-            for token in segment[command_index + 1 :]
-            for key in ("PATH", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH")
-        ):
-            saw_state_mutation = True
+        if command_name == "export":
+            for token in segment[command_index + 1 :]:
+                env_key = _shell_exported_env_key(token)
+                if env_key not in {"PATH", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH"}:
+                    continue
+                exported_pytest_env_keys.add(env_key)
+                if "=" in token:
+                    saw_state_mutation = True
     return False
 
 
@@ -5494,6 +5503,19 @@ def _shell_env_assignment_targets_key(token: str, env_key: str) -> bool:
     if "=" not in token:
         return False
     return token.split("=", 1)[0].upper() == env_key
+
+
+def _shell_env_assignment_key(token: str) -> str | None:
+    if "=" not in token:
+        return None
+    key = token.split("=", 1)[0]
+    if not key:
+        return None
+    return key.upper()
+
+
+def _shell_exported_env_key(token: str) -> str:
+    return token.split("=", 1)[0].upper()
 
 
 def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | None) -> bool:
