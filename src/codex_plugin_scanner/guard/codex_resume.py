@@ -309,9 +309,7 @@ def _resume_codex_exec_session(
     )
     session = store.get_guard_session(session_id) if session_id is not None else None
     workspace = (
-        str(session["workspace"])
-        if isinstance(session, dict) and session.get("workspace") is not None
-        else None
+        str(session["workspace"]) if isinstance(session, dict) and session.get("workspace") is not None else None
     )
     if not _is_safe_codex_session_id(thread_id):
         return {
@@ -326,6 +324,11 @@ def _resume_codex_exec_session(
     command_text = _first_string(metadata, _COMMAND_TEXT_KEYS) if isinstance(metadata, Mapping) else None
     if command_text is not None and not _is_safe_resume_prompt_text(command_text):
         command_text = None
+    prompt = build_codex_continuation_prompt(
+        action,
+        request_id=request_id,
+        command_text=command_text,
+    )
     command = [
         "codex",
         "exec",
@@ -336,11 +339,7 @@ def _resume_codex_exec_session(
         "--ignore-user-config",
         "--skip-git-repo-check",
         thread_id,
-        build_codex_continuation_prompt(
-            action,
-            request_id=request_id,
-            command_text=command_text,
-        ),
+        "-",
     ]
     env = os.environ.copy()
     codex_home = _first_string(metadata, _CODEX_HOME_KEYS) if isinstance(metadata, Mapping) else None
@@ -354,6 +353,7 @@ def _resume_codex_exec_session(
             check=False,
             cwd=cwd,
             env=env,
+            input=prompt,
             text=True,
             timeout=_CODEX_EXEC_RESUME_TIMEOUT_SECONDS,
         )

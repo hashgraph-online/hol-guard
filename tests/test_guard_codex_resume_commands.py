@@ -175,6 +175,7 @@ def test_guard_approvals_resume_uses_exec_resume_when_only_session_binding_exist
         recorded["command"] = command
         recorded["cwd"] = kwargs.get("cwd")
         recorded["env"] = kwargs.get("env")
+        recorded["input"] = kwargs.get("input")
         return type(
             "CompletedProcess",
             (),
@@ -216,4 +217,7 @@ def test_guard_approvals_resume_uses_exec_resume_when_only_session_binding_exist
     assert recorded["command"][:3] == ["codex", "exec", "resume"]
     assert "--dangerously-bypass-approvals-and-sandbox" in recorded["command"]
     assert "thread-1" in recorded["command"]
+    assert recorded["command"][-1] == "-"
+    assert isinstance(recorded["input"], str)
+    assert "approved request `req-cli-exec`" in recorded["input"]
     assert recorded["cwd"] == str(workspace)

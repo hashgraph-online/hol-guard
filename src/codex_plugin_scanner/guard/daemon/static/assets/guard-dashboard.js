@@ -19387,10 +19387,11 @@ function allowButtonLabel(scope) {
   }
   return "Approve and remember";
 }
-function ReviewCodexResumePanel({ ux, onRetry }) {
-  const isPending = !ux.showRetry && ux.body === null;
-  const isSuccess = !ux.showRetry && ux.body !== null && !ux.headline.includes("not");
-  const isFailed = ux.showRetry;
+function ReviewCodexResumePanel({ resume, onRetry }) {
+  const ux = buildCodexResumeUx(resume);
+  const isPending = resume.status === "pending" || resume.status === "in_progress";
+  const isSuccess = resume.status === "sent" || resume.status === "already_sent";
+  const isFailed = resume.status === "failed";
   const borderClass = isFailed ? "border-brand-purple/25 bg-brand-purple/[0.05]" : isSuccess ? "border-brand-green/25 bg-brand-green-bg/30" : isPending ? "border-brand-blue/25 bg-brand-blue/[0.04]" : "border-slate-200/60 bg-slate-50/40";
   const iconClass = isFailed ? "text-brand-purple" : isSuccess ? "text-brand-green" : "text-brand-blue";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-start gap-3 rounded-2xl border px-4 py-3 ${borderClass}`, children: [
@@ -19407,7 +19408,6 @@ function ReviewCodexResumePanel({ ux, onRetry }) {
 }
 function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }) {
   const appsCount = runtime?.managed_installs?.filter((i) => i.active).length ?? 0;
-  const codexUx = codexResume !== null ? buildCodexResumeUx(codexResume) : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,
@@ -19426,8 +19426,8 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
         ]
       }
     ),
-    codexUx !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewCodexResumePanel, { ux: codexUx, onRetry: onRetryResume }),
-    codexUx === null && resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
+    codexResume !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewCodexResumePanel, { resume: codexResume, onRetry: onRetryResume }),
+    codexResume === null && resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: resolutionMessage })
     ] }),

@@ -374,6 +374,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_session_resume(path_parts[2])
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "resume":
+            if not self._header_token_is_valid():
+                self._write_json(
+                    {"error": "unauthorized"},
+                    status=401,
+                    extra_headers=self._cors_headers_for_request(),
+                )
+                return
             self._handle_request_resume_read(path_parts[2])
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "operations"]:
@@ -2051,7 +2058,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
             return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["v1", "requests"]
+            and path_parts[3] in {"approve", "block", "resume"}
+        ):
             return True
         if (
             len(path_parts) == 4

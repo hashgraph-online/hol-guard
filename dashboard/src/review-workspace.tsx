@@ -46,7 +46,6 @@ import {
   resolveEnvelopeDisplayText,
   formatRelativeTime,
   buildCodexResumeUx,
-  type CodexResumeUx,
 } from "./approval-center-utils";
 import {
   SkillRiskCard,
@@ -1095,14 +1094,15 @@ function allowButtonLabel(scope: DecisionScope): string {
 }
 
 type ReviewCodexResumePanelProps = {
-  ux: CodexResumeUx;
+  resume: GuardCodexResumeResult;
   onRetry?: () => void;
 };
 
-function ReviewCodexResumePanel({ ux, onRetry }: ReviewCodexResumePanelProps) {
-  const isPending = !ux.showRetry && ux.body === null;
-  const isSuccess = !ux.showRetry && ux.body !== null && !ux.headline.includes("not");
-  const isFailed = ux.showRetry;
+function ReviewCodexResumePanel({ resume, onRetry }: ReviewCodexResumePanelProps) {
+  const ux = buildCodexResumeUx(resume);
+  const isPending = resume.status === "pending" || resume.status === "in_progress";
+  const isSuccess = resume.status === "sent" || resume.status === "already_sent";
+  const isFailed = resume.status === "failed";
 
   const borderClass = isFailed
     ? "border-brand-purple/25 bg-brand-purple/[0.05]"
@@ -1151,7 +1151,6 @@ function ReviewCodexResumePanel({ ux, onRetry }: ReviewCodexResumePanelProps) {
 
 function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null; codexResume: GuardCodexResumeResult | null; onRetryResume?: () => void }) {
   const appsCount = runtime?.managed_installs?.filter((i) => i.active).length ?? 0;
-  const codexUx = codexResume !== null ? buildCodexResumeUx(codexResume) : null;
 
   return (
     <div className="space-y-6">
@@ -1168,11 +1167,11 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
         ]}
       />
 
-      {codexUx !== null && (
-        <ReviewCodexResumePanel ux={codexUx} onRetry={onRetryResume} />
+      {codexResume !== null && (
+        <ReviewCodexResumePanel resume={codexResume} onRetry={onRetryResume} />
       )}
 
-      {codexUx === null && resolutionMessage && (
+      {codexResume === null && resolutionMessage && (
         <div className="flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
           <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
           <p className="text-sm font-medium text-brand-green-text">{resolutionMessage}</p>

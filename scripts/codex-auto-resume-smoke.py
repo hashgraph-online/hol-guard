@@ -212,7 +212,6 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
         )
     final_message = message_path.read_text(encoding="utf-8").strip() if message_path.is_file() else ""
     proof_created = _wait_for_proof_state(proof_path=proof_path, should_exist=decision == "allow", timeout_seconds=20.0)
-    proof_created = _wait_for_proof_state(proof_path=proof_path, should_exist=decision == "allow", timeout_seconds=20.0)
     stderr_text = stderr_path.read_text(encoding="utf-8")
     _assert_expected_outcome(
         decision=decision,
@@ -306,9 +305,7 @@ def _run_guard_cli(argv: list[str], *, home_dir: Path, codex_home: str | None) -
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"guard CLI failed: {' '.join(command)}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-        )
+        raise RuntimeError(f"guard CLI failed: {' '.join(command)}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")
     stdout = result.stdout.strip()
     if not stdout:
         return None
@@ -331,8 +328,7 @@ def _wait_for_pending_request(
         _drain_pty(master_fd=master_fd, transcript_chunks=transcript_chunks, block=False)
         if process.poll() is not None:
             raise RuntimeError(
-                "codex exec exited before Guard queued a pending request\n"
-                f"stdout:\n{''.join(transcript_chunks)}\n"
+                f"codex exec exited before Guard queued a pending request\nstdout:\n{''.join(transcript_chunks)}\n"
             )
         time.sleep(0.5)
     raise TimeoutError(f"Codex did not finish the seed session within {timeout_seconds:.1f}s")
@@ -590,9 +586,7 @@ def _queue_pending_request(
                 artifact.metadata.get("runtime_request_summary") or "Requested a sensitive native tool action."
             ),
             risk_signals=tuple(
-                str(item)
-                for item in artifact.metadata.get("runtime_request_signals", [])
-                if isinstance(item, str)
+                str(item) for item in artifact.metadata.get("runtime_request_signals", []) if isinstance(item, str)
             ),
             artifact_label="Native shell action",
             source_label="Codex remembered command",

@@ -46,10 +46,36 @@ def _post_json(port: int, token: str, path: str, payload: dict[str, object]) -> 
         return json.loads(response.read().decode("utf-8"))
 
 
+def _post_json_without_token(port: int, path: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read().decode("utf-8"))
+
+
 def _get_json(port: int, token: str, path: str) -> tuple[int, dict[str, object]]:
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
         headers={"X-Guard-Token": token},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read().decode("utf-8"))
+
+
+def _get_json_without_token(port: int, path: str) -> tuple[int, dict[str, object]]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
         method="GET",
     )
     try:
@@ -189,6 +215,40 @@ def test_request_resume_status_endpoint_returns_persisted_result(tmp_path: Path)
     assert payload["request_id"] == "req-status"
     assert payload["status"] == "skipped"
     assert payload["strategy"] == "manual-only"
+
+
+def test_request_resume_status_endpoint_requires_guard_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-auth"), "2026-05-19T10:00:00+00:00")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        status, payload = _get_json_without_token(daemon.port, "/v1/requests/req-auth/resume")
+    finally:
+        daemon.stop()
+
+    assert status == 401
+    assert payload["error"] == "unauthorized"
+
+
+def test_request_resume_retry_endpoint_requires_guard_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-auth-post"), "2026-05-19T10:00:00+00:00")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        status, payload = _post_json_without_token(
+            daemon.port,
+            "/v1/requests/req-auth-post/resume",
+            {},
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 401
+    assert payload["error"] == "unauthorized"
 
 
 def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_present(
@@ -361,6 +421,7 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
         recorded["command"] = command
         recorded["cwd"] = kwargs.get("cwd")
         recorded["env"] = kwargs.get("env")
+        recorded["input"] = kwargs.get("input")
         return type(
             "CompletedProcess",
             (),
@@ -408,6 +469,9 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     assert "--dangerously-bypass-approvals-and-sandbox" in command
     assert "session-exec-1" in command
     assert "--dangerously-bypass-hook-trust" in command
+    assert command[-1] == "-"
     assert recorded["cwd"] == str(workspace)
     assert isinstance(recorded["env"], dict)
     assert recorded["env"]["CODEX_HOME"] == str(codex_home)
+    assert isinstance(recorded["input"], str)
+    assert "approved request `req-exec`" in recorded["input"]
