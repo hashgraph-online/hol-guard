@@ -195,7 +195,7 @@ def test_guard_approvals_resume_rejects_unsafe_thread_id(
     assert output["reason"] == "unsafe_thread_id"
 
 
-def test_guard_approvals_resume_uses_exec_resume_when_only_session_binding_exists(
+def test_guard_approvals_resume_falls_back_to_exec_resume_when_app_server_unavailable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,

@@ -456,7 +456,7 @@ def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Pat
         session_id=str(session["session_id"]),
         harness="codex",
         operation_type="tool_call",
-        status="waiting_on_approval",
+        status="approval_wait_timeout",
         approval_request_ids=["req-active"],
         resume_token="resume-token",
         metadata={
