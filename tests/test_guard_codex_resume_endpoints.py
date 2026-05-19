@@ -377,14 +377,16 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     store.add_approval_request(_request("req-exec"), "2026-05-19T10:00:00+00:00")
     missing_socket = tmp_path / "missing-codex.sock"
     workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
     workspace.mkdir()
+    codex_home.mkdir()
     _seed_codex_operation(
         store,
         request_id="req-exec",
         socket_path=missing_socket,
         thread_id="session-exec-1",
         workspace=str(workspace),
-        codex_home="/tmp/codex-home",
+        codex_home=str(codex_home),
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -408,4 +410,4 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     assert "--dangerously-bypass-hook-trust" in command
     assert recorded["cwd"] == str(workspace)
     assert isinstance(recorded["env"], dict)
-    assert recorded["env"]["CODEX_HOME"] == "/tmp/codex-home"
+    assert recorded["env"]["CODEX_HOME"] == str(codex_home)

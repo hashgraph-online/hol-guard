@@ -40,6 +40,7 @@ def _seed_codex_operation(
     socket_path: Path | None,
     workspace: str = "/workspace",
     codex_home: str | None = None,
+    thread_id: str = "thread-1",
 ) -> None:
     session = store.upsert_guard_session(
         session_id=f"session-{request_id}",
@@ -54,7 +55,7 @@ def _seed_codex_operation(
         now="2026-05-19T10:00:00+00:00",
     )
     metadata: dict[str, object] = {
-        "codex_thread_id": "thread-1",
+        "codex_thread_id": thread_id,
         "codex_turn_id": "turn-1",
     }
     if socket_path is not None:
@@ -128,6 +129,39 @@ def test_guard_doctor_codex_reports_resume_diagnostics(
     assert output["codex_resume"]["remote_control_support"] in {True, False}
     assert output["codex_resume"]["headless_resume_support"] in {True, False}
     assert output["codex_resume"]["latest_attempt"] is None
+
+
+def test_guard_approvals_resume_rejects_unsafe_thread_id(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-unsafe"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-unsafe",
+        socket_path=None,
+        workspace=str(workspace),
+        codex_home="/tmp/codex-home",
+        thread_id="unsafe\nthread",
+    )
+    store.resolve_approval_request(
+        "req-cli-unsafe",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-unsafe", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "failed"
+    assert output["reason"] == "unsafe_thread_id"
 
 
 def test_guard_approvals_resume_uses_exec_resume_when_only_session_binding_exists(

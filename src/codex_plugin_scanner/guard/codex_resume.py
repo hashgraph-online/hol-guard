@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from collections.abc import Mapping
@@ -32,6 +33,7 @@ _APP_SERVER_FALLBACK_REASONS = {
     "unsafe_socket_path",
 }
 _CODEX_EXEC_RESUME_TIMEOUT_SECONDS = 120.0
+_SAFE_CODEX_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 def seed_request_resume_record(store: GuardStore, *, request_id: str, now: str) -> dict[str, object] | None:
@@ -311,6 +313,19 @@ def _resume_codex_exec_session(
         if isinstance(session, dict) and session.get("workspace") is not None
         else None
     )
+    if not _is_safe_codex_session_id(thread_id):
+        return {
+            "status": "failed",
+            "reason": "unsafe_thread_id",
+            "message": "Codex session metadata was not safe to resume automatically.",
+            "last_error": "unsafe Codex session id",
+            "thread_id": thread_id,
+            "strategy": "codex-exec-resume",
+            "supported": True,
+        }
+    command_text = _first_string(metadata, _COMMAND_TEXT_KEYS) if isinstance(metadata, Mapping) else None
+    if command_text is not None and not _is_safe_resume_prompt_text(command_text):
+        command_text = None
     command = [
         "codex",
         "exec",
@@ -324,14 +339,14 @@ def _resume_codex_exec_session(
         build_codex_continuation_prompt(
             action,
             request_id=request_id,
-            command_text=_first_string(metadata, _COMMAND_TEXT_KEYS) if isinstance(metadata, Mapping) else None,
+            command_text=command_text,
         ),
     ]
     env = os.environ.copy()
     codex_home = _first_string(metadata, _CODEX_HOME_KEYS) if isinstance(metadata, Mapping) else None
-    if codex_home is not None:
+    if codex_home is not None and _is_safe_local_directory(codex_home):
         env["CODEX_HOME"] = codex_home
-    cwd = workspace if workspace is not None and Path(workspace).is_dir() else None
+    cwd = workspace if workspace is not None and _is_safe_local_directory(workspace) else None
     try:
         result = subprocess.run(
             command,
@@ -380,6 +395,26 @@ def _resume_codex_exec_session(
         "strategy": "codex-exec-resume",
         "supported": True,
     }
+
+
+def _is_safe_codex_session_id(value: str) -> bool:
+    return bool(_SAFE_CODEX_SESSION_ID_PATTERN.fullmatch(value))
+
+
+def _is_safe_resume_prompt_text(value: str) -> bool:
+    if "\x00" in value or len(value) > 4000:
+        return False
+    return all(character in "\n\r\t" or 32 <= ord(character) <= 126 for character in value)
+
+
+def _is_safe_local_directory(raw_path: str) -> bool:
+    if "\x00" in raw_path or not raw_path.strip():
+        return False
+    try:
+        path = Path(raw_path).expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return path.is_dir()
 
 
 def _manual_resume_message(action: str) -> str:
