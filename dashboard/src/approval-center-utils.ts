@@ -2,6 +2,7 @@ import type {
   GuardActionEnvelope,
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardCodexResumeResult,
   GuardReceipt,
   RiskSignalV2
 } from "./guard-types";
@@ -606,4 +607,39 @@ export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   if (item.artifact_type === "tool_action_request") return "Tool action";
 
   return "Stopped command";
+}
+
+export type CodexResumeUx = {
+  headline: string;
+  body: string | null;
+  showRetry: boolean;
+};
+
+export function isCodexHarness(harness: string): boolean {
+  return normalizeHarnessSlug(harness) === "codex";
+}
+
+export function buildCodexResumeUx(resume: GuardCodexResumeResult): CodexResumeUx {
+  if (resume.status === "pending" || resume.status === "in_progress") {
+    return { headline: "Resuming Codex...", body: null, showRetry: false };
+  }
+  if (resume.status === "sent" || resume.status === "already_sent") {
+    return {
+      headline: "Codex resumed.",
+      body: "Watch the chat for the next HOL Guard message.",
+      showRetry: false
+    };
+  }
+  if (resume.status === "failed") {
+    return {
+      headline: "Guard could not resume the Codex session.",
+      body: resume.last_error ?? resume.reason ?? "Resume attempt failed.",
+      showRetry: true
+    };
+  }
+  return {
+    headline: "Guard could not locate the Codex session.",
+    body: "Return to your terminal and continue manually.",
+    showRetry: false
+  };
 }

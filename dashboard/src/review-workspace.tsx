@@ -45,6 +45,8 @@ import {
   displayArtifactName,
   resolveEnvelopeDisplayText,
   formatRelativeTime,
+  buildCodexResumeUx,
+  type CodexResumeUx,
 } from "./approval-center-utils";
 import {
   SkillRiskCard,
@@ -62,6 +64,7 @@ import {
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardCodexResumeResult,
   GuardPolicyDecision,
   GuardReceipt,
   GuardRuntimeSnapshot,
@@ -94,6 +97,8 @@ type ReviewWorkspaceProps = {
   detail: ReviewViewModel | null;
   runtime: GuardRuntimeSnapshot | null;
   resolutionMessage: string | null;
+  codexResume: GuardCodexResumeResult | null;
+  onRetryResume?: () => void;
   onOpenRequest: (requestId: string) => void;
   onResolve: (payload: {
     requestId: string;
@@ -224,7 +229,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   }, [currentPage, pagedRequests, activeRequestId, props.onOpenRequest]);
 
   if (requests.length === 0) {
-    return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} />;
+    return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} codexResume={props.codexResume} onRetryResume={props.onRetryResume} />;
   }
 
   const activeItem = activeRequest ?? filteredRequests[0] ?? requests[0];
@@ -1089,8 +1094,64 @@ function allowButtonLabel(scope: DecisionScope): string {
   return "Approve and remember";
 }
 
-function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null }) {
+type ReviewCodexResumePanelProps = {
+  ux: CodexResumeUx;
+  onRetry?: () => void;
+};
+
+function ReviewCodexResumePanel({ ux, onRetry }: ReviewCodexResumePanelProps) {
+  const isPending = !ux.showRetry && ux.body === null;
+  const isSuccess = !ux.showRetry && ux.body !== null && !ux.headline.includes("not");
+  const isFailed = ux.showRetry;
+
+  const borderClass = isFailed
+    ? "border-brand-purple/25 bg-brand-purple/[0.05]"
+    : isSuccess
+    ? "border-brand-green/25 bg-brand-green-bg/30"
+    : isPending
+    ? "border-brand-blue/25 bg-brand-blue/[0.04]"
+    : "border-slate-200/60 bg-slate-50/40";
+
+  const iconClass = isFailed
+    ? "text-brand-purple"
+    : isSuccess
+    ? "text-brand-green"
+    : "text-brand-blue";
+
+  return (
+    <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3 ${borderClass}`}>
+      {isPending && (
+        <HiMiniArrowPath className={`mt-0.5 h-4 w-4 shrink-0 animate-spin ${iconClass}`} aria-hidden="true" />
+      )}
+      {isSuccess && (
+        <HiMiniCheckCircle className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
+      )}
+      {isFailed && (
+        <HiMiniExclamationTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
+      )}
+      {!isPending && !isSuccess && !isFailed && (
+        <HiMiniInformationCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+      )}
+      <div className="flex-1 space-y-1">
+        <p className="text-sm font-medium text-brand-dark">{ux.headline}</p>
+        {ux.body !== null && (
+          <p className="text-xs text-muted-foreground">{ux.body}</p>
+        )}
+        {isFailed && onRetry !== undefined && (
+          <div className="mt-2">
+            <ActionButton variant="outline" onClick={onRetry}>
+              Retry resume
+            </ActionButton>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResume }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null; codexResume: GuardCodexResumeResult | null; onRetryResume?: () => void }) {
   const appsCount = runtime?.managed_installs?.filter((i) => i.active).length ?? 0;
+  const codexUx = codexResume !== null ? buildCodexResumeUx(codexResume) : null;
 
   return (
     <div className="space-y-6">
@@ -1107,7 +1168,11 @@ function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntim
         ]}
       />
 
-      {resolutionMessage && (
+      {codexUx !== null && (
+        <ReviewCodexResumePanel ux={codexUx} onRetry={onRetryResume} />
+      )}
+
+      {codexUx === null && resolutionMessage && (
         <div className="flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
           <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
           <p className="text-sm font-medium text-brand-green-text">{resolutionMessage}</p>

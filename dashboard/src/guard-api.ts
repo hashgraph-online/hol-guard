@@ -4,7 +4,8 @@ import {
   GUARD_DECISION_V2_CONFIDENCES,
   GUARD_RISK_SIGNAL_V2_CATEGORIES,
   GUARD_RISK_SIGNAL_V2_REDACTION_LEVELS,
-  GUARD_RISK_SIGNAL_V2_SEVERITIES
+  GUARD_RISK_SIGNAL_V2_SEVERITIES,
+  CODEX_RESUME_STATUSES
 } from "./guard-types";
 import type {
   GuardActionEnvelope,
@@ -21,6 +22,7 @@ import type {
   GuardHarnessActionResult,
   GuardNotificationSetupResult,
   GuardPolicyDecision,
+  CodexResumeStatus,
   GuardCodexResumeResult,
   GuardQueueResolutionCopy,
   GuardQueueResolutionResult,
@@ -515,18 +517,36 @@ function normalizeQueueCopy(raw: unknown): GuardQueueResolutionCopy | null {
   return { title, body };
 }
 
+function isCodexResumeStatus(value: unknown): value is CodexResumeStatus {
+  return typeof value === "string" && CODEX_RESUME_STATUSES.some((s) => s === value);
+}
+
 function normalizeCodexResume(raw: unknown): GuardCodexResumeResult | null {
   if (!isRecord(raw)) {
     return null;
   }
   const status = raw["status"];
-  const reason = raw["reason"];
-  const threadId = raw["thread_id"];
-  const isKnownStatus = status === "sent" || status === "skipped" || status === "failed";
-  if (!isKnownStatus || typeof reason !== "string" || typeof threadId !== "string") {
+  if (!isCodexResumeStatus(status)) {
     return null;
   }
-  return { status, reason, thread_id: threadId };
+  return {
+    request_id: isStringOrNull(raw["request_id"]) ? raw["request_id"] : null,
+    operation_id: isStringOrNull(raw["operation_id"]) ? raw["operation_id"] : null,
+    harness: isStringOrNull(raw["harness"]) ? raw["harness"] : null,
+    resolution_action: isStringOrNull(raw["resolution_action"]) ? raw["resolution_action"] : null,
+    strategy: isStringOrNull(raw["strategy"]) ? raw["strategy"] : null,
+    supported: raw["supported"] === true,
+    status,
+    thread_id: isStringOrNull(raw["thread_id"]) ? raw["thread_id"] : null,
+    reason: isStringOrNull(raw["reason"]) ? raw["reason"] : null,
+    message: isStringOrNull(raw["message"]) ? raw["message"] : null,
+    last_error: isStringOrNull(raw["last_error"]) ? raw["last_error"] : null,
+    attempt_count: isNonNegativeNumber(raw["attempt_count"]) ? raw["attempt_count"] : 0,
+    created_at: isStringOrNull(raw["created_at"]) ? raw["created_at"] : null,
+    updated_at: isStringOrNull(raw["updated_at"]) ? raw["updated_at"] : null,
+    last_attempt_at: isStringOrNull(raw["last_attempt_at"]) ? raw["last_attempt_at"] : null,
+    sent_at: isStringOrNull(raw["sent_at"]) ? raw["sent_at"] : null,
+  };
 }
 
 function normalizeQueueResolution(payload: QueueResolutionPayload): GuardQueueResolutionResult {
@@ -1102,4 +1122,47 @@ export async function setupDesktopNotifications(): Promise<GuardNotificationSetu
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({})
   });
+}
+
+export async function fetchResumeStatus(requestId: string): Promise<GuardCodexResumeResult | null> {
+  if (isGuardDemoMode()) {
+    return null;
+  }
+  const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
+  const response = await fetchGuardApi(path);
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`Resume status request failed with ${response.status}`);
+  }
+  const payload = (await response.json()) as unknown;
+  return normalizeCodexResume(payload);
+}
+
+export async function retryResume(requestId: string): Promise<GuardCodexResumeResult | null> {
+  if (isGuardDemoMode()) {
+    return null;
+  }
+  const path = `/v1/requests/${encodeURIComponent(requestId)}/resume`;
+  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeadersForToken(guardToken)
+    },
+    body: JSON.stringify({})
+  });
+  let response = await fetchGuardApi(path, init());
+  if (response.status === 401) {
+    const refreshedToken = await refreshGuardToken();
+    if (refreshedToken !== null) {
+      response = await fetchGuardApi(path, init(refreshedToken));
+    }
+  }
+  if (!response.ok) {
+    throw new Error(`Resume retry failed with ${response.status}`);
+  }
+  const payload = (await response.json()) as unknown;
+  return normalizeCodexResume(payload);
 }

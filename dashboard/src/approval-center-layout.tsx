@@ -13,6 +13,7 @@ import {
   HiMiniXMark as HiMiniXMarkLayout,
   HiMiniCheckCircle,
   HiMiniInformationCircle,
+  HiMiniArrowPath,
 } from "react-icons/hi2";
 import {
   ShellHeader,
@@ -58,6 +59,8 @@ import {
   QUEUE_CONNECTION_ERROR_HEADLINE,
   QUEUE_CONNECTION_ERROR_INSTRUCTION,
   isDisplayableHarness,
+  isCodexHarness,
+  buildCodexResumeUx,
 } from "./approval-center-utils";
 import {
   WhyThisPaused,
@@ -87,6 +90,7 @@ import {
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardCodexResumeResult,
   GuardInventoryItem,
   GuardPolicyDecision,
   GuardReceipt,
@@ -131,6 +135,7 @@ type LayoutProps = {
   inventory: GuardInventoryItem[];
   activeRequestId: string | null;
   resolutionMessage: string | null;
+  codexResume: GuardCodexResumeResult | null;
   homeContent: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
@@ -150,6 +155,7 @@ type LayoutProps = {
   onBulkBlock?: (ids: string[], reason: string) => void;
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;
+  onRetryResume?: () => void;
 };
 
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
@@ -243,9 +249,11 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 } : null}
                 runtime={props.runtime.kind === "ready" ? props.runtime.snapshot : null}
                 resolutionMessage={props.resolutionMessage}
+                codexResume={props.codexResume}
                 onOpenRequest={props.onOpenRequest}
                 onResolve={props.onResolve}
                 onGoHome={props.onGoHome}
+                onRetryResume={props.onRetryResume}
               />
             ) : (
               <QueueWorkspace
@@ -254,6 +262,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 runtime={props.runtime}
                 activeRequestId={props.activeRequestId}
                 resolutionMessage={props.resolutionMessage}
+                codexResume={props.codexResume}
                 onOpenRequest={props.onOpenRequest}
                 onGoHome={props.onGoHome}
                 onResolve={props.onResolve}
@@ -261,6 +270,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 onBulkBlock={props.onBulkBlock}
                 onRetry={props.onRetry}
                 onRepair={props.onRepair}
+                onRetryResume={props.onRetryResume}
               />
             )}
           </div>
@@ -320,6 +330,7 @@ function QueueWorkspace(props: {
   runtime: RuntimeState;
   activeRequestId: string | null;
   resolutionMessage: string | null;
+  codexResume: GuardCodexResumeResult | null;
   onOpenRequest: (requestId: string) => void;
   onGoHome: () => void;
   onResolve: LayoutProps["onResolve"];
@@ -327,6 +338,7 @@ function QueueWorkspace(props: {
   onBulkBlock?: (ids: string[], reason: string) => void;
   onRetry?: () => void;
   onRepair?: () => Promise<void>;
+  onRetryResume?: () => void;
 }) {
   const [repairing, setRepairing] = useState(false);
 
@@ -389,13 +401,18 @@ function QueueWorkspace(props: {
   }
   if (props.requests.items.length === 0) {
     return (
-      <WelcomeState
-        connectUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.connect_url : null}
-        dashboardUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.dashboard_url : null}
-        fleetUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.fleet_url : null}
-        inboxUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.inbox_url : null}
-        resolutionMessage={props.resolutionMessage}
-      />
+      <>
+        {props.codexResume !== null && (
+          <CodexResumePanel resume={props.codexResume} onRetry={props.onRetryResume} />
+        )}
+        <WelcomeState
+          connectUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.connect_url : null}
+          dashboardUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.dashboard_url : null}
+          fleetUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.fleet_url : null}
+          inboxUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.inbox_url : null}
+          resolutionMessage={props.codexResume === null ? props.resolutionMessage : null}
+        />
+      </>
     );
   }
   const showSideBySide = props.requests.items.length > 1;
@@ -408,7 +425,10 @@ function QueueWorkspace(props: {
   );
   return (
     <div className="space-y-4">
-      {props.resolutionMessage && props.requests.items.length > 0 && (
+      {props.codexResume !== null && (
+        <CodexResumePanel resume={props.codexResume} onRetry={props.onRetryResume} />
+      )}
+      {props.resolutionMessage && props.codexResume === null && props.requests.items.length > 0 && (
         <div className="flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
           <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
           <p className="text-sm font-medium text-brand-green-text">{props.resolutionMessage}</p>
@@ -849,6 +869,84 @@ function queueCardStatusDotClass(active: boolean, blocked: boolean): string {
   return "bg-slate-200";
 }
 
+function CodexResumePanel(props: {
+  resume: GuardCodexResumeResult;
+  onRetry?: () => void;
+}) {
+  const ux = buildCodexResumeUx(props.resume);
+  const isPending = props.resume.status === "pending" || props.resume.status === "in_progress";
+  const isSuccess = props.resume.status === "sent" || props.resume.status === "already_sent";
+  const isFailed = props.resume.status === "failed";
+
+  if (isPending) {
+    return (
+      <div
+        className="flex items-center gap-3 rounded-2xl border border-brand-blue/25 bg-brand-blue/[0.05] px-4 py-3"
+        role="status"
+        aria-live="polite"
+      >
+        <HiMiniArrowPath className="h-4 w-4 shrink-0 animate-spin text-brand-blue" aria-hidden="true" />
+        <p className="text-sm font-medium text-brand-blue">{ux.headline}</p>
+      </div>
+    );
+  }
+
+  if (isSuccess) {
+    return (
+      <div
+        className="flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3"
+        role="status"
+        aria-live="polite"
+      >
+        <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-medium text-brand-green-text">{ux.headline}</p>
+          {ux.body !== null && (
+            <p className="mt-0.5 text-sm text-brand-green-text/80">{ux.body}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (isFailed) {
+    return (
+      <div
+        className="rounded-2xl border border-brand-purple/25 bg-brand-purple/[0.05] px-4 py-3 space-y-2"
+        role="alert"
+      >
+        <div className="flex items-start gap-3">
+          <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-purple" aria-hidden="true" />
+          <p className="text-sm font-medium text-brand-purple">{ux.headline}</p>
+        </div>
+        {ux.body !== null && (
+          <p className="ml-7 text-xs text-brand-purple/80">{ux.body}</p>
+        )}
+        {ux.showRetry && props.onRetry !== undefined && (
+          <div className="ml-7">
+            <ActionButton variant="outline" onClick={props.onRetry}>Try again</ActionButton>
+          </div>
+        )}
+        <p className="ml-7 text-xs text-muted-foreground">
+          You can also return to your terminal and retry manually.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-slate-50 px-4 py-3">
+      <HiMiniInformationCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+      <div>
+        <p className="text-sm font-medium text-brand-dark">{ux.headline}</p>
+        {ux.body !== null && (
+          <p className="mt-0.5 text-sm text-muted-foreground">{ux.body}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StickyMobileActions(props: {
   allowLabel: string;
   submitting: "allow" | "block" | null;
@@ -1209,6 +1307,7 @@ function RuleBuilder(props: {
   const previewText = getRulePreviewText(props.item, props.scope);
   const allowLabel = resolveAllowScopeLabel(props.scope);
   const retryInstruction = props.item.decision_v2_json?.retry_instruction ?? null;
+  const isCodex = isCodexHarness(props.item.harness);
 
   const handleAllow = useCallback(() => props.onResolve("allow"), [props.onResolve]);
   const handleBlock = useCallback(() => props.onResolve("block"), [props.onResolve]);
@@ -1242,6 +1341,7 @@ function RuleBuilder(props: {
           previewText={previewText}
           submitting={props.submitting}
           isBlocked={props.item.policy_action === "block"}
+          isCodex={isCodex}
           retryInstruction={retryInstruction}
           onAllow={handleAllow}
           onBlock={handleBlock}
@@ -1344,12 +1444,16 @@ function DecisionActionPanel(props: {
   previewText: string;
   submitting: "allow" | "block" | null;
   isBlocked: boolean;
+  isCodex: boolean;
   retryInstruction: string | null;
   onAllow: () => void;
   onBlock: () => void;
 }) {
   const allowText = resolveAllowButtonText(props.submitting, props.isBlocked, props.allowLabel);
   const blockText = resolveBlockButtonText(props.submitting, props.isBlocked);
+  const footerCopy = props.isCodex
+    ? "Codex will continue automatically after you approve."
+    : "After saving, retry the same request in your chat.";
 
   return (
     <div className="rounded-2xl border border-white/80 bg-white/80 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
@@ -1358,8 +1462,8 @@ function DecisionActionPanel(props: {
         {props.previewText}
       </p>
       <div className="mt-3 grid gap-1.5">
-        <ApproveConsequence retryInstruction={props.retryInstruction} />
-        <BlockConsequence />
+        <ApproveConsequence retryInstruction={props.retryInstruction} isCodex={props.isCodex} />
+        <BlockConsequence isCodex={props.isCodex} />
       </div>
       <div className="mt-4 grid gap-2">
         <ActionButton variant="success" onClick={props.onAllow} disabled={props.submitting !== null}>
@@ -1370,7 +1474,7 @@ function DecisionActionPanel(props: {
         </ActionButton>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
-        After saving, retry the same request in your chat.
+        {footerCopy}
       </p>
     </div>
   );

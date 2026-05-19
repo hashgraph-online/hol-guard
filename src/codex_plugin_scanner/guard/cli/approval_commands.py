@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
+from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
 from ..daemon import load_guard_daemon_url
 from ..runtime.surface_server import GuardSurfaceRuntime
@@ -89,6 +90,15 @@ def add_approval_parser(
     retry_hint_parser.add_argument("request_id", help="The approval request ID to get the retry hint for")
     add_common_args(retry_hint_parser)
     retry_hint_parser.add_argument("--json", action="store_true")
+
+    resume_parser = approvals_subparsers.add_parser(
+        "resume",
+        help="Retry Codex auto-resume for a resolved approval request",
+    )
+    resume_parser.add_argument("request_id", help="The approval request ID to resume")
+    resume_parser.add_argument("--force", action="store_true", help="Retry even if Codex was already resumed")
+    add_common_args(resume_parser)
+    resume_parser.add_argument("--json", action="store_true")
 
 
 def run_approval_command(
@@ -212,6 +222,31 @@ def run_approval_retry_hint_command(
     harness = str(item.get("harness", ""))
     hint: dict[str, object] = dict(_build_retry_hint(resolution_action, harness))
     return hint, 0
+
+
+def run_approval_resume_command(
+    args: argparse.Namespace,
+    *,
+    store: GuardStore,
+) -> tuple[dict[str, object], int]:
+    request_id = args.request_id
+    try:
+        payload = retry_request_resume(
+            store,
+            request_id=request_id,
+            now=_now(),
+            force=bool(getattr(args, "force", False)),
+        )
+    except ValueError as error:
+        error_code = str(error)
+        if error_code == "not_found":
+            return {"error": "not_found", "request_id": request_id}, 1
+        if error_code == "not_resolved":
+            item = store.get_approval_request(request_id)
+            status = str(item.get("status", "")) if item is not None else ""
+            return {"error": "not_resolved", "status": status, "request_id": request_id}, 1
+        return {"error": "resume_not_supported", "request_id": request_id}, 1
+    return payload, 0
 
 
 def _now() -> str:

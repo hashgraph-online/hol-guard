@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from ..approvals import queue_blocked_approvals
+from ..codex_resume import seed_request_resume_record
 from ..models import GuardArtifact, HarnessDetection
 from ..schemas import build_surface_server_contract
 from ..schemas.surface_server import (
@@ -245,6 +246,10 @@ class GuardSurfaceRuntime:
             str(operation["operation_id"]),
             [str(item["request_id"]) for item in queued if isinstance(item.get("request_id"), str)],
         )
+        for item in queued:
+            request_id = item.get("request_id")
+            if isinstance(request_id, str):
+                seed_request_resume_record(self.store, request_id=request_id, now=_now())
         surface = self.ensure_surface(
             surface="approval-center",
             approval_center_url=approval_center_url,

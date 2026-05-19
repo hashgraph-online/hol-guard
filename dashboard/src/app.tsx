@@ -13,6 +13,7 @@ import {
   guardAwareHref,
   repairApprovalCenter,
   resolveRequestWithQueueResult,
+  retryResume,
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
 import { buildClearPayload } from "./clear-policy-payload";
@@ -37,6 +38,7 @@ function LazyFallback() {
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardCodexResumeResult,
   GuardPolicyDecision,
   GuardReceipt,
   GuardRuntimeSnapshot,
@@ -185,6 +187,8 @@ export function App() {
   const [policies, setPolicies] = useState<PolicyState>({ kind: "loading" });
   const [inventory, setInventory] = useState<InventoryState>({ kind: "idle" });
   const [resolutionMessage, setResolutionMessage] = useState<string | null>(null);
+  const [codexResume, setCodexResume] = useState<GuardCodexResumeResult | null>(null);
+  const [resolvedRequestId, setResolvedRequestId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [clearConfirm, setClearConfirm] = useState<{ harness?: string; all?: boolean } | null>(null);
   const resolutionInFlight = useRef(false);
@@ -470,11 +474,14 @@ export function App() {
     try {
       const result = await resolveRequestWithQueueResult(payload);
       const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
+      const resume = result.codex_resume ?? null;
+      setCodexResume(resume);
+      setResolvedRequestId(resume !== null ? payload.requestId : null);
       if (nextId !== null) {
         setResolutionMessage(null);
         navigate(`/requests/${nextId}`);
       } else {
-        setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
+        setResolutionMessage(resume !== null ? null : (result.resolution_summary || "Decision saved. Return to your chat and retry the command."));
         navigate("/inbox");
       }
       await refreshStateAfterAction();
@@ -482,6 +489,12 @@ export function App() {
       resolutionInFlight.current = false;
     }
   }, [requests, refreshStateAfterAction, setResolutionMessage]);
+
+  const handleRetryResume = useCallback(async () => {
+    if (resolvedRequestId === null) return;
+    const updated = await retryResume(resolvedRequestId);
+    setCodexResume(updated);
+  }, [resolvedRequestId]);
 
   const handleBulkApprove = useCallback(async (ids: string[]) => {
     const results = await Promise.allSettled(
@@ -611,6 +624,8 @@ export function App() {
       inventory={inventory.kind === "ready" ? inventory.items : []}
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
+      codexResume={codexResume}
+      onRetryResume={handleRetryResume}
       homeContent={
         <Suspense fallback={<LazyFallback />}>
           <HomeWorkspace

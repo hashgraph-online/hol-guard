@@ -11,6 +11,9 @@ Current Guard support in this repo:
   - wrapper prompt screening now suppresses copied debug and incident context while still escalating risky prompt intent
   - uses same-chat MCP elicitation for live managed MCP tool approvals in the interactive CLI and Codex App
   - falls back to the local approval center only for nonresponsive or headless Codex sessions such as `codex exec`
+  - when a browser approval request has a live Codex thread binding, approving or blocking in the browser resumes that same Codex thread with HOL Guard continuation copy and the exact blocked command context
+  - headless Codex sessions resume through `codex exec resume` with Guard-managed hooks still enabled, so saved approvals can replay the blocked command instead of forcing a manual retry
+  - when no Codex thread binding is available, returns an explicit manual fallback instead of a false resume success
 - `claude-code`
   - detects global and project settings, hooks, `.mcp.json`, and workspace agents
   - supports local hook install and uninstall in `.claude/settings.local.json`
