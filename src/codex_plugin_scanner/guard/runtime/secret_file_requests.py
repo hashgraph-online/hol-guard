@@ -3714,6 +3714,8 @@ def _looks_destructive_shell_command(command_text: str, *, cwd: Path | None = No
     redacted_command_text = _redacted_shell_text_for_command_names(lowered)
     if _contains_mutating_shell_redirection(parts):
         return True
+    if _contains_prior_pytest_state_mutation(parts):
+        return True
     if _contains_unsafe_pytest_environment_wrapper(parts):
         return True
     if _looks_like_safe_read_only_lookup_command(normalized, parts):
@@ -5457,6 +5459,41 @@ def _contains_unsafe_pytest_environment_wrapper(parts: list[str]) -> bool:
         ):
             return True
     return False
+
+
+def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
+    saw_state_mutation = False
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if _segment_targets_pytest(segment, command_name, command_index):
+            return saw_state_mutation
+        if command_name == "cd":
+            saw_state_mutation = True
+            continue
+        if command_name == "export" and any(
+            _shell_env_assignment_targets_key(token, key)
+            for token in segment[command_index + 1 :]
+            for key in ("PATH", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH")
+        ):
+            saw_state_mutation = True
+    return False
+
+
+def _segment_targets_pytest(segment: list[str], command_name: str, command_index: int) -> bool:
+    if command_name == "pytest":
+        return True
+    return _is_python_interpreter_command(command_name) and _python_segment_targets_module(
+        segment[command_index + 1 :],
+        "pytest",
+    )
+
+
+def _shell_env_assignment_targets_key(token: str, env_key: str) -> bool:
+    if "=" not in token:
+        return False
+    return token.split("=", 1)[0].upper() == env_key
 
 
 def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | None) -> bool:
