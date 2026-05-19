@@ -250,6 +250,7 @@ def _normalize_dispatch_result(
     raw_status = str(raw_result.get("status") or "")
     raw_reason = str(raw_result.get("reason") or "unknown")
     raw_thread_id = str(raw_result.get("thread_id")) if raw_result.get("thread_id") is not None else thread_id
+    raw_last_error = str(raw_result.get("last_error")) if raw_result.get("last_error") is not None else None
     raw_supported = raw_result.get("supported")
     supported = raw_supported if isinstance(raw_supported, bool) else raw_status != "skipped"
     if raw_status == "sent":
@@ -267,7 +268,7 @@ def _normalize_dispatch_result(
             "status": "failed",
             "reason": raw_reason,
             "message": _failed_resume_message(action),
-            "last_error": str(raw_result.get("message") or raw_reason),
+            "last_error": raw_last_error or str(raw_result.get("message") or raw_reason),
             "thread_id": raw_thread_id,
             "strategy": effective_strategy,
             "supported": True,
@@ -276,7 +277,9 @@ def _normalize_dispatch_result(
         "status": "failed" if raw_status == "failed" else "skipped",
         "reason": raw_reason,
         "message": _failed_resume_message(action) if raw_status == "failed" else _manual_resume_message(action),
-        "last_error": str(raw_result.get("message") or raw_reason) if raw_status == "failed" else None,
+        "last_error": raw_last_error or str(raw_result.get("message") or raw_reason)
+        if raw_status == "failed"
+        else None,
         "thread_id": raw_thread_id,
         "strategy": effective_strategy,
         "supported": supported,
@@ -363,6 +366,16 @@ def _resume_codex_exec_session(
             "reason": "codex_not_found",
             "message": "The codex binary is not available for automatic resume.",
             "last_error": "codex binary not found",
+            "thread_id": thread_id,
+            "strategy": "codex-exec-resume",
+            "supported": True,
+        }
+    except OSError as error:
+        return {
+            "status": "failed",
+            "reason": "exec_resume_launch_failed",
+            "message": "Guard could not start Codex for automatic resume.",
+            "last_error": str(error),
             "thread_id": thread_id,
             "strategy": "codex-exec-resume",
             "supported": True,

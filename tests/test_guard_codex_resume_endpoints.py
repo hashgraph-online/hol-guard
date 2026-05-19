@@ -475,3 +475,43 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     assert recorded["env"]["CODEX_HOME"] == str(codex_home)
     assert isinstance(recorded["input"], str)
     assert "approved request `req-exec`" in recorded["input"]
+
+
+def test_codex_approve_returns_failed_resume_when_exec_launch_raises_oserror(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_oserror(command, **kwargs):
+        raise PermissionError("exec denied")
+
+    monkeypatch.setattr(codex_resume_module.subprocess, "run", _raise_oserror)
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-oserror"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_codex_operation(
+        store,
+        request_id="req-oserror",
+        socket_path=missing_socket,
+        thread_id="session-oserror-1",
+        workspace=str(workspace),
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-oserror/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codex_resume"]["status"] == "failed"
+    assert payload["codex_resume"]["reason"] == "exec_resume_launch_failed"
+    assert payload["codex_resume"]["last_error"] == "exec denied"
