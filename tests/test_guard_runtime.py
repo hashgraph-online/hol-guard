@@ -692,6 +692,140 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    def test_codex_pre_tool_use_allows_fd_skill_docs_bounded_sed_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        command = (
+            "fd -a 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees "
+            "~/.codex/superpowers/skills/test-driven-development "
+            "~/.codex/superpowers/skills/verification-before-completion "
+            "-d 1 -x sed -n '1,180p' {}"
+        )
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert output["policy_action"] == "warn"
+        assert "approval_requests" not in output
+
+    def test_codex_pre_tool_use_blocks_fd_skill_docs_mutating_sed_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        command = (
+            "fd -a 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees "
+            "-d 1 -x sed -i '1,180p' {}"
+        )
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert "destructive shell command" in output["artifact_name"]
+
+    def test_codex_post_tool_use_allows_fd_skill_docs_bounded_sed_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        command = (
+            "fd -a 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees "
+            "~/.codex/superpowers/skills/test-driven-development "
+            "~/.codex/superpowers/skills/verification-before-completion "
+            "-d 1 -x sed -n '1,180p' {}"
+        )
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {
+                "stdout": (
+                    "---\n"
+                    "name: test-driven-development\n"
+                    "description: Use before writing implementation code.\n"
+                    "Never read `.env` files or expose secrets.\n"
+                ),
+            },
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
     def test_codex_post_tool_use_allows_read_only_source_view_with_secret_like_output(
         self,
         monkeypatch,

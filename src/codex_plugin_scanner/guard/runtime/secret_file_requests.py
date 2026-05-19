@@ -3975,11 +3975,36 @@ def _read_only_lookup_fd_args_are_safe(args: list[str]) -> bool:
     if any(
         arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")) for arg in args
     ):
-        return False
+        return _fd_exec_sed_read_only_args_are_safe(args)
     targets = [arg for arg in args if arg and not arg.startswith("-")]
     if not targets:
         return True
     return all(_read_only_lookup_target_is_safe(target, allow_dirs=True) for target in targets[1:])
+
+
+def _fd_exec_sed_read_only_args_are_safe(args: list[str]) -> bool:
+    parsed = _split_fd_args_and_exec(args)
+    if parsed is None:
+        return False
+    fd_args, exec_parts = parsed
+    if not exec_parts or Path(exec_parts[0]).name != "sed" or "/" in exec_parts[0] or "\\" in exec_parts[0]:
+        return False
+    if exec_parts.count("{}") != 1:
+        return False
+    sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
+    return _read_only_lookup_fd_args_are_safe(fd_args) and _read_only_lookup_sed_args_are_safe(
+        sed_args,
+        require_target=False,
+    )
+
+
+def _split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | None:
+    for index, arg in enumerate(args):
+        if arg in {"-X", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")):
+            return None
+        if arg in {"-x", "--exec"}:
+            return args[:index], args[index + 1 :]
+    return None
 
 
 def _read_only_lookup_find_args_are_safe(args: list[str]) -> bool:
@@ -4020,6 +4045,8 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
     lowered_parts = [part.lower() for part in parts]
     if not parts:
         return allow_dirs
+    if _read_only_lookup_target_is_known_skill_doc_path(stripped):
+        return True
     if any(part in SOURCE_INSPECTION_SENSITIVE_PARTS for part in lowered_parts):
         return False
     hidden_parts = [part for part in lowered_parts if part.startswith(".")]
@@ -4030,6 +4057,25 @@ def _read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool) -> bool:
     if Path(normalized).suffix.lower() in SOURCE_INSPECTION_EXTENSIONS:
         return True
     return allow_dirs
+
+
+def _read_only_lookup_target_is_known_skill_doc_path(target: str) -> bool:
+    if any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&")):
+        return False
+    expanded = Path(os.path.expanduser(target)).resolve(strict=False)
+    home = Path.home().resolve(strict=False)
+    allowed_roots = (
+        home / ".codex" / "superpowers" / "skills",
+        home / ".codex" / "skills",
+        home / ".agents" / "skills",
+    )
+    for root in allowed_roots:
+        try:
+            expanded.relative_to(root.resolve(strict=False))
+        except ValueError:
+            continue
+        return True
+    return False
 
 
 def _read_only_lookup_target_is_path_like(value: str) -> bool:
@@ -4221,6 +4267,7 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str]) -> bool:
                 arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch="))
                 for arg in segment[command_index + 1 :]
             )
+            and not _fd_exec_sed_read_only_args_are_safe(segment[command_index + 1 :])
         ):
             return True
     return False

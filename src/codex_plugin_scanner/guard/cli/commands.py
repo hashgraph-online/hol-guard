@@ -5872,7 +5872,7 @@ def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
     return ""
 
 
-_CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"rg", "grep", "egrep", "fgrep"})
+_CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"fd", "rg", "grep", "egrep", "fgrep"})
 _CODEX_READ_ONLY_VIEW_COMMANDS = frozenset({"cat", "head", "tail", "sed"})
 _CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "tail", "sed"})
 _CODEX_READ_ONLY_SEARCH_WRAPPERS = frozenset({"bash", "sh", "zsh"})
@@ -6082,6 +6082,8 @@ def _codex_source_inspection_target_tokens(parts: list[str]) -> tuple[str, ...]:
             return tuple(targets) if valid and not skip_next else ()
         return tuple(_codex_cat_targets(args))
     if executable in _CODEX_READ_ONLY_SEARCH_COMMANDS:
+        if executable == "fd":
+            return _codex_fd_targets(args)
         return _codex_search_targets(args, executable=executable)
     if executable == "git":
         git_grep_args = _git_grep_search_args(args)
@@ -6190,22 +6192,32 @@ def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
 def _codex_command_has_unquoted_glob_metachar(command: str) -> bool:
     quote: str | None = None
     escaped = False
-    for char in command:
+    index = 0
+    while index < len(command):
+        char = command[index]
         if escaped:
             escaped = False
+            index += 1
             continue
         if char == "\\":
             escaped = True
+            index += 1
             continue
         if quote is not None:
             if char == quote:
                 quote = None
+            index += 1
             continue
         if char in {"'", '"'}:
             quote = char
+            index += 1
+            continue
+        if command.startswith("{}", index):
+            index += 2
             continue
         if char in {"*", "?", "[", "]", "{", "}"}:
             return True
+        index += 1
     return False
 
 
@@ -6378,6 +6390,10 @@ def _codex_command_is_read_only_source_search(command_text: str, *, cwd: Path | 
         return False
     executable = Path(parts[0]).name
     if executable in _CODEX_READ_ONLY_SEARCH_COMMANDS:
+        if executable == "fd":
+            return _codex_fd_targets_are_source_like(parts[1:], cwd=cwd) and _codex_fd_exec_is_bounded_read_only(
+                parts[1:]
+            )
         if executable == "rg" and "--no-config" not in parts and os.environ.get("RIPGREP_CONFIG_PATH"):
             return False
         return _codex_search_targets_are_source_like(parts[1:], cwd=cwd, executable=executable)
@@ -7081,6 +7097,74 @@ def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, 
     return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
 
 
+def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    targets = _codex_fd_targets(args)
+    if not targets:
+        return False
+    return all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+
+
+def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
+    parsed = _codex_split_fd_args_and_exec(args)
+    fd_args = parsed[0] if parsed is not None else args
+    positional: list[str] = []
+    skip_next = False
+    option_value_flags = {
+        "-d",
+        "--max-depth",
+        "-E",
+        "--exclude",
+        "-e",
+        "--extension",
+        "-t",
+        "--type",
+        "--changed-before",
+        "--changed-within",
+        "-j",
+        "--threads",
+    }
+    for arg in fd_args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in option_value_flags:
+            skip_next = True
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in option_value_flags if flag.startswith("--")):
+            continue
+        if arg.startswith("-"):
+            continue
+        positional.append(arg)
+    if len(positional) >= 2:
+        return tuple(positional[1:])
+    return ()
+
+
+def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
+    parsed = _codex_split_fd_args_and_exec(args)
+    if parsed is None:
+        return not any(
+            arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch="))
+            for arg in args
+        )
+    _fd_args, exec_parts = parsed
+    if not exec_parts or Path(exec_parts[0]).name != "sed" or "/" in exec_parts[0] or "\\" in exec_parts[0]:
+        return False
+    if exec_parts.count("{}") != 1:
+        return False
+    sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
+    return _codex_sed_args_are_bounded_filter(sed_args)
+
+
+def _codex_split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | None:
+    for index, arg in enumerate(args):
+        if arg in {"-X", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")):
+            return None
+        if arg in {"-x", "--exec"}:
+            return args[:index], args[index + 1 :]
+    return None
+
+
 def _codex_search_targets(args: list[str], *, executable: str) -> tuple[str, ...]:
     positional: list[str] = []
     skip_next = False
@@ -7146,6 +7230,8 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     stripped = target.strip().strip("'\"")
     if not stripped:
         return False
+    if _codex_search_target_is_known_skill_doc_path(stripped):
+        return True
     if stripped.startswith("~"):
         return False
     if any(char in stripped for char in ("*", "?", "{", "}")):
@@ -7194,6 +7280,25 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     if Path(stripped).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES:
         return True
     return Path(stripped).suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
+
+
+def _codex_search_target_is_known_skill_doc_path(target: str) -> bool:
+    if any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&")):
+        return False
+    expanded = Path(os.path.expanduser(target)).resolve(strict=False)
+    home = Path.home().resolve(strict=False)
+    allowed_roots = (
+        home / ".codex" / "superpowers" / "skills",
+        home / ".codex" / "skills",
+        home / ".agents" / "skills",
+    )
+    for root in allowed_roots:
+        try:
+            expanded.relative_to(root.resolve(strict=False))
+        except ValueError:
+            continue
+        return True
+    return False
 
 
 def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:
