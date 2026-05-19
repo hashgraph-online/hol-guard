@@ -111,7 +111,7 @@ _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
     "pytest": ("pytest.py", "pytest.pyc", "pytest/__init__.py", "pytest/__main__.py"),
 }
 _PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
-_PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = ("--basetemp", "--debug", "--junitxml", "-p")
+_PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = ("--basetemp", "--debug", "--junitxml", "--junit-xml", "-p")
 _MAX_PYTEST_CONFIG_FILE_BYTES = 1_000_000
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
@@ -5839,7 +5839,8 @@ def _pytest_config_file_has_unsafe_addopts(cwd: Path, config_dir: str, config_pa
     dir_fd: int | None = None
     file_handle: int | None = None
     try:
-        dir_fd = os.open(cwd / config_dir, os.O_RDONLY)  # lgtm[py/path-injection]
+        # codeql[py/path-injection] config_dir is relative-only and config_path is from a fixed allowlist.
+        dir_fd = os.open(cwd / config_dir, os.O_RDONLY)
         file_stat = os.stat(config_path, dir_fd=dir_fd)
         if not stat.S_ISREG(file_stat.st_mode):
             return False
