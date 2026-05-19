@@ -106,7 +106,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "glpat-",
     "sk-",
 )
-_SAFE_PYTHON_MODULE_COMMANDS = frozenset()
+_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
 _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
