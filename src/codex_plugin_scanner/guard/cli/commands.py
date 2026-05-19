@@ -117,6 +117,8 @@ from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
+    fd_exec_token_is_plain_sed,
+    split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
 from ..runtime.runner import (
@@ -7129,7 +7131,7 @@ def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None) -> b
 
 
 def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
-    parsed = _codex_split_fd_args_and_exec(args)
+    parsed = split_fd_args_and_exec(args)
     fd_args = parsed[0] if parsed is not None else args
     positional: list[str] = []
     search_paths: list[str] = []
@@ -7165,28 +7167,19 @@ def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
 
 
 def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
-    parsed = _codex_split_fd_args_and_exec(args)
+    parsed = split_fd_args_and_exec(args)
     if parsed is None:
         return not any(
             arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch="))
             for arg in args
         )
     _fd_args, exec_parts = parsed
-    if not exec_parts or Path(exec_parts[0]).name != "sed" or "/" in exec_parts[0] or "\\" in exec_parts[0]:
+    if not exec_parts or not fd_exec_token_is_plain_sed(exec_parts[0]):
         return False
     if exec_parts.count("{}") != 1:
         return False
     sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
     return _codex_sed_args_are_bounded_filter(sed_args)
-
-
-def _codex_split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | None:
-    for index, arg in enumerate(args):
-        if arg in {"-X", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")):
-            return None
-        if arg in {"-x", "--exec"}:
-            return args[:index], args[index + 1 :]
-    return None
 
 
 def _codex_search_targets(args: list[str], *, executable: str) -> tuple[str, ...]:

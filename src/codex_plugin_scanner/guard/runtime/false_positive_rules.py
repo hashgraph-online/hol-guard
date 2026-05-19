@@ -103,6 +103,20 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
     return False
 
 
+def split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | None:
+    for index, arg in enumerate(args):
+        if arg in {"-X", "--exec-batch"} or arg.startswith(("--exec=", "--exec-batch=")):
+            return None
+        if arg in {"-x", "--exec"}:
+            return args[:index], args[index + 1 :]
+    return None
+
+
+def fd_exec_token_is_plain_sed(token: str) -> bool:
+    shell_markers = ("/", "\\", ";", "&", "|", "<", ">", "`", "$")
+    return Path(token).name == "sed" and not any(marker in token for marker in shell_markers)
+
+
 _FIND_MUTATING_FLAGS = re.compile(
     r"(?:^|[\s])-(?:delete|exec\s+rm|exec\s+unlink|exec\s+shred|execdir\s+rm)\b"
     r"|(?:^|[\s])-exec\s+\S+[^\r\n;&|]{0,100}\{.*\}\s*(?:\\;|;|\+)",

@@ -744,10 +744,45 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        command = (
-            "fd -a 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees "
-            "-d 1 -x sed -i '1,180p' {}"
+        command = "fd -a 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees -d 1 -x sed -i '1,180p' {}"
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
         )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert "destructive shell command" in output["artifact_name"]
+
+    def test_codex_pre_tool_use_blocks_fd_skill_docs_metachar_sed_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        command = "fd -a 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees -d 1 -x 'sed;rm' -n '1,180p' {}"
         event = {
             "event": "PreToolUse",
             "tool_name": "Bash",
