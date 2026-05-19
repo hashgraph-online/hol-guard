@@ -5482,12 +5482,22 @@ def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
             continue
         if _segment_targets_pytest(segment, command_name, command_index):
             return saw_state_mutation
-        if command_name == "cd":
+        if command_name in {"cd", "pushd", "popd"}:
             saw_state_mutation = True
             continue
         if command_name == "export":
             for token in segment[command_index + 1 :]:
-                env_key = _shell_exported_env_key(token)
+                env_key = _shell_declared_env_key(token)
+                if env_key not in {"PATH", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH"}:
+                    continue
+                exported_pytest_env_keys.add(env_key)
+                if "=" in token:
+                    saw_state_mutation = True
+        if command_name in {"declare", "typeset"} and _shell_declaration_exports_env(segment[command_index + 1 :]):
+            for token in segment[command_index + 1 :]:
+                if token.startswith("-") or token == "--":
+                    continue
+                env_key = _shell_declared_env_key(token)
                 if env_key not in {"PATH", "PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH"}:
                     continue
                 exported_pytest_env_keys.add(env_key)
@@ -5521,8 +5531,24 @@ def _shell_env_assignment_key(token: str) -> str | None:
     return key.upper()
 
 
-def _shell_exported_env_key(token: str) -> str:
-    return token.split("=", 1)[0].upper()
+def _shell_declared_env_key(token: str) -> str:
+    assignment_key = _shell_env_assignment_key(token)
+    if assignment_key is not None:
+        return assignment_key
+    return token.upper()
+
+
+def _shell_declaration_exports_env(args: list[str]) -> bool:
+    for token in args:
+        if token == "--":
+            return False
+        if not token.startswith("-"):
+            continue
+        if token.startswith("+"):
+            continue
+        if "x" in token.lstrip("-"):
+            return True
+    return False
 
 
 def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | None) -> bool:

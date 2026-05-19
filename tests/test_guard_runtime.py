@@ -12403,10 +12403,32 @@ def test_guard_runtime_blocks_prior_cd_before_pytest(tmp_path):
     assert match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_prior_pushd_before_pytest(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "pushd sub >/dev/null; pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
 def test_guard_runtime_blocks_prior_exported_pytest_environment(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "export PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'; pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_prior_declared_pytest_environment(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "declare -x PYTEST_ADDOPTS='--basetemp /tmp/guard-pytest'; pytest -q"},
         cwd=tmp_path,
     )
 
