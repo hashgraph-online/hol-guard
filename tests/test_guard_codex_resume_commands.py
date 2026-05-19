@@ -118,6 +118,83 @@ def test_guard_approvals_resume_retries_failed_codex_resume(
     assert send_calls == 1
 
 
+def test_guard_approvals_resume_uses_codex_home_default_socket(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    socket_paths: list[str] = []
+
+    def _fake_send(**kwargs):
+        socket_paths.append(str(kwargs["socket_path"]))
+        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
+
+    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+
+    home_dir = tmp_path / "guard-home"
+    codex_home = tmp_path / "codex-home"
+    socket_path = codex_home / "app-server-control" / "app-server-control.sock"
+    socket_path.parent.mkdir(parents=True)
+    socket_path.write_text("", encoding="utf-8")
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-home"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-home",
+        socket_path=None,
+        codex_home=str(codex_home),
+    )
+    store.resolve_approval_request(
+        "req-cli-home",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-home", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "sent"
+    assert socket_paths == [str(socket_path)]
+
+
+def test_default_codex_app_server_socket_probe_uses_codex_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    codex_home = tmp_path / "custom-codex-home"
+    socket_path = codex_home / "app-server-control" / "app-server-control.sock"
+    socket_path.parent.mkdir(parents=True)
+    socket_path.write_text("", encoding="utf-8")
+    connect_paths: list[str] = []
+
+    class _FakeSocket:
+        def __enter__(self) -> _FakeSocket:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def settimeout(self, _timeout: float) -> None:
+            return None
+
+        def connect(self, path: str) -> None:
+            connect_paths.append(path)
+
+    monkeypatch.setattr(codex_app_server_module.socket, "socket", lambda *_args, **_kwargs: _FakeSocket())
+
+    assert (
+        codex_app_server_module.default_codex_app_server_socket_path(environ={"CODEX_HOME": str(codex_home)})
+        == socket_path
+    )
+    assert codex_app_server_module.default_codex_app_server_socket_available(
+        environ={"CODEX_HOME": str(codex_home)}
+    )
+    assert connect_paths == [str(socket_path)]
+
+
 def test_guard_doctor_codex_reports_resume_diagnostics(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
