@@ -4,12 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import shutil
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -25,6 +30,7 @@ if str(SRC_ROOT) not in sys.path:
 
 ALLOW_SENTINEL = "HOL_GUARD_ALLOW_PROOF_PRESENT"
 PROOF_FILE_NAME = "guard-proof.txt"
+_WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 
 @dataclass
@@ -104,7 +110,6 @@ def _run_scenario(*, decision: str, args: argparse.Namespace) -> SmokeScenarioRe
 
 
 def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: Path) -> SmokeScenarioResult:
-    from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
     from codex_plugin_scanner.guard.daemon import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
 
@@ -136,19 +141,9 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     captured_payloads: list[dict[str, object]] = []
-    socket_path = workspace_dir / "codex-app-server.sock"
-    socket_path.write_text("", encoding="utf-8")
+    socket_path = temp_dir / "c.sock"
+    codex_server = _start_fake_codex_app_server(socket_path, captured_payloads, f"thread-smoke-{decision}")
 
-    original_send = codex_app_server_module._send_app_server_websocket_messages
-
-    def _fake_send(**kwargs):
-        payloads = kwargs.get("payloads")
-        if not isinstance(payloads, list):
-            raise AssertionError("fake Codex app-server expected a payloads list")
-        captured_payloads.extend(payloads)
-        return {"id": 2, "result": {"turnId": "turn-smoke"}}, "turn_completed"
-
-    codex_app_server_module._send_app_server_websocket_messages = _fake_send
     daemon.start()
     try:
         thread_id = f"thread-smoke-{decision}"
@@ -176,7 +171,7 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
             raise RuntimeError(f"approval response did not include codex_resume: {approval_payload}")
     finally:
         daemon.stop()
-        codex_app_server_module._send_app_server_websocket_messages = original_send
+        codex_server.join(timeout=1.0)
 
     transcript = "\n".join(json.dumps(payload, sort_keys=True) for payload in captured_payloads)
     proof_created = proof_path.is_file()
@@ -238,6 +233,127 @@ def _start_headless_codex_thread(
     if thread_id is None:
         raise RuntimeError(f"codex exec did not emit a thread id:\n{result.stdout}")
     return thread_id, result.stdout
+
+
+def _start_fake_codex_app_server(
+    socket_path: Path,
+    received: list[dict[str, object]],
+    thread_id: str,
+) -> threading.Thread:
+    def server() -> None:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+            listener.bind(str(socket_path))
+            listener.listen(1)
+            connection, _ = listener.accept()
+            with connection:
+                headers = _recv_until(connection, b"\r\n\r\n").decode("iso-8859-1")
+                key = ""
+                for line in headers.split("\r\n"):
+                    if line.lower().startswith("sec-websocket-key:"):
+                        key = line.split(":", 1)[1].strip()
+                        break
+                accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode(
+                    "ascii"
+                )
+                connection.sendall(
+                    (
+                        "HTTP/1.1 101 Switching Protocols\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Upgrade: websocket\r\n"
+                        f"Sec-WebSocket-Accept: {accept}\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                while True:
+                    opcode, payload = _recv_websocket_frame(connection)
+                    if opcode != 0x1:
+                        continue
+                    message = json.loads(payload.decode("utf-8"))
+                    received.append(message)
+                    if message.get("id") == 1:
+                        _send_websocket_text(
+                            connection,
+                            {
+                                "id": 1,
+                                "result": {
+                                    "userAgent": "smoke",
+                                    "codexHome": "/tmp",
+                                    "platformFamily": "unix",
+                                    "platformOs": "macos",
+                                },
+                            },
+                        )
+                    if message.get("id") == 2:
+                        _send_websocket_text(connection, {"id": 2, "result": {"turnId": "turn-smoke"}})
+                        time.sleep(0.05)
+                        _send_websocket_text(
+                            connection,
+                            {
+                                "method": "turn/completed",
+                                "params": {
+                                    "threadId": thread_id,
+                                    "turn": {
+                                        "id": "turn-smoke",
+                                        "status": "completed",
+                                    },
+                                },
+                            },
+                        )
+                        break
+
+    thread = threading.Thread(target=server, name="codex-app-server-smoke", daemon=True)
+    thread.start()
+    for _ in range(50):
+        if socket_path.exists():
+            break
+        time.sleep(0.01)
+    return thread
+
+
+def _recv_until(connection: socket.socket, marker: bytes) -> bytes:
+    data = b""
+    while marker not in data:
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise RuntimeError("socket closed before marker")
+        data += chunk
+    return data
+
+
+def _recv_exact(connection: socket.socket, length: int) -> bytes:
+    data = b""
+    while len(data) < length:
+        chunk = connection.recv(length - len(data))
+        if not chunk:
+            raise RuntimeError("socket closed before frame completed")
+        data += chunk
+    return data
+
+
+def _recv_websocket_frame(connection: socket.socket) -> tuple[int, bytes]:
+    first, second = _recv_exact(connection, 2)
+    length = second & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", _recv_exact(connection, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", _recv_exact(connection, 8))[0]
+    mask = _recv_exact(connection, 4) if second & 0x80 else None
+    payload = _recv_exact(connection, length) if length else b""
+    if mask is not None:
+        payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return first & 0x0F, payload
+
+
+def _send_websocket_text(connection: socket.socket, payload: dict[str, object]) -> None:
+    data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    length = len(data)
+    if length < 126:
+        header = bytes([0x81, length])
+    elif length < 65_536:
+        header = bytes([0x81, 126]) + struct.pack("!H", length)
+    else:
+        header = bytes([0x81, 127]) + struct.pack("!Q", length)
+    connection.sendall(header + data)
 
 
 def _scenario_env(*, home_dir: Path, codex_home: str | None, guard_daemon_port: int | None = None) -> dict[str, str]:
