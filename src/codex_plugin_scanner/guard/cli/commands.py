@@ -118,6 +118,7 @@ from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
     fd_exec_token_is_plain_sed,
+    fd_search_targets,
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
@@ -5902,29 +5903,6 @@ _CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE = {
     "grep": frozenset({"R"}),
     "rg": frozenset({"L"}),
 }
-_CODEX_FD_OPTION_VALUE_FLAGS = frozenset(
-    {
-        "-d",
-        "--max-depth",
-        "-E",
-        "--exclude",
-        "-e",
-        "--extension",
-        "-t",
-        "--type",
-        "-S",
-        "--size",
-        "-o",
-        "--owner",
-        "--changed-before",
-        "--changed-within",
-        "--changed-after",
-        "-j",
-        "--threads",
-        "--base-directory",
-        "--path-separator",
-    }
-)
 _CODEX_GIT_GLOBAL_VALUE_FLAGS = frozenset(
     {"-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace"}
 )
@@ -7131,39 +7109,7 @@ def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None) -> b
 
 
 def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
-    parsed = split_fd_args_and_exec(args)
-    fd_args = parsed[0] if parsed is not None else args
-    positional: list[str] = []
-    search_paths: list[str] = []
-    skip_next = False
-    for index, arg in enumerate(fd_args):
-        if skip_next:
-            skip_next = False
-            continue
-        if arg == "--base-directory" or arg.startswith("--base-directory="):
-            return ("__guard_unsafe_fd_base_directory__",)
-        if arg == "--search-path":
-            if index + 1 >= len(fd_args):
-                return ("__guard_missing_fd_search_path__",)
-            search_paths.append(fd_args[index + 1])
-            skip_next = True
-            continue
-        if arg.startswith("--search-path="):
-            search_paths.append(arg.split("=", 1)[1])
-            continue
-        if arg in _CODEX_FD_OPTION_VALUE_FLAGS:
-            skip_next = True
-            continue
-        if any(arg.startswith(f"{flag}=") for flag in _CODEX_FD_OPTION_VALUE_FLAGS if flag.startswith("--")):
-            continue
-        if arg.startswith("-"):
-            continue
-        positional.append(arg)
-    if search_paths:
-        return tuple(search_paths)
-    if len(positional) >= 2:
-        return tuple(positional[1:])
-    return ()
+    return fd_search_targets(args) or ("__guard_unsafe_fd_args__",)
 
 
 def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:

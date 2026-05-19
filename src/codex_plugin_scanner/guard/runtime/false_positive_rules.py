@@ -74,6 +74,28 @@ KNOWN_SKILL_DOC_ROOT_SUFFIXES = (
     ".codex/skills",
     ".agents/skills",
 )
+FD_OPTION_VALUE_FLAGS = frozenset(
+    {
+        "-d",
+        "--max-depth",
+        "-E",
+        "--exclude",
+        "-e",
+        "--extension",
+        "-t",
+        "--type",
+        "-S",
+        "--size",
+        "-o",
+        "--owner",
+        "--changed-before",
+        "--changed-within",
+        "--changed-after",
+        "-j",
+        "--threads",
+        "--path-separator",
+    }
+)
 
 _SECRET_FILE_NAMES = re.compile(
     r"(?<![A-Za-z0-9_.-])"
@@ -115,6 +137,42 @@ def split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | Non
 def fd_exec_token_is_plain_sed(token: str) -> bool:
     shell_markers = ("/", "\\", ";", "&", "|", "<", ">", "`", "$")
     return Path(token).name == "sed" and not any(marker in token for marker in shell_markers)
+
+
+def fd_search_targets(args: list[str]) -> tuple[str, ...] | None:
+    parsed = split_fd_args_and_exec(args)
+    fd_args = parsed[0] if parsed is not None else args
+    positional: list[str] = []
+    search_paths: list[str] = []
+    skip_next = False
+    for index, arg in enumerate(fd_args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--base-directory" or arg.startswith("--base-directory="):
+            return None
+        if arg == "--search-path":
+            if index + 1 >= len(fd_args):
+                return None
+            search_paths.append(fd_args[index + 1])
+            skip_next = True
+            continue
+        if arg.startswith("--search-path="):
+            search_paths.append(arg.split("=", 1)[1])
+            continue
+        if arg in FD_OPTION_VALUE_FLAGS:
+            skip_next = True
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in FD_OPTION_VALUE_FLAGS if flag.startswith("--")):
+            continue
+        if arg.startswith("-"):
+            continue
+        positional.append(arg)
+    if search_paths:
+        return tuple(search_paths)
+    if len(positional) >= 2:
+        return tuple(positional[1:])
+    return ()
 
 
 _FIND_MUTATING_FLAGS = re.compile(

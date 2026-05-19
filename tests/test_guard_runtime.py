@@ -849,6 +849,45 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "require-reapproval"
         assert "destructive shell command" in output["artifact_name"]
 
+    def test_codex_pre_tool_use_allows_fd_path_separator_skill_docs_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        command = (
+            "fd --path-separator / 'SKILL.md' ~/.codex/superpowers/skills/using-git-worktrees -d 1 -x sed -n '1,20p' {}"
+        )
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
     def test_codex_post_tool_use_allows_fd_skill_docs_bounded_sed_output(
         self,
         monkeypatch,
