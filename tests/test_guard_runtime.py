@@ -28,7 +28,13 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.models import (
+    GuardApprovalRequest,
+    GuardArtifact,
+    GuardReceipt,
+    HarnessDetection,
+    PolicyDecision,
+)
 from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
@@ -14823,6 +14829,212 @@ def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
 
     assert timeouts == [20, 120]
     assert payload["synced_at"] == "2026-04-19T00:00:10+00:00"
+
+
+def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    for index in range(65):
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-{index}",
+                timestamp="2026-04-19T00:00:00+00:00",
+                harness="codex",
+                artifact_id=f"artifact-{index}",
+                artifact_hash=f"sha256:{index:064x}",
+                policy_decision="review",
+                capabilities_summary="requests file write",
+                changed_capabilities=("fs_write",),
+                provenance_summary="local codex workspace",
+                artifact_name=f"artifact-{index}",
+                source_scope="workspace",
+            )
+        )
+    observed_batch_sizes: list[int] = []
+
+    class _Response:
+        def __init__(self, receipts_stored: int) -> None:
+            self._receipts_stored = receipts_stored
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "syncedAt": "2026-04-19T00:00:10+00:00",
+                    "receiptsStored": self._receipts_stored,
+                    "advisories": [],
+                    "policy": {},
+                    "alertPreferences": {},
+                    "teamPolicyPack": {},
+                    "exceptions": [],
+                }
+            ).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response(0)
+        observed_batch_sizes.append(len(payload["receipts"]))
+        return _Response(len(payload["receipts"]))
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_receipts(store)
+
+    assert observed_batch_sizes == [50, 15]
+    assert payload["receipts"] == 65
+    assert payload["receipts_stored"] == 65
+
+
+def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    for index in range(65):
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-{index}",
+                timestamp="2026-04-19T00:00:00+00:00",
+                harness="codex",
+                artifact_id=f"artifact-{index}",
+                artifact_hash=f"sha256:{index:064x}",
+                policy_decision="review",
+                capabilities_summary="requests file write",
+                changed_capabilities=("fs_write",),
+                provenance_summary="local codex workspace",
+                artifact_name=f"artifact-{index}",
+                source_scope="workspace",
+            )
+        )
+
+    metadata_calls: list[bool] = []
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_guard_device_metadata",
+        lambda _store: (metadata_calls.append(True) or ("device-1", "MacBook Pro")),
+    )
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store: 0)
+
+    sync_payloads = iter(
+        [
+            {
+                "syncedAt": "2026-04-19T00:00:10+00:00",
+                "receiptsStored": 50,
+                "advisories": [
+                    {
+                        "artifactId": "artifact-a",
+                        "artifactName": "Artifact A",
+                        "severity": "high",
+                        "reason": "Batch one advisory",
+                    }
+                ],
+                "policy": {"mode": "enforce"},
+                "alertPreferences": {"advisoriesEnabled": True},
+                "teamPolicyPack": {
+                    "name": "Team policy",
+                    "blockedArtifacts": ["blocked-one"],
+                    "allowedPublishers": ["trusted-one"],
+                },
+                "exceptions": [
+                    {
+                        "scope": "artifact",
+                        "harness": "*",
+                        "artifactId": "allowed-one",
+                        "artifactName": "Allowed One",
+                        "reason": "Batch one exception",
+                        "owner": "owner@example.com",
+                        "expiresAt": "2026-04-19T06:00:00+00:00",
+                    }
+                ],
+            },
+            {
+                "syncedAt": "2026-04-19T00:00:11+00:00",
+                "receiptsStored": 15,
+                "advisories": [
+                    {
+                        "artifactId": "artifact-b",
+                        "artifactName": "Artifact B",
+                        "severity": "medium",
+                        "reason": "Batch two advisory",
+                    }
+                ],
+                "policy": {},
+                "alertPreferences": {"advisoriesEnabled": True},
+                "teamPolicyPack": {
+                    "name": "Team policy",
+                    "blockedArtifacts": ["blocked-two"],
+                    "allowedPublishers": ["trusted-two"],
+                },
+                "exceptions": [
+                    {
+                        "scope": "artifact",
+                        "harness": "*",
+                        "artifactId": "allowed-two",
+                        "artifactName": "Allowed Two",
+                        "reason": "Batch two exception",
+                        "owner": "owner@example.com",
+                        "expiresAt": "2026-04-19T08:00:00+00:00",
+                    }
+                ],
+            },
+        ]
+    )
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        assert len(payload["receipts"]) in {50, 15}
+        return _Response(next(sync_payloads))
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_receipts(store)
+
+    assert metadata_calls == [True]
+    assert payload["receipts_stored"] == 65
+    assert payload["advisories_stored"] == 2
+    assert payload["exceptions_stored"] == 2
+    assert payload["remote_policies_stored"] == 6
+    assert store.get_sync_payload("policy") == {"mode": "enforce"}
+    assert {item["artifactId"] for item in store.list_cached_advisories(limit=None)} == {"artifact-a", "artifact-b"}
+    assert {item["artifact_id"] for item in store.list_policy_decisions() if item["artifact_id"]} >= {
+        "allowed-one",
+        "allowed-two",
+        "blocked-one",
+        "blocked-two",
+    }
+    assert {item["publisher"] for item in store.list_policy_decisions() if item["publisher"]} == {
+        "trusted-one",
+        "trusted-two",
+    }
+    assert len(store.list_events(event_name="premium_advisory")) == 2
+    assert len(store.list_events(event_name="exception_expiring")) == 2
 
 
 def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
