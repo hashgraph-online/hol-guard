@@ -118,13 +118,12 @@ def _headless_safe_failure_reasons() -> dict[str, str]:
 
 
 def _headless_detection_status_to_app_status(value: object) -> str:
-    if value == "protected":
-        return "protected"
-    if value == "found":
-        return "observed"
-    if value == "not_found":
-        return "inactive"
-    return "unknown"
+    status_map = {
+        "protected": "protected",
+        "found": "observed",
+        "not_found": "inactive",
+    }
+    return status_map.get(str(value), "unknown")
 
 
 def _headless_error_payload(
@@ -153,29 +152,35 @@ def _headless_action_error_payload(
     operation: str,
     error_code: str,
 ) -> tuple[int, dict[str, object]]:
-    if error_code == "missing_harness":
-        return 400, _headless_error_payload(
-            code="missing_harness",
-            message="Choose an app before retrying.",
-            retryable=False,
-        )
-    if error_code == "unknown_harness":
-        return 404, _headless_error_payload(
-            code="unknown_harness",
-            message="This app is not supported by local Guard.",
-            retryable=False,
-        )
-    if error_code == "confirmation_required":
-        return 409, _headless_error_payload(
-            code="confirmation_required",
-            message="Disconnect needs the local confirmation phrase before Guard removes protection.",
-            retryable=False,
-        )
-    if error_code == "unsupported_operation":
-        return 400, _headless_error_payload(
-            code="unsupported_operation",
-            message="This daemon cannot run the requested app action.",
-            retryable=False,
+    error_details = {
+        "missing_harness": (
+            400,
+            "Choose an app before retrying.",
+            False,
+        ),
+        "unknown_harness": (
+            404,
+            "This app is not supported by local Guard.",
+            False,
+        ),
+        "confirmation_required": (
+            409,
+            "Disconnect needs the local confirmation phrase before Guard removes protection.",
+            False,
+        ),
+        "unsupported_operation": (
+            400,
+            "This daemon cannot run the requested app action.",
+            False,
+        ),
+    }
+    known_error = error_details.get(error_code)
+    if known_error is not None:
+        status, message, retryable = known_error
+        return status, _headless_error_payload(
+            code=error_code,
+            message=message,
+            retryable=retryable,
         )
     operation_code = "proof_failed" if operation == "scan" else f"{operation}_failed"
     operation_label = "proof test" if operation == "scan" else operation
@@ -183,7 +188,6 @@ def _headless_action_error_payload(
         code=operation_code,
         message=f"Guard could not finish the {operation_label}.",
         retryable=True,
-        detail=error_code,
     )
 
 
@@ -192,6 +196,11 @@ def _headless_app_status_from_result(*, operation: str, result: dict[str, object
         managed_install = result.get("managed_install")
         if isinstance(managed_install, dict) and bool(managed_install.get("active")):
             return "protected"
+        return "unknown"
+    if operation == "remove":
+        managed_install = result.get("managed_install")
+        if isinstance(managed_install, dict) and managed_install.get("active") is False:
+            return "inactive"
         return "unknown"
     verification = result.get("verification")
     if isinstance(verification, dict):
@@ -800,11 +809,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_headless_app_action(self, action_path: str, payload: dict[str, object]) -> None:
         mapping = _HEADLESS_APP_ACTIONS.get(action_path)
         if mapping is None:
-            status, payload = _headless_action_error_payload(
+            status, error_payload = _headless_action_error_payload(
                 operation=action_path,
                 error_code="unsupported_operation",
             )
-            self._write_json(payload, status=status)
+            self._write_json(error_payload, status=status)
             return
         operation, harness_action = mapping
         harness = self._optional_string(payload.get("harness"))

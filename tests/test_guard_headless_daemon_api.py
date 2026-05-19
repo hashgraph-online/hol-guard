@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -148,6 +149,9 @@ def test_headless_app_operations_write_receipts_without_cli_copy(
             if operation == "install":
                 assert payload["state"]["outcome"] == "app_connected"
                 assert payload["state"]["app_status"] == "protected"
+            if operation == "remove":
+                assert payload["state"]["outcome"] == "app_disconnected"
+                assert payload["state"]["app_status"] == "inactive"
             if operation == "scan":
                 assert payload["state"]["outcome"] == "proof_passed"
                 assert payload["state"]["proof_status"] == "passed"
@@ -478,3 +482,20 @@ def test_headless_api_rejects_missing_harness_with_structured_error(tmp_path: Pa
     assert payload["status"] == "failed"
     assert payload["error"]["code"] == "missing_harness"
     assert payload["error"]["retryable"] is False
+
+
+def test_headless_generic_action_error_omits_unstructured_detail() -> None:
+    status, payload = _headless_action_error_payload(
+        operation="repair",
+        error_code="unexpected daemon blowup",
+    )
+
+    assert status == 400
+    assert payload == {
+        "status": "failed",
+        "error": {
+            "code": "repair_failed",
+            "message": "Guard could not finish the repair.",
+            "retryable": True,
+        },
+    }
