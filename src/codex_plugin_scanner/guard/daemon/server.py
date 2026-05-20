@@ -111,6 +111,7 @@ _HEADLESS_APP_ACTIONS = {
     "status": ("status", "verify"),
     "test": ("scan", "verify"),
 }
+_CLOUD_APP_HANDOFF_ACTIONS = frozenset({"connect", "repair", "status", "test"})
 _HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")
 
 
@@ -912,7 +913,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         local_origin = self._local_daemon_origin()
         handoff_query = parse_qs(query_string)
         action_path = self._optional_string(handoff_query.get("action", [None])[-1])
-        if action_path in _HEADLESS_APP_ACTIONS and self._hosted_dashboard_referrer_is_allowed():
+        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and self._hosted_dashboard_referrer_is_allowed():
             self._write_cloud_app_handoff_page(
                 harness=adapter.harness,
                 action_path=action_path,
@@ -976,7 +977,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         action_path = self._optional_string(decoded.get("action_path"))
         token_harness = self._optional_string(decoded.get("harness"))
-        if token_harness != harness or action_path not in _HEADLESS_APP_ACTIONS:
+        if token_harness != harness or action_path not in _CLOUD_APP_HANDOFF_ACTIONS:
             self._write_json({"error": "invalid_handoff_scope"}, status=403)
             return
         status, action_payload = self._headless_app_action_payload(

@@ -229,6 +229,29 @@ def test_cloud_app_handoff_redirects_to_guard_cloud_without_side_effect_when_unt
     assert "guard-token" not in fragment
 
 
+def test_cloud_app_handoff_rejects_confirmation_required_actions(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, location = _read_redirect_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=disconnect",
+                method="GET",
+                origin=None,
+                referer="https://hol.org/guard/apps/codex",
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 302
+    parsed = urlparse(location)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "https://hol.org/guard/apps/codex"
+    assert "guardLocalAction" not in parse_qs(parsed.query)
+
+
 def test_headless_app_operations_write_receipts_without_cli_copy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
