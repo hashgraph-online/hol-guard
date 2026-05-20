@@ -28,7 +28,7 @@ from codex_plugin_scanner.guard.cli import connect_flow as guard_connect_flow_mo
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
-from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action
+from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.store import GuardStore
@@ -7194,7 +7194,7 @@ url = http://127.0.0.1:8787/guard-canary
             approval_center_url: str,
             *,
             store: GuardStore,
-            config: RuntimeConfig,
+            config: GuardConfig,
             open_key: str | None = None,
             force_open: bool = False,
         ) -> dict[str, object]:
@@ -8512,6 +8512,45 @@ url = http://127.0.0.1:8787/guard-canary
                 str(home_dir),
             ]
         )
+
+        assert rc == 1
+        stderr = capsys.readouterr().err
+        assert "Guard Cloud is not connected yet." in stderr
+        assert "Run `hol-guard connect`" in stderr
+
+    def test_guard_cloud_sync_intel_emits_bundle_summary(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.set_sync_credentials(
+            "https://hol.org/api/guard/receipts/sync",
+            "demo-token",
+            "2026-05-19T00:00:00Z",
+            workspace_id="workspace-alpha",
+        )
+
+        def _fake_sync_intel(_store: GuardStore) -> dict[str, object]:
+            return {
+                "status": "synced",
+                "workspace_id": "workspace-alpha",
+                "bundle_version": "1747612800000-deadbeef",
+                "package_count": 1,
+                "advisory_count": 1,
+            }
+
+        monkeypatch.setattr(guard_commands_module, "sync_supply_chain_bundle", _fake_sync_intel)
+
+        rc = main(["guard", "cloud", "sync-intel", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "synced"
+        assert output["bundle_version"] == "1747612800000-deadbeef"
+        assert output["workspace_id"] == "workspace-alpha"
+
+    def test_guard_cloud_sync_intel_without_login_returns_cli_error(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        rc = main(["guard", "cloud", "sync-intel", "--home", str(home_dir)])
 
         assert rc == 1
         stderr = capsys.readouterr().err
