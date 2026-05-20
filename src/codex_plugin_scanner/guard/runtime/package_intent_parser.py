@@ -178,6 +178,18 @@ def _parse_pip_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
             manifest_paths.append(tokens[index + 1])
             index += 2
             continue
+        if token.startswith("--requirement=") or token.startswith("--constraint="):
+            manifest_paths.append(token.partition("=")[2])
+            index += 1
+            continue
+        if token.startswith("-r") and token != "-r":
+            manifest_paths.append(token[2:])
+            index += 1
+            continue
+        if token.startswith("-c") and token != "-c":
+            manifest_paths.append(token[2:])
+            index += 1
+            continue
         if token in {"-e", "--editable"} and index + 1 < len(tokens):
             targets.append(python_target(tokens[index + 1], editable=True))
             index += 2
@@ -475,11 +487,10 @@ def _exec_package_spec(tokens: tuple[str, ...]) -> str | None:
         if positional_package and explicit_package:
             positional_target = js_target(positional_package)
             explicit_target = js_target(explicit_package)
-            positional_name = positional_target.package_name
-            explicit_name = explicit_target.package_name
-            if positional_name == explicit_name:
+            if positional_target.package_name == explicit_target.package_name:
                 return positional_package
-        return positional_package or explicit_package
+            return explicit_package
+        return explicit_package or positional_package
     if command_name == "pipx" and len(tokens) >= 2 and tokens[1] == "run":
         return first_positional(tokens[2:], skip_value_options={"--python"})
     if command_name in {"pnpm", "yarn"} and len(tokens) >= 2 and tokens[1] == "dlx":
@@ -499,10 +510,62 @@ def _normalized_command_tokens(command_text: str) -> tuple[str, ...]:
         if token in _CONTROL_TOKENS:
             break
         segment.append(token)
-    while segment and (
-        _command_name(segment[0]) in {"command", "env", "sudo", "time"} or _ENV_ASSIGNMENT_RE.match(segment[0])
-    ):
-        segment.pop(0)
+    segment = _strip_wrapper_tokens(segment)
     if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
         segment = [segment[2], *segment[3:]]
     return tuple(segment)
+
+
+def _strip_wrapper_tokens(segment: list[str]) -> list[str]:
+    while segment:
+        if _ENV_ASSIGNMENT_RE.match(segment[0]):
+            segment.pop(0)
+            continue
+        command_name = _command_name(segment[0])
+        if command_name == "sudo":
+            segment = _strip_sudo_prefix(segment[1:])
+            continue
+        if command_name == "env":
+            segment = _strip_env_prefix(segment[1:])
+            continue
+        if command_name in {"command", "time"}:
+            segment = _strip_plain_wrapper_flags(segment[1:])
+            continue
+        break
+    return segment
+
+
+def _strip_sudo_prefix(tokens: list[str]) -> list[str]:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if not token.startswith("-"):
+            break
+        if token in {"-u", "-g", "-h", "-p", "-r", "-t", "-C"} and index + 1 < len(tokens):
+            index += 2
+            continue
+        index += 1
+    return tokens[index:]
+
+
+def _strip_env_prefix(tokens: list[str]) -> list[str]:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if _ENV_ASSIGNMENT_RE.match(token):
+            index += 1
+            continue
+        if not token.startswith("-"):
+            break
+        if token in {"-u", "-C", "-S"} and index + 1 < len(tokens):
+            index += 2
+            continue
+        index += 1
+    return tokens[index:]
+
+
+def _strip_plain_wrapper_flags(tokens: list[str]) -> list[str]:
+    index = 0
+    while index < len(tokens) and tokens[index].startswith("-"):
+        index += 1
+    return tokens[index:]
