@@ -21,15 +21,7 @@ from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payl
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _read_json_response(request: urllib.request.Request) -> tuple[int, dict[str, object]]:
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            return response.status, json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read().decode("utf-8"))
-
-
-def _read_json_response_with_headers(
+def _read_json_response_details(
     request: urllib.request.Request,
 ) -> tuple[int, dict[str, object], dict[str, str]]:
     try:
@@ -41,6 +33,17 @@ def _read_json_response_with_headers(
             )
     except urllib.error.HTTPError as error:
         return error.code, json.loads(error.read().decode("utf-8")), dict(error.headers.items())
+
+
+def _read_json_response(request: urllib.request.Request) -> tuple[int, dict[str, object]]:
+    status, payload, _headers = _read_json_response_details(request)
+    return status, payload
+
+
+def _read_json_response_with_headers(
+    request: urllib.request.Request,
+) -> tuple[int, dict[str, object], dict[str, str]]:
+    return _read_json_response_details(request)
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
