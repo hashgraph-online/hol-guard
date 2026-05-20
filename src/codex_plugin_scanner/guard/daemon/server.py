@@ -2707,9 +2707,7 @@ class GuardDaemonServer:
         if interval_seconds is None or interval_seconds <= 0:
             return
         backoff_seconds = (
-            self._bundle_refresh_backoff_seconds
-            if self._bundle_refresh_backoff_seconds > 0
-            else interval_seconds
+            self._bundle_refresh_backoff_seconds if self._bundle_refresh_backoff_seconds > 0 else interval_seconds
         )
         while not self._shutdown_started.is_set():
             refreshed_at = _now()
