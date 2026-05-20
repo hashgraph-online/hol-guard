@@ -59,6 +59,7 @@ def _request(
     dashboard_session_token: str | None = None,
     origin: str | None = "https://hol.org",
     referer: str | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> urllib.request.Request:
     data = json.dumps(payload or {}).encode("utf-8") if method != "GET" else None
     headers = {
@@ -75,6 +76,8 @@ def _request(
         headers["Authorization"] = f"Bearer {authorization_token}"
     if dashboard_session_token is not None:
         headers["X-Guard-Dashboard-Session"] = dashboard_session_token
+    if extra_headers is not None:
+        headers.update(extra_headers)
     return urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
         data=data,
@@ -160,6 +163,42 @@ def test_cloud_app_handoff_serves_token_authenticated_local_action_page(tmp_path
     assert auth_token not in body
 
 
+def test_cloud_app_handoff_start_mints_handoff_url_for_hosted_dashboard(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={"action": "connect"},
+                origin="https://hol.org",
+            ),
+        )
+        assert status == 200
+        handoff_url = payload["handoff_url"]
+        assert isinstance(handoff_url, str)
+        assert handoff_url.startswith(f"http://127.0.0.1:{daemon.port}/v1/apps/codex/cloud?handoffToken=gch1.")
+        assert auth_token not in handoff_url
+        token_status, body = _read_text_response(
+            _request(
+                daemon.port,
+                handoff_url.removeprefix(f"http://127.0.0.1:{daemon.port}"),
+                method="GET",
+                origin=None,
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert token_status == 200
+    assert "HOL Guard local handoff" in body
+    assert "handoffToken" in body
+
+
 def test_cloud_app_handoff_completion_runs_scoped_action_without_daemon_auth_token(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -201,7 +240,7 @@ def test_cloud_app_handoff_completion_runs_scoped_action_without_daemon_auth_tok
     assert payload["receipt"]["operation"] == "install"
 
 
-def test_cloud_app_handoff_redirects_to_guard_cloud_without_side_effect_when_untrusted(tmp_path: Path) -> None:
+def test_cloud_app_handoff_redirects_to_guard_cloud_when_referrer_and_fetch_metadata_missing(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -214,6 +253,35 @@ def test_cloud_app_handoff_redirects_to_guard_cloud_without_side_effect_when_unt
                 "/v1/apps/codex/cloud?action=connect",
                 method="GET",
                 origin=None,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 302
+    parsed = urlparse(location)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "https://hol.org/guard/apps/codex"
+    assert parse_qs(parsed.query)["guardDaemon"] == [f"http://127.0.0.1:{daemon.port}"]
+    assert auth_token not in location
+
+
+def test_cloud_app_handoff_redirects_to_guard_cloud_for_silent_fetch(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, location = _read_redirect_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=connect",
+                method="GET",
+                origin=None,
+                extra_headers={
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Dest": "empty",
+                },
             ),
         )
     finally:
