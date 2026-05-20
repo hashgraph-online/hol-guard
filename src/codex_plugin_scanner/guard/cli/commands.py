@@ -131,6 +131,7 @@ from ..runtime.runner import (
     prompt_requests_to_artifacts,
     sync_receipts,
     sync_runtime_session,
+    sync_supply_chain_bundle,
 )
 from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
@@ -719,6 +720,22 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     sync_parser.add_argument("--home")
     sync_parser.add_argument("--guard-home")
     sync_parser.add_argument("--json", action="store_true")
+
+    cloud_parser = guard_subparsers.add_parser(
+        "cloud",
+        help="Sync Guard Cloud supply-chain intelligence and diagnostics",
+    )
+    cloud_subparsers = cloud_parser.add_subparsers(
+        dest="cloud_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+    cloud_sync_intel_parser = cloud_subparsers.add_parser(
+        "sync-intel",
+        help="Fetch and verify the latest Guard supply-chain bundle for this workspace",
+    )
+    _add_guard_common_args(cloud_sync_intel_parser)
+    cloud_sync_intel_parser.add_argument("--json", action="store_true")
 
     service_parser = guard_subparsers.add_parser(
         "service",
@@ -1820,19 +1837,22 @@ def run_guard_command(
     if args.guard_command == "advisories":
         adv_sub = getattr(args, "advisories_subcommand", None)
         if adv_sub == "sync":
-            credentials = store.get_sync_credentials()
-            if credentials is None:
+            try:
+                payload = sync_supply_chain_bundle(store)
+            except GuardSyncNotConfiguredError:
                 _emit(
                     "advisories_sync",
                     {"generated_at": _now(), "status": "no_cloud_sync_configured"},
                     getattr(args, "json", False),
                 )
-            else:
+            except RuntimeError as error:
                 _emit(
                     "advisories_sync",
-                    {"generated_at": _now(), "status": "advisory_sync_not_available", "synced": False},
+                    {"generated_at": _now(), "status": "supply_chain_sync_failed", "error": str(error)},
                     getattr(args, "json", False),
                 )
+            else:
+                _emit("advisories_sync", payload, getattr(args, "json", False))
         elif adv_sub == "explain":
             target_id = getattr(args, "advisory_id", None)
             all_advs = store.list_cached_advisories(limit=None)
@@ -2061,6 +2081,27 @@ def run_guard_command(
             return 1
         _emit("sync", payload, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "cloud":
+        cloud_command = getattr(args, "cloud_command", None)
+        if cloud_command == "sync-intel":
+            try:
+                payload = sync_supply_chain_bundle(store)
+            except GuardSyncNotConfiguredError:
+                message = _guard_sync_prerequisite_message()
+                if getattr(args, "json", False):
+                    _emit("cloud-sync-intel", {"synced": False, "error": message}, True)
+                else:
+                    print(message, file=sys.stderr)
+                return 1
+            except RuntimeError as error:
+                if getattr(args, "json", False):
+                    _emit("cloud-sync-intel", {"synced": False, "error": str(error)}, True)
+                else:
+                    print(str(error), file=sys.stderr)
+                return 1
+            _emit("cloud-sync-intel", payload, getattr(args, "json", False))
+            return 0
 
     if args.guard_command == "service":
         service_command = getattr(args, "service_command", None)
@@ -7963,7 +8004,11 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
         return
     try:
         sync_receipts(store)
-    except Exception:
+    except (GuardSyncNotConfiguredError, RuntimeError):
+        return
+    try:
+        sync_supply_chain_bundle(store)
+    except (GuardSyncNotConfiguredError, RuntimeError):
         return
 
 
