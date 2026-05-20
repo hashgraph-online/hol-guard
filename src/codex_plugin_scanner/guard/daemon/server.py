@@ -104,6 +104,7 @@ _GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
 _HOSTED_GUARD_DASHBOARD_ORIGINS = frozenset({"https://hol.org", "https://www.hol.org"})
 _HOSTED_GUARD_APPS_URL = "https://hol.org/guard/apps"
 _CLOUD_APP_HANDOFF_TOKEN_TTL_SECONDS = 120
+_CLOUD_APP_DASHBOARD_SESSION_TTL_SECONDS = 10 * 60
 _HEADLESS_APP_ACTIONS = {
     "connect": ("install", "install"),
     "repair": ("repair", "repair"),
@@ -1062,6 +1063,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         script_payload = json.dumps(
             {
                 "actionPath": action_path,
+                "dashboardSessionToken": self._cloud_app_dashboard_session_token(
+                    harness=harness,
+                    workspace_id=workspace_id,
+                ),
                 "handoffToken": handoff_token,
                 "harness": harness,
                 "localOrigin": local_origin,
@@ -1138,9 +1143,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
   <script>
     const data = JSON.parse(document.getElementById('guard-handoff-data').textContent);
     const statusNode = document.getElementById('status');
-    const finish = (params) => {{
+    const finish = (params, fragmentOnlyParams = {{}}) => {{
       const query = new URLSearchParams(params);
       const fragment = new URLSearchParams(params);
+      for (const [key, value] of Object.entries(fragmentOnlyParams)) {{
+        if (typeof value === 'string' && value.length > 0) {{
+          fragment.set(key, value);
+        }}
+      }}
       window.location.assign(`${{data.redirectBase}}?${{query.toString()}}#${{fragment.toString()}}`);
     }};
     const fail = (message) => {{
@@ -1184,6 +1194,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
           guardAppStatus: state.app_status || 'unknown',
           guardProofStatus: state.proof_status || 'unknown',
           guardReceipt: receipt.id || '',
+        }}, {{
+          'guard-token': data.dashboardSessionToken,
         }});
       }} catch (error) {{
         fail(error instanceof Error ? error.message : 'Local Guard setup failed');
@@ -1202,6 +1214,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(encoded)
+
+    def _cloud_app_dashboard_session_token(self, *, harness: str, workspace_id: str) -> str:
+        from datetime import datetime, timedelta, timezone
+
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=_CLOUD_APP_DASHBOARD_SESSION_TTL_SECONDS)
+        payload_json = json.dumps(
+            {
+                "expires_at": expires_at.isoformat(),
+                "harness": harness,
+                "version": "guard-local-daemon-session.v1",
+                "workspace_id": workspace_id,
+            },
+            separators=(",", ":"),
+        )
+        payload = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("ascii").rstrip("=")
+        signature = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
+        return f"gld1.{payload}.{signature}"
 
     def _cloud_app_handoff_navigation_is_allowed(self) -> bool:
         return self._hosted_dashboard_referrer_is_allowed()
@@ -2055,12 +2084,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _dashboard_session_token_is_valid(self) -> bool:
         session_token = self.headers.get("X-Guard-Dashboard-Session")
+        guard_token = self.headers.get("X-Guard-Token")
         authorization = self.headers.get("Authorization")
         bearer_token = None
         if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
             bearer_token = authorization[7:].strip()
         candidates = [
-            candidate for candidate in (session_token, bearer_token) if isinstance(candidate, str) and candidate.strip()
+            candidate
+            for candidate in (session_token, bearer_token, guard_token)
+            if isinstance(candidate, str) and candidate.strip()
         ]
         return any(self._dashboard_session_token_matches(candidate) for candidate in candidates)
 
