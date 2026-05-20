@@ -119,10 +119,10 @@ def get_supply_chain_bundle(conn: sqlite3.Connection, *, workspace_id: str) -> d
     ).fetchone()
     if row is None:
         return None
-    payload = json.loads(str(row["response_json"]))
+    payload = json.loads(row["response_json"])
     if not isinstance(payload, dict):
         return None
-    payload["cached_at"] = str(row["cached_at"])
+    payload["cached_at"] = row["cached_at"]
     return payload
 
 
@@ -201,9 +201,9 @@ def get_supply_chain_evaluation(
     ).fetchone()
     if row is None:
         return None
-    decision = json.loads(str(row["decision_json"]))
+    decision = json.loads(row["decision_json"])
     if not isinstance(decision, dict):
         return None
-    decision["bundle_version"] = str(row["bundle_version"])
-    decision["updated_at"] = str(row["updated_at"])
+    decision["bundle_version"] = row["bundle_version"]
+    decision["updated_at"] = row["updated_at"]
     return decision

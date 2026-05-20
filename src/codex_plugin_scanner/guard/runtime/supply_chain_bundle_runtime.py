@@ -146,7 +146,8 @@ def verify_supply_chain_bundle_response(
 ) -> None:
     """Verify payload hash, freshness, rollback, keyring anchor, and RSA-PSS signature."""
 
-    if payload_hash_for_supply_chain_bundle(response.bundle) != response.payload_hash:
+    canonical_payload = canonical_supply_chain_bundle_payload(response.bundle)
+    if hashlib.sha256(canonical_payload).hexdigest() != response.payload_hash:
         raise SupplyChainBundlePayloadHashError("Bundle payloadHash does not match the canonical payload")
     if cached_bundle_version is not None:
         check_supply_chain_bundle_rollback(response.bundle, cached_bundle_version)
@@ -179,7 +180,7 @@ def verify_supply_chain_bundle_response(
     try:
         public_key.verify(
             signature_bytes,
-            canonical_supply_chain_bundle_payload(response.bundle),
+            canonical_payload,
             padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
             hashes.SHA256(),
         )
@@ -189,9 +190,9 @@ def verify_supply_chain_bundle_response(
 
 def _package_matches(package: SupplyChainBundlePackage, package_name: str, package_version: str | None) -> bool:
     normalized_name = package_name.strip().lower()
-    if package.name.strip().lower() != normalized_name:
+    if package.name.lower() != normalized_name:
         namespace_name = (
-            f"{package.namespace.strip().lower()}/{package.name.strip().lower()}"
+            f"{package.namespace.lower()}/{package.name.lower()}"
             if package.namespace is not None
             else None
         )
