@@ -26,6 +26,7 @@ from .runner import (
     _urlopen_json_with_timeout_retry,
 )
 from .supply_chain_bundle import evaluate_cached_supply_chain_bundle, load_supply_chain_bundle_response
+from .supply_chain_bundle_models import SupplyChainBundlePackage
 
 _DECISION_RANK = {"allow": 0, "monitor": 1, "warn": 2, "ask": 3, "block": 4}
 _SEVERITY_RANK = {"unknown": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -590,7 +591,7 @@ def _heuristic_result(*, artifact: GuardArtifact, targets: tuple[dict[str, objec
     packages: list[dict[str, object]] = []
     for target in targets:
         source_url = _optional_string(target.get("source_url"))
-        if source_url is not None and source_url.startswith("http://"):
+        if source_url is not None and source_url.lower().startswith("http://"):
             packages.append(
                 {
                     "decision": "block",
@@ -779,7 +780,10 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
     lockfile_path = workspace_dir / str(lockfile_paths[0])
     if not lockfile_path.exists():
         return None
-    lockfile_text = lockfile_path.read_text(encoding="utf-8")
+    try:
+        lockfile_text = lockfile_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
     dependencies = _safe_dependency_map_for_path(
         str(lockfile_path.name), lockfile_text, deadline=time.monotonic() + 0.2
     )
@@ -806,9 +810,13 @@ def _transitive_lockfile_results(
         lockfile_path = workspace_dir / str(relative_path)
         if not lockfile_path.exists():
             continue
+        try:
+            lockfile_text = lockfile_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
         dependency_map = _safe_dependency_map_for_path(
             str(lockfile_path.name),
-            lockfile_path.read_text(encoding="utf-8"),
+            lockfile_text,
             deadline=time.monotonic() + 0.2,
         )
         for dependency_path, version in dependency_map.items():
@@ -850,7 +858,12 @@ def _transitive_lockfile_results(
 
 
 def _bundle_package_result(
-    *, target: dict[str, object], package, decision: str, reason: str, stale: bool
+    *,
+    target: dict[str, object],
+    package: SupplyChainBundlePackage,
+    decision: str,
+    reason: str,
+    stale: bool,
 ) -> dict[str, object]:
     severity = package.normalized_severity if stale is False else "unknown"
     return {
@@ -1015,7 +1028,7 @@ def _matching_policy_rule(
         if rule.severity_threshold is not None:
             if package_severity is None:
                 continue
-            if _SEVERITY_RANK[package_severity] < _SEVERITY_RANK[rule.severity_threshold]:
+            if _severity_rank_value(package_severity) < _severity_rank_value(rule.severity_threshold):
                 continue
         return rule
     return None
@@ -1036,7 +1049,12 @@ def _selector_matches_version(selector: str, target: dict[str, object]) -> bool:
         return False
 
 
-def _bundle_package(bundle_response, *, package_name: str, package_version: str):
+def _bundle_package(
+    bundle_response,
+    *,
+    package_name: str,
+    package_version: str,
+) -> SupplyChainBundlePackage | None:
     normalized = package_name.lower()
     for item in bundle_response.bundle.packages:
         full_name = f"{item.namespace}/{item.name}".lower() if item.namespace is not None else item.name.lower()
@@ -1045,6 +1063,10 @@ def _bundle_package(bundle_response, *, package_name: str, package_version: str)
         if item.version == package_version:
             return item
     return None
+
+
+def _severity_rank_value(value: str) -> int:
+    return _SEVERITY_RANK.get(value.strip().lower(), _SEVERITY_RANK["unknown"])
 
 
 def _normalize_bundle_action(value: str) -> str:
