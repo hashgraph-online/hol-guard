@@ -2621,7 +2621,10 @@ def run_guard_command(
             )
             base_decision_signals = data_flow_signals or artifact_risk_signals_v2(runtime_artifact)
             scanner_decision_signals = tuple(cisco_risk_signal_v3_to_v2(signal) for signal in scanner_evidence)
-            decision_signals = (*base_decision_signals, *scanner_decision_signals)
+            if scanner_raised_to_block and scanner_decision_signals:
+                decision_signals = (*scanner_decision_signals, *base_decision_signals)
+            else:
+                decision_signals = (*base_decision_signals, *scanner_decision_signals)
             scanner_risk_signals = [signal.plain_language_summary for signal in scanner_evidence]
             if data_flow_signals:
                 risk_signals = [signal.plain_reason for signal in data_flow_signals]
@@ -2651,7 +2654,7 @@ def run_guard_command(
                     risk_summary = scanner_risk_signals[0]
             decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
             decision_v2_payload = decision_v2.to_dict()
-            if package_evaluation is not None:
+            if package_evaluation is not None and package_evaluation.policy_action == policy_action:
                 decision_v2_payload["user_title"] = package_evaluation.user_copy.title
                 decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
                 decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
@@ -2782,25 +2785,6 @@ def run_guard_command(
                         policy_action=policy_action,
                     )
                     return 0
-                if (
-                    runtime_artifact.artifact_type == "package_request"
-                    and policy_action == "block"
-                    and _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action)
-                ):
-                    _emit_native_hook_block_stderr(
-                        _native_hook_reason_for_harness(
-                            args.harness,
-                            native_reason,
-                            _native_approval_center_context(response_payload, harness=args.harness),
-                        )
-                    )
-                    _record_harness_usage_for_hook(
-                        store=store,
-                        action_envelope=action_envelope,
-                        payload=payload,
-                        policy_action=policy_action,
-                    )
-                    return 2
                 if not _prompt_requires_hard_block(runtime_artifact):
                     approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                     approval_center_url = ensure_guard_daemon(guard_home)
