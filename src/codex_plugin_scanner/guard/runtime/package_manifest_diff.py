@@ -33,7 +33,7 @@ def parse_manifest_dependency_changes(
     path: str,
     before_text: str | None,
     after_text: str | None,
-    byte_limit: int = 262_144,
+    byte_limit: int = 2_097_152,
     deadline_ms: int = 50,
 ) -> ManifestParseResult:
     before_text = before_text or ""
@@ -184,11 +184,11 @@ def _pom_dependency_map(text: str, deadline: float) -> dict[str, str]:
     _ensure_within_deadline(deadline)
     root = ET.fromstring(text or "<project />")
     dependencies: dict[str, str] = {}
-    for dependency in root.findall(".//dependency"):
+    for dependency in root.findall(".//{*}dependency"):
         _ensure_within_deadline(deadline)
-        group_id = dependency.findtext("groupId")
-        artifact_id = dependency.findtext("artifactId")
-        version = dependency.findtext("version")
+        group_id = dependency.findtext("{*}groupId")
+        artifact_id = dependency.findtext("{*}artifactId")
+        version = dependency.findtext("{*}version")
         if group_id and artifact_id and version:
             dependencies[f"{group_id}:{artifact_id}"] = version
     return dependencies
