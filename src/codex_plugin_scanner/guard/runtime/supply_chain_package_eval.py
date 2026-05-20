@@ -836,9 +836,15 @@ def _transitive_lockfile_results(
             deadline=time.monotonic() + 0.2,
         )
         for dependency_path, version in dependency_map.items():
-            if "node_modules/" not in dependency_path:
+            normalized_dependency_path = dependency_path.strip("/")
+            if not normalized_dependency_path:
                 continue
-            package_name = dependency_path.rsplit("node_modules/", 1)[-1]
+            if "node_modules/" in normalized_dependency_path:
+                package_name = normalized_dependency_path.rsplit("node_modules/", 1)[-1]
+            elif "/" not in normalized_dependency_path or normalized_dependency_path.startswith("@"):
+                package_name = normalized_dependency_path
+            else:
+                continue
             offline = evaluate_cached_supply_chain_bundle(
                 bundle_response, package_name=package_name, package_version=version
             )
@@ -1127,7 +1133,10 @@ def _hash_paths(workspace_dir: Path | None, raw_paths: object) -> list[str]:
         path = workspace_dir / str(item)
         if not path.exists():
             continue
-        hashes.append(hashlib.sha256(path.read_bytes()).hexdigest())
+        try:
+            hashes.append(hashlib.sha256(path.read_bytes()).hexdigest())
+        except OSError:
+            continue
     return hashes
 
 
