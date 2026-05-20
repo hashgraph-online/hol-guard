@@ -25,7 +25,11 @@ from .runner import (
     _normalized_receipts_sync_url,
     _urlopen_json_with_timeout_retry,
 )
-from .supply_chain_bundle import evaluate_cached_supply_chain_bundle, load_supply_chain_bundle_response
+from .supply_chain_bundle import (
+    SupplyChainBundleMalformedError,
+    evaluate_cached_supply_chain_bundle,
+    load_supply_chain_bundle_response,
+)
 from .supply_chain_bundle_models import (
     SupplyChainBundlePackage,
     SupplyChainBundlePolicyRule,
@@ -156,8 +160,15 @@ def evaluate_package_request_artifact(
     package_intent_hash = artifact.artifact_id.rsplit(":", 1)[-1]
     workspace_id = store.get_cloud_workspace_id()
     bundle_payload = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
-    bundle_response = load_supply_chain_bundle_response(bundle_payload) if isinstance(bundle_payload, dict) else None
-    bundle_meta = _bundle_meta(bundle_payload) if isinstance(bundle_payload, dict) else None
+    bundle_response: SupplyChainBundleResponse | None = None
+    bundle_meta: dict[str, str] | None = None
+    if isinstance(bundle_payload, dict):
+        try:
+            bundle_response = load_supply_chain_bundle_response(bundle_payload)
+            bundle_meta = _bundle_meta(bundle_payload)
+        except (AssertionError, KeyError, SupplyChainBundleMalformedError, TypeError, ValueError):
+            bundle_response = None
+            bundle_meta = None
     workspace_fingerprint = (
         _workspace_fingerprint(workspace_id, workspace_dir=workspace_dir, artifact=artifact, bundle_meta=bundle_meta)
         if workspace_id is not None
