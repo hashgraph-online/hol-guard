@@ -1098,7 +1098,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         }});
         const payload = await response.json().catch(() => ({{}}));
         if (!response.ok) {{
-          fail(payload.error || `Local Guard returned HTTP ${{response.status}}`);
+          const error = payload.error;
+          const message = error && typeof error === 'object'
+            ? error.message || error.code
+            : error;
+          fail(message || `Local Guard returned HTTP ${{response.status}}`);
           return;
         }}
         const state = payload.state || {{}};
