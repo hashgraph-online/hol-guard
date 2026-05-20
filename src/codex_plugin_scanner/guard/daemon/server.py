@@ -57,6 +57,7 @@ from ..desktop_notifications import (
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..receipts.manager import build_receipt
+from ..runtime.runner import GuardSyncNotConfiguredError, sync_supply_chain_bundle
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
@@ -99,6 +100,8 @@ _ROOT_STATIC_FILES = {
 }
 _CLAUDE_HOOK_EXECUTION_LOCK = threading.Lock()
 _DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 30 * 60
+_DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS = 60.0
+_DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS = 15 * 60.0
 _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
 _GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
 _HOSTED_GUARD_DASHBOARD_ORIGINS = frozenset({"https://hol.org", "https://www.hol.org"})
@@ -2579,6 +2582,8 @@ class GuardDaemonServer:
         host: str = "127.0.0.1",
         port: int = 0,
         *,
+        bundle_refresh_backoff_seconds: float = _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS,
+        bundle_refresh_interval_seconds: float | None = _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS,
         idle_timeout_seconds: float | None = None,
     ) -> None:
         _validate_dashboard_bundle()
@@ -2598,6 +2603,9 @@ class GuardDaemonServer:
         self._server.active_stream_clients = 0
         self._server.active_stream_clients_lock = threading.Lock()
         self.port = int(self._server.server_address[1])
+        self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
+        self._bundle_refresh_interval_seconds = bundle_refresh_interval_seconds
+        self._bundle_refresh_thread: threading.Thread | None = None
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
         self._shutdown_started = threading.Event()
@@ -2624,6 +2632,9 @@ class GuardDaemonServer:
         if self._watchdog_thread is not None:
             self._watchdog_thread.join(timeout=5)
             self._watchdog_thread = None
+        if self._bundle_refresh_thread is not None:
+            self._bundle_refresh_thread.join(timeout=5)
+            self._bundle_refresh_thread = None
 
     def _begin_service(self) -> None:
         self._shutdown_started.clear()
@@ -2637,6 +2648,7 @@ class GuardDaemonServer:
             last_heartbeat_at=_now(),
         )
         self._start_watchdog()
+        self._start_supply_chain_bundle_refresh()
 
     def _serve_forever(self) -> None:
         try:
@@ -2678,6 +2690,57 @@ class GuardDaemonServer:
                 self._server.shutdown()
                 return
             time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
+
+    def _start_supply_chain_bundle_refresh(self) -> None:
+        if self._bundle_refresh_interval_seconds is None or self._bundle_refresh_interval_seconds <= 0:
+            return
+        if self._bundle_refresh_thread is not None and self._bundle_refresh_thread.is_alive():
+            return
+        self._bundle_refresh_thread = threading.Thread(
+            target=self._refresh_supply_chain_bundle_loop,
+            daemon=True,
+        )
+        self._bundle_refresh_thread.start()
+
+    def _refresh_supply_chain_bundle_loop(self) -> None:
+        interval_seconds = self._bundle_refresh_interval_seconds
+        if interval_seconds is None or interval_seconds <= 0:
+            return
+        backoff_seconds = (
+            self._bundle_refresh_backoff_seconds
+            if self._bundle_refresh_backoff_seconds > 0
+            else interval_seconds
+        )
+        while not self._shutdown_started.is_set():
+            refreshed_at = _now()
+            try:
+                summary = sync_supply_chain_bundle(self._server.store)
+                self._server.store.set_sync_payload(
+                    "supply_chain_bundle_daemon",
+                    {**summary, "status": "synced"},
+                    refreshed_at,
+                )
+                wait_seconds = interval_seconds
+            except GuardSyncNotConfiguredError:
+                self._server.store.set_sync_payload(
+                    "supply_chain_bundle_daemon",
+                    {"status": "not_configured", "refreshed_at": refreshed_at},
+                    refreshed_at,
+                )
+                wait_seconds = backoff_seconds
+            except RuntimeError as error:
+                self._server.store.set_sync_payload(
+                    "supply_chain_bundle_daemon",
+                    {
+                        "error": str(error),
+                        "refreshed_at": refreshed_at,
+                        "status": "error",
+                    },
+                    refreshed_at,
+                )
+                wait_seconds = backoff_seconds
+            if self._shutdown_started.wait(wait_seconds):
+                return
 
 
 def _approval_center_browser_url(approval_center_url: str, auth_token: str) -> str:
