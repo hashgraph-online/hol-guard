@@ -216,7 +216,7 @@ def evaluate_package_request_artifact(
         _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
         store.add_event("supply_chain_bundle_refresh_requested", {"artifact_id": artifact.artifact_id}, now_value)
         return fallback
-    cloud_result, cloud_timed_out = _evaluate_with_cloud(
+    cloud_result, cloud_fallback_reason = _evaluate_with_cloud(
         artifact=artifact,
         targets=targets,
         workspace_dir=workspace_dir,
@@ -254,16 +254,8 @@ def evaluate_package_request_artifact(
         fallback = _finalize_evaluation(
             bundle_evaluation, package_intent_hash=package_intent_hash, workspace_fingerprint=workspace_fingerprint
         )
-        if cloud_timed_out:
-            fallback = _with_additional_reason(
-                fallback,
-                {
-                    "code": "cloud_timeout",
-                    "message": "Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
-                    "severity": "unknown",
-                    "source": "guard-cloud",
-                },
-            )
+        if cloud_fallback_reason is not None:
+            fallback = _with_additional_reason(fallback, cloud_fallback_reason)
         _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
         if fallback.refresh_required:
             store.add_event("supply_chain_bundle_refresh_requested", {"artifact_id": artifact.artifact_id}, now_value)
@@ -294,16 +286,8 @@ def evaluate_package_request_artifact(
     result = _finalize_evaluation(
         heuristic, package_intent_hash=package_intent_hash, workspace_fingerprint=workspace_fingerprint
     )
-    if cloud_timed_out:
-        result = _with_additional_reason(
-            result,
-            {
-                "code": "cloud_timeout",
-                "message": "Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
-                "severity": "unknown",
-                "source": "guard-cloud",
-            },
-        )
+    if cloud_fallback_reason is not None:
+        result = _with_additional_reason(result, cloud_fallback_reason)
     _persist_evidence(store=store, artifact=artifact, evaluation=result, now=now_value)
     return result
 
@@ -425,12 +409,12 @@ def _evaluate_with_cloud(
     workspace_fingerprint: str | None,
     bundle_meta: dict[str, str] | None,
     store: GuardStore,
-) -> tuple[PackageRequestEvaluation | None, bool]:
+) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
     if workspace_id is None or workspace_fingerprint is None:
-        return None, False
+        return None, None
     sync_credentials = store.get_sync_credentials()
     if sync_credentials is None:
-        return None, False
+        return None, None
     request_payload = _build_request_payload(
         artifact=artifact,
         targets=targets,
@@ -451,19 +435,32 @@ def _evaluate_with_cloud(
             retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
         )
     except urllib.error.HTTPError as error:
-        if error.code in {429, 500, 502, 503, 504}:
-            return None, True
-        raise
+        return None, _cloud_fallback_reason(
+            code="cloud_http_error",
+            message=(f"Guard cloud evaluation returned HTTP {error.code}, so Guard fell back to local intelligence."),
+        )
     except OSError:
-        return None, True
+        return None, _cloud_fallback_reason(
+            code="cloud_timeout",
+            message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
+        )
+    if not isinstance(response_payload, dict):
+        return None, _cloud_fallback_reason(
+            code="cloud_invalid_response",
+            message="Guard cloud evaluation returned an invalid response, so Guard fell back locally.",
+        )
     if not isinstance(response_payload.get("packages"), list):
-        return None, False
+        return None, _cloud_fallback_reason(
+            code="cloud_invalid_response",
+            message="Guard cloud evaluation returned an invalid package payload, so Guard fell back locally.",
+        )
     packages = tuple(
         _package_from_cloud_result(item) for item in response_payload["packages"] if isinstance(item, dict)
     )
     reasons = tuple(item for item in response_payload.get("reasons", []) if isinstance(item, dict))
+    normalized_decision = _normalize_bundle_action(str(response_payload.get("decision") or "monitor"))
     draft = _EvaluationDraft(
-        decision=str(response_payload.get("decision") or "monitor"),
+        decision=normalized_decision,
         enforcement=str(response_payload.get("enforcement") or "premium_cloud"),
         entitlement_state=str(response_payload.get("entitlementState") or "premium"),
         cache_status=str(response_payload.get("cacheStatus") or "miss"),
@@ -472,7 +469,7 @@ def _evaluate_with_cloud(
         matched_rule_id=None,
         exception_id=None,
         refresh_required=False,
-        record_monitor_evidence=str(response_payload.get("decision")) == "monitor",
+        record_monitor_evidence=normalized_decision == "monitor",
         bundle_version=bundle_meta["bundle_version"] if bundle_meta is not None else None,
         policy_version=str(
             response_payload.get("policyVersion")
@@ -504,7 +501,7 @@ def _evaluate_with_cloud(
                     harness_message=" ".join(harness_parts),
                 ),
             )
-    return evaluation, False
+    return evaluation, None
 
 
 def _evaluate_with_bundle(
@@ -865,11 +862,7 @@ def _bundle_package_result(
             {
                 "advisoryId": package.related_advisory_ids[0] if package.related_advisory_ids else None,
                 "code": reason,
-                "message": "Prototype pollution in minimist"
-                if reason == "known_malware_or_kev"
-                else "Cached bundle matched this package version."
-                if reason == "bundle_match"
-                else "Cached bundle is stale, so Guard kept this package in monitor mode.",
+                "message": _bundle_reason_message(package, reason=reason, stale=stale),
                 "severity": severity,
                 "source": "bundle",
             },
@@ -901,7 +894,7 @@ def _policy_package_result(target: dict[str, object], *, decision: str, rule_id:
 
 def _package_from_cloud_result(item: dict[str, object]) -> dict[str, object]:
     return {
-        "decision": str(item.get("decision") or "monitor"),
+        "decision": _normalize_bundle_action(str(item.get("decision") or "monitor")),
         "ecosystem": str(item.get("ecosystem") or "npm"),
         "name": str(item.get("name") or "unknown"),
         "namespace": _optional_string(item.get("namespace")),
@@ -1108,7 +1101,7 @@ def _package_display_name(package: dict[str, object]) -> str:
 
 def _reason_severity(package: dict[str, object]) -> str:
     reasons = package.get("reasons")
-    if isinstance(reasons, tuple | list):
+    if isinstance(reasons, (tuple, list)):
         for item in reasons:
             if isinstance(item, dict):
                 severity = _optional_string(item.get("severity"))
@@ -1125,7 +1118,12 @@ def _should_record_package(package: dict[str, object], decision: str) -> bool:
 def _evidence_id(package_intent_hash: str, package: dict[str, object]) -> str:
     package_name = _package_display_name(package)
     decision = str(package.get("decision") or "monitor")
-    return f"evidence-{hashlib.sha256(f'{package_intent_hash}:{package_name}:{decision}'.encode()).hexdigest()[:16]}"
+    resolved_version = _optional_string(package.get("resolvedVersion")) or _optional_string(
+        package.get("requestedVersion")
+    )
+    dependency_path = _optional_string(package.get("dependencyPath")) or "direct"
+    identity = f"{package_intent_hash}:{package_name}:{resolved_version}:{dependency_path}:{decision}"
+    return f"evidence-{hashlib.sha256(identity.encode()).hexdigest()[:16]}"
 
 
 def _with_additional_reason(
@@ -1133,20 +1131,35 @@ def _with_additional_reason(
 ) -> PackageRequestEvaluation:
     updated_reasons = (*evaluation.reasons, reason)
     updated_packages = []
-    appended = False
     for package in evaluation.packages:
-        if appended:
-            updated_packages.append(package)
-            continue
         package_reasons = package.get("reasons")
-        if isinstance(package_reasons, tuple | list):
+        if isinstance(package_reasons, (tuple, list)):
             updated_package = dict(package)
             updated_package["reasons"] = (
                 *tuple(item for item in package_reasons if isinstance(item, dict)),
                 reason,
             )
             updated_packages.append(updated_package)
-            appended = True
             continue
-        updated_packages.append(package)
+        updated_package = dict(package)
+        updated_package["reasons"] = (reason,)
+        updated_packages.append(updated_package)
     return replace(evaluation, reasons=updated_reasons, packages=tuple(updated_packages))
+
+
+def _cloud_fallback_reason(*, code: str, message: str) -> dict[str, object]:
+    return {
+        "code": code,
+        "message": message,
+        "severity": "unknown",
+        "source": "guard-cloud",
+    }
+
+
+def _bundle_reason_message(package, *, reason: str, stale: bool) -> str:
+    package_label = f"{package.name}@{package.version}"
+    if stale:
+        return f"Cached bundle is stale, so Guard kept {package_label} in monitor mode."
+    if reason == "known_malware_or_kev":
+        return f"Cached bundle flagged {package_label} from advisory intelligence."
+    return f"Cached bundle matched {package_label}."
