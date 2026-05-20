@@ -10,12 +10,13 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
+from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -27,6 +28,20 @@ def _read_json_response(request: urllib.request.Request) -> tuple[int, dict[str,
         return error.code, json.loads(error.read().decode("utf-8"))
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        return None
+
+
+def _read_redirect_response(request: urllib.request.Request) -> tuple[int, str]:
+    opener = urllib.request.build_opener(_NoRedirectHandler)
+    try:
+        with opener.open(request, timeout=5) as response:
+            return response.status, response.headers.get("Location", "")
+    except urllib.error.HTTPError as error:
+        return error.code, error.headers.get("Location", "")
+
+
 def _request(
     port: int,
     path: str,
@@ -36,13 +51,17 @@ def _request(
     token: str | None = None,
     authorization_token: str | None = None,
     dashboard_session_token: str | None = None,
-    origin: str = "https://hol.org",
+    origin: str | None = "https://hol.org",
+    referer: str | None = None,
 ) -> urllib.request.Request:
     data = json.dumps(payload or {}).encode("utf-8") if method != "GET" else None
     headers = {
         "Content-Type": "application/json",
-        "Origin": origin,
     }
+    if origin is not None:
+        headers["Origin"] = origin
+    if referer is not None:
+        headers["Referer"] = referer
     if token is not None:
         headers["Authorization"] = f"Bearer {token}"
         headers["X-Guard-Dashboard-Session"] = token
@@ -106,6 +125,38 @@ def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: P
     assert codex_item["display_name"] == "Codex"
     assert codex_item["headless_actions"] == ["install", "repair", "remove", "status", "scan"]
     assert codex_item["status"] in {"inactive", "observed", "protected"}
+
+
+def test_cloud_app_handoff_redirects_to_guard_cloud_with_local_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, location = _read_redirect_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=connect",
+                method="GET",
+                origin=None,
+                referer="https://hol.org/guard/apps/codex",
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 302
+    parsed = urlparse(location)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "https://hol.org/guard/apps/codex"
+    assert parse_qs(parsed.query)["guardDaemon"] == [f"http://127.0.0.1:{daemon.port}"]
+    assert parse_qs(parsed.query)["guardLocalAction"] == ["connect"]
+    assert parse_qs(parsed.query)["guardLocalStatus"] == ["completed"]
+    assert parse_qs(parsed.query)["guardAppStatus"] == ["protected"]
+    fragment = parse_qs(parsed.fragment)
+    assert fragment["guardDaemon"] == [f"http://127.0.0.1:{daemon.port}"]
+    assert fragment["guard-token"] == [auth_token]
+    assert fragment["guardReceipt"]
 
 
 def test_headless_app_operations_write_receipts_without_cli_copy(
