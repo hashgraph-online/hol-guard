@@ -663,6 +663,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
             return
         if len(path_parts) == 5 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
+            if path_parts[4] == "start":
+                self._handle_cloud_app_handoff_start(path_parts[2], payload)
+                return
             self._handle_cloud_app_handoff_complete(path_parts[2], payload)
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"]:
@@ -913,10 +916,35 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         local_origin = self._local_daemon_origin()
         handoff_query = parse_qs(query_string)
         action_path = self._optional_string(handoff_query.get("action", [None])[-1])
-        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and self._hosted_dashboard_referrer_is_allowed():
+        handoff_token = self._optional_string(handoff_query.get("handoffToken", [None])[-1])
+        if handoff_token is not None:
+            decoded = self._decode_cloud_app_handoff_token(handoff_token)
+            token_action_path = self._optional_string(decoded.get("action_path")) if decoded else None
+            token_harness = self._optional_string(decoded.get("harness")) if decoded else None
+            if (
+                decoded is None
+                or token_harness != adapter.harness
+                or token_action_path not in _CLOUD_APP_HANDOFF_ACTIONS
+            ):
+                self._write_json({"error": "invalid_handoff_token"}, status=401)
+                return
+            self._write_cloud_app_handoff_page(
+                harness=adapter.harness,
+                action_path=token_action_path,
+                handoff_token=handoff_token,
+                local_origin=local_origin,
+                workspace_id=self._optional_string(decoded.get("workspace_id")) or "",
+            )
+            return
+        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and self._cloud_app_handoff_navigation_is_allowed():
             self._write_cloud_app_handoff_page(
                 harness=adapter.harness,
                 action_path=action_path,
+                handoff_token=self._cloud_app_handoff_token(
+                    harness=adapter.harness,
+                    action_path=action_path,
+                    workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
+                ),
                 local_origin=local_origin,
                 workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
             )
@@ -929,6 +957,36 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         fragment = urlencode(fragment_params)
         location = f"{_HOSTED_GUARD_APPS_URL}/{adapter.harness}?{query}#{fragment}"
         self._write_empty(status=302, extra_headers={"Location": location})
+
+    def _handle_cloud_app_handoff_start(self, harness: str, payload: dict[str, object]) -> None:
+        try:
+            adapter = get_adapter(harness)
+        except ValueError:
+            self._write_json({"error": "unknown_harness"}, status=404)
+            return
+        action_path = self._optional_string(payload.get("action")) or self._optional_string(payload.get("action_path"))
+        if action_path not in _CLOUD_APP_HANDOFF_ACTIONS:
+            self._write_json({"error": "unsupported_handoff_action"}, status=400)
+            return
+        workspace_id = (
+            self._optional_string(payload.get("workspace_id"))
+            or self._optional_string(payload.get("workspaceId"))
+            or ""
+        )
+        local_origin = self._local_daemon_origin()
+        handoff_token = self._cloud_app_handoff_token(
+            harness=adapter.harness,
+            action_path=action_path,
+            workspace_id=workspace_id,
+        )
+        handoff_query = urlencode({"handoffToken": handoff_token})
+        self._write_json(
+            {
+                "handoff_url": f"{local_origin}/v1/apps/{adapter.harness}/cloud?{handoff_query}",
+                "local_origin": local_origin,
+                "status": "ready",
+            }
+        )
 
     def _cloud_app_handoff_token(
         self,
@@ -995,6 +1053,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         harness: str,
         action_path: str,
+        handoff_token: str,
         local_origin: str,
         workspace_id: str,
     ) -> None:
@@ -1003,11 +1062,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         script_payload = json.dumps(
             {
                 "actionPath": action_path,
-                "handoffToken": self._cloud_app_handoff_token(
-                    harness=harness,
-                    action_path=action_path,
-                    workspace_id=workspace_id,
-                ),
+                "handoffToken": handoff_token,
                 "harness": harness,
                 "localOrigin": local_origin,
                 "operation": operation,
@@ -1057,6 +1112,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
       color: #343565;
     }}
     .error {{ color: #7c3aed; }}
+    button {{
+      width: 100%;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 14px;
+      background: #4f91ff;
+      color: white;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 800;
+      padding: 14px 18px;
+    }}
+    button:disabled {{ cursor: wait; opacity: .72; }}
   </style>
 </head>
 <body>
@@ -1085,8 +1153,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         guardLocalError: message,
       }});
     }};
-    (async () => {{
+    const completeSetup = async () => {{
       try {{
+        statusNode.textContent = 'Finishing local Guard setup...';
         const response = await fetch(`${{data.localOrigin}}/v1/apps/${{data.harness}}/cloud/complete`, {{
           method: 'POST',
           headers: {{
@@ -1119,7 +1188,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
       }} catch (error) {{
         fail(error instanceof Error ? error.message : 'Local Guard setup failed');
       }}
-    }})();
+    }};
+    completeSetup();
   </script>
 </body>
 </html>"""
@@ -1132,6 +1202,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(encoded)
+
+    def _cloud_app_handoff_navigation_is_allowed(self) -> bool:
+        return self._hosted_dashboard_referrer_is_allowed()
 
     def _hosted_dashboard_referrer_is_allowed(self) -> bool:
         referrer = self.headers.get("Referer")
@@ -2123,6 +2196,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
+            return True
+        if (
+            len(path_parts) == 5
+            and path_parts[:2] == ["v1", "apps"]
+            and path_parts[3] == "cloud"
+            and path_parts[4] == "start"
+        ):
             return True
         if (
             len(path_parts) == 4
