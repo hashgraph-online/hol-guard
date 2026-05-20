@@ -124,6 +124,7 @@ from ..runtime.false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
+from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.runner import (
     GuardSyncNotConfiguredError,
     extract_prompt_requests,
@@ -4240,6 +4241,8 @@ def _guard_action_severity(action: str) -> int:
 def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
     if artifact.artifact_type == "file_read_request":
         return ["local_secret_read"]
+    if artifact.artifact_type == "package_request":
+        return ["package_script"]
     if artifact.artifact_type == "prompt_request":
         prompt_classes = _prompt_request_classes(artifact)
         risk_classes: list[str] = []
@@ -5394,6 +5397,19 @@ def _hook_runtime_artifact(
         return build_file_read_request_artifact(
             harness=harness,
             request=request,
+            config_path=config_path,
+            source_scope=source_scope,
+        )
+    package_intent = extract_package_intent_request(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+        action_envelope_command=action_envelope.command if action_envelope is not None else None,
+        workspace=workspace,
+    )
+    if package_intent is not None:
+        return build_package_request_artifact(
+            harness=harness,
+            intent=package_intent,
             config_path=config_path,
             source_scope=source_scope,
         )
@@ -7821,6 +7837,11 @@ def _runtime_detection(harness: str, artifact: GuardArtifact) -> HarnessDetectio
 
 
 def _runtime_capabilities_summary(artifact: GuardArtifact) -> str:
+    if artifact.artifact_type == "package_request":
+        package_manager = artifact.metadata.get("package_manager")
+        if isinstance(package_manager, str) and package_manager:
+            return f"package request • {package_manager}"
+        return "package request"
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(tool_name, str) and tool_name:
         if artifact.artifact_type == "tool_action_request":
