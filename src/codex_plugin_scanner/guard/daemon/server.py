@@ -180,7 +180,7 @@ def _headless_action_error_payload(
         ),
         "unsupported_operation": (
             400,
-            "This daemon cannot run the requested app action.",
+            "This version of local Guard cannot run the requested app action.",
             False,
         ),
     }
@@ -192,8 +192,8 @@ def _headless_action_error_payload(
             message=message,
             retryable=retryable,
         )
-    operation_code = "proof_failed" if operation == "scan" else f"{operation}_failed"
-    operation_label = "proof test" if operation == "scan" else operation
+    operation_code = "connection_check_failed" if operation == "scan" else f"{operation}_failed"
+    operation_label = "connection check" if operation == "scan" else operation
     return 400, _headless_error_payload(
         code=operation_code,
         message=f"Guard could not finish the {operation_label}.",
@@ -246,9 +246,9 @@ def _headless_action_state_payload(
         proof_passed = app_status == "protected"
         outcome = "proof_passed" if proof_passed else "proof_failed"
         message = (
-            f"{harness} proof completed and Guard sees local protection."
+            f"{harness} connection check passed. Guard sees local protection."
             if proof_passed
-            else f"{harness} proof completed, but Guard does not see active local protection yet."
+            else f"{harness} connection check finished, but Guard does not see active local protection yet."
         )
         proof_status = "passed" if proof_passed else "failed"
     else:
@@ -1147,7 +1147,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
   <main>
     <div class="eyebrow">HOL Guard local handoff</div>
     <h1>Connecting {html.escape(harness)}.</h1>
-    <p>Guard is using this local page to complete setup with your daemon, then it will return you to HOL Cloud.</p>
+    <p>
+      Guard is using this local page to connect your browser to Guard on this computer,
+      then it will return you to HOL Cloud.
+    </p>
     <div id="status" class="status">Starting local Guard setup...</div>
   </main>
   <script id="guard-handoff-data" type="application/json">{script_payload}</script>
@@ -1176,7 +1179,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     }};
     const completeSetup = async () => {{
       try {{
-        statusNode.textContent = 'Finishing local Guard setup...';
+        statusNode.textContent = 'Connecting this browser to local Guard...';
         const response = await fetch(`${{data.localOrigin}}/v1/apps/${{data.harness}}/cloud/complete`, {{
           method: 'POST',
           headers: {{
