@@ -2728,7 +2728,7 @@ class GuardDaemonServer:
                     refreshed_at,
                 )
                 wait_seconds = backoff_seconds
-            except RuntimeError as error:
+            except Exception as error:
                 self._server.store.set_sync_payload(
                     "supply_chain_bundle_daemon",
                     {
