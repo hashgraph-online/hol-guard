@@ -100,6 +100,26 @@ def _dashboard_token(auth_token: str) -> str:
     return f"gld1.{payload}.{encoded_signature}"
 
 
+def _handoff_script_payload(body: str) -> dict[str, object]:
+    match = re.search(
+        r'<script id="guard-handoff-data" type="application/json">([^<]+)</script>',
+        body,
+    )
+    assert match is not None
+    payload = json.loads(match.group(1))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _decode_token_payload(token: str) -> dict[str, object]:
+    _, encoded_payload, _ = token.split(".")
+    decoded = json.loads(
+        base64.urlsafe_b64decode(f"{encoded_payload}{'=' * (-len(encoded_payload) % 4)}").decode("utf-8"),
+    )
+    assert isinstance(decoded, dict)
+    return decoded
+
+
 def _dashboard_token_for(store: GuardStore) -> str:
     auth_token = load_guard_daemon_auth_token(store.guard_home)
     assert auth_token is not None
@@ -136,7 +156,7 @@ def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: P
     assert codex_item["status"] in {"inactive", "observed", "protected"}
 
 
-def test_headless_capabilities_accepts_dashboard_session_from_guard_token_header(tmp_path: Path) -> None:
+def test_headless_capabilities_rejects_dashboard_session_from_guard_token_header(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -153,8 +173,8 @@ def test_headless_capabilities_accepts_dashboard_session_from_guard_token_header
     finally:
         daemon.stop()
 
-    assert status == 200
-    assert payload["auth_state"] == "dashboard_session"
+    assert status == 401
+    assert payload["error"] == "unauthorized"
 
 
 def test_cloud_app_handoff_serves_token_authenticated_local_action_page(tmp_path: Path) -> None:
@@ -181,8 +201,8 @@ def test_cloud_app_handoff_serves_token_authenticated_local_action_page(tmp_path
     assert f"http://127.0.0.1:{daemon.port}" in body
     assert "/v1/apps/${data.harness}/cloud/complete" in body
     assert "handoffToken" in body
-    assert "dashboardSessionToken" in body
-    assert "guard-token" in body
+    assert "dashboardSessionToken" not in body
+    assert "guard-token" not in body
     assert auth_token not in body
 
 
@@ -199,6 +219,7 @@ def test_cloud_app_handoff_start_mints_handoff_url_for_hosted_dashboard(tmp_path
                 "/v1/apps/codex/cloud/start",
                 payload={"action": "connect"},
                 origin="https://hol.org",
+                token=_dashboard_token_for(store),
             ),
         )
         assert status == 200
@@ -230,25 +251,31 @@ def test_cloud_app_handoff_page_mints_scoped_browser_session_token(tmp_path: Pat
     try:
         auth_token = load_guard_daemon_auth_token(store.guard_home)
         assert auth_token is not None
+        start_status, start_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={"action": "connect", "workspace_id": "workspace-1"},
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+        assert start_status == 200
+        handoff_url = start_payload["handoff_url"]
+        assert isinstance(handoff_url, str)
         status, body = _read_text_response(
             _request(
                 daemon.port,
-                "/v1/apps/codex/cloud?action=connect",
+                handoff_url.removeprefix(f"http://127.0.0.1:{daemon.port}"),
                 method="GET",
                 origin=None,
-                referer="https://hol.org/guard/apps/codex",
             ),
         )
     finally:
         daemon.stop()
 
     assert status == 200
-    match = re.search(
-        r'<script id="guard-handoff-data" type="application/json">([^<]+)</script>',
-        body,
-    )
-    assert match is not None
-    script_payload = json.loads(match.group(1))
+    script_payload = _handoff_script_payload(body)
     browser_token = script_payload["dashboardSessionToken"]
     assert isinstance(browser_token, str)
     assert browser_token.startswith("gld1.")
@@ -260,11 +287,79 @@ def test_cloud_app_handoff_page_mints_scoped_browser_session_token(tmp_path: Pat
         hashlib.sha256,
     ).digest()
     assert encoded_signature == base64.urlsafe_b64encode(expected_signature).decode("ascii").rstrip("=")
-    decoded = json.loads(
-        base64.urlsafe_b64decode(f"{encoded_payload}{'=' * (-len(encoded_payload) % 4)}").decode("utf-8"),
-    )
+    decoded = _decode_token_payload(browser_token)
     assert decoded["version"] == "guard-local-daemon-session.v1"
     assert decoded["harness"] == "codex"
+    assert decoded["workspace_id"] == "workspace-1"
+    assert decoded["action_path"] == "connect"
+
+
+def test_cloud_app_handoff_referrer_page_does_not_mint_browser_session_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=status",
+                method="GET",
+                origin=None,
+                referer="https://hol.org/guard/apps/codex",
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    script_payload = _handoff_script_payload(body)
+    assert "dashboardSessionToken" not in script_payload
+    assert "guard-token" not in body
+
+
+def test_cloud_app_handoff_scoped_session_rejects_settings_reset(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        start_status, start_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={"action": "connect", "workspace_id": "workspace-1"},
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+        assert start_status == 200
+        handoff_url = start_payload["handoff_url"]
+        assert isinstance(handoff_url, str)
+        page_status, body = _read_text_response(
+            _request(
+                daemon.port,
+                handoff_url.removeprefix(f"http://127.0.0.1:{daemon.port}"),
+                method="GET",
+                origin=None,
+            )
+        )
+        assert page_status == 200
+        script_payload = _handoff_script_payload(body)
+        browser_token = script_payload["dashboardSessionToken"]
+        assert isinstance(browser_token, str)
+        reset_status, reset_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/settings/reset",
+                payload={},
+                origin="https://hol.org",
+                dashboard_session_token=browser_token,
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert reset_status == 401
+    assert reset_payload["error"] == "unauthorized"
 
 
 def test_cloud_app_handoff_completion_runs_scoped_action_without_daemon_auth_token(tmp_path: Path) -> None:

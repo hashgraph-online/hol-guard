@@ -17,6 +17,7 @@ import threading
 import time
 import uuid
 import webbrowser
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -566,7 +567,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
+        payload, body_error = self._load_request_body()
+        if body_error is not None:
+            self._write_json({"error": body_error}, status=400)
+            return
+        if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid(payload=payload):
             if (
                 len(path_parts) == 4
                 and path_parts[:2] == ["v1", "requests"]
@@ -594,10 +599,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=401,
                     extra_headers=self._cors_headers_for_request(),
                 )
-            return
-        payload, body_error = self._load_request_body()
-        if body_error is not None:
-            self._write_json({"error": body_error}, status=400)
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
@@ -933,6 +934,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 harness=adapter.harness,
                 action_path=token_action_path,
                 handoff_token=handoff_token,
+                include_dashboard_session_token=True,
                 local_origin=local_origin,
                 workspace_id=self._optional_string(decoded.get("workspace_id")) or "",
             )
@@ -946,6 +948,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     action_path=action_path,
                     workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
                 ),
+                include_dashboard_session_token=False,
                 local_origin=local_origin,
                 workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
             )
@@ -1055,25 +1058,33 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness: str,
         action_path: str,
         handoff_token: str,
+        include_dashboard_session_token: bool,
         local_origin: str,
         workspace_id: str,
     ) -> None:
         operation = _HEADLESS_APP_ACTIONS[action_path][0]
         redirect_base = f"{_HOSTED_GUARD_APPS_URL}/{harness}"
+        script_payload_dict = {
+            "actionPath": action_path,
+            "handoffToken": handoff_token,
+            "harness": harness,
+            "localOrigin": local_origin,
+            "operation": operation,
+            "redirectBase": redirect_base,
+            "workspaceId": workspace_id,
+        }
+        success_fragment_args = ""
+        if include_dashboard_session_token:
+            script_payload_dict["dashboardSessionToken"] = self._cloud_app_dashboard_session_token(
+                action_path=action_path,
+                harness=harness,
+                workspace_id=workspace_id,
+            )
+            success_fragment_args = """, {
+          'guard-token': data.dashboardSessionToken,
+        }"""
         script_payload = json.dumps(
-            {
-                "actionPath": action_path,
-                "dashboardSessionToken": self._cloud_app_dashboard_session_token(
-                    harness=harness,
-                    workspace_id=workspace_id,
-                ),
-                "handoffToken": handoff_token,
-                "harness": harness,
-                "localOrigin": local_origin,
-                "operation": operation,
-                "redirectBase": redirect_base,
-                "workspaceId": workspace_id,
-            },
+            script_payload_dict,
             separators=(",", ":"),
         ).replace("</", "<\\/")
         title = f"Connecting {harness} with HOL Guard"
@@ -1194,9 +1205,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
           guardAppStatus: state.app_status || 'unknown',
           guardProofStatus: state.proof_status || 'unknown',
           guardReceipt: receipt.id || '',
-        }}, {{
-          'guard-token': data.dashboardSessionToken,
-        }});
+        }}{success_fragment_args});
       }} catch (error) {{
         fail(error instanceof Error ? error.message : 'Local Guard setup failed');
       }}
@@ -1215,12 +1224,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
-    def _cloud_app_dashboard_session_token(self, *, harness: str, workspace_id: str) -> str:
-        from datetime import datetime, timedelta, timezone
-
+    def _cloud_app_dashboard_session_token(self, *, action_path: str, harness: str, workspace_id: str) -> str:
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=_CLOUD_APP_DASHBOARD_SESSION_TTL_SECONDS)
         payload_json = json.dumps(
             {
+                "action_path": action_path,
                 "expires_at": expires_at.isoformat(),
                 "harness": harness,
                 "version": "guard-local-daemon-session.v1",
@@ -2074,48 +2082,75 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         token = params.get("token", [None])[-1]
         return self._tokens_match(token)
 
-    def _header_token_is_valid(self) -> bool:
+    def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")
         path = urlparse(self.path).path
         path_parts = [part for part in path.split("/") if part]
         return self._tokens_match(token) or (
-            self._is_hosted_dashboard_api_path(path, path_parts) and self._dashboard_session_token_is_valid()
+            self._is_hosted_dashboard_api_path(path, path_parts)
+            and self._dashboard_session_token_is_valid(payload=payload)
         )
 
-    def _dashboard_session_token_is_valid(self) -> bool:
+    def _dashboard_session_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         session_token = self.headers.get("X-Guard-Dashboard-Session")
-        guard_token = self.headers.get("X-Guard-Token")
         authorization = self.headers.get("Authorization")
         bearer_token = None
         if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
             bearer_token = authorization[7:].strip()
         candidates = [
-            candidate
-            for candidate in (session_token, bearer_token, guard_token)
-            if isinstance(candidate, str) and candidate.strip()
+            candidate for candidate in (session_token, bearer_token) if isinstance(candidate, str) and candidate.strip()
         ]
-        return any(self._dashboard_session_token_matches(candidate) for candidate in candidates)
+        return any(self._dashboard_session_token_matches(candidate, payload=payload) for candidate in candidates)
 
-    def _dashboard_session_token_matches(self, token: str) -> bool:
+    def _dashboard_session_token_matches(self, token: str, *, payload: dict[str, object] | None = None) -> bool:
         if not token.startswith("gld1."):
             return False
         parts = token.split(".")
         if len(parts) != 3:
             return False
-        prefix, payload, signature = parts
-        if prefix != "gld1" or not payload or not signature:
+        prefix, encoded_payload, signature = parts
+        if prefix != "gld1" or not encoded_payload or not signature:
             return False
-        expected = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
+        expected = _dashboard_session_signature(encoded_payload, self.server.auth_token)  # type: ignore[attr-defined]
         if not secrets.compare_digest(signature, expected):
             return False
-        claims = _decode_dashboard_session_payload(payload)
+        claims = _decode_dashboard_session_payload(encoded_payload)
         expires_at = claims.get("expires_at")
         if not isinstance(expires_at, str):
             return False
         try:
-            return _parse_iso_timestamp(expires_at) > _parse_iso_timestamp(_now())
+            if _parse_iso_timestamp(expires_at) <= time.time():
+                return False
         except ValueError:
             return False
+        return self._dashboard_session_claims_authorize_request(claims, payload=payload)
+
+    def _dashboard_session_claims_authorize_request(
+        self,
+        claims: dict[str, object],
+        *,
+        payload: dict[str, object] | None,
+    ) -> bool:
+        action_path = self._optional_string(claims.get("action_path"))
+        if action_path is None:
+            return True
+        path = urlparse(self.path).path
+        path_parts = [part for part in path.split("/") if part]
+        if path in {"/v1/capabilities", "/v1/harnesses", "/v1/inventory", "/v1/runtime"}:
+            return True
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] == action_path:
+            if payload is None:
+                return False
+            harness = self._optional_string(claims.get("harness"))
+            workspace_id = self._optional_string(claims.get("workspace_id")) or ""
+            payload_harness = self._optional_string(payload.get("harness"))
+            payload_workspace_id = self._optional_string(payload.get("workspace_id")) or ""
+            return (
+                harness is not None
+                and payload_harness == harness
+                and (not workspace_id or payload_workspace_id == workspace_id)
+            )
+        return False
 
     def _tokens_match(self, token: object) -> bool:
         if not isinstance(token, str):
@@ -2740,8 +2775,6 @@ def _decode_dashboard_session_payload(payload: str) -> dict[str, object]:
 
 
 def _parse_iso_timestamp(value: str) -> float:
-    from datetime import datetime
-
     normalized = value.replace("Z", "+00:00")
     return datetime.fromisoformat(normalized).timestamp()
 
@@ -2749,7 +2782,6 @@ def _parse_iso_timestamp(value: str) -> float:
 def _normalized_iso_timestamp_string(value: object) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
-    from datetime import datetime, timezone
 
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -2761,8 +2793,6 @@ def _normalized_iso_timestamp_string(value: object) -> str | None:
 
 
 def _now() -> str:
-    from datetime import datetime, timezone
-
     return datetime.now(timezone.utc).isoformat()
 
 
