@@ -32,6 +32,12 @@ from .actions import GuardActionEnvelope, redacted_workspace_label
 from .composition_rules import compose_action_from_signals
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 from .prompt_injection import detect_prompt_injection_requests
+from .supply_chain_bundle import (
+    SupplyChainBundleError,
+    load_supply_chain_bundle_response,
+    load_supply_chain_verification_keys,
+    verify_supply_chain_bundle_response,
+)
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
@@ -920,6 +926,90 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     return summary
 
 
+def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
+    """Fetch, verify, and persist the active supply-chain bundle for the cloud workspace."""
+
+    credentials = store.get_sync_credentials()
+    if credentials is None:
+        raise GuardSyncNotConfiguredError("Guard is not logged in.")
+    workspace_id = store.get_cloud_workspace_id()
+    if workspace_id is None:
+        raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
+    bundle_url = _normalized_supply_chain_bundle_url(str(credentials["sync_url"]), workspace_id)
+    headers = _guard_sync_headers(str(credentials["token"]))
+    headers["Accept-Encoding"] = "identity"
+    request = urllib.request.Request(bundle_url, method="GET", headers=headers)
+    try:
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+        )
+    except urllib.error.HTTPError as error:
+        if error.code == 403:
+            is_plan_restricted, message = _check_plan_restriction_403(error)
+            if is_plan_restricted:
+                raise GuardSyncNotAvailableError(message) from error
+            raise RuntimeError(message) from error
+        raise RuntimeError(_sync_http_error_message(error)) from error
+    except OSError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
+    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
+    cached_bundle_version = None
+    if isinstance(cached_bundle, dict):
+        cached_payload = cached_bundle.get("bundle")
+        if isinstance(cached_payload, dict):
+            existing_version = cached_payload.get("bundleVersion")
+            if isinstance(existing_version, str) and existing_version:
+                cached_bundle_version = existing_version
+    response = load_supply_chain_bundle_response(payload)
+    try:
+        trusted_keys = load_supply_chain_verification_keys(
+            store.get_sync_payload("supply_chain_bundle_keyring")
+        )
+        verify_supply_chain_bundle_response(
+            response,
+            trusted_keys=trusted_keys or None,
+            cached_bundle_version=cached_bundle_version,
+        )
+    except SupplyChainBundleError as error:
+        raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
+    synced_at = _now()
+    store.cache_supply_chain_bundle(workspace_id, response.to_dict(), synced_at)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {
+            "workspace_id": workspace_id,
+            "keys": [item.to_dict() for item in response.verification_keys],
+        },
+        synced_at,
+    )
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "bundle_version": response.bundle.bundle_version,
+            "key_id": response.bundle.key_id,
+            "policy_hash": response.bundle.policy_hash,
+            "tier": response.bundle.tier,
+            "workspace_id": workspace_id,
+        },
+        synced_at,
+    )
+    summary = {
+        "advisory_count": len(response.bundle.advisories),
+        "bundle_version": response.bundle.bundle_version,
+        "feed_snapshot_hash": response.bundle.feed_snapshot_hash,
+        "package_count": len(response.bundle.packages),
+        "policy_hash": response.bundle.policy_hash,
+        "status": "synced",
+        "synced_at": synced_at,
+        "tier": response.bundle.tier,
+        "workspace_id": workspace_id,
+    }
+    store.set_sync_payload("supply_chain_bundle_summary", summary, synced_at)
+    return summary
+
+
 def sync_guard_events(store: GuardStore) -> dict[str, object]:
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
@@ -1548,6 +1638,32 @@ def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
             parsed.netloc,
             parsed.path.rstrip("/") + "/runtime/sessions/sync",
             parsed.query,
+            "",
+        )
+    )
+
+
+def _normalized_supply_chain_bundle_url(sync_url: str, workspace_id: str) -> str:
+    normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
+    parsed = urllib.parse.urlsplit(normalized_receipts_url)
+    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
+        next_path = "/api/guard/supply-chain/bundle"
+    elif parsed.path.rstrip("/") == "/guard/receipts/sync":
+        next_path = "/guard/supply-chain/bundle"
+    else:
+        next_path = parsed.path.rstrip("/") + "/supply-chain/bundle"
+    query_pairs = [
+        (key, value)
+        for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+        if key != "workspaceId"
+    ]
+    query_pairs.append(("workspaceId", workspace_id))
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            next_path,
+            urllib.parse.urlencode(query_pairs),
             "",
         )
     )
