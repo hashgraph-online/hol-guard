@@ -2608,6 +2608,11 @@ def run_guard_command(
                 if _guard_action_severity(data_flow_action) > _guard_action_severity(policy_action):
                     policy_action = data_flow_action
             _pre_scanner_policy_action = policy_action
+            package_controls_pre_scanner_summary = (
+                package_evaluation is not None
+                and _guard_action_severity(package_evaluation.policy_action)
+                >= _guard_action_severity(_pre_scanner_policy_action)
+            )
             if scanner_evidence and requested_policy_action not in VALID_GUARD_ACTIONS:
                 scanner_action = policy_action_for_cisco_signals(
                     scanner_evidence,
@@ -2632,7 +2637,7 @@ def run_guard_command(
             else:
                 risk_signals = list(artifact_risk_signals(runtime_artifact))
                 risk_summary = artifact_risk_summary(runtime_artifact)
-            if package_evaluation is not None:
+            if package_controls_pre_scanner_summary:
                 risk_signals = [
                     str(item.get("message") or item.get("code") or "")
                     for item in package_evaluation.reasons

@@ -798,7 +798,7 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
         return None
     try:
         lockfile_text = lockfile_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
+    except (OSError, UnicodeDecodeError):
         return None
     dependencies = _safe_dependency_map_for_path(
         str(lockfile_path.name), lockfile_text, deadline=time.monotonic() + 0.2
@@ -902,7 +902,7 @@ def _bundle_package_result(
             {
                 "advisoryId": package.related_advisory_ids[0] if package.related_advisory_ids else None,
                 "code": reason,
-                "message": _bundle_reason_message(package, reason=reason, stale=stale),
+                "message": _bundle_reason_message(package, decision=decision, reason=reason, stale=stale),
                 "severity": severity,
                 "source": "bundle",
             },
@@ -1250,11 +1250,18 @@ def _cloud_fallback_reason(*, code: str, message: str) -> dict[str, object]:
 def _bundle_reason_message(
     package: SupplyChainBundlePackage,
     *,
+    decision: str,
     reason: str,
     stale: bool,
 ) -> str:
     package_label = f"{package.name}@{package.version}"
     if stale:
+        if decision == "block":
+            return f"Cached bundle is stale, but Guard still blocked {package_label} from advisory intelligence."
+        if decision == "ask":
+            return f"Cached bundle is stale, so Guard still requires approval for {package_label}."
+        if decision == "warn":
+            return f"Cached bundle is stale, so Guard still warns on {package_label}."
         return f"Cached bundle is stale, so Guard kept {package_label} in monitor mode."
     if reason == "known_malware_or_kev":
         return f"Cached bundle flagged {package_label} from advisory intelligence."
