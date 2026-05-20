@@ -11,6 +11,7 @@ import urllib.request
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -18,7 +19,7 @@ from packaging.version import InvalidVersion, Version
 from ..models import GuardArtifact
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
-from .package_manifest_diff import _dependency_map_for_path
+from .package_manifest_diff import _DeadlineExceededError, _dependency_map_for_path
 from .runner import (
     _guard_sync_headers,
     _normalized_receipts_sync_url,
@@ -683,8 +684,10 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
         exact_version = _exact_version(requested)
         raw_spec = _optional_string(item.get("raw_spec")) or package_name
         source_url = _optional_string(item.get("source_url"))
-        if source_url is None and ("://" in raw_spec or raw_spec.startswith("git+")):
-            source_url = raw_spec.split("@", 1)[1] if "@" in raw_spec else raw_spec
+        if source_url is None:
+            source_url = _source_url_from_specifier(requested)
+        if source_url is None:
+            source_url = _source_url_from_raw_spec(raw_spec)
         parsed.append(
             {
                 "ecosystem": str(item.get("ecosystem") or "npm"),
@@ -777,7 +780,9 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
     if not lockfile_path.exists():
         return None
     lockfile_text = lockfile_path.read_text(encoding="utf-8")
-    dependencies = _dependency_map_for_path(str(lockfile_path.name), lockfile_text, deadline=time.monotonic() + 0.2)
+    dependencies = _safe_dependency_map_for_path(
+        str(lockfile_path.name), lockfile_text, deadline=time.monotonic() + 0.2
+    )
     manifest_hashes = _hash_paths(workspace_dir, artifact.metadata.get("manifest_paths"))
     return {
         "dependencyCount": len(dependencies),
@@ -801,7 +806,7 @@ def _transitive_lockfile_results(
         lockfile_path = workspace_dir / str(relative_path)
         if not lockfile_path.exists():
             continue
-        dependency_map = _dependency_map_for_path(
+        dependency_map = _safe_dependency_map_for_path(
             str(lockfile_path.name),
             lockfile_path.read_text(encoding="utf-8"),
             deadline=time.monotonic() + 0.2,
@@ -927,6 +932,44 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
             },
         ),
     }
+
+
+def _source_url_from_specifier(specifier: str | None) -> str | None:
+    if specifier is None:
+        return None
+    if "://" in specifier or specifier.startswith("git+"):
+        return specifier
+    return None
+
+
+def _source_url_from_raw_spec(raw_spec: str) -> str | None:
+    if raw_spec.startswith("@") and "@" in raw_spec[1:]:
+        candidate = raw_spec.rsplit("@", 1)[-1]
+    elif (
+        "@" in raw_spec
+        and not raw_spec.startswith("http://")
+        and not raw_spec.startswith("https://")
+        and not raw_spec.startswith("git+")
+    ):
+        candidate = raw_spec.split("@", 1)[1]
+    else:
+        candidate = raw_spec
+    if "://" in candidate or candidate.startswith("git+"):
+        return candidate
+    return None
+
+
+def _safe_dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[str, str]:
+    try:
+        return _dependency_map_for_path(path, text, deadline=deadline)
+    except (
+        _DeadlineExceededError,
+        ET.ParseError,
+        UnicodeDecodeError,
+        ValueError,
+        json.JSONDecodeError,
+    ):
+        return {}
 
 
 def _matching_policy_rule(

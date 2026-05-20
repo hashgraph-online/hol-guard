@@ -477,6 +477,27 @@ def test_evaluate_package_request_artifact_blocks_insecure_source_url_without_cl
     assert "http" in result.risk_summary.lower()
 
 
+def test_evaluate_package_request_artifact_blocks_scoped_insecure_source_url_without_cloud(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    artifact = _artifact_for_targets("@scope/demo@http://packages.example.com/demo-1.0.0.tgz")
+
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert result.enforcement == "free_local"
+    assert "http" in result.risk_summary.lower()
+
+
 def test_evaluate_package_request_artifact_handles_upgrade_required_with_premium_copy(tmp_path: Path) -> None:
     _EvaluateHandler.captured_requests = []
     _EvaluateHandler.response_payload = _cloud_response(
@@ -848,6 +869,38 @@ def test_evaluate_package_request_artifact_blocks_transitive_lockfile_match_with
 
     assert result.decision == "block"
     assert any("react/node_modules/minimist" in reason["message"] for reason in result.reasons)
+
+
+def test_evaluate_package_request_artifact_handles_malformed_lockfile_without_crashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "package-lock.json").write_text("{not-json", encoding="utf-8")
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("react@18.0.0", lockfile_paths=("package-lock.json",)),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
 
 
 def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
