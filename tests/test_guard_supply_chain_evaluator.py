@@ -483,7 +483,7 @@ def test_evaluate_package_request_artifact_blocks_scoped_insecure_source_url_wit
     store = GuardStore(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
-    artifact = _artifact_for_targets("@scope/demo@http://packages.example.com/demo-1.0.0.tgz")
+    artifact = _artifact_for_targets("@scope/demo@HTTP://packages.example.com/demo-1.0.0.tgz")
 
     result = evaluate_package_request_artifact(
         artifact=artifact,
@@ -871,7 +871,7 @@ def test_evaluate_package_request_artifact_blocks_transitive_lockfile_match_with
     assert any("react/node_modules/minimist" in reason["message"] for reason in result.reasons)
 
 
-def test_evaluate_package_request_artifact_handles_malformed_lockfile_without_crashing(
+def test_evaluate_package_request_artifact_handles_invalid_lockfile_bytes_without_crashing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
@@ -890,7 +890,7 @@ def test_evaluate_package_request_artifact_handles_malformed_lockfile_without_cr
     store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
-    (workspace_dir / "package-lock.json").write_text("{not-json", encoding="utf-8")
+    (workspace_dir / "package-lock.json").write_bytes(b"\xff\xfe\xfd")
 
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("react@18.0.0", lockfile_paths=("package-lock.json",)),
