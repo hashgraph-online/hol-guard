@@ -102,6 +102,15 @@ def test_parse_package_intent_exec_commands_are_classified_as_execute_requests()
         assert intent.targets[0].requested_specifier == requested_specifier
 
 
+def test_parse_package_intent_npm_exec_prefers_explicit_package_when_command_differs() -> None:
+    intent = parse_package_intent("npm exec --package cowsay hello")
+
+    assert intent is not None
+    assert intent.package_manager == "npm"
+    assert intent.intent_kind == "execute"
+    assert intent.targets[0].package_name == "cowsay"
+
+
 def test_parse_package_intent_pip_install_supports_requirements_constraints_vcs_editable_and_redaction(
     tmp_path: Path,
 ) -> None:
@@ -125,6 +134,20 @@ def test_parse_package_intent_pip_install_supports_requirements_constraints_vcs_
     assert "user:pass" not in intent.redacted_command
     assert "token@" not in intent.redacted_command
     assert "deadbeef" not in intent.redacted_command
+
+
+def test_parse_package_intent_pip_install_supports_inline_requirement_flag_forms(tmp_path: Path) -> None:
+    _write_text(tmp_path / "requirements.txt", "flask==3.0.0\n")
+    _write_text(tmp_path / "constraints.txt", "werkzeug==3.0.0\n")
+
+    intent = parse_package_intent(
+        "pip install --requirement=requirements.txt -cconstraints.txt demo==1.0.0",
+        workspace=tmp_path,
+    )
+
+    assert intent is not None
+    assert intent.manifest_paths == ("requirements.txt", "constraints.txt")
+    assert intent.targets[0].package_name == "demo"
 
 
 def test_parse_package_intent_pipx_install_and_run_are_supported() -> None:
@@ -166,6 +189,18 @@ def test_parse_package_intent_uv_add_sync_and_execute_are_supported(tmp_path: Pa
     assert sync_intent.intent_kind == "sync"
     assert sync_intent.manifest_paths == ("pyproject.toml",)
     assert sync_intent.lockfile_paths == ("uv.lock",)
+
+
+def test_parse_package_intent_skips_wrapper_flags_before_manager_detection() -> None:
+    npm_intent = parse_package_intent("sudo -E npm install react")
+    pip_intent = parse_package_intent("env -i pip install flask==3.0.0")
+
+    assert npm_intent is not None
+    assert npm_intent.package_manager == "npm"
+    assert npm_intent.targets[0].package_name == "react"
+    assert pip_intent is not None
+    assert pip_intent.package_manager == "pip"
+    assert pip_intent.targets[0].package_name == "flask"
 
 
 def test_parse_package_intent_poetry_and_pipenv_use_project_lockfile_context(tmp_path: Path) -> None:
