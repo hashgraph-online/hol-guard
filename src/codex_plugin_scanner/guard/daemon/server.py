@@ -192,7 +192,7 @@ def _headless_action_error_payload(
             message=message,
             retryable=retryable,
         )
-    operation_code = "connection_check_failed" if operation == "scan" else f"{operation}_failed"
+    operation_code = "proof_failed" if operation == "scan" else f"{operation}_failed"
     operation_label = "connection check" if operation == "scan" else operation
     return 400, _headless_error_payload(
         code=operation_code,
