@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import html
 import io
 import json
 import mimetypes
@@ -101,6 +102,8 @@ _DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 30 * 60
 _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
 _GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
 _HOSTED_GUARD_DASHBOARD_ORIGINS = frozenset({"https://hol.org", "https://www.hol.org"})
+_HOSTED_GUARD_APPS_URL = "https://hol.org/guard/apps"
+_CLOUD_APP_HANDOFF_TOKEN_TTL_SECONDS = 120
 _HEADLESS_APP_ACTIONS = {
     "connect": ("install", "install"),
     "repair": ("repair", "repair"),
@@ -108,6 +111,7 @@ _HEADLESS_APP_ACTIONS = {
     "status": ("status", "verify"),
     "test": ("scan", "verify"),
 }
+_CLOUD_APP_HANDOFF_ACTIONS = frozenset({"connect", "repair", "status", "test"})
 _HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")
 
 
@@ -330,6 +334,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/harnesses":
             context = self._harness_context({})
             self._write_json({"items": list_harness_setup_items(context, self.server.store)})  # type: ignore[attr-defined]
+            return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
+            self._handle_cloud_app_handoff(path_parts[2], parsed.query)
             return
         if parsed.path == "/v1/inventory":
             from ..adapters.contracts import HARNESS_CONTRACTS
@@ -655,6 +662,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
             return
+        if len(path_parts) == 5 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
+            self._handle_cloud_app_handoff_complete(path_parts[2], payload)
+            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"]:
             self._handle_headless_app_action(path_parts[2], payload)
             return
@@ -828,34 +838,33 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             }
         )
 
-    def _handle_headless_app_action(self, action_path: str, payload: dict[str, object]) -> None:
-        mapping = _HEADLESS_APP_ACTIONS.get(action_path)
-        if mapping is None:
-            status, error_payload = _headless_action_error_payload(
+    def _headless_app_action_payload(
+        self,
+        *,
+        action_path: str,
+        payload: dict[str, object],
+    ) -> tuple[int, dict[str, object]]:
+        try:
+            mapping = _HEADLESS_APP_ACTIONS[action_path]
+        except KeyError:
+            return _headless_action_error_payload(
                 operation=action_path,
                 error_code="unsupported_operation",
             )
-            self._write_json(error_payload, status=status)
-            return
         operation, harness_action = mapping
         harness = self._optional_string(payload.get("harness"))
         if harness is None:
-            status, error_payload = _headless_action_error_payload(
+            return _headless_action_error_payload(
                 operation=operation,
                 error_code="missing_harness",
             )
-            self._write_json(error_payload, status=status)
-            return
         try:
             adapter = get_adapter(harness)
         except ValueError:
-            status, error_payload = _headless_action_error_payload(
+            return _headless_action_error_payload(
                 operation=operation,
                 error_code="unknown_harness",
             )
-            self._write_json(error_payload, status=status)
-            return
-
         context = self._harness_context(payload)
         try:
             if harness_action == "verify":
@@ -863,13 +872,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             else:
                 result = self._run_headless_managed_action(adapter.harness, harness_action, payload, context)
         except ValueError as error:
-            status, error_payload = _headless_action_error_payload(
+            return _headless_action_error_payload(
                 operation=operation,
                 error_code=str(error),
             )
-            self._write_json(error_payload, status=status)
-            return
-
         receipt = self._record_headless_receipt(
             harness=adapter.harness,
             operation=operation,
@@ -877,21 +883,277 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result=result,
             workspace_id=self._optional_string(payload.get("workspace_id")),
         )
-        self._write_json(
+        return 200, {
+            "harness": adapter.harness,
+            "operation": operation,
+            "result": result,
+            "receipt": receipt,
+            "state": _headless_action_state_payload(
+                harness=adapter.harness,
+                operation=operation,
+                result=result,
+                receipt=receipt,
+            ),
+            "status": "completed",
+        }
+
+    def _local_daemon_origin(self) -> str:
+        host = self.server.server_address[0]  # type: ignore[attr-defined]
+        port = self.server.server_address[1]  # type: ignore[attr-defined]
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"http://{host}:{port}"
+
+    def _handle_cloud_app_handoff(self, harness: str, query_string: str) -> None:
+        try:
+            adapter = get_adapter(harness)
+        except ValueError:
+            self._write_json({"error": "unknown_harness"}, status=404)
+            return
+        local_origin = self._local_daemon_origin()
+        handoff_query = parse_qs(query_string)
+        action_path = self._optional_string(handoff_query.get("action", [None])[-1])
+        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and self._hosted_dashboard_referrer_is_allowed():
+            self._write_cloud_app_handoff_page(
+                harness=adapter.harness,
+                action_path=action_path,
+                local_origin=local_origin,
+                workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
+            )
+            return
+        cloud_params: dict[str, str] = {"guardDaemon": local_origin}
+        fragment_params: dict[str, str] = {
+            "guardDaemon": local_origin,
+        }
+        query = urlencode(cloud_params)
+        fragment = urlencode(fragment_params)
+        location = f"{_HOSTED_GUARD_APPS_URL}/{adapter.harness}?{query}#{fragment}"
+        self._write_empty(status=302, extra_headers={"Location": location})
+
+    def _cloud_app_handoff_token(
+        self,
+        *,
+        harness: str,
+        action_path: str,
+        workspace_id: str,
+    ) -> str:
+        payload_json = json.dumps(
             {
-                "harness": adapter.harness,
-                "operation": operation,
-                "result": result,
-                "receipt": receipt,
-                "state": _headless_action_state_payload(
-                    harness=adapter.harness,
-                    operation=operation,
-                    result=result,
-                    receipt=receipt,
-                ),
-                "status": "completed",
-            }
+                "action_path": action_path,
+                "expires_at": int(time.time()) + _CLOUD_APP_HANDOFF_TOKEN_TTL_SECONDS,
+                "harness": harness,
+                "nonce": secrets.token_urlsafe(16),
+                "version": "guard-cloud-app-handoff.v1",
+                "workspace_id": workspace_id,
+            },
+            separators=(",", ":"),
         )
+        payload = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("ascii").rstrip("=")
+        signature = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
+        return f"gch1.{payload}.{signature}"
+
+    def _decode_cloud_app_handoff_token(self, token: object) -> dict[str, object] | None:
+        if not isinstance(token, str) or not token.startswith("gch1."):
+            return None
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        _, payload, signature = parts
+        expected_signature = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        parsed = _decode_dashboard_session_payload(payload)
+        if parsed.get("version") != "guard-cloud-app-handoff.v1":
+            return None
+        expires_at = parsed.get("expires_at")
+        if not isinstance(expires_at, int) or expires_at < int(time.time()):
+            return None
+        return parsed
+
+    def _handle_cloud_app_handoff_complete(self, harness: str, payload: dict[str, object]) -> None:
+        decoded = self._decode_cloud_app_handoff_token(payload.get("handoff_token"))
+        if decoded is None:
+            self._write_json({"error": "invalid_handoff_token"}, status=401)
+            return
+        action_path = self._optional_string(decoded.get("action_path"))
+        token_harness = self._optional_string(decoded.get("harness"))
+        if token_harness != harness or action_path not in _CLOUD_APP_HANDOFF_ACTIONS:
+            self._write_json({"error": "invalid_handoff_scope"}, status=403)
+            return
+        status, action_payload = self._headless_app_action_payload(
+            action_path=action_path,
+            payload={
+                "harness": harness,
+                "operation": _HEADLESS_APP_ACTIONS[action_path][0],
+                "workspace_id": self._optional_string(decoded.get("workspace_id")) or "",
+            },
+        )
+        self._write_json(action_payload, status=status)
+
+    def _write_cloud_app_handoff_page(
+        self,
+        *,
+        harness: str,
+        action_path: str,
+        local_origin: str,
+        workspace_id: str,
+    ) -> None:
+        operation = _HEADLESS_APP_ACTIONS[action_path][0]
+        redirect_base = f"{_HOSTED_GUARD_APPS_URL}/{harness}"
+        script_payload = json.dumps(
+            {
+                "actionPath": action_path,
+                "handoffToken": self._cloud_app_handoff_token(
+                    harness=harness,
+                    action_path=action_path,
+                    workspace_id=workspace_id,
+                ),
+                "harness": harness,
+                "localOrigin": local_origin,
+                "operation": operation,
+                "redirectBase": redirect_base,
+                "workspaceId": workspace_id,
+            },
+            separators=(",", ":"),
+        ).replace("</", "<\\/")
+        title = f"Connecting {harness} with HOL Guard"
+        body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title)}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #f8fbff, #eef5ff 48%, #f4fff8);
+      color: #343565;
+    }}
+    main {{
+      width: min(92vw, 560px);
+      border: 1px solid #d8e6ff;
+      border-radius: 28px;
+      background: rgba(255,255,255,.92);
+      box-shadow: 0 24px 80px rgba(47,70,120,.18);
+      padding: 32px;
+    }}
+    .eyebrow {{ color: #4f91ff; font-size: 12px; font-weight: 800; letter-spacing: .28em; text-transform: uppercase; }}
+    h1 {{ margin: 12px 0; font-size: clamp(28px, 5vw, 42px); line-height: 1.05; }}
+    p {{ color: #5d668f; font-size: 16px; line-height: 1.6; }}
+    .status {{
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: #f4f8ff;
+      border: 1px solid #d8e6ff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #343565;
+    }}
+    .error {{ color: #7c3aed; }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">HOL Guard local handoff</div>
+    <h1>Connecting {html.escape(harness)}.</h1>
+    <p>Guard is using this local page to complete setup with your daemon, then it will return you to HOL Cloud.</p>
+    <div id="status" class="status">Starting local Guard setup...</div>
+  </main>
+  <script id="guard-handoff-data" type="application/json">{script_payload}</script>
+  <script>
+    const data = JSON.parse(document.getElementById('guard-handoff-data').textContent);
+    const statusNode = document.getElementById('status');
+    const finish = (params) => {{
+      const query = new URLSearchParams(params);
+      const fragment = new URLSearchParams(params);
+      window.location.assign(`${{data.redirectBase}}?${{query.toString()}}#${{fragment.toString()}}`);
+    }};
+    const fail = (message) => {{
+      statusNode.textContent = message;
+      statusNode.className = 'status error';
+      finish({{
+        guardDaemon: data.localOrigin,
+        guardLocalAction: data.actionPath,
+        guardLocalStatus: 'failed',
+        guardLocalError: message,
+      }});
+    }};
+    (async () => {{
+      try {{
+        const response = await fetch(`${{data.localOrigin}}/v1/apps/${{data.harness}}/cloud/complete`, {{
+          method: 'POST',
+          headers: {{
+            'Content-Type': 'application/json',
+          }},
+          body: JSON.stringify({{
+            handoff_token: data.handoffToken,
+          }}),
+        }});
+        const payload = await response.json().catch(() => ({{}}));
+        if (!response.ok) {{
+          const error = payload.error;
+          const message = error && typeof error === 'object'
+            ? error.message || error.code
+            : error;
+          fail(message || `Local Guard returned HTTP ${{response.status}}`);
+          return;
+        }}
+        const state = payload.state || {{}};
+        const receipt = payload.receipt || {{}};
+        statusNode.textContent = 'Setup complete. Returning to HOL Cloud...';
+        finish({{
+          guardDaemon: data.localOrigin,
+          guardLocalAction: data.actionPath,
+          guardLocalStatus: 'completed',
+          guardAppStatus: state.app_status || 'unknown',
+          guardProofStatus: state.proof_status || 'unknown',
+          guardReceipt: receipt.id || '',
+        }});
+      }} catch (error) {{
+        fail(error instanceof Error ? error.message : 'Local Guard setup failed');
+      }}
+    }})();
+  </script>
+</body>
+</html>"""
+        encoded = body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def _hosted_dashboard_referrer_is_allowed(self) -> bool:
+        referrer = self.headers.get("Referer")
+        if not isinstance(referrer, str) or not referrer.strip():
+            return False
+        parsed = urlparse(referrer.strip())
+        if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
+            return False
+        host = parsed.hostname
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        default_port = 80 if parsed.scheme == "http" else 443
+        try:
+            port = parsed.port
+        except ValueError:
+            return False
+        port_suffix = f":{port}" if port not in {None, default_port} else ""
+        return f"{parsed.scheme}://{host}{port_suffix}" in _HOSTED_GUARD_DASHBOARD_ORIGINS
+
+    def _handle_headless_app_action(self, action_path: str, payload: dict[str, object]) -> None:
+        status, payload = self._headless_app_action_payload(action_path=action_path, payload=payload)
+        self._write_json(payload, status=status)
 
     def _run_headless_managed_action(
         self,
@@ -2132,6 +2394,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "Access-Control-Allow-Methods",
             "Access-Control-Allow-Headers",
             "Access-Control-Allow-Private-Network",
+            "Location",
             "Vary",
         }
         validated: dict[str, str] = {}
