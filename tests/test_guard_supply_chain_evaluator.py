@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import threading
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -17,12 +18,17 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
+import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
     js_target,
 )
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    PackageRequestEvaluation,
+    SupplyChainUserCopy,
+    _evidence_id,
+    _with_additional_reason,
     _workspace_fingerprint,
     evaluate_package_request_artifact,
 )
@@ -508,6 +514,116 @@ def test_evaluate_package_request_artifact_handles_upgrade_required_with_premium
     assert "upgrade" in result.user_copy.title.lower()
 
 
+def test_evaluate_package_request_artifact_falls_back_on_cloud_http_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+                normalized_severity="low",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                risk_score=220,
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    def raise_http_error(*args: object, **kwargs: object) -> object:
+        raise urllib.error.HTTPError(
+            "https://hol.org/guard/supply-chain/evaluate",
+            401,
+            "unauthorized",
+            {},
+            None,
+        )
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_http_error)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement in {"offline_cached", "local_fallback"}
+
+
+def test_evaluate_package_request_artifact_normalizes_cloud_review_decision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+
+    monkeypatch.setattr(
+        evaluator_module,
+        "_urlopen_json_with_timeout_retry",
+        lambda **_: {
+            "cacheStatus": "miss",
+            "decision": "review",
+            "enforcement": "premium_cloud",
+            "entitlementState": "premium",
+            "packages": [
+                {
+                    "decision": "review",
+                    "ecosystem": "npm",
+                    "name": "minimist",
+                    "namespace": None,
+                    "requestedVersion": "1.2.8",
+                    "resolvedVersion": "1.2.8",
+                    "recommendedFixVersion": "1.2.9",
+                    "riskScore": 980,
+                    "reasons": [
+                        {
+                            "code": "known_advisory",
+                            "message": "Prototype pollution in minimist",
+                            "severity": "critical",
+                            "source": "ghsa",
+                        }
+                    ],
+                }
+            ],
+            "policyVersion": "policy-version-1",
+            "reasons": [
+                {
+                    "code": "known_advisory",
+                    "message": "Prototype pollution in minimist",
+                    "severity": "critical",
+                    "source": "ghsa",
+                }
+            ],
+        },
+    )
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("minimist@1.2.8"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+
+
 def test_evaluate_package_request_artifact_applies_policy_rule_override(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
@@ -808,3 +924,61 @@ def test_evaluate_package_request_artifact_stale_bundle_requests_refresh_and_rec
     evidence = store.list_evidence()
     assert evidence
     assert evidence[0]["category"] == "supply-chain"
+
+
+def test_with_additional_reason_updates_all_packages() -> None:
+    evaluation = PackageRequestEvaluation(
+        decision="warn",
+        policy_action="warn",
+        enforcement="offline_cached",
+        entitlement_state="premium",
+        cache_status="miss",
+        package_intent_hash="intent-hash",
+        policy_version="policy-v1",
+        bundle_version="bundle-v1",
+        workspace_fingerprint="workspace-fingerprint",
+        reasons=({"code": "known_advisory", "message": "base"},),
+        packages=(
+            {"name": "minimist", "decision": "warn", "reasons": ({"code": "known_advisory"},)},
+            {"name": "lodash", "decision": "warn", "reasons": ({"code": "known_advisory"},)},
+        ),
+        risk_summary="HOL Guard warned about this package request.",
+        user_copy=SupplyChainUserCopy(
+            title="Warn",
+            summary="Warn",
+            next_step=None,
+            dashboard_url="https://hol.org/guard/inbox",
+            harness_message="Warn",
+        ),
+    )
+
+    updated = _with_additional_reason(
+        evaluation,
+        {
+            "code": "cloud_timeout",
+            "message": "Guard cloud evaluation timed out, so Guard fell back locally.",
+            "severity": "unknown",
+            "source": "guard-cloud",
+        },
+    )
+
+    assert all(any(reason["code"] == "cloud_timeout" for reason in package["reasons"]) for package in updated.packages)
+
+
+def test_evidence_id_distinguishes_versions_and_dependency_paths() -> None:
+    direct_package = {
+        "name": "minimist",
+        "resolvedVersion": "1.2.8",
+        "requestedVersion": "1.2.8",
+        "dependencyPath": None,
+        "decision": "block",
+    }
+    transitive_package = {
+        "name": "minimist",
+        "resolvedVersion": "1.2.8",
+        "requestedVersion": "1.2.8",
+        "dependencyPath": "react/node_modules/minimist",
+        "decision": "block",
+    }
+
+    assert _evidence_id("intent-hash", direct_package) != _evidence_id("intent-hash", transitive_package)
