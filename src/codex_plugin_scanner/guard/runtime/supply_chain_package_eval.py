@@ -26,7 +26,11 @@ from .runner import (
     _urlopen_json_with_timeout_retry,
 )
 from .supply_chain_bundle import evaluate_cached_supply_chain_bundle, load_supply_chain_bundle_response
-from .supply_chain_bundle_models import SupplyChainBundlePackage
+from .supply_chain_bundle_models import (
+    SupplyChainBundlePackage,
+    SupplyChainBundlePolicyRule,
+    SupplyChainBundleResponse,
+)
 
 _DECISION_RANK = {"allow": 0, "monitor": 1, "warn": 2, "ask": 3, "block": 4}
 _SEVERITY_RANK = {"unknown": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -446,6 +450,11 @@ def _evaluate_with_cloud(
             code="cloud_timeout",
             message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
         )
+    except ValueError:
+        return None, _cloud_fallback_reason(
+            code="cloud_invalid_response",
+            message="Guard cloud evaluation returned an invalid response, so Guard fell back locally.",
+        )
     if not isinstance(response_payload, dict):
         return None, _cloud_fallback_reason(
             code="cloud_invalid_response",
@@ -517,8 +526,6 @@ def _evaluate_with_bundle(
     bundle_meta = _bundle_meta(bundle_response.to_dict())
     refresh_required = False
     packages: list[dict[str, object]] = []
-    best_rule_id: str | None = None
-    exception_id: str | None = None
     for target in targets:
         exact_version = _exact_version(_optional_string(target.get("version")) or _optional_string(target.get("range")))
         package_match = (
@@ -540,9 +547,6 @@ def _evaluate_with_bundle(
             decision = _normalize_bundle_action(matched_rule.action)
             package = _policy_package_result(target, decision=decision, rule_id=matched_rule.rule_id)
             packages.append(package)
-            best_rule_id = matched_rule.rule_id
-            if decision == "allow":
-                exception_id = matched_rule.rule_id
             continue
         if exact_version is None:
             continue
@@ -569,17 +573,18 @@ def _evaluate_with_bundle(
         return None
     packages.sort(key=lambda item: _decision_rank(str(item.get("decision") or "monitor")), reverse=True)
     decision = str(packages[0].get("decision") or "monitor")
+    winning_rule_id = _optional_string(packages[0].get("ruleId"))
     return _EvaluationDraft(
         decision=decision,
-        enforcement="policy_override" if best_rule_id is not None else "offline_cached",
+        enforcement="policy_override" if winning_rule_id is not None else "offline_cached",
         entitlement_state="premium" if workspace_id is not None else "free",
         cache_status="stale" if refresh_required else "miss",
         packages=tuple(packages),
         reasons=tuple(
             reason for package in packages for reason in package.get("reasons", []) if isinstance(reason, dict)
         ),
-        matched_rule_id=best_rule_id,
-        exception_id=exception_id,
+        matched_rule_id=winning_rule_id,
+        exception_id=winning_rule_id if decision == "allow" else None,
         refresh_required=refresh_required,
         record_monitor_evidence=decision == "monitor",
         bundle_version=bundle_meta["bundle_version"],
@@ -899,6 +904,7 @@ def _policy_package_result(target: dict[str, object], *, decision: str, rule_id:
         "recommendedFixVersion": None,
         "riskScore": None,
         "dependencyPath": None,
+        "ruleId": rule_id,
         "reasons": (
             {
                 "code": "policy_override",
@@ -986,12 +992,12 @@ def _safe_dependency_map_for_path(path: str, text: str, *, deadline: float) -> d
 
 
 def _matching_policy_rule(
-    rules,
+    rules: tuple[SupplyChainBundlePolicyRule, ...],
     *,
     target: dict[str, object],
     harness: str,
     package_severity: str | None,
-):
+) -> SupplyChainBundlePolicyRule | None:
     current_time = datetime.now(timezone.utc).timestamp()
     sorted_rules = sorted(
         rules, key=lambda item: (item.priority if item.priority is not None else 10_000, item.rule_id)
@@ -1050,7 +1056,7 @@ def _selector_matches_version(selector: str, target: dict[str, object]) -> bool:
 
 
 def _bundle_package(
-    bundle_response,
+    bundle_response: SupplyChainBundleResponse,
     *,
     package_name: str,
     package_version: str,
@@ -1221,7 +1227,12 @@ def _cloud_fallback_reason(*, code: str, message: str) -> dict[str, object]:
     }
 
 
-def _bundle_reason_message(package, *, reason: str, stale: bool) -> str:
+def _bundle_reason_message(
+    package: SupplyChainBundlePackage,
+    *,
+    reason: str,
+    stale: bool,
+) -> str:
     package_label = f"{package.name}@{package.version}"
     if stale:
         return f"Cached bundle is stale, so Guard kept {package_label} in monitor mode."

@@ -584,6 +584,49 @@ def test_evaluate_package_request_artifact_falls_back_on_cloud_http_error(
     assert result.enforcement in {"offline_cached", "local_fallback"}
 
 
+def test_evaluate_package_request_artifact_falls_back_on_invalid_cloud_response(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+                normalized_severity="low",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                risk_score=220,
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    def raise_invalid_response(*args: object, **kwargs: object) -> object:
+        raise ValueError("not json")
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_invalid_response)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement in {"offline_cached", "local_fallback"}
+
+
 def test_evaluate_package_request_artifact_normalizes_cloud_review_decision(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -735,6 +778,62 @@ def test_evaluate_package_request_artifact_respects_policy_severity_threshold(
 
     assert result.decision == "monitor"
     assert result.matched_rule_id is None
+    assert result.enforcement == "offline_cached"
+
+
+def test_evaluate_package_request_artifact_keeps_policy_metadata_on_winning_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            ),
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+                normalized_severity="low",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                risk_score=220,
+            ),
+        ],
+        policy_rules=[
+            {
+                "action": "allow",
+                "ruleId": "allow-left-pad",
+                "ecosystemSelector": "npm",
+                "enabled": True,
+                "expiresAt": "2099-01-01T00:00:00Z",
+                "harnessSelector": "codex",
+                "packageSelector": "left-pad",
+                "priority": 1,
+                "severityThreshold": None,
+                "versionRangeSelector": "1.0.0",
+            }
+        ],
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("minimist@1.2.8", "left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.matched_rule_id is None
+    assert result.exception_id is None
     assert result.enforcement == "offline_cached"
 
 
