@@ -7,7 +7,10 @@ import re
 import time
 from xml.etree import ElementTree as ET
 
-import tomllib
+try:
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redef]
 
 from .package_intent_common import (
     ManifestDependencyChange,
