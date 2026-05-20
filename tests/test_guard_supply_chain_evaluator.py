@@ -1133,6 +1133,54 @@ def test_evaluate_package_request_artifact_handles_unreadable_workspace_paths_wi
     assert result.policy_action == "allow"
 
 
+def test_evaluate_package_request_artifact_handles_unreadable_lockfile_context_without_crashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    lockfile_path = workspace_dir / "package-lock.json"
+    lockfile_path.write_text(
+        json.dumps({"packages": {"": {"name": "demo-app"}}}),
+        encoding="utf-8",
+    )
+    original_read_text = Path.read_text
+
+    def guarded_read_text(path: Path, *args: object, **kwargs: object) -> str:
+        if path == lockfile_path:
+            raise OSError("permission denied")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
+    monkeypatch.setattr(
+        evaluator_module,
+        "_urlopen_json_with_timeout_retry",
+        lambda *args, **kwargs: _cloud_response(
+            decision="monitor",
+            enforcement="premium_cloud",
+            entitlement_state="active",
+            package_name="left-pad",
+        ),
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0", lockfile_paths=("package-lock.json",)),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement == "premium_cloud"
+
+
 def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1265,3 +1313,28 @@ def test_evidence_id_distinguishes_versions_and_dependency_paths() -> None:
     }
 
     assert _evidence_id("intent-hash", direct_package) != _evidence_id("intent-hash", transitive_package)
+
+
+def test_bundle_reason_message_uses_block_copy_for_stale_blocked_bundle() -> None:
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            )
+        ]
+    )
+    package = evaluator_module.load_supply_chain_bundle_response(response).bundle.packages[0]
+
+    message = evaluator_module._bundle_reason_message(
+        package,
+        decision="block",
+        reason="known_malware_or_kev",
+        stale=True,
+    )
+
+    assert "blocked" in message.lower()
+    assert "monitor mode" not in message
