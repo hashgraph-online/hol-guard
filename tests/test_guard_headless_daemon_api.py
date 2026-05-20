@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -154,9 +155,50 @@ def test_cloud_app_handoff_serves_token_authenticated_local_action_page(tmp_path
     assert status == 200
     assert "HOL Guard local handoff" in body
     assert f"http://127.0.0.1:{daemon.port}" in body
-    assert "/v1/apps/${data.actionPath}" in body
-    assert "Authorization" in body
-    assert auth_token in body
+    assert "/v1/apps/${data.harness}/cloud/complete" in body
+    assert "handoffToken" in body
+    assert auth_token not in body
+
+
+def test_cloud_app_handoff_completion_runs_scoped_action_without_daemon_auth_token(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=connect",
+                method="GET",
+                origin=None,
+                referer="https://hol.org/guard/apps/codex",
+            ),
+        )
+        assert status == 200
+        match = re.search(
+            r'<script id="guard-handoff-data" type="application/json">([^<]+)</script>',
+            body,
+        )
+        assert match is not None
+        handoff_token = json.loads(match.group(1))["handoffToken"]
+        action_status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/complete",
+                payload={"handoff_token": handoff_token},
+                token=None,
+                origin=f"http://127.0.0.1:{daemon.port}",
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert action_status == 200
+    assert payload["status"] == "completed"
+    assert payload["state"]["app_status"] == "protected"
+    assert payload["receipt"]["operation"] == "install"
 
 
 def test_cloud_app_handoff_redirects_to_guard_cloud_without_side_effect_when_untrusted(tmp_path: Path) -> None:
@@ -184,7 +226,7 @@ def test_cloud_app_handoff_redirects_to_guard_cloud_without_side_effect_when_unt
     assert "guardLocalAction" not in parse_qs(parsed.query)
     fragment = parse_qs(parsed.fragment)
     assert fragment["guardDaemon"] == [f"http://127.0.0.1:{daemon.port}"]
-    assert fragment["guard-token"] == [auth_token]
+    assert "guard-token" not in fragment
 
 
 def test_headless_app_operations_write_receipts_without_cli_copy(

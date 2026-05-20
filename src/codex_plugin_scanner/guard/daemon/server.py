@@ -103,6 +103,7 @@ _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
 _GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
 _HOSTED_GUARD_DASHBOARD_ORIGINS = frozenset({"https://hol.org", "https://www.hol.org"})
 _HOSTED_GUARD_APPS_URL = "https://hol.org/guard/apps"
+_CLOUD_APP_HANDOFF_TOKEN_TTL_SECONDS = 120
 _HEADLESS_APP_ACTIONS = {
     "connect": ("install", "install"),
     "repair": ("repair", "repair"),
@@ -660,6 +661,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
             return
+        if len(path_parts) == 5 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
+            self._handle_cloud_app_handoff_complete(path_parts[2], payload)
+            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"]:
             self._handle_headless_app_action(path_parts[2], payload)
             return
@@ -919,12 +923,71 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         cloud_params: dict[str, str] = {"guardDaemon": local_origin}
         fragment_params: dict[str, str] = {
             "guardDaemon": local_origin,
-            "guard-token": self.server.auth_token,  # type: ignore[attr-defined]
         }
         query = urlencode(cloud_params)
         fragment = urlencode(fragment_params)
         location = f"{_HOSTED_GUARD_APPS_URL}/{adapter.harness}?{query}#{fragment}"
         self._write_empty(status=302, extra_headers={"Location": location})
+
+    def _cloud_app_handoff_token(
+        self,
+        *,
+        harness: str,
+        action_path: str,
+        workspace_id: str,
+    ) -> str:
+        payload_json = json.dumps(
+            {
+                "action_path": action_path,
+                "expires_at": int(time.time()) + _CLOUD_APP_HANDOFF_TOKEN_TTL_SECONDS,
+                "harness": harness,
+                "nonce": secrets.token_urlsafe(16),
+                "version": "guard-cloud-app-handoff.v1",
+                "workspace_id": workspace_id,
+            },
+            separators=(",", ":"),
+        )
+        payload = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("ascii").rstrip("=")
+        signature = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
+        return f"gch1.{payload}.{signature}"
+
+    def _decode_cloud_app_handoff_token(self, token: object) -> dict[str, object] | None:
+        if not isinstance(token, str) or not token.startswith("gch1."):
+            return None
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        _, payload, signature = parts
+        expected_signature = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        parsed = _decode_dashboard_session_payload(payload)
+        if parsed.get("version") != "guard-cloud-app-handoff.v1":
+            return None
+        expires_at = parsed.get("expires_at")
+        if not isinstance(expires_at, int) or expires_at < int(time.time()):
+            return None
+        return parsed
+
+    def _handle_cloud_app_handoff_complete(self, harness: str, payload: dict[str, object]) -> None:
+        decoded = self._decode_cloud_app_handoff_token(payload.get("handoff_token"))
+        if decoded is None:
+            self._write_json({"error": "invalid_handoff_token"}, status=401)
+            return
+        action_path = self._optional_string(decoded.get("action_path"))
+        token_harness = self._optional_string(decoded.get("harness"))
+        if token_harness != harness or action_path not in _HEADLESS_APP_ACTIONS:
+            self._write_json({"error": "invalid_handoff_scope"}, status=403)
+            return
+        status, action_payload = self._headless_app_action_payload(
+            action_path=action_path,
+            payload={
+                "harness": harness,
+                "operation": _HEADLESS_APP_ACTIONS[action_path][0],
+                "workspace_id": self._optional_string(decoded.get("workspace_id")) or "",
+            },
+        )
+        self._write_json(action_payload, status=status)
 
     def _write_cloud_app_handoff_page(
         self,
@@ -939,11 +1002,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         script_payload = json.dumps(
             {
                 "actionPath": action_path,
+                "handoffToken": self._cloud_app_handoff_token(
+                    harness=harness,
+                    action_path=action_path,
+                    workspace_id=workspace_id,
+                ),
                 "harness": harness,
                 "localOrigin": local_origin,
                 "operation": operation,
                 "redirectBase": redirect_base,
-                "token": self.server.auth_token,  # type: ignore[attr-defined]
                 "workspaceId": workspace_id,
             },
             separators=(",", ":"),
@@ -1005,7 +1072,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     const finish = (params) => {{
       const query = new URLSearchParams(params);
       const fragment = new URLSearchParams(params);
-      fragment.set('guard-token', data.token);
       window.location.assign(`${{data.redirectBase}}?${{query.toString()}}#${{fragment.toString()}}`);
     }};
     const fail = (message) => {{
@@ -1020,18 +1086,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     }};
     (async () => {{
       try {{
-        const response = await fetch(`${{data.localOrigin}}/v1/apps/${{data.actionPath}}`, {{
+        const response = await fetch(`${{data.localOrigin}}/v1/apps/${{data.harness}}/cloud/complete`, {{
           method: 'POST',
           headers: {{
-            'Authorization': `Bearer ${{data.token}}`,
             'Content-Type': 'application/json',
-            'X-Guard-Dashboard-Session': data.token,
-            'X-Guard-Token': data.token,
           }},
           body: JSON.stringify({{
-            harness: data.harness,
-            operation: data.operation,
-            workspace_id: data.workspaceId,
+            handoff_token: data.handoffToken,
           }}),
         }});
         const payload = await response.json().catch(() => ({{}}));
