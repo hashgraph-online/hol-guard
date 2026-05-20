@@ -1133,6 +1133,54 @@ def test_evaluate_package_request_artifact_handles_unreadable_workspace_paths_wi
     assert result.policy_action == "allow"
 
 
+def test_evaluate_package_request_artifact_handles_unreadable_transitive_lockfile_without_crashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+                normalized_severity="low",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                risk_score=220,
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    lockfile_path = workspace_dir / "package-lock.json"
+    lockfile_path.write_text(
+        json.dumps({"packages": {"": {"name": "demo-app"}}}),
+        encoding="utf-8",
+    )
+    original_read_text = Path.read_text
+
+    def guarded_read_text(path: Path, *args: object, **kwargs: object) -> str:
+        if path == lockfile_path:
+            raise OSError("permission denied")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0", lockfile_paths=("package-lock.json",)),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+
+
 def test_evaluate_package_request_artifact_handles_unreadable_lockfile_context_without_crashing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
