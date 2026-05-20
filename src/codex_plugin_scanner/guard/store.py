@@ -123,6 +123,23 @@ from .store_resume import (
 from .store_resume import (
     update_request_resume as persist_request_resume_update,
 )
+from .store_supply_chain import (
+    get_supply_chain_bundle as load_supply_chain_bundle,
+)
+from .store_supply_chain import (
+    get_supply_chain_evaluation as load_supply_chain_evaluation,
+)
+from .store_supply_chain import (
+    supply_chain_bundle_schema_statement,
+    supply_chain_eval_cache_schema_statement,
+    supply_chain_index_statements,
+)
+from .store_supply_chain import (
+    upsert_supply_chain_bundle as persist_supply_chain_bundle,
+)
+from .store_supply_chain import (
+    upsert_supply_chain_evaluation as persist_supply_chain_evaluation,
+)
 from .store_threat_intel import (
     threat_intel_bundle_schema_statement,
     threat_intel_index_statements,
@@ -740,6 +757,8 @@ class GuardStore:
             connect_state_schema_statement(),
             approval_schema_statement(),
             evidence_schema_statement(),
+            supply_chain_bundle_schema_statement(),
+            supply_chain_eval_cache_schema_statement(),
             threat_intel_bundle_schema_statement(),
             threat_intel_matches_schema_statement(),
         )
@@ -750,6 +769,8 @@ class GuardStore:
                 self._ensure_column(connection, "guard_evidence", "action_identity", "text")
                 self._record_schema_version(connection, version=4)
             for idx_stmt in evidence_index_statements():
+                connection.execute(idx_stmt)
+            for idx_stmt in supply_chain_index_statements():
                 connection.execute(idx_stmt)
             for idx_stmt in threat_intel_index_statements():
                 connection.execute(idx_stmt)
@@ -2350,6 +2371,70 @@ class GuardStore:
             )
         return items
 
+    def cache_supply_chain_bundle(
+        self,
+        workspace_id: str,
+        response: dict[str, object],
+        now: str,
+    ) -> None:
+        with self._connect() as connection:
+            persist_supply_chain_bundle(
+                connection,
+                workspace_id=workspace_id,
+                response=response,
+                cached_at=now,
+            )
+
+    def get_cached_supply_chain_bundle(self, workspace_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_supply_chain_bundle(connection, workspace_id=workspace_id)
+
+    def cache_supply_chain_evaluation(
+        self,
+        *,
+        workspace_id: str,
+        package_intent_hash: str,
+        feed_snapshot_hash: str,
+        policy_hash: str,
+        scoring_version: str,
+        bundle_version: str,
+        decision: dict[str, object],
+        now: str,
+    ) -> None:
+        with self._connect() as connection:
+            persist_supply_chain_evaluation(
+                connection,
+                workspace_id=workspace_id,
+                package_intent_hash=package_intent_hash,
+                feed_snapshot_hash=feed_snapshot_hash,
+                policy_hash=policy_hash,
+                scoring_version=scoring_version,
+                bundle_version=bundle_version,
+                decision=decision,
+                updated_at=now,
+            )
+
+    def get_cached_supply_chain_evaluation(
+        self,
+        *,
+        workspace_id: str,
+        package_intent_hash: str,
+        feed_snapshot_hash: str,
+        policy_hash: str,
+        scoring_version: str,
+        bundle_version: str,
+    ) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_supply_chain_evaluation(
+                connection,
+                workspace_id=workspace_id,
+                package_intent_hash=package_intent_hash,
+                feed_snapshot_hash=feed_snapshot_hash,
+                policy_hash=policy_hash,
+                scoring_version=scoring_version,
+                bundle_version=bundle_version,
+            )
+
     def set_sync_credentials(self, sync_url: str, token: str, now: str, workspace_id: str | None = None) -> None:
         with self._connect() as connection:
             self._set_sync_credentials_in_connection(connection, sync_url, token, now, workspace_id=workspace_id)
@@ -2849,6 +2934,8 @@ class GuardStore:
         )
         if credentials_changed:
             connection.execute("delete from sync_state where state_key != 'credentials'")
+            connection.execute("delete from guard_supply_chain_bundle_cache")
+            connection.execute("delete from guard_supply_chain_eval_cache")
             connection.execute("delete from publisher_cache")
             connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
 
