@@ -21,12 +21,29 @@ from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payl
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _read_json_response(request: urllib.request.Request) -> tuple[int, dict[str, object]]:
+def _read_json_response_details(
+    request: urllib.request.Request,
+) -> tuple[int, dict[str, object], dict[str, str]]:
     try:
         with urllib.request.urlopen(request, timeout=5) as response:
-            return response.status, json.loads(response.read().decode("utf-8"))
+            return (
+                response.status,
+                json.loads(response.read().decode("utf-8")),
+                dict(response.headers.items()),
+            )
     except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read().decode("utf-8"))
+        return error.code, json.loads(error.read().decode("utf-8")), dict(error.headers.items())
+
+
+def _read_json_response(request: urllib.request.Request) -> tuple[int, dict[str, object]]:
+    status, payload, _headers = _read_json_response_details(request)
+    return status, payload
+
+
+def _read_json_response_with_headers(
+    request: urllib.request.Request,
+) -> tuple[int, dict[str, object], dict[str, str]]:
+    return _read_json_response_details(request)
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -242,6 +259,30 @@ def test_cloud_app_handoff_start_mints_handoff_url_for_hosted_dashboard(tmp_path
     assert "HOL Guard local handoff" in body
     assert "handoffToken" in body
     assert "dashboardSessionToken" in body
+
+
+def test_cloud_app_handoff_start_response_is_not_cacheable(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload, headers = _read_json_response_with_headers(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={"action": "connect", "workspace_id": "local-browser"},
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["local_origin"] == f"http://127.0.0.1:{daemon.port}"
+    assert headers["Cache-Control"] == "no-store, max-age=0"
+    assert headers["Pragma"] == "no-cache"
+    assert headers["Expires"] == "0"
 
 
 def test_cloud_app_handoff_page_mints_scoped_browser_session_token(tmp_path: Path) -> None:

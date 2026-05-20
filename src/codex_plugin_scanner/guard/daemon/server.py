@@ -993,7 +993,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "handoff_url": f"{local_origin}/v1/apps/{adapter.harness}/cloud?{handoff_query}",
                 "local_origin": local_origin,
                 "status": "ready",
-            }
+            },
+            extra_headers={
+                "Cache-Control": "no-store, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
         )
 
     def _cloud_app_handoff_token(
@@ -2548,7 +2553,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "Access-Control-Allow-Methods",
             "Access-Control-Allow-Headers",
             "Access-Control-Allow-Private-Network",
+            "Cache-Control",
+            "Expires",
             "Location",
+            "Pragma",
             "Vary",
         }
         validated: dict[str, str] = {}
