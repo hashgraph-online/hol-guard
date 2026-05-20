@@ -627,6 +627,44 @@ def test_evaluate_package_request_artifact_falls_back_on_invalid_cloud_response(
     assert result.enforcement in {"offline_cached", "local_fallback"}
 
 
+def test_evaluate_package_request_artifact_ignores_malformed_cached_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    monkeypatch.setattr(
+        store,
+        "get_cached_supply_chain_bundle",
+        lambda workspace_id: {"bundle": "corrupted"},
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "_urlopen_json_with_timeout_retry",
+        lambda *args, **kwargs: _cloud_response(
+            decision="monitor",
+            enforcement="premium_cloud",
+            entitlement_state="active",
+            package_name="left-pad",
+        ),
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "monitor"
+    assert result.policy_action == "allow"
+    assert result.enforcement == "premium_cloud"
+
+
 def test_evaluate_package_request_artifact_normalizes_cloud_review_decision(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
