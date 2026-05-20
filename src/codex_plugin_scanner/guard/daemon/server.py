@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import html
 import io
 import json
 import mimetypes
@@ -891,49 +892,180 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "status": "completed",
         }
 
+    def _local_daemon_origin(self) -> str:
+        host = self.server.server_address[0]  # type: ignore[attr-defined]
+        port = self.server.server_address[1]  # type: ignore[attr-defined]
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        return f"http://{host}:{port}"
+
     def _handle_cloud_app_handoff(self, harness: str, query_string: str) -> None:
         try:
             adapter = get_adapter(harness)
         except ValueError:
             self._write_json({"error": "unknown_harness"}, status=404)
             return
-        local_origin = f"http://{self.server.server_address[0]}:{self.server.server_address[1]}"  # type: ignore[attr-defined]
+        local_origin = self._local_daemon_origin()
         handoff_query = parse_qs(query_string)
         action_path = self._optional_string(handoff_query.get("action", [None])[-1])
+        if action_path in _HEADLESS_APP_ACTIONS and self._hosted_dashboard_referrer_is_allowed():
+            self._write_cloud_app_handoff_page(
+                harness=adapter.harness,
+                action_path=action_path,
+                local_origin=local_origin,
+                workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
+            )
+            return
         cloud_params: dict[str, str] = {"guardDaemon": local_origin}
         fragment_params: dict[str, str] = {
             "guardDaemon": local_origin,
             "guard-token": self.server.auth_token,  # type: ignore[attr-defined]
         }
-        if action_path in _HEADLESS_APP_ACTIONS and self._hosted_dashboard_referrer_is_allowed():
-            status, action_payload = self._headless_app_action_payload(
-                action_path=action_path,
-                payload={
-                    "harness": adapter.harness,
-                    "operation": _HEADLESS_APP_ACTIONS[action_path][0],
-                    "workspace_id": self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
-                },
-            )
-            state = action_payload.get("state")
-            receipt = action_payload.get("receipt")
-            cloud_params["guardLocalAction"] = action_path
-            cloud_params["guardLocalStatus"] = "completed" if status == 200 else "failed"
-            if isinstance(state, dict):
-                app_status = self._optional_string(state.get("app_status"))
-                proof_status = self._optional_string(state.get("proof_status"))
-                if app_status:
-                    cloud_params["guardAppStatus"] = app_status
-                if proof_status:
-                    cloud_params["guardProofStatus"] = proof_status
-            if isinstance(receipt, dict):
-                receipt_id = self._optional_string(receipt.get("id"))
-                if receipt_id:
-                    cloud_params["guardReceipt"] = receipt_id
-            fragment_params.update(cloud_params)
         query = urlencode(cloud_params)
         fragment = urlencode(fragment_params)
         location = f"{_HOSTED_GUARD_APPS_URL}/{adapter.harness}?{query}#{fragment}"
         self._write_empty(status=302, extra_headers={"Location": location})
+
+    def _write_cloud_app_handoff_page(
+        self,
+        *,
+        harness: str,
+        action_path: str,
+        local_origin: str,
+        workspace_id: str,
+    ) -> None:
+        operation = _HEADLESS_APP_ACTIONS[action_path][0]
+        redirect_base = f"{_HOSTED_GUARD_APPS_URL}/{harness}"
+        script_payload = json.dumps(
+            {
+                "actionPath": action_path,
+                "harness": harness,
+                "localOrigin": local_origin,
+                "operation": operation,
+                "redirectBase": redirect_base,
+                "token": self.server.auth_token,  # type: ignore[attr-defined]
+                "workspaceId": workspace_id,
+            },
+            separators=(",", ":"),
+        ).replace("</", "<\\/")
+        title = f"Connecting {harness} with HOL Guard"
+        body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title)}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #f8fbff, #eef5ff 48%, #f4fff8);
+      color: #343565;
+    }}
+    main {{
+      width: min(92vw, 560px);
+      border: 1px solid #d8e6ff;
+      border-radius: 28px;
+      background: rgba(255,255,255,.92);
+      box-shadow: 0 24px 80px rgba(47,70,120,.18);
+      padding: 32px;
+    }}
+    .eyebrow {{ color: #4f91ff; font-size: 12px; font-weight: 800; letter-spacing: .28em; text-transform: uppercase; }}
+    h1 {{ margin: 12px 0; font-size: clamp(28px, 5vw, 42px); line-height: 1.05; }}
+    p {{ color: #5d668f; font-size: 16px; line-height: 1.6; }}
+    .status {{
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: #f4f8ff;
+      border: 1px solid #d8e6ff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #343565;
+    }}
+    .error {{ color: #7c3aed; }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">HOL Guard local handoff</div>
+    <h1>Connecting {html.escape(harness)}.</h1>
+    <p>Guard is using this local page to complete setup with your daemon, then it will return you to HOL Cloud.</p>
+    <div id="status" class="status">Starting local Guard setup...</div>
+  </main>
+  <script id="guard-handoff-data" type="application/json">{script_payload}</script>
+  <script>
+    const data = JSON.parse(document.getElementById('guard-handoff-data').textContent);
+    const statusNode = document.getElementById('status');
+    const finish = (params) => {{
+      const query = new URLSearchParams(params);
+      const fragment = new URLSearchParams(params);
+      fragment.set('guard-token', data.token);
+      window.location.assign(`${{data.redirectBase}}?${{query.toString()}}#${{fragment.toString()}}`);
+    }};
+    const fail = (message) => {{
+      statusNode.textContent = message;
+      statusNode.className = 'status error';
+      finish({{
+        guardDaemon: data.localOrigin,
+        guardLocalAction: data.actionPath,
+        guardLocalStatus: 'failed',
+        guardLocalError: message,
+      }});
+    }};
+    (async () => {{
+      try {{
+        const response = await fetch(`${{data.localOrigin}}/v1/apps/${{data.actionPath}}`, {{
+          method: 'POST',
+          headers: {{
+            'Authorization': `Bearer ${{data.token}}`,
+            'Content-Type': 'application/json',
+            'X-Guard-Dashboard-Session': data.token,
+            'X-Guard-Token': data.token,
+          }},
+          body: JSON.stringify({{
+            harness: data.harness,
+            operation: data.operation,
+            workspace_id: data.workspaceId,
+          }}),
+        }});
+        const payload = await response.json().catch(() => ({{}}));
+        if (!response.ok) {{
+          fail(payload.error || `Local Guard returned HTTP ${{response.status}}`);
+          return;
+        }}
+        const state = payload.state || {{}};
+        const receipt = payload.receipt || {{}};
+        statusNode.textContent = 'Setup complete. Returning to HOL Cloud...';
+        finish({{
+          guardDaemon: data.localOrigin,
+          guardLocalAction: data.actionPath,
+          guardLocalStatus: 'completed',
+          guardAppStatus: state.app_status || 'unknown',
+          guardProofStatus: state.proof_status || 'unknown',
+          guardReceipt: receipt.id || '',
+        }});
+      }} catch (error) {{
+        fail(error instanceof Error ? error.message : 'Local Guard setup failed');
+      }}
+    }})();
+  </script>
+</body>
+</html>"""
+        encoded = body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        self.end_headers()
+        self.wfile.write(encoded)
 
     def _hosted_dashboard_referrer_is_allowed(self) -> bool:
         referrer = self.headers.get("Referer")
