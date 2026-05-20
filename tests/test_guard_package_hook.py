@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 
 WORKSPACE_ID = "workspace-alpha"
@@ -141,6 +142,38 @@ def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str)
     )
 
 
+class _CiscoSignalStub:
+    plain_language_summary = "Cisco scanner found a critical package exfiltration path."
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "signal_id": "cisco:package-exfiltration",
+            "category": "network",
+            "severity": "critical",
+            "confidence": "strong",
+            "detector": "cisco",
+            "title": "Cisco scanner found a critical package exfiltration path.",
+            "plain_language_summary": self.plain_language_summary,
+        }
+
+
+def _scanner_signal_v2() -> RiskSignalV2:
+    return RiskSignalV2(
+        signal_id="cisco:package-exfiltration",
+        category="network",
+        severity="critical",
+        confidence="strong",
+        detector="cisco",
+        title="Cisco scanner found a critical package exfiltration path.",
+        plain_reason="Cisco scanner found a critical package exfiltration path.",
+        technical_detail=None,
+        evidence_ref="artifact",
+        redaction_level="summary",
+        false_positive_hint=None,
+        advisory_id=None,
+    )
+
+
 def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_sync(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -156,7 +189,14 @@ def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_syn
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
     )
     store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="block"), "2026-05-19T00:00:00Z")
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    def fail_daemon(_home: Path) -> object:
+        raise RuntimeError("no daemon client")
+
+    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
 
     def fail_subprocess(*args: object, **kwargs: object) -> object:
         raise AssertionError("blocked package request must not launch a subprocess")
@@ -187,6 +227,7 @@ def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_syn
     queued_events = store.list_guard_events_v1(uploaded=False)
     assert queued_events
     assert any(event["event_type"] == "receipt.created" for event in queued_events)
+    assert store.list_approval_requests(limit=5)
 
 
 def test_guard_hook_ask_queues_package_approval_with_advisory_context(
@@ -298,6 +339,71 @@ def test_guard_hook_warns_for_package_request_without_blocking(
     assert "minimist@1.2.8" in output["risk_summary"]
     assert output["scanner_evidence"]
     assert "approval_requests" not in output
+
+
+def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    payload_path = workspace_dir / "hook-event.json"
+    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
+    store = GuardStore(home_dir)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="warn"), "2026-05-19T00:00:00Z")
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    def fail_daemon(_home: Path) -> object:
+        raise RuntimeError("no daemon client")
+
+    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
+    monkeypatch.setattr(
+        guard_commands_module,
+        "scan_action_for_cisco_evidence",
+        lambda *_args, **_kwargs: (_CiscoSignalStub(),),
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "policy_action_for_cisco_signals",
+        lambda *_args, **_kwargs: "block",
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "cisco_risk_signal_v3_to_v2",
+        lambda _signal: _scanner_signal_v2(),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["policy_action"] == "block"
+    assert output["decision_v2_json"]["user_title"] == "Blocked by policy"
+    assert output["decision_v2_json"]["user_title"] != output["supply_chain_evaluation"]["user_copy"]["title"]
+    assert (
+        output["decision_v2_json"]["dashboard_primary_detail"]
+        == "Cisco scanner found a critical package exfiltration path."
+    )
     evidence = store.list_evidence()
     assert evidence
     assert evidence[0]["category"] == "supply-chain"
