@@ -102,6 +102,4 @@ def _bundle_version_timestamp(bundle_version: str) -> int:
         prefix = bundle_version.split("-", 1)[0]
         return int(prefix)
     except (TypeError, ValueError) as exc:
-        raise SupplyChainBundleMalformedError(
-            "bundleVersion must start with a unix-ms timestamp prefix"
-        ) from exc
+        raise SupplyChainBundleMalformedError("bundleVersion must start with a unix-ms timestamp prefix") from exc

@@ -964,9 +964,7 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
                 cached_bundle_version = existing_version
     response = load_supply_chain_bundle_response(payload)
     try:
-        trusted_keys = load_supply_chain_verification_keys(
-            store.get_sync_payload("supply_chain_bundle_keyring")
-        )
+        trusted_keys = load_supply_chain_verification_keys(store.get_sync_payload("supply_chain_bundle_keyring"))
         verify_supply_chain_bundle_response(
             response,
             trusted_keys=trusted_keys or None,

@@ -110,9 +110,7 @@ def check_supply_chain_bundle_freshness(bundle: SupplyChainBundle, now: float | 
             f"Bundle expired at {bundle.expires_at}, current time is {current_time:.0f}"
         )
     if current_time < bundle.generated_at_timestamp - _BUNDLE_CLOCK_SKEW_SECONDS:
-        raise SupplyChainBundleExpiredError(
-            f"Bundle generatedAt {bundle.generated_at} is in the future"
-        )
+        raise SupplyChainBundleExpiredError(f"Bundle generatedAt {bundle.generated_at} is in the future")
     age = current_time - bundle.generated_at_timestamp
     if age > _BUNDLE_MAX_AGE_SECONDS:
         raise SupplyChainBundleExpiredError(
@@ -192,9 +190,7 @@ def _package_matches(package: SupplyChainBundlePackage, package_name: str, packa
     normalized_name = package_name.strip().lower()
     if package.name.lower() != normalized_name:
         namespace_name = (
-            f"{package.namespace.lower()}/{package.name.lower()}"
-            if package.namespace is not None
-            else None
+            f"{package.namespace.lower()}/{package.name.lower()}" if package.namespace is not None else None
         )
         if namespace_name != normalized_name:
             return False
@@ -223,9 +219,7 @@ def evaluate_cached_supply_chain_bundle(
         check_supply_chain_bundle_freshness(response.bundle, now=now)
     except SupplyChainBundleExpiredError:
         stale = True
-    matches = [
-        item for item in response.bundle.packages if _package_matches(item, package_name, package_version)
-    ]
+    matches = [item for item in response.bundle.packages if _package_matches(item, package_name, package_version)]
     if not matches:
         return OfflineSupplyChainDecision(
             action="monitor",
