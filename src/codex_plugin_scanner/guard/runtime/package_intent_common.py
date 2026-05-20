@@ -369,9 +369,7 @@ def _looks_like_js_source_spec(value: str | None) -> bool:
 def _source_url_package_name(source_url: str) -> str | None:
     normalized = source_url.strip()
     candidate = (
-        normalized.partition(":")[2]
-        if normalized.startswith(("github:", "gitlab:", "bitbucket:"))
-        else normalized
+        normalized.partition(":")[2] if normalized.startswith(("github:", "gitlab:", "bitbucket:")) else normalized
     )
     sanitized = _sanitize_url(candidate)
     package_name = PurePath(sanitized).name

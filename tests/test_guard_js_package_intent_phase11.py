@@ -58,12 +58,10 @@ def test_parse_package_intent_npm_exec_keeps_explicit_version_when_positional_to
 
 def test_parse_manifest_dependency_changes_supports_package_lock_v1_nested_dependencies() -> None:
     before_text = (
-        '{"dependencies":{"minimist":{"version":"1.2.7","dependencies":'
-        '{"brace-expansion":{"version":"1.1.11"}}}}}'
+        '{"dependencies":{"minimist":{"version":"1.2.7","dependencies":{"brace-expansion":{"version":"1.1.11"}}}}}'
     )
     after_text = (
-        '{"dependencies":{"minimist":{"version":"1.2.8","dependencies":'
-        '{"brace-expansion":{"version":"1.1.12"}}}}}'
+        '{"dependencies":{"minimist":{"version":"1.2.8","dependencies":{"brace-expansion":{"version":"1.1.12"}}}}}'
     )
 
     result = parse_manifest_dependency_changes(
