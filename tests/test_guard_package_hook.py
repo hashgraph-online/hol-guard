@@ -1,0 +1,303 @@
+"""Package-request hook integration tests for HOL Guard."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
+
+from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.store import GuardStore
+
+WORKSPACE_ID = "workspace-alpha"
+
+
+def _iso(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _generate_key_pair() -> tuple[bytes, bytes]:
+    private_key = generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return private_pem, public_pem
+
+
+def _fingerprint(public_key_pem: bytes) -> str:
+    return hashlib.sha256(public_key_pem.decode("utf-8").strip().encode("utf-8")).hexdigest()
+
+
+def _bundle_response(*, action: str, policy_rules: list[dict[str, object]] | None = None) -> dict[str, object]:
+    generated_at = datetime(2026, 5, 19, tzinfo=timezone.utc)
+    expires_at = generated_at + timedelta(hours=12)
+    bundle = {
+        "advisories": [
+            {
+                "advisoryId": "GHSA-vh95-rmgr-6w4m",
+                "aliases": ["CVE-2020-7598"],
+                "confidence": 990,
+                "exploitLevel": "active",
+                "knownExploited": True,
+                "malwareState": "known",
+                "normalizedSeverity": "critical",
+                "recommendedFixVersion": "1.2.9",
+                "sourceKey": "ghsa",
+                "summary": "Prototype pollution in minimist",
+                "title": "Prototype pollution in minimist",
+            }
+        ],
+        "bundleVersion": "1747612800000-deadbeef",
+        "expiresAt": _iso(expires_at),
+        "feedSnapshotHash": "feed-snapshot-1",
+        "generatedAt": _iso(generated_at),
+        "keyId": "guard-bundle-key-2026-05",
+        "packages": [
+            {
+                "confidence": 990,
+                "defaultAction": action,
+                "ecosystem": "npm",
+                "exploitLevel": "active",
+                "knownExploited": True,
+                "malwareState": "known",
+                "name": "minimist",
+                "namespace": None,
+                "normalizedSeverity": "critical",
+                "packageAgeState": "watch",
+                "purl": "pkg:npm/minimist@1.2.8",
+                "reachability": "reachable",
+                "recommendedFixVersion": "1.2.9",
+                "relatedAdvisoryIds": ["GHSA-vh95-rmgr-6w4m"],
+                "riskScore": 980,
+                "sourceIntegrityState": "high-risk",
+                "version": "1.2.8",
+            }
+        ],
+        "policyHash": "policy-hash-1",
+        "policyRules": policy_rules or [],
+        "scoringVersion": "scf-v1",
+        "sourceHashes": [{"payloadHash": "ghsa-feed-hash", "sourceKey": "ghsa", "staleStatus": "fresh"}],
+        "tier": "premium",
+        "workspaceId": WORKSPACE_ID,
+    }
+    private_key_pem, public_key_pem = _generate_key_pair()
+    loaded_key = serialization.load_pem_private_key(private_key_pem, password=None)
+    assert isinstance(loaded_key, RSAPrivateKey)
+    canonical_payload = json.dumps(bundle, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    payload_hash = hashlib.sha256(canonical_payload).hexdigest()
+    signature = loaded_key.sign(
+        canonical_payload,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256(),
+    )
+    return {
+        "bundle": bundle,
+        "payloadHash": payload_hash,
+        "signature": base64.b64encode(signature).decode("utf-8"),
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "verificationKeys": [
+            {
+                "fingerprintSha256": _fingerprint(public_key_pem),
+                "keyId": "guard-bundle-key-2026-05",
+                "publicKeyPem": public_key_pem.decode("utf-8").strip(),
+                "state": "active",
+                "validUntil": None,
+            }
+        ],
+    }
+
+
+def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "session_id": "session-1",
+                "turn_id": "turn-1",
+                "cwd": str(workspace_dir),
+                "hook_event_name": "PreToolUse",
+                "model": "gpt-5.4",
+                "permission_mode": "bypassPermissions",
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+                "tool_use_id": "call-1",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_sync(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    payload_path = workspace_dir / "hook-event.json"
+    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
+    store = GuardStore(home_dir)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="block"), "2026-05-19T00:00:00Z")
+    monkeypatch.setenv("CODEX_MANAGED_BY_BUN", "1")
+
+    def fail_subprocess(*args: object, **kwargs: object) -> object:
+        raise AssertionError("blocked package request must not launch a subprocess")
+
+    monkeypatch.setattr(guard_commands_module.subprocess, "run", fail_subprocess)
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 2
+    assert "blocked" in captured.err.lower()
+    evidence = store.list_evidence()
+    assert evidence
+    assert evidence[0]["category"] == "supply-chain"
+    queued_events = store.list_guard_events_v1(uploaded=False)
+    assert queued_events
+    assert any(event["event_type"] == "receipt.created" for event in queued_events)
+
+
+def test_guard_hook_ask_queues_package_approval_with_advisory_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    payload_path = workspace_dir / "hook-event.json"
+    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
+    store = GuardStore(home_dir)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
+    )
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            action="block",
+            policy_rules=[
+                {
+                    "action": "review",
+                    "ruleId": "policy-review-1",
+                    "ecosystemSelector": "npm",
+                    "enabled": True,
+                    "expiresAt": "2099-01-01T00:00:00Z",
+                    "harnessSelector": "codex",
+                    "packageSelector": "minimist",
+                    "priority": 1,
+                    "severityThreshold": "low",
+                    "versionRangeSelector": "1.2.8",
+                }
+            ],
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    def fail_daemon(_home: Path) -> object:
+        raise RuntimeError("no daemon client")
+
+    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["policy_action"] == "require-reapproval"
+    assert output["approval_requests"]
+    pending = store.list_approval_requests(limit=5)
+    assert pending[0]["risk_summary"]
+    assert "minimist" in pending[0]["risk_summary"].lower()
+
+
+def test_guard_hook_warns_for_package_request_without_blocking(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    payload_path = workspace_dir / "hook-event.json"
+    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
+    store = GuardStore(home_dir)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="warn"), "2026-05-19T00:00:00Z")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["policy_action"] == "warn"
+    assert output["risk_summary"]
+    assert "minimist@1.2.8" in output["risk_summary"]
+    assert output["scanner_evidence"]
+    assert "approval_requests" not in output
+    evidence = store.list_evidence()
+    assert evidence
+    assert evidence[0]["category"] == "supply-chain"
