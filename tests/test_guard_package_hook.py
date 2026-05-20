@@ -174,6 +174,23 @@ def _scanner_signal_v2() -> RiskSignalV2:
     )
 
 
+def _data_flow_signal_v2() -> RiskSignalV2:
+    return RiskSignalV2(
+        signal_id="data-flow:secret-pipe-http",
+        category="network",
+        severity="critical",
+        confidence="strong",
+        detector="data_flow.exfiltration",
+        title="Shell pipeline sends a local secret to a network host",
+        plain_reason="This command sends local secret to network host.",
+        technical_detail="source and sink were detected without retaining secret contents",
+        evidence_ref="command",
+        redaction_level="summary",
+        false_positive_hint="Allow only when the command intentionally moves non-sensitive data.",
+        advisory_id=None,
+    )
+
+
 def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_sync(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -336,8 +353,8 @@ def test_guard_hook_warns_for_package_request_without_blocking(
     assert rc == 0
     assert output["policy_action"] == "warn"
     assert output["risk_summary"]
-    assert "minimist@1.2.8" in output["risk_summary"]
-    assert output["scanner_evidence"]
+    assert "minimist@1.2.8" in output["supply_chain_evaluation"]["risk_summary"]
+    assert output["supply_chain_evaluation"]["packages"]
     assert "approval_requests" not in output
 
 
@@ -404,6 +421,72 @@ def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
         output["decision_v2_json"]["dashboard_primary_detail"]
         == "Cisco scanner found a critical package exfiltration path."
     )
+
+
+def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    payload_path = workspace_dir / "hook-event.json"
+    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
+    store = GuardStore(home_dir)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="warn"), "2026-05-19T00:00:00Z")
+    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    def fail_daemon(_home: Path) -> object:
+        raise RuntimeError("no daemon client")
+
+    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
+    monkeypatch.setattr(
+        guard_commands_module,
+        "_runtime_action_data_flow_signals",
+        lambda *_args, **_kwargs: (_data_flow_signal_v2(),),
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "resolve_risk_action",
+        lambda _config, risk_class, harness=None: "block" if risk_class == "data_flow_exfiltration" else "allow",
+    )
+    monkeypatch.setattr(
+        guard_commands_module,
+        "scan_action_for_cisco_evidence",
+        lambda *_args, **_kwargs: (),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--event-file",
+            str(payload_path),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["policy_action"] == "block"
+    assert "network host" in output["risk_summary"]
+    assert output["decision_v2_json"]["user_title"] == "Blocked by policy"
+    assert (
+        output["decision_v2_json"]["dashboard_primary_detail"] == "Source-to-sink route: local secret -> network host. "
+        "This command sends local secret to network host without exposing the raw secret in Guard evidence."
+    )
+    assert output["decision_v2_json"]["dashboard_primary_detail"] != output["supply_chain_evaluation"]["risk_summary"]
     evidence = store.list_evidence()
     assert evidence
     assert evidence[0]["category"] == "supply-chain"
