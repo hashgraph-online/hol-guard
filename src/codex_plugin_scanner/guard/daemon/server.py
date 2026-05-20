@@ -244,6 +244,7 @@ def _headless_action_state_payload(
         proof_status = "not_applicable"
     elif operation == "scan":
         proof_passed = app_status == "protected"
+        # Keep protocol values stable for Cloud clients; user-facing copy below avoids jargon.
         outcome = "proof_passed" if proof_passed else "proof_failed"
         message = (
             f"{harness} connection check passed. Guard sees local protection."
