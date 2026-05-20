@@ -828,7 +828,7 @@ def _transitive_lockfile_results(
             continue
         try:
             lockfile_text = lockfile_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
+        except (OSError, UnicodeDecodeError):
             continue
         dependency_map = _safe_dependency_map_for_path(
             str(lockfile_path.name),
