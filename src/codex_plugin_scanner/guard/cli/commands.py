@@ -150,6 +150,7 @@ from ..runtime.secret_sensitivity import (
 )
 from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
+from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .approval_commands import (
@@ -2580,12 +2581,24 @@ def run_guard_command(
                 )
                 return 0
             changed_capabilities = [runtime_artifact.artifact_type]
+            package_evaluation = None
             scanner_evidence = (
                 scan_action_for_cisco_evidence(action_envelope, workspace=runtime_workspace)
                 if action_envelope is not None
                 else ()
             )
             scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
+            if (
+                runtime_artifact.artifact_type == "package_request"
+                and requested_policy_action not in VALID_GUARD_ACTIONS
+            ):
+                package_evaluation = evaluate_package_request_artifact(
+                    artifact=runtime_artifact,
+                    store=store,
+                    workspace_dir=runtime_workspace,
+                )
+                if _guard_action_severity(package_evaluation.policy_action) > _guard_action_severity(policy_action):
+                    policy_action = package_evaluation.policy_action
             if data_flow_signals:
                 data_flow_action = resolve_risk_action(
                     config,
@@ -2616,11 +2629,33 @@ def run_guard_command(
             else:
                 risk_signals = list(artifact_risk_signals(runtime_artifact))
                 risk_summary = artifact_risk_summary(runtime_artifact)
+            if package_evaluation is not None:
+                risk_signals = [
+                    str(item.get("message") or item.get("code") or "")
+                    for item in package_evaluation.reasons
+                ]
+                risk_summary = package_evaluation.risk_summary
+                scanner_evidence_payload.extend(
+                    {
+                        "decision": package_evaluation.decision,
+                        "enforcement": package_evaluation.enforcement,
+                        "exception_id": package_evaluation.exception_id,
+                        "matched_rule_id": package_evaluation.matched_rule_id,
+                        "package": package,
+                    }
+                    for package in package_evaluation.packages
+                )
             if scanner_risk_signals:
                 risk_signals.extend(scanner_risk_signals)
                 if scanner_raised_to_block:
                     risk_summary = scanner_risk_signals[0]
             decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
+            decision_v2_payload = decision_v2.to_dict()
+            if package_evaluation is not None:
+                decision_v2_payload["user_title"] = package_evaluation.user_copy.title
+                decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
+                decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
+                decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
             incident = build_incident_context(
                 harness=args.harness,
                 artifact=runtime_artifact,
@@ -2665,7 +2700,7 @@ def run_guard_command(
                 "risk_signals": risk_signals,
                 "risk_summary": risk_summary,
                 "scanner_evidence": scanner_evidence_payload,
-                "decision_v2_json": decision_v2.to_dict(),
+                "decision_v2_json": decision_v2_payload,
                 "artifact_label": incident["artifact_label"],
                 "source_label": incident["source_label"],
                 "trigger_summary": incident["trigger_summary"],
@@ -2674,6 +2709,8 @@ def run_guard_command(
                 "risk_headline": incident["risk_headline"],
                 "path_summary": _runtime_requested_path(runtime_artifact),
             }
+            if package_evaluation is not None:
+                response_payload["supply_chain_evaluation"] = package_evaluation.to_dict()
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
                 additional_context = _claude_prompt_additional_context(
@@ -2745,6 +2782,25 @@ def run_guard_command(
                         policy_action=policy_action,
                     )
                     return 0
+                if (
+                    runtime_artifact.artifact_type == "package_request"
+                    and policy_action == "block"
+                    and _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action)
+                ):
+                    _emit_native_hook_block_stderr(
+                        _native_hook_reason_for_harness(
+                            args.harness,
+                            native_reason,
+                            _native_approval_center_context(response_payload, harness=args.harness),
+                        )
+                    )
+                    _record_harness_usage_for_hook(
+                        store=store,
+                        action_envelope=action_envelope,
+                        payload=payload,
+                        policy_action=policy_action,
+                    )
+                    return 2
                 if not _prompt_requires_hard_block(runtime_artifact):
                     approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                     approval_center_url = ensure_guard_daemon(guard_home)
@@ -2761,9 +2817,13 @@ def run_guard_command(
                                 "source_scope": runtime_artifact.source_scope,
                                 "config_path": runtime_artifact.config_path,
                                 "launch_target": _runtime_request_summary(runtime_artifact),
+                                "risk_summary": risk_summary,
                                 "action_envelope_json": _action_envelope_json(action_envelope),
-                                "decision_v2_json": decision_v2.to_dict(),
+                                "decision_v2_json": decision_v2_payload,
                                 "scanner_evidence": scanner_evidence_payload,
+                                "supply_chain_evaluation": package_evaluation.to_dict()
+                                if package_evaluation is not None
+                                else None,
                             }
                         ]
                     }
