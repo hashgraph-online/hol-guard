@@ -105,9 +105,7 @@ class SupplyChainBundleAdvisory:
             raise SupplyChainBundleMalformedError(f"Unsupported advisory malwareState: {malware_state!r}")
         normalized_severity = _require_string(data, "normalizedSeverity")
         if normalized_severity not in _SEVERITY_VALUES:
-            raise SupplyChainBundleMalformedError(
-                f"Unsupported advisory normalizedSeverity: {normalized_severity!r}"
-            )
+            raise SupplyChainBundleMalformedError(f"Unsupported advisory normalizedSeverity: {normalized_severity!r}")
         return SupplyChainBundleAdvisory(
             advisory_id=_require_string(data, "advisoryId"),
             aliases=_require_string_array(data, "aliases"),
@@ -179,9 +177,7 @@ class SupplyChainBundlePackage:
             raise SupplyChainBundleMalformedError(f"Unsupported package malwareState: {malware_state!r}")
         normalized_severity = _require_string(data, "normalizedSeverity")
         if normalized_severity not in _SEVERITY_VALUES:
-            raise SupplyChainBundleMalformedError(
-                f"Unsupported package normalizedSeverity: {normalized_severity!r}"
-            )
+            raise SupplyChainBundleMalformedError(f"Unsupported package normalizedSeverity: {normalized_severity!r}")
         return SupplyChainBundlePackage(
             confidence=_require_int(data, "confidence"),
             default_action=default_action,
@@ -239,9 +235,7 @@ class SupplyChainBundlePolicyRule:
             raise SupplyChainBundleMalformedError(f"Unsupported policy action: {action!r}")
         severity_threshold = _optional_string(data, "severityThreshold")
         if severity_threshold is not None and severity_threshold not in _SEVERITY_VALUES:
-            raise SupplyChainBundleMalformedError(
-                f"Unsupported policy severityThreshold: {severity_threshold!r}"
-            )
+            raise SupplyChainBundleMalformedError(f"Unsupported policy severityThreshold: {severity_threshold!r}")
         expires_at = _optional_string(data, "expiresAt")
         if expires_at is not None:
             _parse_iso_timestamp(expires_at, field_name="expiresAt")
@@ -356,31 +350,21 @@ class SupplyChainBundle:
             raise SupplyChainBundleMalformedError("Bundle sourceHashes must be a list")
         bundle = SupplyChainBundle(
             advisories=tuple(
-                SupplyChainBundleAdvisory.from_dict(item)
-                for item in raw_advisories
-                if isinstance(item, dict)
+                SupplyChainBundleAdvisory.from_dict(item) for item in raw_advisories if isinstance(item, dict)
             ),
             bundle_version=_require_string(data, "bundleVersion"),
             expires_at=_require_string(data, "expiresAt"),
             feed_snapshot_hash=_require_string(data, "feedSnapshotHash"),
             generated_at=_require_string(data, "generatedAt"),
             key_id=_require_string(data, "keyId"),
-            packages=tuple(
-                SupplyChainBundlePackage.from_dict(item)
-                for item in raw_packages
-                if isinstance(item, dict)
-            ),
+            packages=tuple(SupplyChainBundlePackage.from_dict(item) for item in raw_packages if isinstance(item, dict)),
             policy_hash=_require_string(data, "policyHash"),
             policy_rules=tuple(
-                SupplyChainBundlePolicyRule.from_dict(item)
-                for item in raw_policy_rules
-                if isinstance(item, dict)
+                SupplyChainBundlePolicyRule.from_dict(item) for item in raw_policy_rules if isinstance(item, dict)
             ),
             scoring_version=_require_string(data, "scoringVersion"),
             source_hashes=tuple(
-                SupplyChainBundleSourceHash.from_dict(item)
-                for item in raw_source_hashes
-                if isinstance(item, dict)
+                SupplyChainBundleSourceHash.from_dict(item) for item in raw_source_hashes if isinstance(item, dict)
             ),
             tier=_require_string(data, "tier"),
             workspace_id=_require_string(data, "workspaceId"),
