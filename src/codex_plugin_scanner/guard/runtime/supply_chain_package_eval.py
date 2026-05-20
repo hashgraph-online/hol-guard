@@ -364,8 +364,13 @@ def _finalize_evaluation(
     }[draft.decision]
     reason_message = _optional_string(draft.reasons[0].get("message")) if draft.reasons else None
     reason_code = _optional_string(draft.reasons[0].get("code")) if draft.reasons else None
-    if reason_code == "insecure_source_url" and reason_message is not None:
-        risk_summary = f"{prefix} `{package_ref}` from insecure HTTP source before install."
+    source_risk_summaries = {
+        "insecure_source_url": "from insecure HTTP source before install.",
+        "external_tarball_source": "from external tarball source before install.",
+        "git_dependency_source": "from git dependency source before install.",
+    }
+    if reason_code in source_risk_summaries and reason_message is not None:
+        risk_summary = f"{prefix} `{package_ref}` {source_risk_summaries[reason_code]}"
     fix_command = _fix_command(primary_package)
     title = {
         "block": "Critical install blocked",
@@ -1225,10 +1230,9 @@ def _dependency_confusion_policy_package_result(
     *,
     target: dict[str, object],
 ) -> dict[str, object] | None:
-    if (
-        (_optional_string(target.get("ecosystem")) or "npm") != "npm"
-        or _optional_string(target.get("namespace")) is not None
-    ):
+    if (_optional_string(target.get("ecosystem")) or "npm") != "npm" or _optional_string(
+        target.get("namespace")
+    ) is not None:
         return None
     current_time = datetime.now(timezone.utc).timestamp()
     target_name = str(target["name"]).lower()
@@ -1333,11 +1337,12 @@ def _is_git_source_url(source_url: str) -> bool:
 
 
 def _is_external_https_tarball_source(source_url: str) -> bool:
-    normalized = source_url.lower()
+    parsed = urllib.parse.urlsplit(source_url)
+    normalized_path = parsed.path.lower()
     return (
-        normalized.startswith("https://")
-        and normalized.endswith((".tgz", ".tar.gz", ".tar"))
-        and "registry.npmjs.org/" not in normalized
+        parsed.scheme.lower() == "https"
+        and normalized_path.endswith((".tgz", ".tar.gz", ".tar"))
+        and "registry.npmjs.org" not in parsed.netloc.lower()
     )
 
 
@@ -1728,7 +1733,7 @@ def _split_namespace_name(value: str) -> tuple[str | None, str]:
 def _exact_version(value: str | None) -> str | None:
     if value is None:
         return None
-    if "://" in value or value.startswith("git+"):
+    if "://" in value or value.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
         return None
     if value.startswith(("^", "~", "<", ">", "!", "*")):
         return None

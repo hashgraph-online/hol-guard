@@ -48,10 +48,7 @@ def test_evaluate_package_request_artifact_preserves_direct_version_when_package
 
     assert result.decision == "block"
     assert result.packages[0]["dependencyPath"] == "react/node_modules/minimist"
-    assert any(
-        package["resolvedVersion"] == "1.2.9" and package["decision"] == "allow"
-        for package in result.packages
-    )
+    assert any(package["resolvedVersion"] == "1.2.9" and package["decision"] == "allow" for package in result.packages)
 
 
 def test_evaluate_package_request_artifact_resolves_alias_range_from_package_lock_metadata(
