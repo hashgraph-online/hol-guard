@@ -99,11 +99,15 @@ from .store_connect import (
     mark_connect_result as persist_connect_result,
 )
 from .store_evidence import (
+    EvidenceRecord,
     evidence_index_statements,
     evidence_schema_statement,
 )
 from .store_evidence import (
     list_evidence as _list_evidence_impl,
+)
+from .store_evidence import (
+    store_evidence as _store_evidence_impl,
 )
 from .store_resume import (
     delete_request_resumes as purge_request_resumes,
@@ -3517,6 +3521,10 @@ class GuardStore:
             }
             for r in records
         ]
+
+    def add_evidence(self, record: EvidenceRecord) -> None:
+        with self._connect() as connection:
+            _store_evidence_impl(connection, record)
 
     @staticmethod
     def _advisory_cache_key(advisory: dict[str, object]) -> str:
