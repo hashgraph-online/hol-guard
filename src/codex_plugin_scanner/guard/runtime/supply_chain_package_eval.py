@@ -814,7 +814,7 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
 
 
 def _transitive_lockfile_results(
-    *, bundle_response, artifact: GuardArtifact, workspace_dir: Path | None
+    *, bundle_response: SupplyChainBundleResponse, artifact: GuardArtifact, workspace_dir: Path | None
 ) -> list[dict[str, object]]:
     if workspace_dir is None:
         return []
