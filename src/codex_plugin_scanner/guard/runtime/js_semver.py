@@ -5,15 +5,32 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import total_ordering
 
-_JS_VERSION_RE = re.compile(r"^v?(?P<major>\d+)(?:\.(?P<minor>\d+))?(?:\.(?P<patch>\d+))?(?:[-+].*)?$")
+_JS_VERSION_RE = re.compile(
+    r"^v?(?P<major>\d+)(?:\.(?P<minor>\d+))?(?:\.(?P<patch>\d+))?"
+    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
+)
 
 
-@dataclass(frozen=True, order=True, slots=True)
+@total_ordering
+@dataclass(frozen=True, slots=True)
 class JsSemverVersion:
     major: int
     minor: int
     patch: int
+    prerelease: tuple[str, ...] | None = None
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, JsSemverVersion):
+            return NotImplemented
+        if (self.major, self.minor, self.patch) != (other.major, other.minor, other.patch):
+            return (self.major, self.minor, self.patch) < (other.major, other.minor, other.patch)
+        if self.prerelease is None:
+            return other.prerelease is not None
+        if other.prerelease is None:
+            return True
+        return _compare_prerelease(self.prerelease, other.prerelease) < 0
 
 
 def parse_js_semver(value: str | None) -> JsSemverVersion | None:
@@ -27,6 +44,7 @@ def parse_js_semver(value: str | None) -> JsSemverVersion | None:
         major=int(matched.group("major")),
         minor=int(matched.group("minor") or 0),
         patch=int(matched.group("patch") or 0),
+        prerelease=tuple(matched.group("prerelease").split(".")) if matched.group("prerelease") else None,
     )
 
 
@@ -111,3 +129,19 @@ def _matches_comparator(version: JsSemverVersion, operator: str, raw_value: str)
     if operator == "<":
         return version < parsed_value
     return version == parsed_value
+
+
+def _compare_prerelease(left: Sequence[str], right: Sequence[str]) -> int:
+    for left_token, right_token in zip(left, right, strict=False):
+        if left_token == right_token:
+            continue
+        left_numeric = left_token.isdigit()
+        right_numeric = right_token.isdigit()
+        if left_numeric and right_numeric:
+            return int(left_token) - int(right_token)
+        if left_numeric:
+            return -1
+        if right_numeric:
+            return 1
+        return -1 if left_token < right_token else 1
+    return len(left) - len(right)
