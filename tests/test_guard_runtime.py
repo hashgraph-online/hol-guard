@@ -8621,6 +8621,59 @@ def test_hook_runtime_artifact_prefers_raw_file_read_path_over_redacted_action_p
     assert artifact.metadata["normalized_path"] == str(outside_secret)
 
 
+def test_hook_runtime_artifact_routes_package_installs_to_package_request(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(home_dir / "config.toml", '[risk_actions]\npackage_script = "block"\ndestructive_shell = "allow"\n')
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm install react@18.3.0"},
+        "source_scope": "project",
+    }
+    action = guard_commands_module._hook_action_envelope(
+        harness="codex",
+        payload=payload,
+        home_dir=home_dir,
+        workspace=workspace_dir,
+    )
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="codex",
+        payload=payload,
+        action_envelope=action,
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+
+    assert artifact is not None
+    assert artifact.artifact_type == "package_request"
+    assert artifact.metadata["package_manager"] == "npm"
+    assert (
+        guard_commands_module._runtime_artifact_policy_action(
+            load_guard_config(home_dir),
+            artifact,
+            "codex",
+        )
+        == "block"
+    )
+
+
+def test_runtime_capabilities_summary_uses_package_request_label() -> None:
+    artifact = GuardArtifact(
+        artifact_id="codex:test:package-request",
+        name="npm install react",
+        harness="codex",
+        artifact_type="package_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={"package_manager": "npm"},
+    )
+
+    assert guard_commands_module._runtime_capabilities_summary(artifact) == "package request • npm"
+
+
 def test_guard_hook_claude_alias_reuses_legacy_alias_policy_keys(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -14923,7 +14976,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     monkeypatch.setattr(
         guard_runner_module,
         "_guard_device_metadata",
-        lambda _store: (metadata_calls.append(True) or ("device-1", "MacBook Pro")),
+        lambda _store: metadata_calls.append(True) or ("device-1", "MacBook Pro"),
     )
     monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store: 0)
 

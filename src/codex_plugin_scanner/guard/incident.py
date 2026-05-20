@@ -21,6 +21,7 @@ _ARTIFACT_LABELS = {
     "hook": "Hook",
     "agent": "Agent",
     "command": "Command",
+    "package_request": "Package request",
     "prompt_request": "Prompt request",
     "file_read_request": "File read request",
     "artifact": "Artifact",
@@ -62,6 +63,12 @@ def build_incident_context(
             f"HOL Guard paused the native tool action `{artifact_name or artifact_id}` from an active "
             f"{harness_label} tool call."
         )
+    elif artifact_type == "package_request":
+        source_label = f"{harness_label} runtime tool call"
+        trigger_summary = (
+            f"HOL Guard paused the package request `{artifact_name or artifact_id}` from an active "
+            f"{harness_label} tool call."
+        )
     else:
         short_config_path = _short_config_path(config_path)
         source_label = f"{normalized_scope} {harness_label} config"
@@ -101,6 +108,8 @@ def _why_now_text(
         return "The tool requested a protected local secret file, so HOL Guard paused the read until you approve it."
     if artifact_type == "tool_action_request" or "tool_action_request" in normalized:
         return "HOL Guard paused this native tool action because it can change the local machine before you confirm it."
+    if artifact_type == "package_request" or "package_request" in normalized:
+        return "HOL Guard paused this package change until you confirm the dependency action."
     if "first_seen" in normalized:
         return f"It is new in this {harness_label.lower()} workspace, so HOL Guard paused it for review."
     if "removed" in normalized:
