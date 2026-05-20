@@ -309,6 +309,12 @@ def test_parse_manifest_dependency_changes_supports_primary_manifests_lockfiles_
             {"org.example:demo": ("1.0.0", "1.2.0"), "org.example:extra": (None, "2.0.0")},
         ),
         (
+            "pom.xml",
+            '<project xmlns="http://maven.apache.org/POM/4.0.0"><dependencies><dependency><groupId>org.example</groupId><artifactId>demo</artifactId><version>1.0.0</version></dependency></dependencies></project>',
+            '<project xmlns="http://maven.apache.org/POM/4.0.0"><dependencies><dependency><groupId>org.example</groupId><artifactId>demo</artifactId><version>1.1.0</version></dependency></dependencies></project>',
+            {"org.example:demo": ("1.0.0", "1.1.0")},
+        ),
+        (
             "build.gradle.kts",
             'dependencies { implementation("org.example:demo:1.0.0") }\n',
             'dependencies { implementation("org.example:demo:1.2.0") implementation("org.example:extra:2.0.0") }\n',
