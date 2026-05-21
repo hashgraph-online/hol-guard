@@ -292,3 +292,28 @@ def test_supply_chain_bundle_offline_evaluation_blocks_high_confidence_and_monit
     assert stale_decision.action == "monitor"
     assert stale_decision.stale is True
     assert stale_decision.reason == "stale_low_confidence"
+
+
+def test_supply_chain_bundle_offline_evaluation_does_not_match_scoped_entries_from_unscoped_names() -> None:
+    private_key, _public_key = _generate_key_pair()
+    bundle = _bundle_dict()
+    bundle["packages"] = [
+        {
+            **bundle["packages"][0],
+            "name": "minimist",
+            "namespace": "@scope",
+            "purl": "pkg:npm/%40scope/minimist@1.2.8",
+        }
+    ]
+    response = load_supply_chain_bundle_response(json.dumps(_sign_bundle_response(bundle, private_key_pem=private_key)))
+
+    decision = evaluate_cached_supply_chain_bundle(
+        response,
+        package_name="minimist",
+        package_version="1.2.8",
+        now=response.bundle.generated_at_timestamp + 60,
+    )
+
+    assert decision.action == "monitor"
+    assert decision.matched_advisory_ids == ()
+    assert decision.reason == "no_cached_match"
