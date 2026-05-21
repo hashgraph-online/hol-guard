@@ -48,6 +48,7 @@ from .supply_chain_bundle_models import (
     SupplyChainBundlePolicyRule,
     SupplyChainBundleResponse,
 )
+from .supply_chain_support import ecosystem_support_metadata
 
 _DECISION_RANK = {"allow": 0, "monitor": 1, "warn": 2, "ask": 3, "block": 4}
 _SEVERITY_RANK = {"unknown": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -145,7 +146,11 @@ class PackageRequestEvaluation:
             bundle_version=bundle_version,
             workspace_fingerprint=workspace_fingerprint,
             reasons=tuple(item for item in payload.get("reasons", []) if isinstance(item, dict)),
-            packages=tuple(item for item in payload.get("packages", []) if isinstance(item, dict)),
+            packages=tuple(
+                _with_support_metadata(item)
+                for item in payload.get("packages", [])
+                if isinstance(item, dict)
+            ),
             risk_summary=str(payload.get("risk_summary") or "HOL Guard recorded this package request."),
             user_copy=SupplyChainUserCopy(
                 title=str(user_copy_map.get("title") or "Monitoring this package"),
@@ -355,7 +360,8 @@ def _finalize_evaluation(
     package_intent_hash: str,
     workspace_fingerprint: str | None,
 ) -> PackageRequestEvaluation:
-    primary_package = draft.packages[0] if draft.packages else {}
+    packages = tuple(_with_support_metadata(item) for item in draft.packages)
+    primary_package = packages[0] if packages else {}
     package_display = _package_display_name(primary_package)
     requested_version = _optional_string(primary_package.get("requestedVersion")) or _optional_string(
         primary_package.get("resolvedVersion")
@@ -434,7 +440,7 @@ def _finalize_evaluation(
         bundle_version=draft.bundle_version,
         workspace_fingerprint=workspace_fingerprint,
         reasons=draft.reasons,
-        packages=draft.packages,
+        packages=packages,
         risk_summary=risk_summary,
         user_copy=user_copy,
         matched_rule_id=draft.matched_rule_id,
@@ -702,6 +708,14 @@ def _heuristic_result(
 ) -> _EvaluationDraft | None:
     packages: list[dict[str, object]] = []
     for target in targets:
+        lockfile_parse_warning = _lockfile_parse_warning_result(
+            target=target,
+            artifact=artifact,
+            workspace_dir=workspace_dir,
+        )
+        if lockfile_parse_warning is not None:
+            packages.append(lockfile_parse_warning)
+            continue
         local_package_result = _local_package_manifest_result(
             target=target,
             artifact=artifact,
@@ -714,6 +728,21 @@ def _heuristic_result(
         if local_python_result is not None:
             packages.append(local_python_result)
             continue
+        ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+        if ecosystem == "system":
+            packages.append(_system_package_monitor_result(target))
+            continue
+        if ecosystem == "unsupported":
+            packages.append(_unsupported_ecosystem_result(target))
+            continue
+        go_replace_result = _go_replace_result(target=target, artifact=artifact, workspace_dir=workspace_dir)
+        if go_replace_result is not None:
+            packages.append(go_replace_result)
+            continue
+        local_source_result = _local_source_dependency_result(target)
+        if local_source_result is not None:
+            packages.append(local_source_result)
+            continue
         source_url = _optional_string(target.get("source_url"))
         if source_url is not None and source_url.lower().startswith("http://"):
             packages.append(
@@ -721,7 +750,7 @@ def _heuristic_result(
                     target=target,
                     decision="block",
                     code="insecure_source_url",
-                    message=f"Insecure HTTP package source: {source_url}",
+                    message="Package source uses insecure HTTP transport.",
                     severity="high",
                 )
             )
@@ -732,7 +761,7 @@ def _heuristic_result(
                     target=target,
                     decision="warn",
                     code="git_dependency_source",
-                    message=f"Git package source requires review before install: {source_url}",
+                    message="Git package source requires review before install.",
                     severity="high",
                 )
             )
@@ -743,7 +772,7 @@ def _heuristic_result(
                     target=target,
                     decision="warn",
                     code="external_tarball_source",
-                    message=f"External HTTPS tarball source requires review before install: {source_url}",
+                    message="External tarball source requires review before install.",
                     severity="medium",
                 )
             )
@@ -1056,6 +1085,16 @@ def _lockfile_ecosystem(lockfile_name: str) -> str | None:
         return "npm"
     if lower_name in {"poetry.lock", "uv.lock", "pipfile.lock"}:
         return "pypi"
+    if lower_name == "cargo.lock":
+        return "cargo"
+    if lower_name == "composer.lock":
+        return "packagist"
+    if lower_name == "gemfile.lock":
+        return "rubygems"
+    if lower_name == "go.sum":
+        return "go"
+    if lower_name == "gradle.lockfile":
+        return "maven"
     return None
 
 
@@ -1093,6 +1132,65 @@ def _bundle_package_result(
             },
         ),
     }
+
+
+def _system_package_monitor_result(target: dict[str, object]) -> dict[str, object]:
+    command = _optional_string(target.get("redacted_command")) or ""
+    signals = detect_supply_chain_risk(command)
+    if signals:
+        strongest = sorted(signals, key=lambda item: _severity_rank_value(item.severity), reverse=True)[0]
+        return _heuristic_package_result(
+            target=target,
+            decision="warn",
+            code="system_package_manager_generic_risk",
+            message=strongest.plain_reason,
+            severity=strongest.severity,
+        )
+    return _heuristic_package_result(
+        target=target,
+        decision="warn",
+        code="system_package_manager_monitor_only",
+        message=(
+            "Guard treats system package managers as monitor-only coverage today and will not "
+            "pretend advisory blocking."
+        ),
+        severity="low",
+    )
+
+
+def _unsupported_ecosystem_result(target: dict[str, object]) -> dict[str, object]:
+    command = _optional_string(target.get("redacted_command")) or ""
+    signals = detect_supply_chain_risk(command)
+    if signals:
+        strongest = sorted(signals, key=lambda item: _severity_rank_value(item.severity), reverse=True)[0]
+        decision = "block" if strongest.severity in {"critical", "high"} else "warn"
+        return _heuristic_package_result(
+            target=target,
+            decision=decision,
+            code="unsupported_ecosystem_generic_risk",
+            message=strongest.plain_reason,
+            severity=strongest.severity,
+        )
+    return _heuristic_package_result(
+        target=target,
+        decision="monitor",
+        code="unsupported_ecosystem_monitor_only",
+        message="Guard recorded this unsupported package-manager request and applied generic risk detection only.",
+        severity="low",
+    )
+
+
+def _local_source_dependency_result(target: dict[str, object]) -> dict[str, object] | None:
+    source_url = _optional_string(target.get("source_url"))
+    if source_url is None or not source_url.startswith("file:"):
+        return None
+    return _heuristic_package_result(
+        target=target,
+        decision="warn",
+        code="local_path_dependency_source",
+        message="Local path dependency requires review before install.",
+        severity="medium",
+    )
 
 
 def _policy_package_result(target: dict[str, object], *, decision: str, rule_id: str) -> dict[str, object]:
@@ -1512,10 +1610,85 @@ def _heuristic_package_result(
     }
 
 
+def _go_replace_result(
+    *,
+    target: dict[str, object],
+    artifact: GuardArtifact,
+    workspace_dir: Path | None,
+) -> dict[str, object] | None:
+    if workspace_dir is None or (_optional_string(target.get("ecosystem")) or "npm") != "go":
+        return None
+    manifest_paths = artifact.metadata.get("manifest_paths")
+    if not isinstance(manifest_paths, list):
+        return None
+    go_mod_path = next((workspace_dir / str(path) for path in manifest_paths if Path(str(path)).name == "go.mod"), None)
+    if go_mod_path is None or not go_mod_path.exists():
+        return None
+    try:
+        go_mod_text = go_mod_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    replacements = _go_mod_replace_map(go_mod_text)
+    for candidate in _target_candidate_names(target):
+        replacement = replacements.get(candidate)
+        if replacement is None:
+            continue
+        if replacement.startswith(("file:", "./", "../", "/", "~", ".\\", "..\\")):
+            return _heuristic_package_result(
+                target=target,
+                decision="warn",
+                code="go_replace_local_source",
+                message="Go replace directive reroutes this module to a local path.",
+                severity="medium",
+            )
+        if _exact_version(replacement) is None:
+            return _heuristic_package_result(
+                target=target,
+                decision="warn",
+                code="go_replace_mutable_source",
+                message="Go replace directive reroutes this module away from proxy-pinned version resolution.",
+                severity="medium",
+            )
+    return None
+
+
+def _go_mod_replace_map(text: str) -> dict[str, str]:
+    replacements: dict[str, str] = {}
+    in_replace_block = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("replace ("):
+            in_replace_block = True
+            continue
+        if in_replace_block and line == ")":
+            in_replace_block = False
+            continue
+        if line.startswith("replace "):
+            line = line.removeprefix("replace ").strip()
+        elif not in_replace_block:
+            continue
+        if "=>" not in line:
+            continue
+        original, _, replacement = line.partition("=>")
+        normalized_original = original.strip().split()[0]
+        normalized_replacement = replacement.strip().split()[0]
+        if normalized_original and normalized_replacement:
+            replacements[_normalize_package_name("go", normalized_original)] = normalized_replacement
+    return replacements
+
+
 def _is_git_source_url(source_url: str) -> bool:
     normalized = source_url.lower()
     if normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
         return True
+    parsed = urllib.parse.urlsplit(source_url)
+    if (
+        parsed.scheme.lower() in {"http", "https"}
+        and parsed.hostname is not None
+        and parsed.hostname.lower() in {"github.com", "gitlab.com", "bitbucket.org"}
+    ):
+        path_parts = [part for part in parsed.path.split("/") if part]
+        return len(path_parts) >= 2
     return (
         "/" in source_url
         and not normalized.startswith(("http://", "https://"))
@@ -1570,6 +1743,15 @@ def _lockfile_dependency_versions(
             continue
         if lockfile_path.name == "bun.lock":
             versions.update(_bun_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "Cargo.lock":
+            versions.update(_cargo_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "composer.lock":
+            versions.update(_composer_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "Gemfile.lock":
+            versions.update(_gemfile_lock_target_versions(lockfile_text, targets))
             continue
         if lockfile_path.name == "poetry.lock":
             versions.update(_poetry_lock_target_versions(lockfile_text, targets, python_manifest_names))
@@ -1627,7 +1809,7 @@ def _manifest_dependency_versions(
     if not isinstance(manifest_paths, list):
         return {}
     package_manager = str(artifact.metadata.get("package_manager") or "npm")
-    python_targets = {target_key: target for target in targets if (target_key := _lockfile_target_key(target))}
+    keyed_targets = {target_key: target for target in targets if (target_key := _lockfile_target_key(target))}
     versions: dict[tuple[str, str | None], str] = {}
     for relative_path in manifest_paths:
         manifest_path = workspace_dir / str(relative_path)
@@ -1644,17 +1826,20 @@ def _manifest_dependency_versions(
         )
         if not dependency_map:
             continue
-        normalized_dependencies = {
-            _normalize_package_name("pypi", package_name): specifier
-            for package_name, specifier in dependency_map.items()
-        }
-        for target_key, target in python_targets.items():
-            if (_optional_string(target.get("ecosystem")) or "npm") != "pypi" or target_key in versions:
+        for target_key, target in keyed_targets.items():
+            if target_key in versions:
                 continue
-            specifier = normalized_dependencies.get(str(target["normalized_name"]))
-            exact_version = _python_lockfile_version(specifier)
-            if exact_version is not None:
-                versions[target_key] = exact_version
+            ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+            normalized_dependencies = {
+                _normalize_package_name(ecosystem, package_name): specifier
+                for package_name, specifier in dependency_map.items()
+            }
+            for candidate in _target_candidate_names(target):
+                specifier = normalized_dependencies.get(_normalize_package_name(ecosystem, candidate))
+                exact_version = _manifest_exact_version(ecosystem, specifier)
+                if exact_version is not None:
+                    versions[target_key] = exact_version
+                    break
     return versions
 
 
@@ -1753,6 +1938,38 @@ def _package_lock_candidate_names(target: dict[str, object]) -> tuple[str, ...]:
     if qualified_name not in candidates:
         candidates.append(qualified_name)
     return tuple(candidates)
+
+
+def _cargo_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    direct_versions, _error = _safe_dependency_map_result_for_path("Cargo.lock", text, deadline=time.monotonic() + 0.2)
+    return _target_versions_from_direct_map(targets, direct_versions)
+
+
+def _composer_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    direct_versions, _error = _safe_dependency_map_result_for_path(
+        "composer.lock",
+        text,
+        deadline=time.monotonic() + 0.2,
+    )
+    return _target_versions_from_direct_map(targets, direct_versions)
+
+
+def _gemfile_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    direct_versions, _error = _safe_dependency_map_result_for_path(
+        "Gemfile.lock",
+        text,
+        deadline=time.monotonic() + 0.2,
+    )
+    return _target_versions_from_direct_map(targets, direct_versions)
 
 
 def _pnpm_lock_target_versions(
@@ -2055,14 +2272,11 @@ def _resolved_target_version(
     exact_version = _optional_string(target.get("version"))
     if exact_version is not None:
         return exact_version
+    lockfile_version = lockfile_versions.get(_lockfile_target_key(target))
+    if lockfile_version is not None:
+        return lockfile_version
     requested_range = _optional_string(target.get("range"))
     if requested_range is None:
-        return None
-    ecosystem = _optional_string(target.get("ecosystem")) or "npm"
-    if ecosystem in {"npm", "pypi"}:
-        lockfile_version = lockfile_versions.get(_lockfile_target_key(target))
-        if lockfile_version is not None:
-            return lockfile_version
         return None
     return _exact_version(requested_range)
 
@@ -2156,8 +2370,18 @@ def _source_url_from_raw_spec(raw_spec: str) -> str | None:
 
 
 def _safe_dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[str, str]:
+    dependency_map, _error = _safe_dependency_map_result_for_path(path, text, deadline=deadline)
+    return dependency_map
+
+
+def _safe_dependency_map_result_for_path(
+    path: str,
+    text: str,
+    *,
+    deadline: float,
+) -> tuple[dict[str, str], str | None]:
     try:
-        return _dependency_map_for_path(path, text, deadline=deadline)
+        return _dependency_map_for_path(path, text, deadline=deadline), None
     except (
         _DeadlineExceededError,
         ET.ParseError,
@@ -2165,7 +2389,71 @@ def _safe_dependency_map_for_path(path: str, text: str, *, deadline: float) -> d
         ValueError,
         json.JSONDecodeError,
     ):
-        return {}
+        return {}, "parse_error"
+
+
+def _lockfile_parse_warning_result(
+    *,
+    target: dict[str, object],
+    artifact: GuardArtifact,
+    workspace_dir: Path | None,
+) -> dict[str, object] | None:
+    if workspace_dir is None:
+        return None
+    lockfile_paths = artifact.metadata.get("lockfile_paths")
+    if not isinstance(lockfile_paths, list):
+        return None
+    target_ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+    for relative_path in lockfile_paths:
+        lockfile_path = workspace_dir / str(relative_path)
+        if not lockfile_path.exists():
+            continue
+        lockfile_ecosystem = _lockfile_ecosystem(lockfile_path.name)
+        if lockfile_ecosystem is not None and lockfile_ecosystem != target_ecosystem:
+            continue
+        try:
+            lockfile_text = lockfile_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        _dependency_map, error = _safe_dependency_map_result_for_path(
+            lockfile_path.name,
+            lockfile_text,
+            deadline=time.monotonic() + 0.2,
+        )
+        if error is None:
+            continue
+        return _heuristic_package_result(
+            target=target,
+            decision="monitor",
+            code="lockfile_parse_error",
+            message=(
+                "Guard could not parse the existing lockfile and fell back to monitor-only "
+                "coverage. Repair the lockfile, then retry."
+            ),
+            severity="low",
+        )
+    return None
+
+
+def _manifest_exact_version(ecosystem: str, value: str | None) -> str | None:
+    if ecosystem == "pypi":
+        return _python_lockfile_version(value)
+    if ecosystem == "cargo":
+        normalized = _optional_string(value)
+        if normalized is None:
+            return None
+        if normalized.startswith("="):
+            return _exact_version(normalized.lstrip("="))
+        return None
+    return _exact_version(value)
+
+
+def _with_support_metadata(package: dict[str, object]) -> dict[str, object]:
+    metadata = ecosystem_support_metadata(_optional_string(package.get("ecosystem")) or "unsupported")
+    enriched = dict(package)
+    enriched["supportLevel"] = metadata["support_level"]
+    enriched["supportLabel"] = metadata["support_label"]
+    return enriched
 
 
 def _matching_policy_rule(
