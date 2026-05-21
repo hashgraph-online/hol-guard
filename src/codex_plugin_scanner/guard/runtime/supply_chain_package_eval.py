@@ -1325,7 +1325,11 @@ def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -
             workspace_dir / "setup.py"
         ).exists()
         return workspace_dir if editable and workspace_has_python_project else None
-    candidate_path = Path(raw_spec.partition("file:")[2] if raw_spec.startswith("file:") else raw_spec)
+    path_text = raw_spec.partition("file:")[2] if raw_spec.startswith("file:") else raw_spec
+    try:
+        candidate_path = Path(path_text).expanduser()
+    except RuntimeError:
+        candidate_path = Path(path_text)
     disk_path = candidate_path if candidate_path.is_absolute() else workspace_dir / candidate_path
     if disk_path.is_dir():
         if (disk_path / "pyproject.toml").exists() or (disk_path / "setup.py").exists():
