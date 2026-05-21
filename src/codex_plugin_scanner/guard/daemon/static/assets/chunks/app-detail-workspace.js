@@ -393,7 +393,7 @@ function AppOverviewTab(props) {
           "button",
           {
             onClick: () => props.onOpenRequest(item.request_id),
-            className: "flex w-full items-center justify-between rounded-xl border border-slate-200/70 bg-white px-4 py-3 text-left transition-shadow hover:shadow-sm",
+            className: `flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-shadow hover:shadow-sm ${isPackageInstallEvent(item) ? "border-emerald-200/70 bg-emerald-50/30" : "border-slate-200/70 bg-white"}`,
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: item.artifact_name ?? item.artifact_id }),
@@ -403,7 +403,10 @@ function AppOverviewTab(props) {
                   formatRelativeTime(item.created_at)
                 ] })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 shrink-0 text-slate-300" })
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-center gap-2", children: [
+                isPackageInstallEvent(item) && /* @__PURE__ */ jsxRuntimeExports.jsx(PackageEventBadge, {}),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 shrink-0 text-slate-300" })
+              ] })
             ]
           },
           item.request_id
@@ -688,7 +691,7 @@ function AppActivityTab(props) {
       "button",
       {
         onClick: () => props.onOpenRequest(item.request_id),
-        className: "flex w-full items-center justify-between rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-shadow hover:shadow-sm",
+        className: `flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-shadow hover:shadow-sm ${isPackageInstallEvent(item) ? "border-emerald-200/70 bg-emerald-50/30" : "border-brand-blue/15 bg-brand-blue/[0.04]"}`,
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: item.artifact_name ?? item.artifact_id }),
@@ -698,7 +701,10 @@ function AppActivityTab(props) {
               formatRelativeTime(item.created_at)
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Pending" })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-center gap-2", children: [
+            isPackageInstallEvent(item) && /* @__PURE__ */ jsxRuntimeExports.jsx(PackageEventBadge, {}),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "info", children: "Pending" })
+          ] })
         ]
       },
       item.request_id
@@ -777,7 +783,7 @@ function ExpandableReceiptRow({ receipt, selected, onToggle }) {
         }
       )
     ] }),
-    expanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in border-t border-slate-200/70 bg-slate-50/60 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-2 text-xs", children: [
+    expanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in border-t border-slate-200/70 bg-slate-50/60 px-4 py-3", children: isPackageInstallEvent(receipt) ? /* @__PURE__ */ jsxRuntimeExports.jsx(PackageEventDetail, { receipt }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-2 text-xs", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Action ID" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: receipt.artifact_id })
@@ -1423,6 +1429,114 @@ function CloudValueBanner({
       )
     ] })
   ] }) });
+}
+function isPackageInstallEvent(item) {
+  const type = (item.artifact_type ?? "").toLowerCase();
+  if (
+    type.includes("package") ||
+    type === "supply_chain" ||
+    type === "npm" ||
+    type === "pip" ||
+    type === "pypi" ||
+    type === "cargo" ||
+    type === "gem" ||
+    type === "go_module"
+  ) {
+    return true;
+  }
+  const id = (item.artifact_id ?? "").toLowerCase();
+  if (id.includes("package-request") || id.startsWith("pkg-")) {
+    return true;
+  }
+  const name = (item.artifact_name ?? "").toLowerCase();
+  return /^(npm|pip|pip3|cargo|gem|go|yarn|pnpm|npx|poetry)\s/.test(name);
+}
+function splitPackageSpec(rawSpec) {
+  const spec = (rawSpec ?? "").trim();
+  if (!spec) {
+    return { packageSpec: null, packageName: null };
+  }
+  const versionIndex = spec.lastIndexOf("@");
+  if (versionIndex > 0) {
+    return { packageSpec: spec, packageName: spec.slice(0, versionIndex) };
+  }
+  return { packageSpec: spec, packageName: spec };
+}
+function parsePackageTarget(receipt) {
+  const id = receipt.artifact_id ?? "";
+  const afterColon = id.includes("package-request:") ? id.split("package-request:")[1] : null;
+  if (afterColon) {
+    const slashIndex = afterColon.indexOf("/");
+    if (slashIndex >= 0) {
+      const eco = afterColon.slice(0, slashIndex);
+      const spec = splitPackageSpec(afterColon.slice(slashIndex + 1));
+      return { ecosystem: eco, packageSpec: spec.packageSpec, packageName: spec.packageName };
+    }
+    const spec = splitPackageSpec(afterColon);
+    return { ecosystem: null, packageSpec: spec.packageSpec, packageName: spec.packageName };
+  }
+  const name = (receipt.artifact_name ?? "").trim();
+  const managerMatch = name.match(/^(npm|pip|pip3|cargo|gem|go|yarn|pnpm|npx|poetry)\s+/i);
+  if (managerMatch) {
+    const ecosystem = managerMatch[1].toLowerCase().replace("pip3", "pip");
+    const packageSpec = extractPackageSpecFromCommand(name.slice(managerMatch[0].length));
+    if (packageSpec) {
+      const spec = splitPackageSpec(packageSpec);
+      return { ecosystem, packageSpec: spec.packageSpec, packageName: spec.packageName };
+    }
+  }
+  const fallback = splitPackageSpec(name || receipt.artifact_id);
+  return { ecosystem: null, packageSpec: fallback.packageSpec, packageName: fallback.packageName };
+}
+function extractPackageSpecFromCommand(rawCommand) {
+  const tokens = (rawCommand ?? "").trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return "";
+  }
+  const verb = tokens[0].toLowerCase();
+  const args = verb === "install" || verb === "add" || verb === "get" || verb === "exec" ? tokens.slice(1) : tokens;
+  const candidate = args.find((token) => !token.startsWith("-") && token !== "--" && !/^(https?:|file:|\.{1,2}\/|\/)/i.test(token));
+  return candidate ?? "";
+}
+function PackageEventBadge() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700", "aria-label": "Package install event", children: "Package" });
+}
+function PackageEventDetail({ receipt }) {
+  const { ecosystem, packageSpec, packageName } = parsePackageTarget(receipt);
+  const ecoFlag = ecosystem ? ` --ecosystem ${ecosystem}` : "";
+  const explainTarget = packageSpec || packageName || receipt.artifact_id;
+  const safeCmd = `hol-guard supply-chain explain ${explainTarget}${ecoFlag}`;
+  const displayEcosystem = ecosystem || receipt.artifact_type || null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-2 text-xs", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Package" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono font-semibold text-brand-dark", children: explainTarget })
+    ] }),
+    displayEcosystem && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Ecosystem" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 capitalize text-brand-dark", children: displayEcosystem })
+    ] }),
+    receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-medium text-brand-attention", children: "Advisory" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: receipt.capabilities_summary })
+    ] }),
+    receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Provenance" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: receipt.provenance_summary })
+    ] }),
+    receipt.artifact_hash && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Hash" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: receipt.artifact_hash })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Time" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: new Date(receipt.timestamp).toLocaleString() })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-200/70 pt-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Inspect" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block overflow-x-auto rounded-lg bg-white/80 px-2.5 py-1.5 font-mono text-[11px] text-brand-dark select-all", "aria-label": "Inspect command", children: safeCmd }) })
+    ] })
+  ] });
 }
 function StatCard({
   label,

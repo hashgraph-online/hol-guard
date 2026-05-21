@@ -93,3 +93,17 @@ def test_static_docs_cover_supply_chain_support_levels() -> None:
     assert "protected" in docs_text
     assert "beta" in docs_text
     assert "monitor-only" in docs_text
+
+
+def test_static_docs_cover_local_supply_chain_firewall_commands() -> None:
+    docs_text = "\n".join(
+        [
+            _read_repo_file("README.md"),
+            _read_repo_file("docs/guard/get-started.md"),
+            _read_repo_file("docs/guard/local-vs-cloud.md"),
+        ]
+    ).lower()
+
+    assert "hol-guard supply-chain scan" in docs_text
+    assert "hol-guard supply-chain explain" in docs_text
+    assert "hol-guard protect" in docs_text
