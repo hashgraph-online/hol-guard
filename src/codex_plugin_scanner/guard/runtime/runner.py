@@ -38,6 +38,7 @@ from .supply_chain_bundle import (
     load_supply_chain_verification_keys,
     verify_supply_chain_bundle_response,
 )
+from .supply_chain_support import ecosystem_support_matrix
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
@@ -996,6 +997,7 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
     summary = {
         "advisory_count": len(response.bundle.advisories),
         "bundle_version": response.bundle.bundle_version,
+        "ecosystem_support": list(ecosystem_support_matrix()),
         "feed_snapshot_hash": response.bundle.feed_snapshot_hash,
         "package_count": len(response.bundle.packages),
         "policy_hash": response.bundle.policy_hash,

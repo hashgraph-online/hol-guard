@@ -89,6 +89,12 @@ def test_docker_image_latest_detected() -> None:
     assert any("docker-image-latest" in s.signal_id for s in signals)
 
 
+def test_known_critical_docker_base_image_detected() -> None:
+    content = _fixture("critical-base-image-Dockerfile")
+    signals = detect_supply_chain_risk(content)
+    assert any("docker-base-image-known-critical" in s.signal_id for s in signals)
+
+
 def test_lockfile_source_drift_detected() -> None:
     content = '"resolved": "https://evil-registry.example.com/pkg/-/pkg-1.0.0.tgz"'
     signals = detect_supply_chain_risk(content)
