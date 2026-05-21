@@ -1484,7 +1484,11 @@ def _lockfile_dependency_versions(
     if not isinstance(lockfile_paths, list):
         return {}
     versions: dict[tuple[str, str | None], str] = {}
-    python_manifest_names = _manifest_direct_dependency_names(workspace_dir, artifact, ecosystem="pypi")
+    python_manifest_names = _manifest_direct_dependency_names(
+        workspace_dir,
+        artifact,
+        ecosystem="pypi",
+    )
     for relative_path in lockfile_paths:
         lockfile_path = workspace_dir / str(relative_path)
         if not lockfile_path.exists():
@@ -1826,7 +1830,10 @@ def _poetry_lock_target_versions(
     targets: tuple[dict[str, object], ...],
     direct_manifest_names: set[str],
 ) -> dict[tuple[str, str | None], str]:
-    return _target_versions_from_direct_map(targets, _poetry_lock_direct_versions(text, direct_manifest_names))
+    return _target_versions_from_direct_map(
+        targets,
+        _poetry_lock_direct_versions(text, direct_manifest_names),
+    )
 
 
 def _poetry_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> dict[str, str]:
@@ -1844,7 +1851,11 @@ def _poetry_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> 
         name = _optional_string(package.get("name"))
         version = _optional_string(package.get("version"))
         normalized_name = _normalize_package_name("pypi", name) if name is not None else None
-        if normalized_name is None or version is None or normalized_name not in direct_manifest_names:
+        if (
+            normalized_name is None
+            or version is None
+            or normalized_name not in direct_manifest_names
+        ):
             continue
         direct_versions[normalized_name] = version
     return direct_versions
@@ -1855,7 +1866,10 @@ def _uv_lock_target_versions(
     targets: tuple[dict[str, object], ...],
     direct_manifest_names: set[str],
 ) -> dict[tuple[str, str | None], str]:
-    return _target_versions_from_direct_map(targets, _uv_lock_direct_versions(text, direct_manifest_names))
+    return _target_versions_from_direct_map(
+        targets,
+        _uv_lock_direct_versions(text, direct_manifest_names),
+    )
 
 
 def _uv_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> dict[str, str]:
@@ -1873,7 +1887,11 @@ def _uv_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> dict
         name = _optional_string(package.get("name"))
         version = _optional_string(package.get("version"))
         normalized_name = _normalize_package_name("pypi", name) if name is not None else None
-        if normalized_name is None or version is None or normalized_name not in direct_manifest_names:
+        if (
+            normalized_name is None
+            or version is None
+            or normalized_name not in direct_manifest_names
+        ):
             continue
         direct_versions[normalized_name] = version
     return direct_versions
@@ -1884,7 +1902,10 @@ def _pipfile_lock_target_versions(
     targets: tuple[dict[str, object], ...],
     direct_manifest_names: set[str],
 ) -> dict[tuple[str, str | None], str]:
-    return _target_versions_from_direct_map(targets, _pipfile_lock_direct_versions(text, direct_manifest_names))
+    return _target_versions_from_direct_map(
+        targets,
+        _pipfile_lock_direct_versions(text, direct_manifest_names),
+    )
 
 
 def _pipfile_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> dict[str, str]:
@@ -2142,7 +2163,10 @@ def _bundle_package(
     ecosystem: str | None = None,
 ) -> SupplyChainBundlePackage | None:
     for item in bundle_response.bundle.packages:
-        normalized = _normalize_package_name(ecosystem or item.ecosystem, package_name)
+        normalized = _normalize_package_name(
+            ecosystem or item.ecosystem,
+            package_name,
+        )
         full_name = (
             _normalize_package_name(item.ecosystem, f"{item.namespace}/{item.name}")
             if item.namespace is not None
