@@ -26,6 +26,7 @@ from ..models import GuardArtifact
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from .js_semver import version_matches_js_selector
+from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
     _DeadlineExceededError,
     _dependency_map_for_path,
@@ -1333,7 +1334,7 @@ def _local_python_build_result(target: dict[str, object], workspace_dir: Path | 
 
 
 def _looks_like_explicit_local_python_path(raw_spec: str) -> bool:
-    normalized = raw_spec.strip()
+    normalized, _extras = split_python_extras(_local_python_path_text(raw_spec))
     return (
         normalized == "."
         or normalized == "~"
@@ -1342,6 +1343,12 @@ def _looks_like_explicit_local_python_path(raw_spec: str) -> bool:
         or "\\" in normalized
         or bool(re.match(r"^[A-Za-z]:[\\\\/]", normalized))
     )
+
+
+def _local_python_path_text(raw_spec: str) -> str:
+    path_text = raw_spec.partition("file:")[2] if raw_spec.startswith("file:") else raw_spec
+    normalized_path, _extras = split_python_extras(path_text)
+    return normalized_path or path_text
 
 
 def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -> Path | None:
@@ -1359,7 +1366,7 @@ def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -
             workspace_dir / "setup.py"
         ).exists()
         return workspace_dir if editable and workspace_has_python_project else None
-    path_text = raw_spec.partition("file:")[2] if raw_spec.startswith("file:") else raw_spec
+    path_text = _local_python_path_text(raw_spec)
     try:
         candidate_path = Path(path_text).expanduser()
     except RuntimeError:
