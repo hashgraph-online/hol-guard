@@ -84,6 +84,48 @@ def test_evaluate_package_request_artifact_resolves_constraint_versions_for_pyth
     assert result.packages[0]["resolvedVersion"] == "0.27.1"
 
 
+def test_evaluate_package_request_artifact_resolves_versions_from_nested_requirements_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    write_text(
+        workspace_dir / "deps" / "prod.txt",
+        """
+requests==2.31.0 \\
+    --hash=sha256:aaaaaaaa
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(
+            packages=[
+                package_fixture(
+                    name="requests",
+                    version="2.31.0",
+                    default_action="block",
+                    recommended_fix_version="2.32.0",
+                )
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = artifact_from_command_fixture(
+        'pip install -r deps/prod.txt "requests>=2.31,<2.32"',
+        workspace=workspace_dir,
+    )
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["resolvedVersion"] == "2.31.0"
+
+
 def test_evaluate_package_request_artifact_allows_recommended_safe_python_version(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
