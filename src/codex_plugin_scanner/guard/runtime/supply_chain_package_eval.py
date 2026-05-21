@@ -579,6 +579,7 @@ def _evaluate_with_bundle(
                 bundle_response,
                 package_name=str(target["normalized_name"]),
                 package_version=resolved_version,
+                ecosystem=_optional_string(target.get("ecosystem")) or "npm",
             )
             if resolved_version is not None
             else None
@@ -2138,9 +2139,10 @@ def _bundle_package(
     *,
     package_name: str,
     package_version: str,
+    ecosystem: str | None = None,
 ) -> SupplyChainBundlePackage | None:
-    normalized = _normalize_package_name("pypi", package_name)
     for item in bundle_response.bundle.packages:
+        normalized = _normalize_package_name(ecosystem or item.ecosystem, package_name)
         full_name = (
             _normalize_package_name(item.ecosystem, f"{item.namespace}/{item.name}")
             if item.namespace is not None

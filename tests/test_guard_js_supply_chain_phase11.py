@@ -396,6 +396,77 @@ def test_evaluate_package_request_artifact_npm_audit_fix_scans_existing_lockfile
     assert result.packages[0]["dependencyPath"] in {"minimist", "node_modules/minimist"}
 
 
+def test_evaluate_package_request_artifact_matches_transitive_js_lockfile_names_without_pypi_normalization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(
+        workspace_dir / "package.json",
+        """
+{
+  "name": "demo",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+""".strip()
+        + "\n",
+    )
+    _write_text(
+        workspace_dir / "package-lock.json",
+        """
+{
+  "name": "demo",
+  "lockfileVersion": 3,
+  "packages": {
+    "": {
+      "dependencies": {
+        "express": "^4.18.2"
+      }
+    },
+    "node_modules/express": {
+      "name": "express",
+      "version": "4.18.2",
+      "dependencies": {
+        "left_pad": "1.3.0"
+      }
+    },
+    "node_modules/left_pad": {
+      "name": "left_pad",
+      "version": "1.3.0"
+    }
+  }
+}
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(
+            packages=[
+                _package(
+                    name="left_pad",
+                    version="1.3.0",
+                    default_action="block",
+                    recommended_fix_version="1.3.1",
+                )
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command("npm install express@4.18.2", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert any(package["name"] == "left_pad" for package in result.packages)
+
+
 def test_evaluate_package_request_artifact_blocks_local_package_with_install_scripts(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
