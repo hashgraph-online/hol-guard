@@ -103,6 +103,9 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 
    ```bash
    hol-guard cloud sync-intel
+   hol-guard supply-chain sync
+   hol-guard supply-chain scan
+   hol-guard supply-chain explain minimist@1.2.5 --ecosystem npm
    ```
 
    Guard prints the latest bundle summary plus ecosystem support labels. Today `npm` and `PyPI` show **Protected** coverage, Cargo/Go/Maven/Gradle/Composer/RubyGems show **Beta**, and system packages or unsupported package managers stay **Monitor-only** so Guard never pretends advisory blocking where it does not exist.
@@ -114,6 +117,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | I need the current protection posture | `hol-guard status` | What is Guard watching, is sync connected, and what is the next action? |
 | I need first-run setup | `hol-guard init` | Open the local dashboard, install supported harnesses, start optional Cloud connect, and check desktop notifications. |
 | I need install/connect docs | `hol-guard explain install-connect` | Which local-first setup and optional cloud commands should I share? |
+| I need to preview one install before I run it | `hol-guard protect npm install <package> --dry-run` | Would Guard allow, warn, review, or block this exact install request right now? |
 | I need setup or runtime troubleshooting | `hol-guard doctor <harness>` | Why is this harness or Guard runtime not behaving correctly? |
 | A launch was blocked or changed | `hol-guard diff <harness>` | What changed since the last recorded snapshot? |
 | I need to resolve a queued block | `hol-guard approvals` | Which requests are waiting, and how do I approve or deny them? |
@@ -122,6 +126,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | I need an exportable evidence artifact | `hol-guard abom` | What local AI-BOM can I attach to an audit or handoff? |
 | I need the chronological log | `hol-guard events` | What happened over time on this machine? |
 | I need supply-chain coverage labels | `hol-guard cloud sync-intel` | Which ecosystems are protected, beta, or monitor-only right now? |
+| I need a workspace install scan or one-package verdict | `hol-guard supply-chain scan` or `hol-guard supply-chain explain <package> --ecosystem <ecosystem>` | Which current dependencies or package versions would Guard warn, review, or block right now? |
 
 ## One continuity model
 
