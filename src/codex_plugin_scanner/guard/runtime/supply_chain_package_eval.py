@@ -713,69 +713,63 @@ def _heuristic_result(
             artifact=artifact,
             workspace_dir=workspace_dir,
         )
-        if lockfile_parse_warning is not None:
-            packages.append(lockfile_parse_warning)
-            continue
+        package_result: dict[str, object] | None = None
         local_package_result = _local_package_manifest_result(
             target=target,
             artifact=artifact,
             workspace_dir=workspace_dir,
         )
         if local_package_result is not None:
-            packages.append(local_package_result)
-            continue
-        local_python_result = _local_python_build_result(target=target, workspace_dir=workspace_dir)
-        if local_python_result is not None:
-            packages.append(local_python_result)
-            continue
+            package_result = local_package_result
+        if package_result is None:
+            local_python_result = _local_python_build_result(target=target, workspace_dir=workspace_dir)
+            if local_python_result is not None:
+                package_result = local_python_result
         ecosystem = _optional_string(target.get("ecosystem")) or "npm"
-        if ecosystem == "system":
-            packages.append(_system_package_monitor_result(target))
-            continue
-        if ecosystem == "unsupported":
-            packages.append(_unsupported_ecosystem_result(target))
-            continue
-        go_replace_result = _go_replace_result(target=target, artifact=artifact, workspace_dir=workspace_dir)
-        if go_replace_result is not None:
-            packages.append(go_replace_result)
-            continue
-        local_source_result = _local_source_dependency_result(target)
-        if local_source_result is not None:
-            packages.append(local_source_result)
-            continue
+        if package_result is None and ecosystem == "system":
+            package_result = _system_package_monitor_result(target)
+        if package_result is None and ecosystem == "unsupported":
+            package_result = _unsupported_ecosystem_result(target)
+        if package_result is None:
+            go_replace_result = _go_replace_result(target=target, artifact=artifact, workspace_dir=workspace_dir)
+            if go_replace_result is not None:
+                package_result = go_replace_result
+        if package_result is None:
+            local_source_result = _local_source_dependency_result(target)
+            if local_source_result is not None:
+                package_result = local_source_result
         source_url = _optional_string(target.get("source_url"))
-        if source_url is not None and source_url.lower().startswith("http://"):
-            packages.append(
-                _heuristic_package_result(
-                    target=target,
-                    decision="block",
-                    code="insecure_source_url",
-                    message="Package source uses insecure HTTP transport.",
-                    severity="high",
-                )
+        if package_result is None and source_url is not None and source_url.lower().startswith("http://"):
+            package_result = _heuristic_package_result(
+                target=target,
+                decision="block",
+                code="insecure_source_url",
+                message="Package source uses insecure HTTP transport.",
+                severity="high",
             )
+        if package_result is None and source_url is not None and _is_git_source_url(source_url):
+            package_result = _heuristic_package_result(
+                target=target,
+                decision="warn",
+                code="git_dependency_source",
+                message="Git package source requires review before install.",
+                severity="high",
+            )
+        if package_result is None and source_url is not None and _is_external_https_tarball_source(source_url):
+            package_result = _heuristic_package_result(
+                target=target,
+                decision="warn",
+                code="external_tarball_source",
+                message="External tarball source requires review before install.",
+                severity="medium",
+            )
+        if package_result is None:
+            if lockfile_parse_warning is not None:
+                packages.append(lockfile_parse_warning)
             continue
-        if source_url is not None and _is_git_source_url(source_url):
-            packages.append(
-                _heuristic_package_result(
-                    target=target,
-                    decision="warn",
-                    code="git_dependency_source",
-                    message="Git package source requires review before install.",
-                    severity="high",
-                )
-            )
-            continue
-        if source_url is not None and _is_external_https_tarball_source(source_url):
-            packages.append(
-                _heuristic_package_result(
-                    target=target,
-                    decision="warn",
-                    code="external_tarball_source",
-                    message="External tarball source requires review before install.",
-                    severity="medium",
-                )
-            )
+        if lockfile_parse_warning is not None:
+            package_result = _with_package_reason(package_result, lockfile_parse_warning["reasons"][0])
+        packages.append(package_result)
     if not packages:
         return None
     packages.sort(key=lambda item: _decision_rank(str(item.get("decision") or "monitor")), reverse=True)
@@ -2454,6 +2448,16 @@ def _with_support_metadata(package: dict[str, object]) -> dict[str, object]:
     enriched["supportLevel"] = metadata["support_level"]
     enriched["supportLabel"] = metadata["support_label"]
     return enriched
+
+
+def _with_package_reason(package: dict[str, object], reason: dict[str, object]) -> dict[str, object]:
+    package_reasons = package.get("reasons")
+    updated = dict(package)
+    if isinstance(package_reasons, (tuple, list)):
+        updated["reasons"] = (*tuple(item for item in package_reasons if isinstance(item, dict)), reason)
+    else:
+        updated["reasons"] = (reason,)
+    return updated
 
 
 def _matching_policy_rule(

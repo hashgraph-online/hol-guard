@@ -483,7 +483,7 @@ def _parse_system_package_intent(tokens: tuple[str, ...], *, workspace: Path | N
         "apt-get": {"install"},
         "brew": {"install"},
         "dnf": {"install"},
-        "pacman": {"-s", "-sy", "-suy"},
+        "pacman": {"-s", "-sy", "-syu", "-suy"},
         "yum": {"install"},
         "zypper": {"install", "in"},
     }
@@ -654,6 +654,10 @@ def _redact_local_source_tokens(segment: list[str]) -> list[str]:
         if token in path_flags and index + 1 < len(segment):
             redacted.extend((token, "<local-path>"))
             index += 2
+            continue
+        if token.startswith("--path="):
+            redacted.append("--path=<local-path>")
+            index += 1
             continue
         if token.startswith("file:"):
             redacted.append("file:<local-path>")
