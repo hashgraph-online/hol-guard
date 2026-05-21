@@ -86,6 +86,12 @@ from ..desktop_notifications import (
 )
 from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
+from ..local_supply_chain import (
+    build_local_supply_chain_posture,
+    build_supply_chain_explain_payload,
+    build_supply_chain_status_payload,
+    build_workspace_scan_payload,
+)
 from ..mcp_tool_calls import (
     allow_tool_call,
     block_tool_call,
@@ -738,6 +744,41 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
     _add_guard_common_args(cloud_sync_intel_parser)
     cloud_sync_intel_parser.add_argument("--json", action="store_true")
+
+    supply_chain_parser = guard_subparsers.add_parser(
+        "supply-chain",
+        help="Inspect and refresh local Guard supply-chain firewall coverage",
+    )
+    _add_guard_common_args(supply_chain_parser)
+    supply_chain_subparsers = supply_chain_parser.add_subparsers(
+        dest="supply_chain_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+    supply_chain_scan_parser = supply_chain_subparsers.add_parser(
+        "scan",
+        help="Evaluate the current workspace manifests and lockfiles against the signed bundle",
+    )
+    _add_guard_common_args(supply_chain_scan_parser)
+    supply_chain_scan_parser.add_argument("--json", action="store_true")
+    supply_chain_sync_parser = supply_chain_subparsers.add_parser(
+        "sync",
+        help="Fetch and verify the latest signed supply-chain bundle for this workspace",
+    )
+    _add_guard_common_args(supply_chain_sync_parser)
+    supply_chain_sync_parser.add_argument("--json", action="store_true")
+    supply_chain_explain_parser = supply_chain_subparsers.add_parser(
+        "explain",
+        help="Explain one package version with the current signed supply-chain bundle",
+    )
+    supply_chain_explain_parser.add_argument("package")
+    supply_chain_explain_parser.add_argument(
+        "--ecosystem",
+        choices=("npm", "pypi", "cargo", "go", "maven", "packagist", "rubygems"),
+        default="npm",
+    )
+    _add_guard_common_args(supply_chain_explain_parser)
+    supply_chain_explain_parser.add_argument("--json", action="store_true")
 
     service_parser = guard_subparsers.add_parser(
         "service",
@@ -1471,14 +1512,16 @@ def run_guard_command(
         _refresh_cloud_policy_bundle(store)
         protect_command = list(getattr(args, "protect_command", []) or [])
         if len(protect_command) == 0:
-            print("guard protect requires a command to wrap.", file=sys.stderr)
-            return 2
+            payload = build_supply_chain_status_payload(store=store, config=config, now=_now())
+            _emit("protect", payload, getattr(args, "json", False))
+            return 0
         payload, exit_code = build_protect_payload(
             command=protect_command,
             store=store,
             workspace_dir=workspace or Path.cwd(),
             dry_run=bool(getattr(args, "dry_run", False)),
             now=_now(),
+            config=config,
             unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
         )
         _emit("protect", payload, getattr(args, "json", False))
@@ -1987,6 +2030,7 @@ def run_guard_command(
             }
         if getattr(args, "perf", False):
             payload["detector_perf"] = _runtime_detector_perf_payload(config)
+        payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
         _emit("doctor", payload, getattr(args, "json", False))
         return 0
 
@@ -2102,8 +2146,52 @@ def run_guard_command(
                 else:
                     print(str(error), file=sys.stderr)
                 return 1
+            payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
             _emit("cloud-sync-intel", payload, getattr(args, "json", False))
             return 0
+
+    if args.guard_command == "supply-chain":
+        supply_chain_command = getattr(args, "supply_chain_command", None)
+        workspace_dir = workspace or Path.cwd()
+        if supply_chain_command == "scan":
+            payload, exit_code = build_workspace_scan_payload(
+                store=store,
+                config=config,
+                workspace_dir=workspace_dir,
+                now=_now(),
+            )
+            _emit("supply-chain-scan", payload, getattr(args, "json", False))
+            return exit_code
+        if supply_chain_command == "sync":
+            try:
+                payload = sync_supply_chain_bundle(store)
+            except GuardSyncNotConfiguredError:
+                message = _guard_sync_prerequisite_message()
+                if getattr(args, "json", False):
+                    _emit("supply-chain-sync", {"synced": False, "error": message}, True)
+                else:
+                    print(message, file=sys.stderr)
+                return 1
+            except RuntimeError as error:
+                if getattr(args, "json", False):
+                    _emit("supply-chain-sync", {"synced": False, "error": str(error)}, True)
+                else:
+                    print(str(error), file=sys.stderr)
+                return 1
+            payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
+            _emit("supply-chain-sync", payload, getattr(args, "json", False))
+            return 0
+        if supply_chain_command == "explain":
+            payload, exit_code = build_supply_chain_explain_payload(
+                store=store,
+                config=config,
+                workspace_dir=workspace_dir,
+                package_spec=str(args.package),
+                ecosystem=str(args.ecosystem),
+                now=_now(),
+            )
+            _emit("supply-chain-explain", payload, getattr(args, "json", False))
+            return exit_code
 
     if args.guard_command == "service":
         service_command = getattr(args, "service_command", None)
