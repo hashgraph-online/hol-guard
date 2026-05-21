@@ -238,7 +238,17 @@ class RuntimeMcpGuardProxy:
             arguments=arguments,
         )
         package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
-        if package_artifact is not None and _package_request_routes_through_package_policy(decision):
+        if package_artifact is not None and _package_request_requires_tool_policy_review(decision):
+            response, queued_event = self._queue_approval_center_response(
+                message_id=message.get("id"),
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                tool_name=tool_name,
+                signals=decision.signals,
+                params=params,
+            )
+            return response, queued_event
+        if package_artifact is not None:
             response, package_event = self._handle_package_request(
                 message=message,
                 child_stdin=child_stdin,
@@ -984,8 +994,13 @@ def _optional_text(value: object) -> str | None:
     return None
 
 
-def _package_request_routes_through_package_policy(decision: ToolCallDecision) -> bool:
-    return not (decision.source == "policy" and decision.action not in {"allow", "warn", "review"})
+def _package_request_requires_tool_policy_review(decision: ToolCallDecision) -> bool:
+    return decision.source == "policy" and decision.action in {
+        "review",
+        "require-reapproval",
+        "sandbox-required",
+        "block",
+    }
 
 
 def _now() -> str:
