@@ -16,8 +16,14 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.consumer.service import artifact_hash
+from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
+from codex_plugin_scanner.guard.runtime.package_intent import (
+    build_package_request_artifact,
+    extract_package_intent_request,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 WORKSPACE_ID = "workspace-alpha"
@@ -237,6 +243,7 @@ def test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call(
     assert marker_path.exists() is False
     assert result["responses"][2]["error"]["code"] == -32001
     assert request["artifact_type"] == "package_request"
+    assert request["decision_v2_json"]["signals"]
     assert "minimist" in str(request["risk_summary"]).lower()
 
 
@@ -255,6 +262,80 @@ def test_phase14_runtime_mcp_proxy_forwards_allowed_package_call(
     store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="allow"), "2026-05-19T00:00:00Z")
     config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
     marker_path = tmp_path / "cursor-mcp-forwarded.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    proxy = RuntimeMcpGuardProxy(
+        harness="cursor",
+        server_name="workspace-tools",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "run_terminal_command",
+                    "arguments": {"command": "npm install minimist@1.2.8"},
+                },
+            },
+        ]
+    )
+
+    assert marker_path.exists() is True
+    assert "error" not in result["responses"][2]
+    assert store.list_approval_requests(limit=5) == []
+
+
+def test_phase14_runtime_mcp_proxy_honors_stored_allow_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="block"), "2026-05-19T00:00:00Z")
+    intent = extract_package_intent_request(
+        "run_terminal_command",
+        {"command": "npm install minimist@1.2.8"},
+        action_envelope_command="npm install minimist@1.2.8",
+        workspace=context.workspace_dir,
+    )
+    assert intent is not None
+    package_artifact = build_package_request_artifact(
+        harness="cursor",
+        intent=intent,
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+        source_scope="project",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="cursor",
+            scope="artifact",
+            action="allow",
+            artifact_id=package_artifact.artifact_id,
+            artifact_hash=artifact_hash(package_artifact),
+            workspace=None,
+            publisher=None,
+            reason="verified false positive",
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "cursor-mcp-override.json"
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
     proxy = RuntimeMcpGuardProxy(
         harness="cursor",

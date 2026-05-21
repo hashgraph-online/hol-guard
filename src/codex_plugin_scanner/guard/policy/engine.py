@@ -12,6 +12,14 @@ from ..runtime.signals import RiskSignalV2
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 SAFE_CHANGED_HASH_ACTION: GuardAction = "require-reapproval"
 SAFE_DEFAULT_ACTION: GuardAction = "require-reapproval"
+_GUARD_ACTION_SEVERITY = {
+    "allow": 0,
+    "warn": 1,
+    "review": 2,
+    "require-reapproval": 3,
+    "sandbox-required": 4,
+    "block": 5,
+}
 
 
 def decide_action(
@@ -60,3 +68,9 @@ def decide_action_with_v2(
         changed=changed,
     )
     return action, build_decision_v2(action, reason=reason, signals=signals)
+
+
+def guard_action_severity(action: str) -> int:
+    """Return a stable ordering for comparing Guard enforcement actions."""
+
+    return _GUARD_ACTION_SEVERITY.get(action, -1)
