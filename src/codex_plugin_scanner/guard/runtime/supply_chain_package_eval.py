@@ -1033,6 +1033,8 @@ def _transitive_lockfile_results(
                     "recommendedFixVersion": package_match.recommended_fix_version,
                     "riskScore": package_match.risk_score,
                     "dependencyPath": dependency_path,
+                    "packageManager": str(artifact.metadata.get("package_manager") or "npm"),
+                    "redactedCommand": _optional_string(artifact.metadata.get("redacted_command")),
                     "reasons": (
                         {
                             "code": "transitive_lockfile_match",
