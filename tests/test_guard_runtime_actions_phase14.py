@@ -57,6 +57,34 @@ def test_phase14_action_contract_round_trips_package_intent_fields() -> None:
     assert restored == envelope
 
 
+def test_phase14_action_contract_preserves_backwards_compatible_constructor() -> None:
+    envelope = GuardActionEnvelope(
+        schema_version=1,
+        action_id="",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace=None,
+        workspace_hash=None,
+        tool_name="Bash",
+        command="pip uninstall holguard",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    assert envelope.package_intent_kind is None
+    assert envelope.package_targets == ()
+    assert envelope.pre_execution_result is None
+
+
 def test_normalize_codex_package_command_extracts_package_metadata(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace = home_dir / "workspace"
