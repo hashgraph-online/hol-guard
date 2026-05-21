@@ -2816,7 +2816,7 @@ class GuardStore:
                 )
             self._set_sync_credentials_in_connection(
                 connection,
-                request["sync_url"],
+                str(request["sync_url"]),
                 token,
                 now,
                 workspace_id=workspace_id,
