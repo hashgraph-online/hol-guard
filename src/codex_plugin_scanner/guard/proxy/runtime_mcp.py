@@ -12,7 +12,7 @@ from typing import Any, TextIO
 from ..adapters.base import HarnessContext
 from ..approvals import first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
-from ..consumer.service import artifact_hash
+from ..consumer.service import artifact_hash as compute_artifact_hash
 from ..daemon import ensure_guard_daemon
 from ..mcp_tool_calls import (
     allow_tool_call,
@@ -228,12 +228,12 @@ class RuntimeMcpGuardProxy:
             tool_schema=tool_definition.get("input_schema"),
             tool_description=tool_definition.get("description"),
         )
-        artifact_hash = build_tool_call_hash(artifact, arguments)
+        tool_artifact_hash = build_tool_call_hash(artifact, arguments)
         decision = evaluate_tool_call(
             store=self.store,
             config=self.config,
             artifact=artifact,
-            artifact_hash=artifact_hash,
+            artifact_hash=tool_artifact_hash,
             arguments=arguments,
         )
         package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
@@ -268,7 +268,17 @@ class RuntimeMcpGuardProxy:
                     allow_tool_call(
                         store=self.store,
                         artifact=artifact,
-                        artifact_hash=artifact_hash,
+                        artifact_hash=tool_artifact_hash,
+                        decision_source="inline-approved",
+                        now=_now(),
+                        signals=decision.signals,
+                        risk_categories=decision.risk_categories,
+                        remember=True,
+                    )
+                    allow_tool_call(
+                        store=self.store,
+                        artifact=package_artifact,
+                        artifact_hash=compute_artifact_hash(package_artifact),
                         decision_source="inline-approved",
                         now=_now(),
                         signals=decision.signals,
@@ -290,7 +300,7 @@ class RuntimeMcpGuardProxy:
                     block_tool_call(
                         store=self.store,
                         artifact=artifact,
-                        artifact_hash=artifact_hash,
+                        artifact_hash=tool_artifact_hash,
                         decision_source="inline-denied",
                         now=_now(),
                         signals=decision.signals,
@@ -308,7 +318,7 @@ class RuntimeMcpGuardProxy:
                     block_tool_call(
                         store=self.store,
                         artifact=artifact,
-                        artifact_hash=artifact_hash,
+                        artifact_hash=tool_artifact_hash,
                         decision_source="inline-invalid",
                         now=_now(),
                         signals=decision.signals,
@@ -328,7 +338,7 @@ class RuntimeMcpGuardProxy:
             response, queued_event = self._queue_approval_center_response(
                 message_id=message.get("id"),
                 artifact=artifact,
-                artifact_hash=artifact_hash,
+                artifact_hash=tool_artifact_hash,
                 tool_name=tool_name,
                 signals=decision.signals,
                 params=params,
@@ -342,7 +352,7 @@ class RuntimeMcpGuardProxy:
                 client_input=client_input,
                 server_output=server_output,
                 artifact=artifact,
-                artifact_hash=artifact_hash,
+                artifact_hash=tool_artifact_hash,
                 decision_source=_decision_source(decision.action, decision.source),
                 signals=decision.signals,
                 risk_categories=decision.risk_categories,
@@ -356,7 +366,7 @@ class RuntimeMcpGuardProxy:
                 client_input=client_input,
                 server_output=server_output,
                 artifact=artifact,
-                artifact_hash=artifact_hash,
+                artifact_hash=tool_artifact_hash,
                 decision_source="native-approved",
                 signals=decision.signals,
                 risk_categories=decision.risk_categories,
@@ -372,7 +382,7 @@ class RuntimeMcpGuardProxy:
                     client_input=client_input,
                     server_output=server_output,
                     artifact=artifact,
-                    artifact_hash=artifact_hash,
+                    artifact_hash=tool_artifact_hash,
                     decision_source="inline-approved",
                     signals=decision.signals,
                     risk_categories=decision.risk_categories,
@@ -383,7 +393,7 @@ class RuntimeMcpGuardProxy:
                 block_tool_call(
                     store=self.store,
                     artifact=artifact,
-                    artifact_hash=artifact_hash,
+                    artifact_hash=tool_artifact_hash,
                     decision_source="inline-denied",
                     now=_now(),
                     signals=decision.signals,
@@ -401,7 +411,7 @@ class RuntimeMcpGuardProxy:
                 block_tool_call(
                     store=self.store,
                     artifact=artifact,
-                    artifact_hash=artifact_hash,
+                    artifact_hash=tool_artifact_hash,
                     decision_source="inline-invalid",
                     now=_now(),
                     signals=decision.signals,
@@ -421,7 +431,7 @@ class RuntimeMcpGuardProxy:
         response, queued_event = self._queue_approval_center_response(
             message_id=message.get("id"),
             artifact=artifact,
-            artifact_hash=artifact_hash,
+            artifact_hash=tool_artifact_hash,
             tool_name=tool_name,
             signals=decision.signals,
             params=params,
@@ -456,7 +466,7 @@ class RuntimeMcpGuardProxy:
         params: dict[str, Any],
         artifact: Any,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        artifact_digest = artifact_hash(artifact)
+        artifact_digest = compute_artifact_hash(artifact)
         stored_policy_action = self.store.resolve_policy(
             artifact.harness,
             artifact.artifact_id,
@@ -471,7 +481,8 @@ class RuntimeMcpGuardProxy:
         policy_action = (
             stored_policy_action if isinstance(stored_policy_action, str) else package_evaluation.policy_action
         )
-        if policy_action in {"allow", "warn"}:
+        queue_policy_action = "require-reapproval" if policy_action == "review" else policy_action
+        if queue_policy_action in {"allow", "warn"}:
             response = self._forward_message(
                 message,
                 child_stdin,
@@ -482,20 +493,20 @@ class RuntimeMcpGuardProxy:
             return response, {
                 "method": "tools/call",
                 "tool_name": tool_name,
-                "decision": f"package-{policy_action}",
+                "decision": f"package-{queue_policy_action}",
                 "redacted_params": _redact_json(params),
             }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         decision_v2_payload = build_decision_v2(
-            policy_action,
-            reason=policy_action,
+            queue_policy_action,
+            reason=queue_policy_action,
             signals=_package_reason_signals(package_evaluation.reasons),
         ).to_dict()
         decision_v2_payload["user_title"] = package_evaluation.user_copy.title
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
         decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
         decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
-        should_queue_approval_center = not (policy_action == "block" and stored_policy_action == "block")
+        should_queue_approval_center = not (queue_policy_action == "block" and stored_policy_action == "block")
         queued: list[dict[str, Any]] = []
         if should_queue_approval_center:
             queued = queue_blocked_approvals(
@@ -516,7 +527,7 @@ class RuntimeMcpGuardProxy:
                             "source_scope": artifact.source_scope,
                             "config_path": artifact.config_path,
                             "changed_fields": ["runtime_tool_call", "package_request"],
-                            "policy_action": policy_action,
+                            "policy_action": queue_policy_action,
                             "launch_target": self._launch_target(tool_name, params.get("arguments")),
                             "risk_summary": package_evaluation.risk_summary,
                             "risk_signals": [

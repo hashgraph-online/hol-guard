@@ -731,6 +731,19 @@ def test_phase14_codex_package_inline_approval_is_remembered(
         config_path=str(context.workspace_dir / ".codex" / "config.toml"),
     )
     approvals: list[dict[str, object]] = []
+    intent = extract_package_intent_request(
+        "run_terminal_command",
+        {"command": "npm install minimist@1.2.8"},
+        action_envelope_command="npm install minimist@1.2.8",
+        workspace=context.workspace_dir,
+    )
+    assert intent is not None
+    package_artifact = build_package_request_artifact(
+        harness="codex",
+        intent=intent,
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+        source_scope="project",
+    )
 
     def inline_approval(request: dict[str, object]) -> dict[str, object]:
         approvals.append(request)
@@ -773,3 +786,88 @@ def test_phase14_codex_package_inline_approval_is_remembered(
     assert "error" not in first_result["responses"][2]
     assert "error" not in second_result["responses"][2]
     assert len(approvals) == 1
+    assert (
+        store.resolve_policy(
+            package_artifact.harness,
+            package_artifact.artifact_id,
+            artifact_hash=artifact_hash(package_artifact),
+            workspace=None,
+        )
+        == "allow"
+    )
+
+
+def test_phase14_runtime_mcp_proxy_normalizes_stored_review_for_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _allow_mcp_tool_calls(monkeypatch)
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="allow"), "2026-05-19T00:00:00Z")
+    intent = extract_package_intent_request(
+        "run_terminal_command",
+        {"command": "npm install minimist@1.2.8"},
+        action_envelope_command="npm install minimist@1.2.8",
+        workspace=context.workspace_dir,
+    )
+    assert intent is not None
+    package_artifact = build_package_request_artifact(
+        harness="cursor",
+        intent=intent,
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+        source_scope="project",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="cursor",
+            scope="artifact",
+            action="review",
+            artifact_id=package_artifact.artifact_id,
+            artifact_hash=artifact_hash(package_artifact),
+            workspace=None,
+            publisher=None,
+            reason="review exact package request",
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "cursor-mcp-stored-review.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    proxy = RuntimeMcpGuardProxy(
+        harness="cursor",
+        server_name="workspace-tools",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "run_terminal_command",
+                    "arguments": {"command": "npm install minimist@1.2.8"},
+                },
+            },
+        ]
+    )
+
+    assert marker_path.exists() is False
+    assert result["responses"][2]["error"]["code"] == -32001
+    assert "approve request" in json.dumps(result["responses"][2]).lower()
+    assert len(store.list_approval_requests(limit=5)) == 1
