@@ -128,6 +128,44 @@ requests==2.31.0 \\
     assert result.packages[0]["resolvedVersion"] == "2.31.0"
 
 
+def test_evaluate_package_request_artifact_resolves_marker_qualified_exact_requirements_versions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    write_text(
+        workspace_dir / "requirements.txt",
+        'requests==2.31.0 ; python_version < "3.13"\n',
+    )
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(
+            packages=[
+                package_fixture(
+                    name="requests",
+                    version="2.31.0",
+                    default_action="block",
+                    recommended_fix_version="2.32.0",
+                )
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = artifact_from_command_fixture(
+        'pip install -r requirements.txt "requests>=2.31,<2.32"',
+        workspace=workspace_dir,
+    )
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["resolvedVersion"] == "2.31.0"
+
+
 def test_evaluate_package_request_artifact_allows_recommended_safe_python_version(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
