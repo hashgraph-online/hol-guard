@@ -28,6 +28,7 @@ coverage/
 dashboard/node_modules/
 dashboard/.vite/
 dashboard/dist/
+output/playwright/
 .guard-*/
 .guard-ui-review/
 .package-check/

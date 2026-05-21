@@ -2,6 +2,79 @@ import { r as reactExports, x as fetchSettings, y as fetchRuntimeSnapshot, z as 
 import { a as resolveProtectionLevelCopy } from "./runtime-overview.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+function resolveSupportChipClasses(supportLevel) {
+  if (supportLevel === "protected") {
+    return "border-emerald-200 bg-white/80 text-emerald-700";
+  }
+  if (supportLevel === "beta") {
+    return "border-brand-blue/15 bg-brand-blue/[0.06] text-brand-blue";
+  }
+  return "border-slate-200 bg-slate-100/70 text-slate-600";
+}
+function SupplyChainPolicySummary({ draft, supplyChain }) {
+  const packageScriptAction = draft?.risk_actions?.package_script ?? "warn";
+  const cloudAdvisoryAction = draft?.risk_actions?.cloud_advisory ?? "warn";
+  const cloudPolicy = supplyChain?.policy ?? null;
+  const bundle = supplyChain?.bundle ?? null;
+  const ecosystems = supplyChain?.supported_ecosystems ?? [];
+  const status = supplyChain?.status ?? "not_connected";
+  const isCloudManaged = cloudPolicy?.managed_by_cloud === true;
+  const isBundleActive = status === "synced";
+  const managedLabel = cloudPolicy?.managed_label || "Guard Cloud";
+  const managedUpdatedAt = cloudPolicy?.managed_updated_at || null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-emerald-100 bg-emerald-50/30 p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mt-0.5 h-5 w-5 shrink-0 text-emerald-600", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package firewall" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isBundleActive ? "green" : "slate", children: status === "expired" ? "Bundle expired" : isBundleActive ? "Bundle active" : "Local only" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Guard intercepts package install scripts and cloud advisories independently of the security level." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 grid gap-3 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Package scripts" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "p",
+              {
+                className: `mt-0.5 text-sm font-semibold capitalize ${isCloudManaged ? "text-brand-blue" : "text-brand-dark"}`,
+                children: cloudPolicy?.package_script_action || packageScriptAction
+              }
+            ),
+            isCloudManaged && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-[11px] text-brand-blue/70", children: "Managed in Guard Cloud" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Cloud advisories" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "p",
+              {
+                className: `mt-0.5 text-sm font-semibold capitalize ${isCloudManaged ? "text-brand-blue" : "text-brand-dark"}`,
+                children: cloudPolicy?.cloud_advisory_action || cloudAdvisoryAction
+              }
+            ),
+            isCloudManaged && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-[11px] text-brand-blue/70", children: "Managed in Guard Cloud" })
+          ] })
+        ] }),
+        isCloudManaged && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 rounded-lg border border-brand-blue/10 bg-white/70 px-3 py-2 text-xs text-slate-500", children: [
+          managedLabel,
+          " is managing the synced policy summary for this machine",
+          managedUpdatedAt ? `, updated ${managedUpdatedAt}.` : "."
+        ] }),
+        ecosystems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Coverage by ecosystem" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1.5 flex flex-wrap gap-1.5", role: "list", "aria-label": "Covered ecosystems", children: ecosystems.map((eco) => {
+            const label = eco.display_name || eco.ecosystem || String(eco);
+            const key = eco.ecosystem || eco.display_name || label;
+            const supportLabel = eco.support_label || eco.label || "Monitor-only";
+            const supportLevel = eco.support_level || "monitor-only";
+            return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "listitem", className: `rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${resolveSupportChipClasses(supportLevel)}`, children: `${label} · ${supportLabel}` }, key);
+          }) })
+        ] }),
+        !isBundleActive && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-lg border border-slate-200/70 bg-white/60 px-3 py-2 text-xs text-slate-500", children: "Local fallback mode: Guard applies the package_script policy above without a cloud advisory lookup. Connect to Guard Cloud to enable advisory data from the signed bundle." })
+      ] })
+    ] })
+  ] });
+}
 function resolveSecurityLevelCardDescription(level) {
   if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
   if (level === "balanced") return "Ask before secret access, hidden execution, exfiltration, and destructive actions.";
@@ -512,6 +585,7 @@ function SettingsWorkspace() {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: consequenceSummary })
       ] })
     ] }) }),
+    !hasSearch && /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainPolicySummary, { draft, supplyChain: perfSnapshot?.supply_chain ?? null }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", role: "region", "aria-label": "Settings sections", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         AccordionSection,
