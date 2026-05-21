@@ -58,8 +58,25 @@ def parse_manifest_dependency_changes(
     return ManifestParseResult(changes)
 
 
+def parse_manifest_dependencies(
+    *,
+    path: str,
+    text: str,
+    byte_limit: int = 2_097_152,
+    deadline_ms: int = 50,
+) -> dict[str, str]:
+    if len(text.encode("utf-8")) > byte_limit:
+        return {}
+    deadline = time.monotonic() + (deadline_ms / 1000)
+    try:
+        return _dependency_map_for_path(path, text, deadline=deadline)
+    except Exception:
+        return {}
+
+
 def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[str, str]:
     lower_path = path.lower()
+    lower_name = lower_path.rsplit("/", 1)[-1]
     if lower_path.endswith("package.json"):
         return _json_dependency_map(
             text,
@@ -76,10 +93,20 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
         return _bun_lock_dependency_map(text, deadline)
     if lower_path.endswith("composer.json"):
         return _json_dependency_map(text, ("require", "require-dev"), deadline)
-    if lower_path.endswith("requirements.txt"):
+    if lower_path.endswith("requirements.txt") or lower_path.endswith("constraints.txt") or lower_name.endswith(
+        ".requirements.txt"
+    ):
         return _requirements_dependency_map(text, deadline)
     if lower_path.endswith("pyproject.toml"):
         return _pyproject_dependency_map(text, deadline)
+    if lower_path.endswith("poetry.lock"):
+        return _poetry_lock_dependency_map(text, deadline)
+    if lower_path.endswith("uv.lock"):
+        return _uv_lock_dependency_map(text, deadline)
+    if lower_path.endswith("pipfile"):
+        return _toml_table_dependency_map(text, ("packages", "dev-packages"), deadline)
+    if lower_path.endswith("pipfile.lock"):
+        return _pipfile_lock_dependency_map(text, deadline)
     if lower_path.endswith("cargo.toml"):
         return _toml_table_dependency_map(text, ("dependencies", "dev-dependencies", "build-dependencies"), deadline)
     if lower_path.endswith("go.mod"):
@@ -281,7 +308,11 @@ def _requirements_dependency_map(text: str, deadline: float) -> dict[str, str]:
     for line in text.splitlines():
         _ensure_within_deadline(deadline)
         stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+        if not stripped or stripped.startswith("#"):
+            continue
+        stripped = re.split(r"\s+#", stripped, maxsplit=1)[0].strip()
+        stripped = re.sub(r"\s+--hash(?:=|\s+)[^\s]+", "", stripped).strip()
+        if not stripped or stripped.startswith("-"):
             continue
         target: PackageIntentTarget = python_target(stripped)
         if target.package_name is not None:
@@ -295,12 +326,110 @@ def _pyproject_dependency_map(text: str, deadline: float) -> dict[str, str]:
     dependencies: dict[str, str] = {}
     project = payload.get("project")
     if isinstance(project, dict):
-        values = project.get("dependencies")
-        if isinstance(values, list):
-            for value in values:
-                target = python_target(str(value))
-                if target.package_name is not None:
-                    dependencies[target.package_name] = target.requested_specifier or ""
+        _collect_python_dependency_list(dependencies, project.get("dependencies"), deadline)
+        optional_dependencies = project.get("optional-dependencies")
+        if isinstance(optional_dependencies, dict):
+            for values in optional_dependencies.values():
+                _collect_python_dependency_list(dependencies, values, deadline)
+    tool = payload.get("tool")
+    if isinstance(tool, dict):
+        poetry = tool.get("poetry")
+        if isinstance(poetry, dict):
+            _collect_poetry_dependency_table(dependencies, poetry.get("dependencies"), deadline)
+            _collect_poetry_dependency_table(dependencies, poetry.get("dev-dependencies"), deadline)
+            groups = poetry.get("group")
+            if isinstance(groups, dict):
+                for group in groups.values():
+                    if not isinstance(group, dict):
+                        continue
+                    _collect_poetry_dependency_table(dependencies, group.get("dependencies"), deadline)
+    return dependencies
+
+
+def _collect_python_dependency_list(
+    dependencies: dict[str, str],
+    values: object,
+    deadline: float,
+) -> None:
+    if not isinstance(values, list):
+        return
+    for value in values:
+        _ensure_within_deadline(deadline)
+        target = python_target(str(value))
+        if target.package_name is not None:
+            dependencies[target.package_name] = target.requested_specifier or ""
+
+
+def _collect_poetry_dependency_table(
+    dependencies: dict[str, str],
+    values: object,
+    deadline: float,
+) -> None:
+    if not isinstance(values, dict):
+        return
+    for package_name, value in values.items():
+        _ensure_within_deadline(deadline)
+        normalized_name = str(package_name)
+        if normalized_name == "python":
+            continue
+        if isinstance(value, str):
+            dependencies[normalized_name] = value
+            continue
+        if isinstance(value, dict) and isinstance(value.get("version"), str):
+            dependencies[normalized_name] = str(value["version"])
+
+
+def _poetry_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+    _ensure_within_deadline(deadline)
+    payload = tomllib.loads(text or "")
+    packages = payload.get("package")
+    dependencies: dict[str, str] = {}
+    if not isinstance(packages, list):
+        return dependencies
+    for package in packages:
+        _ensure_within_deadline(deadline)
+        if not isinstance(package, dict):
+            continue
+        name = package.get("name")
+        version = package.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            dependencies[name] = version
+    return dependencies
+
+
+def _uv_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+    _ensure_within_deadline(deadline)
+    payload = tomllib.loads(text or "")
+    packages = payload.get("package")
+    dependencies: dict[str, str] = {}
+    if not isinstance(packages, list):
+        return dependencies
+    for package in packages:
+        _ensure_within_deadline(deadline)
+        if not isinstance(package, dict):
+            continue
+        name = package.get("name")
+        version = package.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            dependencies[name] = version
+    return dependencies
+
+
+def _pipfile_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+    _ensure_within_deadline(deadline)
+    payload = json.loads(text or "{}")
+    dependencies: dict[str, str] = {}
+    for section in ("default", "develop"):
+        values = payload.get(section)
+        if not isinstance(values, dict):
+            continue
+        for package_name, package_value in values.items():
+            _ensure_within_deadline(deadline)
+            if not isinstance(package_name, str) or not isinstance(package_value, dict):
+                continue
+            exact_version = _exact_dependency_version(package_value.get("version"))
+            if exact_version is not None:
+                dependencies[package_name] = exact_version
     return dependencies
 
 

@@ -26,7 +26,11 @@ from ..models import GuardArtifact
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from .js_semver import version_matches_js_selector
-from .package_manifest_diff import _DeadlineExceededError, _dependency_map_for_path
+from .package_manifest_diff import (
+    _DeadlineExceededError,
+    _dependency_map_for_path,
+    parse_manifest_dependencies,
+)
 from .runner import (
     _guard_sync_headers,
     _normalized_receipts_sync_url,
@@ -616,6 +620,7 @@ def _evaluate_with_bundle(
         refresh_required = refresh_required or offline.stale
         package = _bundle_package_result(
             target=target,
+            bundle_response=bundle_response,
             package=package_match,
             decision=_normalize_bundle_action(offline.action),
             reason=offline.reason,
@@ -668,6 +673,24 @@ def _evaluate_with_bundle(
     )
 
 
+def _primary_bundle_advisory_id(
+    bundle_response: SupplyChainBundleResponse,
+    package: SupplyChainBundlePackage,
+) -> str | None:
+    if not package.related_advisory_ids:
+        return None
+    advisory_lookup: dict[str, str] = {}
+    for advisory in bundle_response.bundle.advisories:
+        advisory_lookup[advisory.advisory_id] = advisory.advisory_id
+        for alias in advisory.aliases:
+            advisory_lookup.setdefault(alias, advisory.advisory_id)
+    for advisory_id in package.related_advisory_ids:
+        canonical_id = advisory_lookup.get(advisory_id)
+        if canonical_id is not None:
+            return canonical_id
+    return package.related_advisory_ids[0]
+
+
 def _heuristic_result(
     *,
     artifact: GuardArtifact,
@@ -683,6 +706,10 @@ def _heuristic_result(
         )
         if local_package_result is not None:
             packages.append(local_package_result)
+            continue
+        local_python_result = _local_python_build_result(target=target, workspace_dir=workspace_dir)
+        if local_python_result is not None:
+            packages.append(local_python_result)
             continue
         source_url = _optional_string(target.get("source_url"))
         if source_url is not None and source_url.lower().startswith("http://"):
@@ -783,6 +810,7 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
     for item in raw_targets:
         if not isinstance(item, dict):
             continue
+        ecosystem = str(item.get("ecosystem") or "npm")
         package_name = _optional_string(item.get("package_name"))
         if package_name is None:
             continue
@@ -797,9 +825,9 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
             source_url = _source_url_from_raw_spec(raw_spec)
         parsed.append(
             {
-                "ecosystem": str(item.get("ecosystem") or "npm"),
+                "ecosystem": ecosystem,
                 "package_name": package_name,
-                "normalized_name": package_name.lower(),
+                "normalized_name": _normalize_package_name(ecosystem, package_name),
                 "namespace": namespace,
                 "name": name,
                 "raw_spec": raw_spec,
@@ -807,6 +835,9 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
                 "range": requested if exact_version is None else None,
                 "source_url": source_url,
                 "alias": _optional_string(item.get("alias")),
+                "dependency_group": _optional_string(item.get("dependency_group")),
+                "extras": tuple(item.get("extras")) if isinstance(item.get("extras"), list) else (),
+                "editable": bool(item.get("editable")),
                 "package_manager": package_manager,
             }
         )
@@ -917,7 +948,7 @@ def _transitive_lockfile_results(
     direct_target_names: set[str] = set()
     for target in _targets_from_artifact(artifact):
         direct_target_names.add(str(target["normalized_name"]))
-        direct_target_names.update(_package_lock_candidate_names(target))
+        direct_target_names.update(_target_candidate_names(target))
     for relative_path in lockfile_paths:
         lockfile_path = workspace_dir / str(relative_path)
         if not lockfile_path.exists():
@@ -998,6 +1029,7 @@ def _transitive_lockfile_results(
 def _bundle_package_result(
     *,
     target: dict[str, object],
+    bundle_response: SupplyChainBundleResponse,
     package: SupplyChainBundlePackage,
     decision: str,
     reason: str,
@@ -1019,7 +1051,7 @@ def _bundle_package_result(
         "alias": _optional_string(target.get("alias")),
         "reasons": (
             {
-                "advisoryId": package.related_advisory_ids[0] if package.related_advisory_ids else None,
+                "advisoryId": _primary_bundle_advisory_id(bundle_response, package),
                 "code": reason,
                 "message": _bundle_reason_message(package, decision=decision, reason=reason, stale=stale),
                 "severity": severity,
@@ -1222,6 +1254,86 @@ def _local_package_manifest_path(target: dict[str, object], workspace_dir: Path 
     return None
 
 
+def _local_python_build_result(target: dict[str, object], workspace_dir: Path | None) -> dict[str, object] | None:
+    if workspace_dir is None or (_optional_string(target.get("ecosystem")) or "npm") != "pypi":
+        return None
+    project_path = _local_python_project_path(target, workspace_dir)
+    if project_path is None:
+        return None
+    setup_py_path = project_path / "setup.py"
+    if setup_py_path.exists():
+        try:
+            setup_py_text = setup_py_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            setup_py_text = ""
+        if _python_setup_script_looks_suspicious(setup_py_text):
+            return _heuristic_package_result(
+                target=target,
+                decision="block",
+                code="setup_py_exec_risk",
+                message="Local setup.py executes commands or network behavior during packaging.",
+                severity="high",
+            )
+    pyproject_path = project_path / "pyproject.toml"
+    if pyproject_path.exists():
+        try:
+            pyproject_text = pyproject_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            pyproject_text = ""
+        if "[build-system]" in pyproject_text and "build-backend" in pyproject_text:
+            if _python_setup_script_looks_suspicious(pyproject_text):
+                return _heuristic_package_result(
+                    target=target,
+                    decision="block",
+                    code="build_backend_exec_risk",
+                    message="Local pyproject build backend references execution or network bootstrap behavior.",
+                    severity="high",
+                )
+            return _heuristic_package_result(
+                target=target,
+                decision="warn",
+                code="local_build_backend_risk",
+                message="Editable local Python installs can invoke pyproject build backend hooks from this workspace.",
+                severity="medium",
+            )
+    return None
+
+
+def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -> Path | None:
+    raw_spec = _optional_string(target.get("raw_spec"))
+    source_url = _optional_string(target.get("source_url"))
+    editable = bool(target.get("editable"))
+    if source_url is not None and source_url.startswith("file:"):
+        raw_spec = source_url.partition("file:")[2]
+    if raw_spec is None:
+        return workspace_dir if editable else None
+    if raw_spec.startswith(("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:")):
+        return None
+    candidate_path = Path(raw_spec.partition("file:")[2] if raw_spec.startswith("file:") else raw_spec)
+    disk_path = candidate_path if candidate_path.is_absolute() else workspace_dir / candidate_path
+    if disk_path.is_dir():
+        if (disk_path / "pyproject.toml").exists() or (disk_path / "setup.py").exists():
+            return disk_path
+        return None
+    parent = disk_path.parent
+    if disk_path.name in {"pyproject.toml", "setup.py"} and disk_path.exists():
+        return parent
+    workspace_has_python_project = (workspace_dir / "pyproject.toml").exists() or (
+        workspace_dir / "setup.py"
+    ).exists()
+    return workspace_dir if editable and workspace_has_python_project else None
+
+
+def _python_setup_script_looks_suspicious(content: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:os\.system|subprocess\.(?:run|Popen|call|check_output)|requests\.(?:get|post)|urllib\.request\.)",
+            content,
+        )
+        or re.search(r"\b(?:curl|wget)\b", content)
+    )
+
+
 def _manifest_package_name(manifest_text: str) -> str | None:
     try:
         payload = json.loads(manifest_text or "{}")
@@ -1371,6 +1483,7 @@ def _lockfile_dependency_versions(
     if not isinstance(lockfile_paths, list):
         return {}
     versions: dict[tuple[str, str | None], str] = {}
+    python_manifest_names = _manifest_direct_dependency_names(workspace_dir, artifact, ecosystem="pypi")
     for relative_path in lockfile_paths:
         lockfile_path = workspace_dir / str(relative_path)
         if not lockfile_path.exists():
@@ -1390,6 +1503,81 @@ def _lockfile_dependency_versions(
             continue
         if lockfile_path.name == "bun.lock":
             versions.update(_bun_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "poetry.lock":
+            versions.update(_poetry_lock_target_versions(lockfile_text, targets, python_manifest_names))
+            continue
+        if lockfile_path.name == "uv.lock":
+            versions.update(_uv_lock_target_versions(lockfile_text, targets, python_manifest_names))
+            continue
+        if lockfile_path.name == "Pipfile.lock":
+            versions.update(_pipfile_lock_target_versions(lockfile_text, targets, python_manifest_names))
+    manifest_versions = _manifest_dependency_versions(workspace_dir, artifact, targets)
+    for target_key, version in manifest_versions.items():
+        versions.setdefault(target_key, version)
+    return versions
+
+
+def _manifest_direct_dependency_names(
+    workspace_dir: Path | None,
+    artifact: GuardArtifact,
+    *,
+    ecosystem: str,
+) -> set[str]:
+    if workspace_dir is None:
+        return set()
+    manifest_paths = artifact.metadata.get("manifest_paths")
+    if not isinstance(manifest_paths, list):
+        return set()
+    direct_names: set[str] = set()
+    for relative_path in manifest_paths:
+        manifest_path = workspace_dir / str(relative_path)
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest_text = manifest_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        dependency_map = parse_manifest_dependencies(path=str(manifest_path.name), text=manifest_text)
+        for package_name in dependency_map:
+            direct_names.add(_normalize_package_name(ecosystem, package_name))
+    return direct_names
+
+
+def _manifest_dependency_versions(
+    workspace_dir: Path | None,
+    artifact: GuardArtifact,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    if workspace_dir is None:
+        return {}
+    manifest_paths = artifact.metadata.get("manifest_paths")
+    if not isinstance(manifest_paths, list):
+        return {}
+    python_targets = {target_key: target for target in targets if (target_key := _lockfile_target_key(target))}
+    versions: dict[tuple[str, str | None], str] = {}
+    for relative_path in manifest_paths:
+        manifest_path = workspace_dir / str(relative_path)
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest_text = manifest_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        dependency_map = parse_manifest_dependencies(path=str(manifest_path.name), text=manifest_text)
+        if not dependency_map:
+            continue
+        normalized_dependencies = {
+            _normalize_package_name("pypi", package_name): specifier
+            for package_name, specifier in dependency_map.items()
+        }
+        for target_key, target in python_targets.items():
+            if (_optional_string(target.get("ecosystem")) or "npm") != "pypi" or target_key in versions:
+                continue
+            specifier = normalized_dependencies.get(str(target["normalized_name"]))
+            exact_version = _python_lockfile_version(specifier)
+            if exact_version is not None:
+                versions[target_key] = exact_version
     return versions
 
 
@@ -1632,6 +1820,92 @@ def _bun_lock_target_versions(
     return versions
 
 
+def _poetry_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+    direct_manifest_names: set[str],
+) -> dict[tuple[str, str | None], str]:
+    return _target_versions_from_direct_map(targets, _poetry_lock_direct_versions(text, direct_manifest_names))
+
+
+def _poetry_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> dict[str, str]:
+    try:
+        payload = tomllib.loads(text or "")
+    except tomllib.TOMLDecodeError:
+        return {}
+    packages = payload.get("package")
+    direct_versions: dict[str, str] = {}
+    if not isinstance(packages, list):
+        return direct_versions
+    for package in packages:
+        if not isinstance(package, dict):
+            continue
+        name = _optional_string(package.get("name"))
+        version = _optional_string(package.get("version"))
+        normalized_name = _normalize_package_name("pypi", name) if name is not None else None
+        if normalized_name is None or version is None or normalized_name not in direct_manifest_names:
+            continue
+        direct_versions[normalized_name] = version
+    return direct_versions
+
+
+def _uv_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+    direct_manifest_names: set[str],
+) -> dict[tuple[str, str | None], str]:
+    return _target_versions_from_direct_map(targets, _uv_lock_direct_versions(text, direct_manifest_names))
+
+
+def _uv_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> dict[str, str]:
+    try:
+        payload = tomllib.loads(text or "")
+    except tomllib.TOMLDecodeError:
+        return {}
+    packages = payload.get("package")
+    direct_versions: dict[str, str] = {}
+    if not isinstance(packages, list):
+        return direct_versions
+    for package in packages:
+        if not isinstance(package, dict):
+            continue
+        name = _optional_string(package.get("name"))
+        version = _optional_string(package.get("version"))
+        normalized_name = _normalize_package_name("pypi", name) if name is not None else None
+        if normalized_name is None or version is None or normalized_name not in direct_manifest_names:
+            continue
+        direct_versions[normalized_name] = version
+    return direct_versions
+
+
+def _pipfile_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+    direct_manifest_names: set[str],
+) -> dict[tuple[str, str | None], str]:
+    return _target_versions_from_direct_map(targets, _pipfile_lock_direct_versions(text, direct_manifest_names))
+
+
+def _pipfile_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> dict[str, str]:
+    try:
+        payload = json.loads(text or "{}")
+    except json.JSONDecodeError:
+        return {}
+    direct_versions: dict[str, str] = {}
+    for section in ("default", "develop"):
+        values = payload.get(section)
+        if not isinstance(values, dict):
+            continue
+        for package_name, package_value in values.items():
+            if not isinstance(package_name, str) or not isinstance(package_value, dict):
+                continue
+            exact_version = _python_lockfile_version(package_value.get("version"))
+            normalized_name = _normalize_package_name("pypi", package_name)
+            if exact_version is not None and normalized_name in direct_manifest_names:
+                direct_versions[normalized_name] = exact_version
+    return direct_versions
+
+
 def _target_versions_from_direct_map(
     targets: tuple[dict[str, object], ...],
     direct_versions: dict[str, str],
@@ -1639,7 +1913,7 @@ def _target_versions_from_direct_map(
     versions: dict[tuple[str, str | None], str] = {}
     for target in targets:
         target_key = _lockfile_target_key(target)
-        for candidate in _package_lock_candidate_names(target):
+        for candidate in _target_candidate_names(target):
             version = direct_versions.get(candidate)
             if version is not None:
                 versions[target_key] = version
@@ -1687,7 +1961,7 @@ def _resolved_target_version(
     if requested_range is None:
         return None
     ecosystem = _optional_string(target.get("ecosystem")) or "npm"
-    if ecosystem == "npm":
+    if ecosystem in {"npm", "pypi"}:
         lockfile_version = lockfile_versions.get(_lockfile_target_key(target))
         if lockfile_version is not None:
             return lockfile_version
@@ -1700,14 +1974,18 @@ def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target:
 
 
 def _bundle_package_name_matches(package: SupplyChainBundlePackage, target: dict[str, object]) -> bool:
-    full_name = f"{package.namespace}/{package.name}".lower() if package.namespace is not None else package.name.lower()
+    full_name = (
+        _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
+        if package.namespace is not None
+        else _normalize_package_name(package.ecosystem, package.name)
+    )
     target_name = str(target["normalized_name"])
     target_namespace = _optional_string(target.get("namespace"))
     if target_namespace is not None:
         return target_name == full_name
     if package.namespace is not None:
         return False
-    return target_name == package.name.lower()
+    return target_name == _normalize_package_name(package.ecosystem, package.name)
 
 
 def _recommended_fix_allow_package_result(
@@ -1861,10 +2139,15 @@ def _bundle_package(
     package_name: str,
     package_version: str,
 ) -> SupplyChainBundlePackage | None:
-    normalized = package_name.lower()
+    normalized = _normalize_package_name("pypi", package_name)
     for item in bundle_response.bundle.packages:
-        full_name = f"{item.namespace}/{item.name}".lower() if item.namespace is not None else item.name.lower()
-        if normalized not in {item.name.lower(), full_name}:
+        full_name = (
+            _normalize_package_name(item.ecosystem, f"{item.namespace}/{item.name}")
+            if item.namespace is not None
+            else _normalize_package_name(item.ecosystem, item.name)
+        )
+        normalized_item_name = _normalize_package_name(item.ecosystem, item.name)
+        if normalized not in {normalized_item_name, full_name}:
             continue
         if item.version == package_version:
             return item
@@ -1965,6 +2248,12 @@ def _fix_command(package: dict[str, object]) -> str | None:
     if not fix_version:
         return None
     if ecosystem == "pypi":
+        if package_manager == "uv":
+            return f"uv add {package_name}=={fix_version}"
+        if package_manager == "poetry":
+            return f"poetry add {package_name}@{fix_version}"
+        if package_manager == "pipenv":
+            return f"pipenv install {package_name}=={fix_version}"
         return f"pip install {package_name}=={fix_version}"
     if package_manager == "pnpm":
         return f"pnpm add {package_name}@{fix_version}"
@@ -1991,6 +2280,48 @@ def _package_display_name(package: dict[str, object]) -> str:
     namespace = _optional_string(package.get("namespace"))
     name = _optional_string(package.get("name")) or "package"
     return f"{namespace}/{name}" if namespace is not None else name
+
+
+def _normalize_package_name(ecosystem: str, package_name: str) -> str:
+    normalized = package_name.strip().lower()
+    if ecosystem == "pypi":
+        return re.sub(r"[-_.]+", "-", normalized)
+    return normalized
+
+
+def _target_candidate_names(target: dict[str, object]) -> tuple[str, ...]:
+    alias = _optional_string(target.get("alias"))
+    namespace = _optional_string(target.get("namespace"))
+    ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+    name = str(target["name"])
+    candidates: list[str] = []
+    if alias is not None:
+        candidates.append(alias)
+    qualified_name = f"{namespace}/{name}" if namespace is not None else name
+    candidates.append(qualified_name)
+    normalized_name = _normalize_package_name(ecosystem, qualified_name)
+    if normalized_name not in candidates:
+        candidates.append(normalized_name)
+    raw_package_name = _optional_string(target.get("package_name"))
+    if raw_package_name is not None and raw_package_name not in candidates:
+        candidates.append(raw_package_name)
+        raw_normalized = _normalize_package_name(ecosystem, raw_package_name)
+        if raw_normalized not in candidates:
+            candidates.append(raw_normalized)
+    return tuple(candidates)
+
+
+def _python_lockfile_version(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().strip('"').strip("'")
+    if normalized.startswith(("==", "===")):
+        normalized = normalized.lstrip("=")
+    try:
+        Version(normalized)
+    except InvalidVersion:
+        return None
+    return normalized
 
 
 def _reason_severity(package: dict[str, object]) -> str:
