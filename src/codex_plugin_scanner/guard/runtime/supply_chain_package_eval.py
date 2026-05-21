@@ -2428,8 +2428,12 @@ def _python_lockfile_version(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     normalized = value.strip().strip('"').strip("'")
+    if ";" in normalized:
+        normalized = normalized.split(";", 1)[0].strip()
     if normalized.startswith(("==", "===")):
         normalized = normalized.lstrip("=")
+    if not normalized:
+        return None
     try:
         Version(normalized)
     except InvalidVersion:
