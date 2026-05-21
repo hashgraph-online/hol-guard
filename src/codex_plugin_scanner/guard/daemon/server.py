@@ -1943,9 +1943,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         request_id = self._optional_string(payload.get("request_id"))
         pairing_secret = self._optional_string(payload.get("pairing_secret"))
         token = self._optional_string(payload.get("token"))
-        workspace_id = (
-            self._optional_string(payload.get("workspace_id"))
-            or self._optional_string(payload.get("workspaceId"))
+        workspace_id = self._optional_string(payload.get("workspace_id")) or self._optional_string(
+            payload.get("workspaceId")
         )
         if origin is None or request_id is None or pairing_secret is None or token is None:
             self._write_json(
