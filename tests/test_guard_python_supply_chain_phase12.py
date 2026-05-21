@@ -302,6 +302,58 @@ source = { registry = "https://pypi.org/simple" }
     assert results == []
 
 
+def test_evaluate_package_request_artifact_uses_manager_specific_fix_commands_for_python_transitives(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    write_text(
+        workspace_dir / "pyproject.toml",
+        "[project]\nname = 'demo'\nversion = '0.1.0'\ndependencies = ['fastapi>=0.110,<0.116']\n",
+    )
+    write_text(
+        workspace_dir / "uv.lock",
+        """
+version = 1
+
+[[package]]
+name = "fastapi"
+version = "0.115.0"
+source = { registry = "https://pypi.org/simple" }
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(
+            packages=[
+                package_fixture(
+                    name="requests",
+                    version="2.31.0",
+                    default_action="block",
+                    recommended_fix_version="2.32.0",
+                )
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+    monkeypatch.setattr(
+        supply_chain_package_eval_module,
+        "_safe_dependency_map_for_path",
+        lambda _path, _text, *, deadline: {"requests": "2.31.0"},
+    )
+
+    artifact = artifact_from_command_fixture("uv add fastapi>=0.110,<0.116", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.user_copy.next_step == "uv add requests==2.32.0"
+
+
 @pytest.mark.parametrize(
     ("command", "manifest_name", "manifest_text", "lockfile_name", "lockfile_text", "package_name", "version"),
     [
