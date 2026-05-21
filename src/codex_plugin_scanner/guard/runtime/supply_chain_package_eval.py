@@ -1561,6 +1561,7 @@ def _manifest_direct_dependency_names(
     manifest_paths = artifact.metadata.get("manifest_paths")
     if not isinstance(manifest_paths, list):
         return set()
+    package_manager = str(artifact.metadata.get("package_manager") or "npm")
     direct_names: set[str] = set()
     for relative_path in manifest_paths:
         manifest_path = workspace_dir / str(relative_path)
@@ -1570,7 +1571,11 @@ def _manifest_direct_dependency_names(
             manifest_text = manifest_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        dependency_map = parse_manifest_dependencies(path=str(manifest_path.name), text=manifest_text)
+        dependency_map = _artifact_manifest_dependency_map(
+            package_manager=package_manager,
+            relative_path=str(relative_path),
+            manifest_text=manifest_text,
+        )
         for package_name in dependency_map:
             direct_names.add(_normalize_package_name(ecosystem, package_name))
     return direct_names
@@ -1586,6 +1591,7 @@ def _manifest_dependency_versions(
     manifest_paths = artifact.metadata.get("manifest_paths")
     if not isinstance(manifest_paths, list):
         return {}
+    package_manager = str(artifact.metadata.get("package_manager") or "npm")
     python_targets = {target_key: target for target in targets if (target_key := _lockfile_target_key(target))}
     versions: dict[tuple[str, str | None], str] = {}
     for relative_path in manifest_paths:
@@ -1596,7 +1602,11 @@ def _manifest_dependency_versions(
             manifest_text = manifest_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        dependency_map = parse_manifest_dependencies(path=str(manifest_path.name), text=manifest_text)
+        dependency_map = _artifact_manifest_dependency_map(
+            package_manager=package_manager,
+            relative_path=str(relative_path),
+            manifest_text=manifest_text,
+        )
         if not dependency_map:
             continue
         normalized_dependencies = {
@@ -1611,6 +1621,18 @@ def _manifest_dependency_versions(
             if exact_version is not None:
                 versions[target_key] = exact_version
     return versions
+
+
+def _artifact_manifest_dependency_map(
+    *,
+    package_manager: str,
+    relative_path: str,
+    manifest_text: str,
+) -> dict[str, str]:
+    dependency_map = parse_manifest_dependencies(path=relative_path, text=manifest_text)
+    if dependency_map or package_manager != "pip":
+        return dependency_map
+    return parse_manifest_dependencies(path="requirements.txt", text=manifest_text)
 
 
 def _package_lock_target_versions(
