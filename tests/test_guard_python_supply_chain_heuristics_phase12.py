@@ -49,6 +49,35 @@ def test_evaluate_package_request_artifact_normalizes_pypi_names_for_bundle_matc
     assert result.packages[0]["name"] == "scikit-learn"
 
 
+def test_evaluate_package_request_artifact_ignores_cross_ecosystem_bundle_matches(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    npm_package = package_fixture(
+        name="requests",
+        version="2.31.0",
+        default_action="block",
+        recommended_fix_version="2.32.0",
+    )
+    npm_package["ecosystem"] = "npm"
+    npm_package["purl"] = "pkg:npm/requests@2.31.0"
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(packages=[npm_package]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = artifact_from_command_fixture("pip install requests==2.31.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "monitor"
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -93,6 +122,31 @@ build-backend = "setuptools.build_meta"
 
     assert result.decision == "warn"
     assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
+
+
+def test_evaluate_package_request_artifact_does_not_treat_plain_requirement_name_as_local_path(
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    local_requests_dir = workspace_dir / "requests"
+    local_requests_dir.mkdir()
+    write_text(
+        local_requests_dir / "pyproject.toml",
+        """
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+
+    artifact = artifact_from_command_fixture("pip install requests", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "monitor"
 
 
 def test_evaluate_package_request_artifact_keeps_benign_pyproject_urls_as_warn_only(tmp_path: Path) -> None:
