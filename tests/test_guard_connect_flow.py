@@ -197,6 +197,129 @@ def test_guard_connect_preserves_pairing_when_first_sync_fails(
     assert payload["proof"]["first_synced_at"] is None
 
 
+def test_guard_daemon_connect_complete_persists_cloud_workspace_id(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        initialize_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/initialize",
+            data=json.dumps(
+                {
+                    "client_name": "hol-guard-cli",
+                    "surface": "cli",
+                    "supported_protocol_versions": ["1.1"],
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(initialize_request, timeout=5) as response:
+            initialize_payload = json.loads(response.read().decode("utf-8"))
+
+        create_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/connect/requests",
+            data=json.dumps(
+                {
+                    "sync_url": "https://hol.org/api/guard/receipts/sync",
+                    "allowed_origin": "https://hol.org",
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Guard-Token": initialize_payload["auth_token"],
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(create_request, timeout=5) as response:
+            created_payload = json.loads(response.read().decode("utf-8"))
+
+        complete_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/connect/complete",
+            data=urllib.parse.urlencode(
+                {
+                    "request_id": created_payload["request_id"],
+                    "pairing_secret": created_payload["pairing_secret"],
+                    "token": "guard-live-runtime-token",
+                    "workspace_id": "workspace-alpha",
+                }
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Origin": "https://hol.org",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(complete_request, timeout=5) as response:
+            completed_payload = json.loads(response.read().decode("utf-8"))
+    finally:
+        daemon.stop()
+
+    assert completed_payload["completed"] is True
+    assert store.get_cloud_workspace_id() == "workspace-alpha"
+
+
+def test_guard_connect_completion_preserves_existing_workspace_for_same_token_retry(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    first_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+    )
+    store.complete_guard_connect_request(
+        request_id=str(first_request["request_id"]),
+        pairing_secret=str(first_request["pairing_secret"]),
+        token="guard-live-runtime-token-one",
+        now="2026-04-15T00:00:01+00:00",
+        workspace_id="workspace-alpha",
+    )
+    second_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:01:00+00:00",
+    )
+
+    store.complete_guard_connect_request(
+        request_id=str(second_request["request_id"]),
+        pairing_secret=str(second_request["pairing_secret"]),
+        token="guard-live-runtime-token-one",
+        now="2026-04-15T00:01:01+00:00",
+    )
+
+    assert store.get_cloud_workspace_id() == "workspace-alpha"
+
+
+def test_guard_connect_completion_drops_workspace_for_rotated_token_without_workspace(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    first_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+    )
+    store.complete_guard_connect_request(
+        request_id=str(first_request["request_id"]),
+        pairing_secret=str(first_request["pairing_secret"]),
+        token="guard-live-runtime-token-one",
+        now="2026-04-15T00:00:01+00:00",
+        workspace_id="workspace-alpha",
+    )
+    second_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:01:00+00:00",
+    )
+
+    store.complete_guard_connect_request(
+        request_id=str(second_request["request_id"]),
+        pairing_secret=str(second_request["pairing_secret"]),
+        token="guard-live-runtime-token-two",
+        now="2026-04-15T00:01:01+00:00",
+    )
+
+    assert store.get_cloud_workspace_id() is None
+
+
 def test_guard_connect_status_reports_retry_recovery_command(tmp_path, capsys) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)

@@ -450,7 +450,14 @@ class TestGuardApprovals:
             lifetime_seconds=600,
         )
 
-        def fail_credentials_write(connection, sync_url: str, token: str, now: str) -> None:
+        def fail_credentials_write(
+            connection,
+            sync_url: str,
+            token: str,
+            now: str,
+            *,
+            workspace_id: str | None = None,
+        ) -> None:
             raise RuntimeError("credentials unavailable")
 
         monkeypatch.setattr(store, "_set_sync_credentials_in_connection", fail_credentials_write)
