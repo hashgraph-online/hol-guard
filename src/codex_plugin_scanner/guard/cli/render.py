@@ -1646,8 +1646,7 @@ def _build_supply_chain_posture_panel(supply_chain: dict[str, object]) -> Panel:
     policy = supply_chain.get("policy")
     if isinstance(policy, dict):
         body.add_row("Security", str(policy.get("security_level") or "unknown"))
-        if policy.get("cloud_advisory_action"):
-            body.add_row("Cloud advisories", str(policy.get("cloud_advisory_action")))
+        body.add_row("Cloud advisories", str(policy.get("cloud_advisory_action") or "unknown"))
     ecosystems = _coerce_dict_list(supply_chain.get("supported_ecosystems"))
     if ecosystems:
         support_summary = ", ".join(

@@ -124,13 +124,11 @@ def build_local_supply_chain_posture(
         or _string_value(entitlement.get("tier"))
         or _string_value(bundle_payload.get("tier"))
     )
-    remote_package_script_action = (
-        _string_value(remote_policy.get("packageScriptAction"))
-        or _string_value(remote_policy.get("package_script_action"))
+    remote_package_script_action = _string_value(remote_policy.get("packageScriptAction")) or _string_value(
+        remote_policy.get("package_script_action")
     )
-    remote_cloud_advisory_action = (
-        _string_value(remote_policy.get("cloudAdvisoryAction"))
-        or _string_value(remote_policy.get("cloud_advisory_action"))
+    remote_cloud_advisory_action = _string_value(remote_policy.get("cloudAdvisoryAction")) or _string_value(
+        remote_policy.get("cloud_advisory_action")
     )
     managed_by_cloud = bool(remote_policy or team_policy_pack)
     managed_label = _string_value(team_policy_pack.get("name")) or ("Guard Cloud sync" if managed_by_cloud else None)
@@ -211,7 +209,7 @@ def build_workspace_scan_payload(
                 "message": "No supported manifests or lockfiles found in this workspace.",
                 "supply_chain": posture,
             },
-            1,
+            0,
         )
     artifact = build_package_request_artifact(
         _LOCAL_SUPPLY_CHAIN_HARNESS,
@@ -373,25 +371,43 @@ def build_package_protect_payload(
             now,
         )
         return (payload, _evaluation_exit_code(evaluation.decision))
-    execution = subprocess.run(
-        list(command),
-        cwd=workspace_dir,
-        capture_output=True,
-        check=False,
-        text=True,
-        timeout=timeout_seconds,
-    )
-    redacted_stdout = redact_text(execution.stdout)
-    redacted_stderr = redact_text(execution.stderr)
     payload["executed"] = True
-    payload["execution"] = {
-        "returncode": execution.returncode,
-        "stdout": execution.stdout if unsafe_raw_output else redacted_stdout.text,
-        "stderr": execution.stderr if unsafe_raw_output else redacted_stderr.text,
-        "stdout_redactions": redacted_stdout.to_dict(),
-        "stderr_redactions": redacted_stderr.to_dict(),
-        "raw_output_enabled": unsafe_raw_output,
-    }
+    try:
+        execution = subprocess.run(
+            list(command),
+            cwd=workspace_dir,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except (subprocess.TimeoutExpired, OSError) as error:
+        payload["execution"] = _build_command_execution_payload(
+            stdout=_coerce_command_output(getattr(error, "stdout", None)),
+            stderr=_coerce_command_error_output(error),
+            returncode=-1,
+            unsafe_raw_output=unsafe_raw_output,
+        )
+        store.add_event(
+            "install_time_execution_failed",
+            {
+                "artifact_id": artifact.artifact_id,
+                "artifact_name": artifact.name,
+                "executor": str(command[0]) if command else _LOCAL_SUPPLY_CHAIN_HARNESS,
+                "install_kind": sanitized_intent.intent_kind,
+                "action": verdict_action,
+                "error": type(error).__name__,
+                "risk_signals": list(risk_signals),
+            },
+            now,
+        )
+        return (payload, 1)
+    payload["execution"] = _build_command_execution_payload(
+        stdout=execution.stdout,
+        stderr=execution.stderr,
+        returncode=execution.returncode,
+        unsafe_raw_output=unsafe_raw_output,
+    )
     if execution.returncode == 0:
         store.add_receipt(receipt)
         store.add_event(
@@ -425,6 +441,41 @@ def build_package_protect_payload(
 
 def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:
     return tuple(_redact_command_token(str(token)) for token in command)
+
+
+def _build_command_execution_payload(
+    *,
+    stdout: str,
+    stderr: str,
+    returncode: int,
+    unsafe_raw_output: bool,
+) -> dict[str, object]:
+    redacted_stdout = redact_text(stdout)
+    redacted_stderr = redact_text(stderr)
+    return {
+        "returncode": returncode,
+        "stdout": stdout if unsafe_raw_output else redacted_stdout.text,
+        "stderr": stderr if unsafe_raw_output else redacted_stderr.text,
+        "stdout_redactions": redacted_stdout.to_dict(),
+        "stderr_redactions": redacted_stderr.to_dict(),
+        "raw_output_enabled": unsafe_raw_output,
+    }
+
+
+def _coerce_command_output(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _coerce_command_error_output(error: subprocess.TimeoutExpired | OSError) -> str:
+    parts = [_coerce_command_output(getattr(error, "stderr", None))]
+    message = str(error).strip()
+    if message:
+        parts.append(message)
+    return "\n".join(part for part in parts if part)
 
 
 def _workspace_scan_intent(workspace_dir: Path) -> PackageIntent | None:
