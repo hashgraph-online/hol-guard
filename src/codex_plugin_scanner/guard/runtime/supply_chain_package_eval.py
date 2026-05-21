@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -13,18 +14,25 @@ from datetime import datetime, timezone
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+try:
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redef]
+
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
 from ..models import GuardArtifact
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
+from .js_semver import version_matches_js_selector
 from .package_manifest_diff import _DeadlineExceededError, _dependency_map_for_path
 from .runner import (
     _guard_sync_headers,
     _normalized_receipts_sync_url,
     _urlopen_json_with_timeout_retry,
 )
+from .supply_chain import detect_supply_chain_risk
 from .supply_chain_bundle import (
     SupplyChainBundleMalformedError,
     evaluate_cached_supply_chain_bundle,
@@ -245,7 +253,7 @@ def evaluate_package_request_artifact(
     if cloud_result is not None:
         upgraded = cloud_result
         if cloud_result.enforcement == "upgrade_required":
-            heuristic = _heuristic_result(artifact=artifact, targets=targets)
+            heuristic = _heuristic_result(artifact=artifact, targets=targets, workspace_dir=workspace_dir)
             if heuristic is not None and _decision_rank(heuristic.decision) > _decision_rank(cloud_result.decision):
                 upgraded = _finalize_evaluation(
                     _EvaluationDraft(
@@ -277,19 +285,30 @@ def evaluate_package_request_artifact(
         if fallback.refresh_required:
             store.add_event("supply_chain_bundle_refresh_requested", {"artifact_id": artifact.artifact_id}, now_value)
         return fallback
-    heuristic = _heuristic_result(artifact=artifact, targets=targets)
+    heuristic = _heuristic_result(artifact=artifact, targets=targets, workspace_dir=workspace_dir)
     if heuristic is None:
+        fallback_packages = _fallback_monitor_packages(targets=targets, artifact=artifact, workspace_dir=workspace_dir)
+        has_bun_binary_fallback = any(
+            reason["code"] == "bun_lockfile_binary_fallback"
+            for package in fallback_packages
+            for reason in package["reasons"]
+        )
         heuristic = _EvaluationDraft(
             decision="monitor",
             enforcement="free_local" if workspace_id is None else "local_fallback",
             entitlement_state="free" if workspace_id is None else "premium",
             cache_status="miss",
-            packages=tuple(_unknown_package_result(target) for target in targets),
+            packages=fallback_packages,
             reasons=(
                 {
-                    "code": "no_cached_match",
-                    "message": "Guard recorded this package request and will keep watching for new intelligence.",
-                    "severity": "unknown",
+                    "code": "bun_lockfile_binary_fallback" if has_bun_binary_fallback else "no_cached_match",
+                    "message": (
+                        "Guard could not parse bun.lockb because Bun stores it as a binary "
+                        "lockfile, so this request fell back to manifest-only monitoring."
+                        if has_bun_binary_fallback
+                        else "Guard recorded this package request and will keep watching for new intelligence."
+                    ),
+                    "severity": "low" if has_bun_binary_fallback else "unknown",
                     "source": "guard-local",
                 },
             ),
@@ -350,6 +369,14 @@ def _finalize_evaluation(
         "allow": f"{prefix} `{package_ref}` as trusted by policy.",
     }[draft.decision]
     reason_message = _optional_string(draft.reasons[0].get("message")) if draft.reasons else None
+    reason_code = _optional_string(draft.reasons[0].get("code")) if draft.reasons else None
+    source_risk_summaries = {
+        "insecure_source_url": "from insecure HTTP source before install.",
+        "external_tarball_source": "from external tarball source before install.",
+        "git_dependency_source": "from git dependency source before install.",
+    }
+    if reason_code in source_risk_summaries and reason_message is not None:
+        risk_summary = f"{prefix} `{package_ref}` {source_risk_summaries[reason_code]}"
     fix_command = _fix_command(primary_package)
     title = {
         "block": "Critical install blocked",
@@ -537,15 +564,19 @@ def _evaluate_with_bundle(
     bundle_meta = _bundle_meta(bundle_response.to_dict())
     refresh_required = False
     packages: list[dict[str, object]] = []
+    lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
     for target in targets:
-        exact_version = _exact_version(_optional_string(target.get("version")) or _optional_string(target.get("range")))
+        resolved_version = _resolved_target_version(
+            target=target,
+            lockfile_versions=lockfile_versions,
+        )
         package_match = (
             _bundle_package(
                 bundle_response,
                 package_name=str(target["normalized_name"]),
-                package_version=exact_version,
+                package_version=resolved_version,
             )
-            if exact_version is not None
+            if resolved_version is not None
             else None
         )
         matched_rule = _matching_policy_rule(
@@ -559,14 +590,28 @@ def _evaluate_with_bundle(
             package = _policy_package_result(target, decision=decision, rule_id=matched_rule.rule_id)
             packages.append(package)
             continue
-        if exact_version is None:
+        confusion_result = _dependency_confusion_policy_package_result(
+            bundle_response.bundle.policy_rules,
+            target=target,
+        )
+        if confusion_result is not None:
+            packages.append(confusion_result)
+            continue
+        if resolved_version is None:
             continue
         offline = evaluate_cached_supply_chain_bundle(
             bundle_response,
             package_name=str(target["normalized_name"]),
-            package_version=exact_version,
+            package_version=resolved_version,
         )
         if package_match is None:
+            safe_allow = _recommended_fix_allow_package_result(
+                target=target,
+                resolved_version=resolved_version,
+                bundle_response=bundle_response,
+            )
+            if safe_allow is not None:
+                packages.append(safe_allow)
             continue
         refresh_required = refresh_required or offline.stale
         package = _bundle_package_result(
@@ -575,10 +620,30 @@ def _evaluate_with_bundle(
             decision=_normalize_bundle_action(offline.action),
             reason=offline.reason,
             stale=offline.stale,
+            resolved_version=resolved_version,
         )
         packages.append(package)
+    direct_identities = {
+        (
+            _optional_string(package.get("namespace")),
+            str(package.get("name") or ""),
+            _optional_string(package.get("resolvedVersion")),
+        )
+        for package in packages
+    }
     packages.extend(
-        _transitive_lockfile_results(bundle_response=bundle_response, artifact=artifact, workspace_dir=workspace_dir)
+        package
+        for package in _transitive_lockfile_results(
+            bundle_response=bundle_response,
+            artifact=artifact,
+            workspace_dir=workspace_dir,
+        )
+        if (
+            _optional_string(package.get("namespace")),
+            str(package.get("name") or ""),
+            _optional_string(package.get("resolvedVersion")),
+        )
+        not in direct_identities
     )
     if not packages:
         return None
@@ -603,37 +668,61 @@ def _evaluate_with_bundle(
     )
 
 
-def _heuristic_result(*, artifact: GuardArtifact, targets: tuple[dict[str, object], ...]) -> _EvaluationDraft | None:
+def _heuristic_result(
+    *,
+    artifact: GuardArtifact,
+    targets: tuple[dict[str, object], ...],
+    workspace_dir: Path | None,
+) -> _EvaluationDraft | None:
     packages: list[dict[str, object]] = []
     for target in targets:
+        local_package_result = _local_package_manifest_result(
+            target=target,
+            artifact=artifact,
+            workspace_dir=workspace_dir,
+        )
+        if local_package_result is not None:
+            packages.append(local_package_result)
+            continue
         source_url = _optional_string(target.get("source_url"))
         if source_url is not None and source_url.lower().startswith("http://"):
             packages.append(
-                {
-                    "decision": "block",
-                    "ecosystem": target["ecosystem"],
-                    "name": target["name"],
-                    "namespace": target["namespace"],
-                    "requestedVersion": _optional_string(target.get("range"))
-                    or _optional_string(target.get("version")),
-                    "resolvedVersion": _optional_string(target.get("version")),
-                    "recommendedFixVersion": None,
-                    "riskScore": None,
-                    "dependencyPath": None,
-                    "reasons": (
-                        {
-                            "code": "insecure_source_url",
-                            "message": f"Insecure HTTP package source: {source_url}",
-                            "severity": "high",
-                            "source": "guard-local",
-                        },
-                    ),
-                }
+                _heuristic_package_result(
+                    target=target,
+                    decision="block",
+                    code="insecure_source_url",
+                    message=f"Insecure HTTP package source: {source_url}",
+                    severity="high",
+                )
+            )
+            continue
+        if source_url is not None and _is_git_source_url(source_url):
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="warn",
+                    code="git_dependency_source",
+                    message=f"Git package source requires review before install: {source_url}",
+                    severity="high",
+                )
+            )
+            continue
+        if source_url is not None and _is_external_https_tarball_source(source_url):
+            packages.append(
+                _heuristic_package_result(
+                    target=target,
+                    decision="warn",
+                    code="external_tarball_source",
+                    message=f"External HTTPS tarball source requires review before install: {source_url}",
+                    severity="medium",
+                )
             )
     if not packages:
         return None
+    packages.sort(key=lambda item: _decision_rank(str(item.get("decision") or "monitor")), reverse=True)
+    decision = str(packages[0].get("decision") or "monitor")
     return _EvaluationDraft(
-        decision="block",
+        decision=decision,
         enforcement="free_local",
         entitlement_state="free",
         cache_status="miss",
@@ -642,7 +731,7 @@ def _heuristic_result(*, artifact: GuardArtifact, targets: tuple[dict[str, objec
         matched_rule_id=None,
         exception_id=None,
         refresh_required=False,
-        record_monitor_evidence=False,
+        record_monitor_evidence=decision == "monitor",
         bundle_version=None,
         policy_version="local:none",
     )
@@ -690,6 +779,7 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
     if not isinstance(raw_targets, list):
         return ()
     parsed: list[dict[str, object]] = []
+    package_manager = str(artifact.metadata.get("package_manager") or "npm")
     for item in raw_targets:
         if not isinstance(item, dict):
             continue
@@ -716,6 +806,8 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
                 "version": exact_version,
                 "range": requested if exact_version is None else None,
                 "source_url": source_url,
+                "alias": _optional_string(item.get("alias")),
+                "package_manager": package_manager,
             }
         )
     return tuple(parsed)
@@ -822,6 +914,10 @@ def _transitive_lockfile_results(
     if not isinstance(lockfile_paths, list):
         return []
     results: list[dict[str, object]] = []
+    direct_target_names: set[str] = set()
+    for target in _targets_from_artifact(artifact):
+        direct_target_names.add(str(target["normalized_name"]))
+        direct_target_names.update(_package_lock_candidate_names(target))
     for relative_path in lockfile_paths:
         lockfile_path = workspace_dir / str(relative_path)
         if not lockfile_path.exists():
@@ -830,20 +926,40 @@ def _transitive_lockfile_results(
             lockfile_text = lockfile_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        dependency_map = _safe_dependency_map_for_path(
-            str(lockfile_path.name),
-            lockfile_text,
-            deadline=time.monotonic() + 0.2,
-        )
-        for dependency_path, version in dependency_map.items():
-            normalized_dependency_path = dependency_path.strip("/")
-            if not normalized_dependency_path:
-                continue
-            if "node_modules/" in normalized_dependency_path:
-                package_name = normalized_dependency_path.rsplit("node_modules/", 1)[-1]
-            elif "/" not in normalized_dependency_path or normalized_dependency_path.startswith("@"):
-                package_name = normalized_dependency_path
-            else:
+        dependency_entries: list[tuple[str, str, str, bool]] = []
+        if lockfile_path.name == "package-lock.json":
+            dependency_entries = [
+                (
+                    dependency_path,
+                    package_name,
+                    version,
+                    dependency_path in direct_target_names,
+                )
+                for dependency_path, package_name, version, _direct in _package_lock_entries(lockfile_text)
+            ]
+        else:
+            dependency_map = _safe_dependency_map_for_path(
+                str(lockfile_path.name),
+                lockfile_text,
+                deadline=time.monotonic() + 0.2,
+            )
+            for dependency_path, version in dependency_map.items():
+                normalized_dependency_path = dependency_path.strip("/")
+                if not normalized_dependency_path:
+                    continue
+                package_name = _dependency_package_name(normalized_dependency_path)
+                if package_name is None:
+                    continue
+                dependency_entries.append(
+                    (
+                        dependency_path,
+                        package_name,
+                        version,
+                        normalized_dependency_path in direct_target_names,
+                    )
+                )
+        for dependency_path, package_name, version, direct in dependency_entries:
+            if direct:
                 continue
             offline = evaluate_cached_supply_chain_bundle(
                 bundle_response, package_name=package_name, package_version=version
@@ -886,6 +1002,7 @@ def _bundle_package_result(
     decision: str,
     reason: str,
     stale: bool,
+    resolved_version: str,
 ) -> dict[str, object]:
     severity = package.normalized_severity if stale is False else "unknown"
     return {
@@ -893,11 +1010,13 @@ def _bundle_package_result(
         "ecosystem": package.ecosystem,
         "name": package.name,
         "namespace": package.namespace,
-        "requestedVersion": _optional_string(target.get("version")) or _optional_string(target.get("range")),
-        "resolvedVersion": package.version,
+        "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
+        "resolvedVersion": resolved_version,
         "recommendedFixVersion": package.recommended_fix_version,
         "riskScore": package.risk_score,
         "dependencyPath": None,
+        "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "alias": _optional_string(target.get("alias")),
         "reasons": (
             {
                 "advisoryId": package.related_advisory_ids[0] if package.related_advisory_ids else None,
@@ -921,6 +1040,8 @@ def _policy_package_result(target: dict[str, object], *, decision: str, rule_id:
         "recommendedFixVersion": None,
         "riskScore": None,
         "dependencyPath": None,
+        "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "alias": _optional_string(target.get("alias")),
         "ruleId": rule_id,
         "reasons": (
             {
@@ -959,6 +1080,8 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
         "recommendedFixVersion": None,
         "riskScore": None,
         "dependencyPath": None,
+        "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "alias": _optional_string(target.get("alias")),
         "reasons": (
             {
                 "code": "no_cached_match",
@@ -970,10 +1093,667 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _fallback_monitor_packages(
+    *,
+    targets: tuple[dict[str, object], ...],
+    artifact: GuardArtifact,
+    workspace_dir: Path | None,
+) -> tuple[dict[str, object], ...]:
+    bun_fallback_packages = _bun_lockfile_binary_fallback_packages(
+        targets=targets,
+        artifact=artifact,
+        workspace_dir=workspace_dir,
+    )
+    if bun_fallback_packages:
+        return tuple(bun_fallback_packages)
+    return tuple(_unknown_package_result(target) for target in targets)
+
+
+def _bun_lockfile_binary_fallback_packages(
+    *,
+    targets: tuple[dict[str, object], ...],
+    artifact: GuardArtifact,
+    workspace_dir: Path | None,
+) -> list[dict[str, object]]:
+    if workspace_dir is None:
+        return []
+    lockfile_paths = artifact.metadata.get("lockfile_paths")
+    if not isinstance(lockfile_paths, list):
+        return []
+    bun_lock_path = next(
+        (
+            workspace_dir / str(relative_path)
+            for relative_path in lockfile_paths
+            if Path(str(relative_path)).name == "bun.lockb" and (workspace_dir / str(relative_path)).exists()
+        ),
+        None,
+    )
+    if bun_lock_path is None:
+        return []
+    message = (
+        "Guard detected bun.lockb but Bun stores it as a binary lockfile, so this request fell back to "
+        "manifest-only monitoring."
+    )
+    if targets:
+        return [
+            _heuristic_package_result(
+                target=target,
+                decision="monitor",
+                code="bun_lockfile_binary_fallback",
+                message=message,
+                severity="low",
+            )
+            for target in targets
+        ]
+    return [
+        _heuristic_package_result(
+            target={"ecosystem": "npm", "name": "workspace", "namespace": None, "package_manager": "bun"},
+            decision="monitor",
+            code="bun_lockfile_binary_fallback",
+            message=message,
+            severity="low",
+        )
+    ]
+
+
+def _local_package_manifest_result(
+    *,
+    target: dict[str, object],
+    artifact: GuardArtifact,
+    workspace_dir: Path | None,
+) -> dict[str, object] | None:
+    manifest_path = _local_package_manifest_path(target, workspace_dir)
+    if manifest_path is None:
+        return None
+    try:
+        manifest_text = manifest_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    signals = tuple(
+        signal
+        for signal in detect_supply_chain_risk(manifest_text)
+        if signal.signal_id.startswith("supply-chain.postinstall")
+        or signal.signal_id.endswith("install-lifecycle-exec")
+    )
+    if not signals:
+        return None
+    manifest_target = dict(target)
+    manifest_package_name = _manifest_package_name(manifest_text)
+    if manifest_package_name is not None:
+        namespace, name = _split_namespace_name(manifest_package_name)
+        manifest_target["namespace"] = namespace
+        manifest_target["name"] = name
+    if _artifact_has_flag(artifact, "--ignore-scripts"):
+        return _heuristic_package_result(
+            target=manifest_target,
+            decision="allow",
+            code="ignore_scripts_applied",
+            message="`--ignore-scripts` disables lifecycle hooks for this local package install.",
+            severity="low",
+        )
+    strongest_signal = sorted(signals, key=lambda item: _severity_rank_value(item.severity), reverse=True)[0]
+    return _heuristic_package_result(
+        target=manifest_target,
+        decision="block",
+        code="install_script_risk",
+        message=strongest_signal.plain_reason,
+        severity=strongest_signal.severity,
+    )
+
+
+def _local_package_manifest_path(target: dict[str, object], workspace_dir: Path | None) -> Path | None:
+    if workspace_dir is None:
+        return None
+    raw_spec = _optional_string(target.get("raw_spec"))
+    source_url = _optional_string(target.get("source_url"))
+    if source_url is not None and source_url.startswith("file:"):
+        raw_spec = source_url.partition("file:")[2]
+    if raw_spec is None or raw_spec.startswith(("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:")):
+        return None
+    if raw_spec.startswith("file:"):
+        raw_spec = raw_spec.partition("file:")[2]
+    candidate_path = Path(raw_spec)
+    disk_path = candidate_path if candidate_path.is_absolute() else workspace_dir / candidate_path
+    if disk_path.is_dir():
+        manifest_path = disk_path / "package.json"
+        return manifest_path if manifest_path.exists() else None
+    if disk_path.name == "package.json" and disk_path.exists():
+        return disk_path
+    return None
+
+
+def _manifest_package_name(manifest_text: str) -> str | None:
+    try:
+        payload = json.loads(manifest_text or "{}")
+    except json.JSONDecodeError:
+        return None
+    package_name = payload.get("name")
+    return package_name.strip() if isinstance(package_name, str) and package_name.strip() else None
+
+
+def _artifact_has_flag(artifact: GuardArtifact, flag: str) -> bool:
+    raw_flags = artifact.metadata.get("flags")
+    return isinstance(raw_flags, list) and flag in raw_flags
+
+
+def _dependency_confusion_policy_package_result(
+    rules: tuple[SupplyChainBundlePolicyRule, ...],
+    *,
+    target: dict[str, object],
+) -> dict[str, object] | None:
+    if (_optional_string(target.get("ecosystem")) or "npm") != "npm" or _optional_string(
+        target.get("namespace")
+    ) is not None:
+        return None
+    current_time = datetime.now(timezone.utc).timestamp()
+    target_name = str(target["name"]).lower()
+    sorted_rules = sorted(
+        rules, key=lambda item: (item.priority if item.priority is not None else 10_000, item.rule_id)
+    )
+    for rule in sorted_rules:
+        if rule.enabled is False:
+            continue
+        if rule.expires_at is not None:
+            try:
+                if datetime.fromisoformat(rule.expires_at.replace("Z", "+00:00")).timestamp() <= current_time:
+                    continue
+            except ValueError:
+                pass
+        if rule.ecosystem_selector is not None and rule.ecosystem_selector != "npm":
+            continue
+        selector = (rule.package_selector or "").strip().lower()
+        if not selector or not _dependency_confusion_selector_matches(selector, target_name):
+            continue
+        decision = _normalize_bundle_action(rule.action)
+        if decision not in {"block", "ask", "warn"}:
+            decision = "warn"
+        return {
+            "decision": decision,
+            "ecosystem": target["ecosystem"],
+            "name": target["name"],
+            "namespace": target["namespace"],
+            "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
+            "resolvedVersion": _optional_string(target.get("version")),
+            "recommendedFixVersion": None,
+            "riskScore": None,
+            "dependencyPath": None,
+            "packageManager": _optional_string(target.get("package_manager")) or "npm",
+            "alias": _optional_string(target.get("alias")),
+            "ruleId": rule.rule_id,
+            "reasons": (
+                {
+                    "code": "dependency_confusion_risk",
+                    "message": (
+                        f"Policy reserves internal package selector {rule.package_selector}; "
+                        f"installing public package {target_name} may cause dependency confusion."
+                    ),
+                    "severity": "high",
+                    "source": "policy",
+                },
+            ),
+        }
+    return None
+
+
+def _dependency_confusion_selector_matches(selector: str, target_name: str) -> bool:
+    if not selector.startswith("@") or "/" not in selector:
+        return False
+    selector = selector.split("/", 1)[1]
+    if selector in {"", "*"}:
+        return False
+    if selector.endswith("*"):
+        return target_name.startswith(selector[:-1])
+    return target_name == selector
+
+
+def _heuristic_package_result(
+    *,
+    target: dict[str, object],
+    decision: str,
+    code: str,
+    message: str,
+    severity: str,
+) -> dict[str, object]:
+    return {
+        "decision": decision,
+        "ecosystem": target["ecosystem"],
+        "name": target["name"],
+        "namespace": target["namespace"],
+        "requestedVersion": _optional_string(target.get("range")) or _optional_string(target.get("version")),
+        "resolvedVersion": _optional_string(target.get("version")),
+        "recommendedFixVersion": None,
+        "riskScore": None,
+        "dependencyPath": None,
+        "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "alias": _optional_string(target.get("alias")),
+        "reasons": (
+            {
+                "code": code,
+                "message": message,
+                "severity": severity,
+                "source": "guard-local",
+            },
+        ),
+    }
+
+
+def _is_git_source_url(source_url: str) -> bool:
+    normalized = source_url.lower()
+    if normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
+        return True
+    return (
+        "/" in source_url
+        and not normalized.startswith(("http://", "https://"))
+        and ":" not in source_url
+        and not source_url.startswith(("@", "./", "../", "/"))
+    )
+
+
+def _is_external_https_tarball_source(source_url: str) -> bool:
+    parsed = urllib.parse.urlsplit(source_url)
+    normalized_path = parsed.path.lower()
+    hostname = parsed.hostname.lower() if parsed.hostname is not None else ""
+    return (
+        parsed.scheme.lower() == "https"
+        and normalized_path.endswith((".tgz", ".tar.gz", ".tar"))
+        and hostname != "registry.npmjs.org"
+    )
+
+
+def _lockfile_dependency_versions(
+    workspace_dir: Path | None,
+    artifact: GuardArtifact,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    if workspace_dir is None:
+        return {}
+    lockfile_paths = artifact.metadata.get("lockfile_paths")
+    if not isinstance(lockfile_paths, list):
+        return {}
+    versions: dict[tuple[str, str | None], str] = {}
+    for relative_path in lockfile_paths:
+        lockfile_path = workspace_dir / str(relative_path)
+        if not lockfile_path.exists():
+            continue
+        try:
+            lockfile_text = lockfile_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if lockfile_path.name == "package-lock.json":
+            versions.update(_package_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "pnpm-lock.yaml":
+            versions.update(_pnpm_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "yarn.lock":
+            versions.update(_yarn_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "bun.lock":
+            versions.update(_bun_lock_target_versions(lockfile_text, targets))
+    return versions
+
+
+def _package_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    entries = _package_lock_entries(text)
+    versions: dict[tuple[str, str | None], str] = {}
+    for target in targets:
+        target_key = _lockfile_target_key(target)
+        candidate_paths = set(_package_lock_candidate_names(target))
+        normalized_name = str(target["normalized_name"])
+        for dependency_path, package_name, version, direct in entries:
+            if not direct:
+                continue
+            if dependency_path in candidate_paths or package_name == normalized_name:
+                versions[target_key] = version
+                break
+    return versions
+
+
+def _package_lock_entries(text: str) -> list[tuple[str, str, str, bool]]:
+    payload = json.loads(text or "{}")
+    entries: list[tuple[str, str, str, bool]] = []
+    packages = payload.get("packages")
+    if isinstance(packages, dict):
+        for package_path, value in packages.items():
+            if not isinstance(package_path, str) or not package_path.startswith("node_modules/"):
+                continue
+            version = value.get("version") if isinstance(value, dict) else None
+            if not isinstance(version, str):
+                continue
+            dependency_path = package_path.removeprefix("node_modules/")
+            package_name = _optional_string(value.get("name")) if isinstance(value, dict) else None
+            entries.append(
+                (
+                    dependency_path,
+                    package_name or dependency_path.rsplit("node_modules/", 1)[-1],
+                    version,
+                    "node_modules/" not in dependency_path,
+                )
+            )
+        return entries
+    legacy_dependencies = payload.get("dependencies")
+    if isinstance(legacy_dependencies, dict):
+        _walk_package_lock_entries(legacy_dependencies, entries, prefix=None)
+    return entries
+
+
+def _walk_package_lock_entries(
+    payload: dict[str, object],
+    entries: list[tuple[str, str, str, bool]],
+    *,
+    prefix: str | None,
+) -> None:
+    for package_name, value in payload.items():
+        if not isinstance(package_name, str) or not isinstance(value, dict):
+            continue
+        version = value.get("version")
+        dependency_path = package_name if prefix is None else f"{prefix}/node_modules/{package_name}"
+        if isinstance(version, str):
+            entries.append(
+                (
+                    dependency_path,
+                    _optional_string(value.get("name")) or package_name,
+                    version,
+                    prefix is None,
+                )
+            )
+        nested_dependencies = value.get("dependencies")
+        if isinstance(nested_dependencies, dict):
+            _walk_package_lock_entries(nested_dependencies, entries, prefix=dependency_path)
+
+
+def _package_lock_candidate_names(target: dict[str, object]) -> tuple[str, ...]:
+    alias = _optional_string(target.get("alias"))
+    namespace = _optional_string(target.get("namespace"))
+    name = str(target["name"])
+    candidates: list[str] = []
+    if alias is not None:
+        candidates.append(alias)
+    qualified_name = f"{namespace}/{name}" if namespace is not None else name
+    if qualified_name not in candidates:
+        candidates.append(qualified_name)
+    return tuple(candidates)
+
+
+def _pnpm_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    direct_versions: dict[str, str] = {}
+    section: str | None = None
+    importer: str | None = None
+    dependency_block: str | None = None
+    dependency_name: str | None = None
+    top_level_dependency_sections = {"dependencies", "devDependencies", "optionalDependencies"}
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        if indent == 0:
+            section = stripped.removesuffix(":")
+            importer = None
+            dependency_block = None
+            dependency_name = None
+            continue
+        if section in top_level_dependency_sections:
+            if indent == 2 and ":" in stripped:
+                raw_name, _, raw_value = stripped.partition(":")
+                dependency_name = raw_name.strip().strip('"').strip("'")
+                direct_value = raw_value.strip().strip('"').strip("'")
+                exact_version = _direct_lockfile_version(direct_value)
+                if exact_version is not None:
+                    direct_versions[dependency_name] = exact_version
+                    dependency_name = None
+                continue
+            if dependency_name is not None and indent >= 4 and stripped.startswith("version:"):
+                exact_version = _direct_lockfile_version(stripped.partition(":")[2].strip().strip('"').strip("'"))
+                if exact_version is not None:
+                    direct_versions[dependency_name] = exact_version
+                dependency_name = None
+            continue
+        if section != "importers":
+            continue
+        if indent == 2 and stripped.endswith(":"):
+            importer = stripped[:-1].strip('"').strip("'")
+            dependency_block = None
+            dependency_name = None
+            continue
+        if importer not in {".", "default"}:
+            continue
+        if indent == 4 and stripped.endswith(":"):
+            block_name = stripped.removesuffix(":")
+            dependency_block = block_name if "dependencies" in block_name.lower() else None
+            dependency_name = None
+            continue
+        if dependency_block is None:
+            continue
+        if indent == 6 and ":" in stripped:
+            raw_name, _, raw_value = stripped.partition(":")
+            dependency_name = raw_name.strip().strip('"').strip("'")
+            direct_value = raw_value.strip().strip('"').strip("'")
+            exact_version = _direct_lockfile_version(direct_value)
+            if exact_version is not None:
+                direct_versions[dependency_name] = exact_version
+                dependency_name = None
+            continue
+        if dependency_name is not None and indent >= 8 and stripped.startswith("version:"):
+            exact_version = _direct_lockfile_version(stripped.partition(":")[2].strip().strip('"').strip("'"))
+            if exact_version is not None:
+                direct_versions[dependency_name] = exact_version
+            dependency_name = None
+    return _target_versions_from_direct_map(targets, direct_versions)
+
+
+def _yarn_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    versions: dict[tuple[str, str | None], str] = {}
+    current_selectors: tuple[str, ...] = ()
+    target_selectors = {_lockfile_target_key(target): set(_expected_yarn_selectors(target)) for target in targets}
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not raw_line.startswith((" ", "\t")):
+            current_selectors = tuple(
+                selector
+                for selector in (part.strip().strip('"').strip("'") for part in stripped.removesuffix(":").split(","))
+                if selector and selector != "__metadata"
+            )
+            continue
+        if not current_selectors:
+            continue
+        version_match = re.match(r'^version\s+"([^"]+)"$', stripped) or re.match(
+            r'^version:\s*"?([^"\s]+)"?$',
+            stripped,
+        )
+        if version_match is None:
+            continue
+        version = version_match.group(1)
+        selector_set = set(current_selectors)
+        for target_key, expected_selectors in target_selectors.items():
+            if target_key in versions or not expected_selectors:
+                continue
+            if selector_set & expected_selectors:
+                versions[target_key] = version
+    return versions
+
+
+def _expected_yarn_selectors(target: dict[str, object]) -> tuple[str, ...]:
+    requested = _optional_string(target.get("version")) or _optional_string(target.get("range"))
+    if requested is None:
+        return ()
+    normalized_name = str(target["normalized_name"])
+    alias = _optional_string(target.get("alias"))
+    selectors = [f"{normalized_name}@{requested}", f"{normalized_name}@npm:{requested}"]
+    if alias is not None:
+        selectors.append(f"{alias}@npm:{normalized_name}@{requested}")
+    return tuple(dict.fromkeys(selectors))
+
+
+def _bun_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    try:
+        payload = tomllib.loads(text or "")
+    except tomllib.TOMLDecodeError:
+        return {}
+    packages = payload.get("package")
+    if not isinstance(packages, list):
+        return {}
+    versions_by_name: dict[str, list[str]] = {}
+    for entry in packages:
+        if not isinstance(entry, dict):
+            continue
+        name = _optional_string(entry.get("name"))
+        version = _optional_string(entry.get("version"))
+        if name is None or version is None:
+            continue
+        versions_by_name.setdefault(name, []).append(version)
+    versions: dict[tuple[str, str | None], str] = {}
+    for target in targets:
+        target_key = _lockfile_target_key(target)
+        requested = _optional_string(target.get("range"))
+        candidates = versions_by_name.get(str(target["normalized_name"]), [])
+        if len(candidates) == 1:
+            versions[target_key] = candidates[0]
+            continue
+        if requested is None:
+            continue
+        matching_versions = [value for value in candidates if version_matches_js_selector(value, requested)]
+        if len(matching_versions) == 1:
+            versions[target_key] = matching_versions[0]
+    return versions
+
+
+def _target_versions_from_direct_map(
+    targets: tuple[dict[str, object], ...],
+    direct_versions: dict[str, str],
+) -> dict[tuple[str, str | None], str]:
+    versions: dict[tuple[str, str | None], str] = {}
+    for target in targets:
+        target_key = _lockfile_target_key(target)
+        for candidate in _package_lock_candidate_names(target):
+            version = direct_versions.get(candidate)
+            if version is not None:
+                versions[target_key] = version
+                break
+    return versions
+
+
+def _direct_lockfile_version(value: str) -> str | None:
+    normalized = value.split("(", 1)[0].strip()
+    if normalized.startswith("npm:"):
+        normalized = normalized.partition("npm:")[2]
+    if "@" in normalized and not normalized.startswith("@"):
+        candidate = normalized.rsplit("@", 1)[-1]
+        if _exact_version(candidate) is not None:
+            return candidate
+    if _exact_version(normalized) is not None:
+        return normalized
+    return None
+
+
+def _lockfile_target_key(target: dict[str, object]) -> tuple[str, str | None]:
+    return str(target["normalized_name"]), _optional_string(target.get("alias"))
+
+
+def _dependency_package_name(dependency_path: str) -> str | None:
+    normalized_dependency_path = dependency_path.strip("/").lower()
+    if not normalized_dependency_path:
+        return None
+    if "node_modules/" in normalized_dependency_path:
+        return normalized_dependency_path.rsplit("node_modules/", 1)[-1]
+    if "/" not in normalized_dependency_path or normalized_dependency_path.startswith("@"):
+        return normalized_dependency_path
+    return None
+
+
+def _resolved_target_version(
+    *,
+    target: dict[str, object],
+    lockfile_versions: dict[tuple[str, str | None], str],
+) -> str | None:
+    exact_version = _optional_string(target.get("version"))
+    if exact_version is not None:
+        return exact_version
+    requested_range = _optional_string(target.get("range"))
+    if requested_range is None:
+        return None
+    ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+    if ecosystem == "npm":
+        lockfile_version = lockfile_versions.get(_lockfile_target_key(target))
+        if lockfile_version is not None:
+            return lockfile_version
+        return None
+    return _exact_version(requested_range)
+
+
+def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target: dict[str, object]) -> list[str]:
+    return [item.version for item in bundle_response.bundle.packages if _bundle_package_name_matches(item, target)]
+
+
+def _bundle_package_name_matches(package: SupplyChainBundlePackage, target: dict[str, object]) -> bool:
+    full_name = f"{package.namespace}/{package.name}".lower() if package.namespace is not None else package.name.lower()
+    target_name = str(target["normalized_name"])
+    target_namespace = _optional_string(target.get("namespace"))
+    if target_namespace is not None:
+        return target_name == full_name
+    if package.namespace is not None:
+        return False
+    return target_name == package.name.lower()
+
+
+def _recommended_fix_allow_package_result(
+    *,
+    target: dict[str, object],
+    resolved_version: str,
+    bundle_response: SupplyChainBundleResponse,
+) -> dict[str, object] | None:
+    for package in bundle_response.bundle.packages:
+        if not _bundle_package_name_matches(package, target):
+            continue
+        if package.version == resolved_version:
+            continue
+        if package.recommended_fix_version != resolved_version:
+            continue
+        return {
+            "decision": "allow",
+            "ecosystem": package.ecosystem,
+            "name": target["name"],
+            "namespace": target["namespace"],
+            "requestedVersion": _optional_string(target.get("range")) or resolved_version,
+            "resolvedVersion": resolved_version,
+            "recommendedFixVersion": None,
+            "riskScore": None,
+            "dependencyPath": None,
+            "packageManager": _optional_string(target.get("package_manager")) or "npm",
+            "alias": _optional_string(target.get("alias")),
+            "reasons": (
+                {
+                    "code": "recommended_fix_version",
+                    "message": (
+                        f"Requested version {resolved_version} matches Guard's recommended fix for "
+                        f"{_package_display_name(target)}."
+                    ),
+                    "severity": "low",
+                    "source": "bundle",
+                },
+            ),
+        }
+    return None
+
+
 def _source_url_from_specifier(specifier: str | None) -> str | None:
     if specifier is None:
         return None
-    if "://" in specifier or specifier.startswith("git+"):
+    if "://" in specifier or specifier.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
         return specifier
     return None
 
@@ -990,7 +1770,7 @@ def _source_url_from_raw_spec(raw_spec: str) -> str | None:
         candidate = raw_spec.split("@", 1)[1]
     else:
         candidate = raw_spec
-    if "://" in candidate or candidate.startswith("git+"):
+    if "://" in candidate or candidate.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
         return candidate
     return None
 
@@ -1062,9 +1842,12 @@ def _selector_matches_version(selector: str, target: dict[str, object]) -> bool:
     requested_range = _optional_string(target.get("range"))
     if requested_range is not None and requested_range == selector:
         return True
+    ecosystem = _optional_string(target.get("ecosystem")) or "npm"
     if version is None:
         return False
     if selector in {version, f"={version}", f"=={version}"}:
+        return True
+    if ecosystem == "npm" and version_matches_js_selector(version, selector):
         return True
     try:
         return Version(version) in SpecifierSet(selector)
@@ -1152,15 +1935,16 @@ def _split_namespace_name(value: str) -> tuple[str | None, str]:
 
 
 def _exact_version(value: str | None) -> str | None:
-    if value is None:
+    normalized = _optional_string(value)
+    if normalized is None:
         return None
-    if "://" in value or value.startswith("git+"):
+    if "://" in normalized or normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
         return None
-    if value.startswith(("^", "~", "<", ">", "!", "*")):
+    if normalized.startswith(("^", "~", "<", ">", "!", "*")):
         return None
-    if any(token in value for token in ("||", " - ", ",")):
+    if any(token in normalized for token in ("||", " - ", ",")):
         return None
-    return value
+    return normalized
 
 
 def _optional_string(value: object) -> str | None:
@@ -1174,17 +1958,36 @@ def _decision_rank(value: str) -> int:
 
 
 def _fix_command(package: dict[str, object]) -> str | None:
-    package_name = _package_display_name(package)
+    package_name = _package_install_target(package)
     fix_version = _optional_string(package.get("recommendedFixVersion"))
     ecosystem = _optional_string(package.get("ecosystem")) or "npm"
+    package_manager = _optional_string(package.get("packageManager")) or "npm"
     if not fix_version:
         return None
     if ecosystem == "pypi":
         return f"pip install {package_name}=={fix_version}"
+    if package_manager == "pnpm":
+        return f"pnpm add {package_name}@{fix_version}"
+    if package_manager == "yarn":
+        return f"yarn add {package_name}@{fix_version}"
+    if package_manager == "bun":
+        return f"bun add {package_name}@{fix_version}"
     return f"npm install {package_name}@{fix_version}"
 
 
+def _package_install_target(package: dict[str, object]) -> str:
+    alias = _optional_string(package.get("alias"))
+    package_name = _package_display_name({**package, "alias": None})
+    ecosystem = _optional_string(package.get("ecosystem")) or "npm"
+    if alias is not None and ecosystem == "npm":
+        return f"{alias}@npm:{package_name}"
+    return alias if alias is not None else package_name
+
+
 def _package_display_name(package: dict[str, object]) -> str:
+    alias = _optional_string(package.get("alias"))
+    if alias is not None:
+        return alias
     namespace = _optional_string(package.get("namespace"))
     name = _optional_string(package.get("name")) or "package"
     return f"{namespace}/{name}" if namespace is not None else name
