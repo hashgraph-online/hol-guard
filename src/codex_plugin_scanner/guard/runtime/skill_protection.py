@@ -44,7 +44,7 @@ _REMOTE_FETCH_EXEC_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 _PACKAGE_INSTALL_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
-        r"\b(?:npm\s+(?:install|add)|pnpm\s+(?:install|add)|yarn\s+add|bun\s+add|pip\s+install|"
+        r"\b(?:npm\s+(?:install|i|add|ci)|pnpm\s+(?:install|i|add)|yarn\s+add|bun\s+add|pip\s+install|"
         r"uv\s+pip\s+install|pipx\s+install|poetry\s+add|cargo\s+install|go\s+install|gem\s+install|"
         r"brew\s+install)\b",
         re.IGNORECASE,

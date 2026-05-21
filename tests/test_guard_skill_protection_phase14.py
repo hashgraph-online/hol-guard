@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, SkillRiskDetector
@@ -25,6 +27,15 @@ npm install minimist@1.2.8
 
 def test_phase14_skill_content_flags_package_install_instructions() -> None:
     signals = detect_skill_content_risk(_PACKAGE_INSTALL_SKILL)
+
+    assert any(signal.signal_id == "skill.package-install" for signal in signals)
+
+
+@pytest.mark.parametrize("command", ["npm i minimist@1.2.8", "pnpm i minimist@1.2.8"])
+def test_phase14_skill_content_flags_common_install_aliases(command: str) -> None:
+    skill_content = _PACKAGE_INSTALL_SKILL.replace("npm install minimist@1.2.8", command)
+
+    signals = detect_skill_content_risk(skill_content)
 
     assert any(signal.signal_id == "skill.package-install" for signal in signals)
 
