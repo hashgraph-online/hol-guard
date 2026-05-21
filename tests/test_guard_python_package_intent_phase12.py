@@ -35,6 +35,21 @@ httpx>=0.27 ; python_version >= "3.10"
     assert set(changes) == {"flask", "httpx"}
 
 
+def test_parse_manifest_dependency_changes_supports_python_requirements_line_continuations() -> None:
+    before = """
+requests==2.31.0 \\
+    --hash=sha256:aaaaaaaa
+"""
+    after = """
+requests==2.32.0 \\
+    --hash=sha256:bbbbbbbb
+"""
+
+    changes = _change_map("requirements.txt", before, after)
+
+    assert changes["requests"] == ("2.31.0", "2.32.0")
+
+
 def test_parse_manifest_dependency_changes_supports_pyproject_optional_dependencies() -> None:
     before = """
 [project]
@@ -154,10 +169,7 @@ def test_parse_package_intent_redacts_pip_index_credentials_from_flag_values() -
 
 
 def test_parse_package_intent_redacts_pip_index_credentials_from_env_assignments() -> None:
-    intent = parse_package_intent(
-        "PIP_INDEX_URL=https://user:secret@example.com/simple "
-        "pip install requests==2.31.0"
-    )
+    intent = parse_package_intent("PIP_INDEX_URL=https://user:secret@example.com/simple pip install requests==2.31.0")
 
     assert intent is not None
     assert "user:secret@" not in intent.redacted_command

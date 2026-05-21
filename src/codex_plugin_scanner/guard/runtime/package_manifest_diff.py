@@ -307,8 +307,7 @@ def _exact_dependency_version(value: object) -> str | None:
 
 def _requirements_dependency_map(text: str, deadline: float) -> dict[str, str]:
     dependencies: dict[str, str] = {}
-    for line in text.splitlines():
-        _ensure_within_deadline(deadline)
+    for line in _requirements_logical_lines(text, deadline):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
@@ -320,6 +319,24 @@ def _requirements_dependency_map(text: str, deadline: float) -> dict[str, str]:
         if target.package_name is not None:
             dependencies[target.package_name] = target.requested_specifier or ""
     return dependencies
+
+
+def _requirements_logical_lines(text: str, deadline: float) -> list[str]:
+    logical_lines: list[str] = []
+    current = ""
+    for line in text.splitlines():
+        _ensure_within_deadline(deadline)
+        fragment = line.rstrip()
+        if current:
+            fragment = f"{current} {fragment.lstrip()}"
+        if fragment.endswith("\\"):
+            current = fragment[:-1].rstrip()
+            continue
+        logical_lines.append(fragment)
+        current = ""
+    if current:
+        logical_lines.append(current)
+    return logical_lines
 
 
 def _pyproject_dependency_map(text: str, deadline: float) -> dict[str, str]:
