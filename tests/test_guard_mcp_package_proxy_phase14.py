@@ -579,3 +579,57 @@ def test_phase14_runtime_mcp_proxy_preserves_tool_policy_for_package_calls(
     assert marker_path.exists() is False
     assert result["responses"][2]["error"]["code"] == -32001
     assert request["artifact_type"] == "tool_call"
+
+
+def test_phase14_runtime_mcp_proxy_enforces_tool_policy_review_before_package_routing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "cursor-mcp-tool-review.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "evaluate_tool_call",
+        lambda **_kwargs: ToolCallDecision(
+            action="review",
+            source="policy",
+            signals=("command_execution",),
+            summary="review before execution",
+            risk_categories=("command_execution",),
+        ),
+    )
+    proxy = RuntimeMcpGuardProxy(
+        harness="cursor",
+        server_name="workspace-tools",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "run_terminal_command",
+                    "arguments": {"command": "npm install minimist@1.2.8"},
+                },
+            },
+        ]
+    )
+
+    request = store.list_approval_requests(limit=5)[0]
+
+    assert marker_path.exists() is False
+    assert result["responses"][2]["error"]["code"] == -32001
+    assert request["artifact_type"] == "tool_call"
