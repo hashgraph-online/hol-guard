@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 
@@ -187,14 +188,26 @@ def verify_supply_chain_bundle_response(
 
 
 def _package_matches(package: SupplyChainBundlePackage, package_name: str, package_version: str | None) -> bool:
-    normalized_name = package_name.strip().lower()
-    namespace_name = f"{package.namespace.lower()}/{package.name.lower()}" if package.namespace is not None else None
+    normalized_name = _normalize_package_name(package.ecosystem, package_name)
+    namespace_name = (
+        _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
+        if package.namespace is not None
+        else None
+    )
+    package_leaf_name = _normalize_package_name(package.ecosystem, package.name)
     if normalized_name.startswith("@"):
         if namespace_name != normalized_name:
             return False
-    elif package.namespace is not None or package.name.lower() != normalized_name:
+    elif package.namespace is not None or package_leaf_name != normalized_name:
         return False
     return package_version is None or package.version == package_version
+
+
+def _normalize_package_name(ecosystem: str, package_name: str) -> str:
+    normalized = package_name.strip().lower()
+    if ecosystem == "pypi":
+        return re.sub(r"[-_.]+", "-", normalized)
+    return normalized
 
 
 def _is_high_confidence_block(package: SupplyChainBundlePackage) -> bool:
@@ -210,6 +223,7 @@ def evaluate_cached_supply_chain_bundle(
     *,
     package_name: str,
     package_version: str | None = None,
+    ecosystem: str | None = None,
     now: float | None = None,
 ) -> OfflineSupplyChainDecision:
     """Evaluate one package against the cached supply-chain bundle."""
@@ -219,7 +233,11 @@ def evaluate_cached_supply_chain_bundle(
         check_supply_chain_bundle_freshness(response.bundle, now=now)
     except SupplyChainBundleExpiredError:
         stale = True
-    matches = [item for item in response.bundle.packages if _package_matches(item, package_name, package_version)]
+    matches = [
+        item
+        for item in response.bundle.packages
+        if (ecosystem is None or item.ecosystem == ecosystem) and _package_matches(item, package_name, package_version)
+    ]
     if not matches:
         return OfflineSupplyChainDecision(
             action="monitor",
