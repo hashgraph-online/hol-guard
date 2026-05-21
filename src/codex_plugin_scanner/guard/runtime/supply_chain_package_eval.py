@@ -135,6 +135,9 @@ class PackageRequestEvaluation:
     ) -> PackageRequestEvaluation:
         user_copy = payload.get("user_copy")
         user_copy_map = user_copy if isinstance(user_copy, dict) else {}
+        cached_packages = tuple(
+            _with_support_metadata(item) for item in payload.get("packages", []) if isinstance(item, dict)
+        )
         return cls(
             decision=str(payload.get("decision") or "monitor"),
             policy_action=str(payload.get("policy_action") or "allow"),
@@ -146,11 +149,7 @@ class PackageRequestEvaluation:
             bundle_version=bundle_version,
             workspace_fingerprint=workspace_fingerprint,
             reasons=tuple(item for item in payload.get("reasons", []) if isinstance(item, dict)),
-            packages=tuple(
-                _with_support_metadata(item)
-                for item in payload.get("packages", [])
-                if isinstance(item, dict)
-            ),
+            packages=cached_packages,
             risk_summary=str(payload.get("risk_summary") or "HOL Guard recorded this package request."),
             user_copy=SupplyChainUserCopy(
                 title=str(user_copy_map.get("title") or "Monitoring this package"),
