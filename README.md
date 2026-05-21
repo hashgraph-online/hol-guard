@@ -46,6 +46,9 @@ pipx run hol-guard connect
 pipx run hol-guard connect status
 pipx run hol-guard connect repair
 pipx run hol-guard sync
+pipx run hol-guard supply-chain sync
+pipx run hol-guard supply-chain scan
+pipx run hol-guard supply-chain explain minimist@1.2.5 --ecosystem npm
 pipx run hol-guard explain install-connect
 ```
 

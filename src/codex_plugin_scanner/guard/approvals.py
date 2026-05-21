@@ -19,6 +19,7 @@ from .desktop_notifications import (
     notify_pending_approval_once,
 )
 from .incident import build_incident_context
+from .local_supply_chain import build_local_supply_chain_posture
 from .models import GuardApprovalRequest, HarnessDetection, PolicyDecision
 from .risk import artifact_risk_signals, artifact_risk_summary
 from .store import GuardStore
@@ -364,6 +365,7 @@ def build_runtime_snapshot(
     latest_receipts = store.list_receipts(limit=receipt_limit)
     cloud_context = _build_runtime_cloud_context(store)
     snapshot_now = now or _now()
+    config = load_guard_config(store.guard_home)
     latest_connect_state = _build_latest_connect_state(store, snapshot_now)
     headline_state = _resolve_runtime_headline_state(
         pending_count=store.count_approval_requests(),
@@ -393,6 +395,7 @@ def build_runtime_snapshot(
         "items": pending_requests,
         "latest_receipts": latest_receipts,
         "managed_installs": store.list_managed_installs(),
+        "supply_chain": build_local_supply_chain_posture(store, config, now=snapshot_now),
         **cloud_context,
     }
 
