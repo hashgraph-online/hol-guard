@@ -7,6 +7,7 @@ Current Guard support in this repo:
   - detects Guard-managed `.codex/hooks.json` Bash hook entries
   - parses configured MCP servers
   - installs Guard-owned Codex `PreToolUse` Bash hooks so native shell commands can be denied before execution even when Codex itself is running in YOLO mode
+  - serializes package-manager shell intent, package metadata, and the final pre-execution Guard result into the shared runtime envelope before Guard queues or blocks the action
   - supports wrapper-mode `guard run codex`
   - wrapper prompt screening now suppresses copied debug and incident context while still escalating risky prompt intent
   - uses same-chat MCP elicitation for live managed MCP tool approvals in the interactive CLI and Codex App
@@ -18,6 +19,7 @@ Current Guard support in this repo:
   - detects global and project settings, hooks, `.mcp.json`, and workspace agents
   - supports local hook install and uninstall in `.claude/settings.local.json`
   - has native `UserPromptSubmit` and `PreToolUse` Guard hook coverage
+  - carries package-manager shell intent and pre-execution block state through the shared Guard runtime envelope before Claude sees the denied tool response
   - is the best current harness for graceful approval deferral
 - `copilot`
   - detects read-only user config in `~/.copilot/config.json` and `~/.copilot/mcp-config.json`
@@ -26,11 +28,13 @@ Current Guard support in this repo:
   - installs and removes Guard-owned repo hooks in `.github/hooks/hol-guard-copilot.json`
   - supports wrapper-mode `guard run copilot`
   - has native `userPromptSubmitted`, `preToolUse`, and `postToolUse` hook coverage normalized onto the shared Guard runtime
+  - package-manager shell tool calls now persist package intent, consistent block copy, and pre-execution Guard state before Copilot retries
 - `cursor`
   - detects global and project `mcp.json`
   - supports wrapper-mode management state
   - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
   - leaves native Cursor tool approval in place and focuses Guard on artifact trust
+  - managed MCP package-manager tool calls are routed through the supply-chain decision engine before Cursor receives the tool result
 - `antigravity`
   - detects Antigravity user settings, installed extension profiles, and Antigravity-owned MCP and skill roots
   - supports wrapper-mode management state
@@ -40,16 +44,19 @@ Current Guard support in this repo:
   - supports wrapper-mode management state
   - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
   - falls back to the local approval center when Guard blocks a launch
+  - native package-manager shell actions now use the same package intent contract, consistent block copy, and evidence payload as the other managed harnesses
 - `hermes`
   - detects Hermes skills plus MCP servers from `~/.hermes/config.yaml` and `~/.hermes/mcp_servers.json`
   - supports `hol-guard hermes bootstrap` and a Guard-managed Hermes overlay bundle under Guard home
   - rewrites managed Hermes MCP entries through Guard’s existing proxy path and uses native-or-center delivery when the managed bundle is present
   - blocks sensitive file reads and Docker-sensitive native pre-tool actions through the existing Guard hook path
+  - package-manager shell actions now emit shared package intent metadata and use the same pre-execution package block flow as Codex, Claude Code, Gemini, Copilot, and OpenCode
 - `openclaw`
   - detects `~/.openclaw/openclaw.json`, gateway posture, channels, MCP servers, workspace skills, user skills, and OpenClaw-owned skills
   - supports a Guard-managed OpenClaw overlay bundle under Guard home without mutating user OpenClaw config
   - flags open DM channel posture and remote MCP endpoints before launch so chat-originated agent work can be reviewed
   - uses native-or-center delivery when the managed bundle is present and keeps browser auto-open off for blocked requests
+  - managed MCP package-manager calls now route through the supply-chain package evaluator before OpenClaw receives the tool result
 - `opencode`
   - detects global and project config, MCP servers, config-defined commands, markdown commands, npm plugins, local
     plugin files, and OpenCode-compatible skill directories
@@ -59,6 +66,7 @@ Current Guard support in this repo:
   - keeps managed MCP tools on OpenCode native ask so the user can allow once, allow for the session, or reject inline
   - blocks newly introduced OpenCode MCP, plugin, and skill artifacts before launch when local Guard policy requires
     approval
+  - native shell and managed MCP package-manager calls now share the same package-request evaluator, evidence fields, and approval-center copy
 
 Approval tiers:
 
@@ -81,6 +89,10 @@ Runtime intent protections:
 - Guard evaluates prompt and tool intent for secret-bearing files beyond `.env`, including SSH, AWS, kubeconfig, Docker, npm, and Python credential files.
 - Guard flags exfiltration verbs, staged transfer intent, destructive filesystem mutation intent, subprocess expansion, and explicit Guard bypass intent.
 - Prompt intent is converted into typed prompt-request artifacts so it follows the same policy, approval, receipt, and cloud sync pipeline as other artifact decisions.
+- Package-manager shell and MCP actions now persist package manager, primary package, install intent, and the final pre-execution Guard result in the shared runtime envelope before an approval request is queued.
+- Saved artifact-level package blocks now stop retries without creating a fresh approval request, so deny decisions stay sticky until a new allow rule or exception exists.
+- Skill protection flags package-manager install instructions inside `SKILL.md` content before the agent executes the skill.
+- Supply-chain evidence now records harness, agent app, redacted command shape, and workspace fingerprint so Cloud and local receipts stay attributable.
 
 Device identity model:
 
@@ -96,6 +108,7 @@ Explicit non-support:
 - Guard does not add `guard run vscode-copilot`.
 - Guard treats `~/.copilot/*` as read-only detection input and does not auto-write user-level Copilot config.
 - Guard does not add Cisco AIBOM runtime or policy integration in this pass. If revisited later, AIBOM belongs on evidence or export surfaces.
+- Guard does not currently ship a Goose adapter in this repository. There is no Goose detection, install, hook, or proxy surface here to protect yet.
 
 ## Protection Contract Summary
 

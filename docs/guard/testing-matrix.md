@@ -14,6 +14,36 @@ Automated coverage in this phase includes:
 - scanner command consistency tests for nonexistent target handling across `scan`, `lint`, `verify`, `doctor`, and `submit`
 - tier 2 package-request regressions for Cargo, Go, Maven, Gradle, Composer, RubyGems, system package managers, and unsupported-manager fallback
 - support-matrix assertions for `hol-guard cloud sync-intel` so CLI and Cloud surface `Protected`, `Beta`, and `Monitor-only` labels consistently
+- Phase 14 harness package-install regressions for the shared runtime action contract, package-hook no-run behavior, MCP package routing, skill install detection, retry safety, resume targeting, approval dedupe, and evidence source fields
+
+## Phase 14 harness package-install proof
+
+Run this focused proof bundle when you touch harness package-install coverage:
+
+```bash
+pytest \
+  tests/test_guard_runtime_actions_phase14.py \
+  tests/test_guard_mcp_package_proxy_phase14.py \
+  tests/test_guard_package_hook_phase14.py \
+  tests/test_guard_package_resume_phase14.py \
+  tests/test_guard_approval_store_phase14.py \
+  tests/test_guard_skill_protection_phase14.py -q
+```
+
+This proof bundle covers:
+
+- Codex, Claude Code, OpenCode, Copilot, Gemini, Hermes, and OpenClaw package-manager hook interception before execution
+- Cursor, OpenCode, Hermes, and OpenClaw MCP package-manager routing through the supply-chain evaluator
+- consistent package block copy and dashboard link output across managed harnesses
+- saved block retry safety so denied package actions do not open a fresh approval request
+- Codex approval resume targeting for the matching package request while other queued package approvals remain pending
+- approval queue compatibility when package metadata is added to action envelopes, plus simultaneous duplicate and distinct package-request inserts
+- skill-content detection for package-manager install instructions
+- evidence assertions for harness, agent app, redacted command shape, and workspace fingerprint
+
+Repo-scoped gap:
+
+- Goose has no adapter, config surface, binary harness, or MCP proxy integration in this repository today, so there is no local Phase 14 package-install proof to run for Goose yet.
 
 ## Supply-chain ecosystem support labels
 
@@ -52,6 +82,7 @@ Manual verification should include:
 - `hol-guard connect repair`
 - `hol-guard sync`
 - `hol-guard cloud sync-intel`
+- `pytest tests/test_guard_runtime_actions_phase14.py tests/test_guard_mcp_package_proxy_phase14.py tests/test_guard_package_hook_phase14.py tests/test_guard_package_resume_phase14.py tests/test_guard_approval_store_phase14.py tests/test_guard_skill_protection_phase14.py -q`
 - `hol-guard explain install-connect`
 - `hol-guard explain codex:project:<artifact-name>`
 - `hol-guard diff codex`

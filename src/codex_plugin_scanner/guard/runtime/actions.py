@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PureWindowsPath
 from typing import Literal
 
@@ -141,6 +141,9 @@ class GuardActionEnvelope:
     mcp_tool: str | None
     package_manager: str | None
     package_name: str | None
+    package_intent_kind: str | None
+    package_targets: tuple[str, ...]
+    pre_execution_result: str | None
     script_name: str | None
     raw_payload_redacted: dict[str, object]
 
@@ -168,9 +171,17 @@ class GuardActionEnvelope:
             "mcp_tool": self.mcp_tool,
             "package_manager": self.package_manager,
             "package_name": self.package_name,
+            "package_intent_kind": self.package_intent_kind,
+            "package_targets": list(self.package_targets),
+            "pre_execution_result": self.pre_execution_result,
             "script_name": self.script_name,
             "raw_payload_redacted": dict(self.raw_payload_redacted),
         }
+
+    def with_pre_execution_result(self, value: str | None) -> GuardActionEnvelope:
+        """Return a copy of the envelope annotated with its final pre-exec decision."""
+
+        return replace(self, pre_execution_result=value)
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, object]) -> GuardActionEnvelope:
@@ -198,6 +209,9 @@ class GuardActionEnvelope:
             mcp_tool=_string_value(payload.get("mcp_tool")),
             package_manager=_string_value(payload.get("package_manager")),
             package_name=_string_value(payload.get("package_name")),
+            package_intent_kind=_string_value(payload.get("package_intent_kind")),
+            package_targets=_string_tuple(payload.get("package_targets")),
+            pre_execution_result=_string_value(payload.get("pre_execution_result")),
             script_name=_string_value(payload.get("script_name")),
             raw_payload_redacted=_dict_value(payload.get("raw_payload_redacted")),
         )
@@ -219,8 +233,8 @@ def stable_action_hash(envelope: GuardActionEnvelope) -> str:
         "network_hosts": list(envelope.network_hosts),
         "mcp_server": envelope.mcp_server,
         "mcp_tool": envelope.mcp_tool,
-        "package_manager": envelope.package_manager,
-        "package_name": envelope.package_name,
+        "package_manager": None,
+        "package_name": None,
         "script_name": envelope.script_name,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -328,6 +342,40 @@ def normalize_gemini_payload(
     )
 
 
+def normalize_hermes_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Hermes runtime payload into a typed action envelope."""
+
+    return _normalize_action_payload(
+        payload,
+        harness="hermes",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
+def normalize_openclaw_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize an OpenClaw runtime payload into a typed action envelope."""
+
+    return _normalize_action_payload(
+        payload,
+        harness="openclaw",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
 def normalize_harness_payload(
     harness: str,
     event_name: str,
@@ -346,6 +394,8 @@ def normalize_harness_payload(
         "opencode": normalize_opencode_payload,
         "copilot": normalize_copilot_payload,
         "gemini": normalize_gemini_payload,
+        "hermes": normalize_hermes_payload,
+        "openclaw": normalize_openclaw_payload,
     }
     normalizer = normalizers.get(normalized_harness)
     if normalizer is None:
@@ -396,6 +446,21 @@ def _normalize_action_payload(
     network_hosts = _network_hosts(raw_command, prompt_text)
     workspace_label = redacted_workspace_label(workspace, home_dir=home_dir)
     workspace_hash = _workspace_hash(workspace)
+    workspace_path = Path(workspace) if workspace is not None else None
+    from .package_intent_parser import parse_package_intent
+
+    package_intent = parse_package_intent(raw_command, workspace=workspace_path) if raw_command else None
+    package_targets = (
+        tuple(target.raw_spec for target in package_intent.targets if target.raw_spec)
+        if package_intent is not None
+        else ()
+    )
+    primary_package_name = None
+    if package_intent is not None:
+        for target in package_intent.targets:
+            if target.package_name:
+                primary_package_name = target.package_name
+                break
     return GuardActionEnvelope(
         schema_version=_SCHEMA_VERSION,
         action_id="",
@@ -412,8 +477,11 @@ def _normalize_action_payload(
         network_hosts=network_hosts,
         mcp_server=mcp_server,
         mcp_tool=mcp_tool,
-        package_manager=None,
-        package_name=None,
+        package_manager=package_intent.package_manager if package_intent is not None else None,
+        package_name=primary_package_name,
+        package_intent_kind=package_intent.intent_kind if package_intent is not None else None,
+        package_targets=package_targets,
+        pre_execution_result=None,
         script_name=None,
         raw_payload_redacted=_redacted_payload(normalized_payload, home_dir=home_dir),
     )
