@@ -188,12 +188,12 @@ def verify_supply_chain_bundle_response(
 
 def _package_matches(package: SupplyChainBundlePackage, package_name: str, package_version: str | None) -> bool:
     normalized_name = package_name.strip().lower()
-    if package.name.lower() != normalized_name:
-        namespace_name = (
-            f"{package.namespace.lower()}/{package.name.lower()}" if package.namespace is not None else None
-        )
+    namespace_name = f"{package.namespace.lower()}/{package.name.lower()}" if package.namespace is not None else None
+    if normalized_name.startswith("@"):
         if namespace_name != normalized_name:
             return False
+    elif package.namespace is not None or package.name.lower() != normalized_name:
+        return False
     return package_version is None or package.version == package_version
 
 

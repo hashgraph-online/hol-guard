@@ -17,6 +17,7 @@ IntentKind = Literal["install", "execute", "sync"]
 _EXTRAS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)\[(?P<extras>[A-Za-z0-9_,.-]+)\]$")
 _EGG_FRAGMENT_RE = re.compile(r"(?:^|[#&])egg=([^&#]+)")
 _PYTHON_VERSION_RE = re.compile(r"(?P<name>[^<>=!~\s]+)(?P<op>===|==|~=|!=|<=|>=|<|>|=)?(?P<version>.*)")
+_JS_SOURCE_PREFIXES = ("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:", "file:")
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,7 +227,21 @@ def js_target(spec: str) -> PackageIntentTarget:
     normalized_spec = spec
     if "@npm:" in spec and not spec.startswith("@npm:"):
         alias, _, normalized_spec = spec.partition("@npm:")
+    named_source_package, source_url = _split_js_named_source_spec(normalized_spec)
+    if source_url is not None:
+        return PackageIntentTarget("npm", named_source_package, spec, None, source_url=source_url, alias=alias)
+    if _looks_like_js_source_spec(normalized_spec):
+        return PackageIntentTarget(
+            "npm",
+            _source_url_package_name(normalized_spec),
+            spec,
+            None,
+            source_url=normalized_spec,
+            alias=alias,
+        )
     package_name, requested_specifier = _split_package_token(normalized_spec)
+    if _looks_like_js_source_spec(requested_specifier):
+        return PackageIntentTarget("npm", package_name, spec, None, source_url=requested_specifier, alias=alias)
     return PackageIntentTarget("npm", package_name, spec, requested_specifier, alias=alias)
 
 
@@ -326,3 +341,42 @@ def _sanitize_url(value: str) -> str:
         suffix = f"/{tail[0]}" if tail else ""
         return f"{scheme}://{authority}{suffix}".split("?", 1)[0].split("#", 1)[0]
     return value.split("?", 1)[0].split("#", 1)[0]
+
+
+def _split_js_named_source_spec(spec: str) -> tuple[str | None, str | None]:
+    if "@" not in spec:
+        return None, None
+    package_name, source_candidate = spec.rsplit("@", 1)
+    normalized_package_name = package_name.strip()
+    normalized_source = source_candidate.strip()
+    if not normalized_package_name or not _looks_like_js_source_spec(normalized_source):
+        return None, None
+    return normalized_package_name, normalized_source
+
+
+def _looks_like_js_source_spec(value: str | None) -> bool:
+    if not value:
+        return False
+    normalized = value.strip()
+    if normalized.startswith(_JS_SOURCE_PREFIXES) or "://" in normalized:
+        return True
+    if normalized.startswith("@") or normalized.startswith(("./", "../", "/")) or ":" in normalized:
+        return False
+    parts = normalized.split("/")
+    return len(parts) == 2 and all(part.strip() for part in parts)
+
+
+def _source_url_package_name(source_url: str) -> str | None:
+    normalized = source_url.strip()
+    candidate = (
+        normalized.partition(":")[2]
+        if normalized.startswith(("github:", "gitlab:", "bitbucket:", "file:"))
+        else normalized
+    )
+    sanitized = _sanitize_url(candidate)
+    package_name = PurePath(sanitized).name
+    if package_name.endswith(".tar.gz"):
+        return package_name[: -len(".tar.gz")] or normalized
+    if package_name.endswith((".git", ".tar", ".tgz")):
+        return package_name.rsplit(".", 1)[0] or normalized
+    return package_name or normalized
