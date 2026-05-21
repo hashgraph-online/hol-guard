@@ -59,6 +59,15 @@ def parse_package_intent(command_text: str, *, workspace: Path | None = None) ->
         "bundle": _parse_bundle_intent,
         "bundler": _parse_bundle_intent,
         "gem": _parse_gem_intent,
+        "brew": _parse_system_package_intent,
+        "apt": _parse_system_package_intent,
+        "apt-get": _parse_system_package_intent,
+        "yum": _parse_system_package_intent,
+        "dnf": _parse_system_package_intent,
+        "apk": _parse_system_package_intent,
+        "pacman": _parse_system_package_intent,
+        "zypper": _parse_system_package_intent,
+        "helm": _parse_helm_intent,
     }
     handler = handlers.get(command_name)
     if handler is None:
@@ -338,9 +347,21 @@ def _parse_pipenv_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> 
 def _parse_cargo_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
     if len(tokens) < 2 or tokens[1] not in {"add", "install"}:
         return None
-    source_url = option_value(tokens, "--git")
+    source_url = option_value(tokens, "--path")
+    if source_url is not None:
+        source_url = f"file:{source_url}"
+    if source_url is None:
+        source_url = option_value(tokens, "--git")
     targets = tuple(
-        version_target("cargo", spec, source_url=source_url) for spec in _collect_package_specs(list(tokens[2:]))
+        version_target(
+            "cargo",
+            spec,
+            source_url=source_url,
+        )
+        for spec in _collect_specs(
+            tokens[2:],
+            skip_value_options={"--branch", "--git", "--index", "--path", "--registry", "--rev", "--tag"},
+        )
     )
     return _build_intent(
         "cargo",
@@ -452,6 +473,41 @@ def _parse_gem_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
     )
 
 
+def _parse_system_package_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
+    if len(tokens) < 2:
+        return None
+    command_name = _command_name(tokens[0])
+    install_verbs = {
+        "apk": {"add"},
+        "apt": {"install"},
+        "apt-get": {"install"},
+        "brew": {"install"},
+        "dnf": {"install"},
+        "pacman": {"-s", "-sy", "-syu", "-suy"},
+        "yum": {"install"},
+        "zypper": {"install", "in"},
+    }
+    verb = tokens[1].lower()
+    if verb not in install_verbs.get(command_name, set()):
+        return None
+    targets = tuple(
+        PackageIntentTarget("system", package_name=spec, raw_spec=spec, requested_specifier=None)
+        for spec in _collect_specs(tokens[2:], skip_value_options={"--repo", "--repository", "-c"})
+    )
+    return _build_intent(command_name, "install", tokens, targets, workspace=workspace)
+
+
+def _parse_helm_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> PackageIntent | None:
+    if len(tokens) < 4 or tokens[1] != "install":
+        return None
+    chart = first_positional(tokens[3:], skip_value_options={"--version", "--repo", "-n", "--namespace"})
+    if chart is None:
+        chart = tokens[3]
+    version = option_value(tokens, "--version")
+    target = PackageIntentTarget("unsupported", package_name=chart, raw_spec=chart, requested_specifier=version)
+    return _build_intent("helm", "install", tokens, (target,), workspace=workspace)
+
+
 def _build_intent(
     package_manager: str,
     intent_kind: str,
@@ -547,6 +603,7 @@ def _redacted_command_text(command_text: str) -> str:
     segment = _strip_redaction_wrappers(segment)
     if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
         segment = [segment[2], *segment[3:]]
+    segment = _redact_local_source_tokens(segment)
     return redacted_command(tuple(segment))
 
 
@@ -586,6 +643,29 @@ def _strip_wrapper_tokens(segment: list[str]) -> list[str]:
             continue
         break
     return segment
+
+
+def _redact_local_source_tokens(segment: list[str]) -> list[str]:
+    redacted: list[str] = []
+    path_flags = {"--path"}
+    index = 0
+    while index < len(segment):
+        token = segment[index]
+        if token in path_flags and index + 1 < len(segment):
+            redacted.extend((token, "<local-path>"))
+            index += 2
+            continue
+        if token.startswith("--path="):
+            redacted.append("--path=<local-path>")
+            index += 1
+            continue
+        if token.startswith("file:"):
+            redacted.append("file:<local-path>")
+            index += 1
+            continue
+        redacted.append(token)
+        index += 1
+    return redacted
 
 
 def _strip_sudo_prefix(tokens: list[str]) -> list[str]:

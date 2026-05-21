@@ -79,3 +79,17 @@ def test_static_docs_explain_safe_decode_sandbox_guarantee() -> None:
     assert "never executes decoded payloads" in docs_text
     assert "base64" in docs_text
     assert "powershell" in docs_text
+
+
+def test_static_docs_cover_supply_chain_support_levels() -> None:
+    docs_text = "\n".join(
+        [
+            _read_repo_file("docs/guard/get-started.md"),
+            _read_repo_file("docs/guard/testing-matrix.md"),
+        ]
+    ).lower()
+
+    assert "hol-guard cloud sync-intel" in docs_text
+    assert "protected" in docs_text
+    assert "beta" in docs_text
+    assert "monitor-only" in docs_text
