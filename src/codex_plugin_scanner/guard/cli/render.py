@@ -505,6 +505,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         artifacts = _coerce_dict_list(payload.get("artifacts"))
         if artifacts:
             console.print(_build_artifact_table(artifacts))
+        supply_chain = payload.get("supply_chain")
+        if isinstance(supply_chain, dict):
+            console.print(_build_supply_chain_posture_panel(supply_chain))
     perf_items = payload.get("detector_perf")
     if isinstance(perf_items, list) and perf_items:
         perf_table = Table(title="Detector performance", box=box.SIMPLE_HEAVY, show_header=True)
@@ -1559,6 +1562,14 @@ def _render_preflight(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_protect(console: Console, payload: dict[str, object]) -> None:
+    if str(payload.get("mode") or "") == "status":
+        body = Table.grid(padding=(0, 1))
+        body.add_row("Mode", "status")
+        console.print(Panel(body, title="Install protection", border_style="cyan"))
+        supply_chain = payload.get("supply_chain")
+        if isinstance(supply_chain, dict):
+            console.print(_build_supply_chain_posture_panel(supply_chain))
+        return
     verdict = payload.get("verdict")
     request = payload.get("request")
     body = Table.grid(padding=(0, 1))
@@ -1571,6 +1582,16 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
         body.add_row("Reason", str(verdict.get("reason") or "unknown"))
     console.print(Panel(body, title="Install protection", border_style="cyan"))
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
+    if isinstance(supply_chain_evaluation, dict):
+        user_copy = supply_chain_evaluation.get("user_copy")
+        if isinstance(user_copy, dict):
+            harness_message = str(user_copy.get("harness_message") or "").strip()
+            if harness_message:
+                console.print(Panel(Text(harness_message), title="Guard guidance", border_style="magenta"))
+    supply_chain = payload.get("supply_chain")
+    if isinstance(supply_chain, dict):
+        console.print(_build_supply_chain_posture_panel(supply_chain))
     risk_signals = _coerce_string_list(verdict.get("risk_signals")) if isinstance(verdict, dict) else []
     if risk_signals:
         console.print(
@@ -1606,6 +1627,37 @@ def _render_fallback(console: Console, payload: dict[str, object]) -> None:
             word_wrap=True,
         )
     )
+
+
+def _build_supply_chain_posture_panel(supply_chain: dict[str, object]) -> Panel:
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Status", str(supply_chain.get("status") or "unknown"))
+    detail = supply_chain.get("detail")
+    if detail:
+        body.add_row("Detail", str(detail))
+    bundle = supply_chain.get("bundle")
+    if isinstance(bundle, dict):
+        if bundle.get("bundle_version"):
+            body.add_row("Bundle", str(bundle.get("bundle_version")))
+        if bundle.get("tier"):
+            body.add_row("Tier", str(bundle.get("tier")))
+        if bundle.get("workspace_id"):
+            body.add_row("Workspace", str(bundle.get("workspace_id")))
+    policy = supply_chain.get("policy")
+    if isinstance(policy, dict):
+        body.add_row("Security", str(policy.get("security_level") or "unknown"))
+        if policy.get("cloud_advisory_action"):
+            body.add_row("Cloud advisories", str(policy.get("cloud_advisory_action")))
+    ecosystems = _coerce_dict_list(supply_chain.get("supported_ecosystems"))
+    if ecosystems:
+        support_summary = ", ".join(
+            f"{item.get('display_name') or item.get('ecosystem')}: {item.get('support_label') or item.get('label')}"
+            for item in ecosystems[:5]
+        )
+        if len(ecosystems) > 5:
+            support_summary = f"{support_summary}, +{len(ecosystems) - 5} more"
+        body.add_row("Coverage", support_summary)
+    return Panel(body, title="Supply-chain firewall", border_style="cyan")
 
 
 def _build_harness_table(detections: list[dict[str, object]]) -> Table:
@@ -2242,6 +2294,9 @@ _RENDERERS: dict[str, Any] = {
     "deny": _render_decision,
     "login": _render_login,
     "sync": _render_sync,
+    "supply-chain-explain": _render_fallback,
+    "supply-chain-scan": _render_fallback,
+    "supply-chain-sync": _render_fallback,
     "update": _render_update,
     "hook": _render_hook,
     "protect": _render_protect,
