@@ -949,14 +949,23 @@ def _transitive_lockfile_results(
     if not isinstance(lockfile_paths, list):
         return []
     results: list[dict[str, object]] = []
-    direct_target_names: set[str] = set()
+    direct_target_names_by_ecosystem: dict[str, set[str]] = {}
+    all_direct_target_names: set[str] = set()
     for target in _targets_from_artifact(artifact):
-        direct_target_names.add(str(target["normalized_name"]))
-        direct_target_names.update(_target_candidate_names(target))
+        ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+        candidate_names = {str(target["normalized_name"]), *_target_candidate_names(target)}
+        direct_target_names_by_ecosystem.setdefault(ecosystem, set()).update(candidate_names)
+        all_direct_target_names.update(candidate_names)
     for relative_path in lockfile_paths:
         lockfile_path = workspace_dir / str(relative_path)
         if not lockfile_path.exists():
             continue
+        lockfile_ecosystem = _lockfile_ecosystem(lockfile_path.name)
+        direct_target_names = (
+            direct_target_names_by_ecosystem.get(lockfile_ecosystem, all_direct_target_names)
+            if lockfile_ecosystem is not None
+            else all_direct_target_names
+        )
         try:
             lockfile_text = lockfile_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -997,11 +1006,19 @@ def _transitive_lockfile_results(
             if direct:
                 continue
             offline = evaluate_cached_supply_chain_bundle(
-                bundle_response, package_name=package_name, package_version=version
+                bundle_response,
+                package_name=package_name,
+                package_version=version,
+                ecosystem=lockfile_ecosystem,
             )
             if _normalize_bundle_action(offline.action) not in {"ask", "block", "warn"}:
                 continue
-            package_match = _bundle_package(bundle_response, package_name=package_name, package_version=version)
+            package_match = _bundle_package(
+                bundle_response,
+                package_name=package_name,
+                package_version=version,
+                ecosystem=lockfile_ecosystem,
+            )
             if package_match is None:
                 continue
             results.append(
@@ -1028,6 +1045,15 @@ def _transitive_lockfile_results(
                 }
             )
     return results
+
+
+def _lockfile_ecosystem(lockfile_name: str) -> str | None:
+    lower_name = lockfile_name.lower()
+    if lower_name in {"package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb"}:
+        return "npm"
+    if lower_name in {"poetry.lock", "uv.lock", "pipfile.lock"}:
+        return "pypi"
+    return None
 
 
 def _bundle_package_result(
