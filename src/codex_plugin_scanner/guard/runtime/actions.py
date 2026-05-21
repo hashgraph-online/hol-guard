@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PureWindowsPath
 from typing import Literal
 
@@ -141,11 +141,11 @@ class GuardActionEnvelope:
     mcp_tool: str | None
     package_manager: str | None
     package_name: str | None
-    package_intent_kind: str | None
-    package_targets: tuple[str, ...]
-    pre_execution_result: str | None
-    script_name: str | None
-    raw_payload_redacted: dict[str, object]
+    package_intent_kind: str | None = None
+    package_targets: tuple[str, ...] = ()
+    pre_execution_result: str | None = None
+    script_name: str | None = None
+    raw_payload_redacted: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.action_id:
