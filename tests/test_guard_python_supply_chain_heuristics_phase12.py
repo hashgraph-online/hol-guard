@@ -203,6 +203,30 @@ build-backend = "setuptools.build_meta"
     assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
 
 
+def test_evaluate_package_request_artifact_treats_local_python_path_extras_as_explicit(
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    write_text(
+        workspace_dir / "pyproject.toml",
+        """
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+
+    artifact = artifact_from_command_fixture("pip install .[pdf]", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "warn"
+    assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
+
+
 def test_evaluate_package_request_artifact_keeps_benign_pyproject_urls_as_warn_only(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
