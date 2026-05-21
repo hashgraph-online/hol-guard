@@ -115,6 +115,77 @@ def test_evaluate_package_request_artifact_allows_recommended_safe_python_versio
     assert result.policy_action == "allow"
 
 
+def test_evaluate_package_request_artifact_scopes_offline_decisions_to_python_ecosystem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    npm_package = package_fixture(
+        name="requests",
+        version="2.31.0",
+        default_action="block",
+        recommended_fix_version="2.32.0",
+    )
+    npm_package["ecosystem"] = "npm"
+    npm_package["purl"] = "pkg:npm/requests@2.31.0"
+    npm_package["riskScore"] = 999
+    pypi_package = package_fixture(
+        name="requests",
+        version="2.31.0",
+        default_action="block",
+        recommended_fix_version="2.32.0",
+    )
+    pypi_package["riskScore"] = 200
+    pypi_package["knownExploited"] = False
+    pypi_package["malwareState"] = "unknown"
+    pypi_package["normalizedSeverity"] = "medium"
+    pypi_package["exploitLevel"] = "none"
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(packages=[npm_package, pypi_package]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = artifact_from_command_fixture("pip install requests==2.31.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "monitor"
+    assert result.packages[0]["decision"] == "monitor"
+
+
+def test_evaluate_package_request_artifact_does_not_allow_fix_versions_from_other_ecosystems(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    npm_package = package_fixture(
+        name="requests",
+        version="2.31.0",
+        default_action="block",
+        recommended_fix_version="2.32.0",
+    )
+    npm_package["ecosystem"] = "npm"
+    npm_package["purl"] = "pkg:npm/requests@2.31.0"
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(packages=[npm_package]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = artifact_from_command_fixture("pip install requests==2.32.0", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "monitor"
+
+
 @pytest.mark.parametrize(
     ("command", "manifest_name", "manifest_text", "lockfile_name", "lockfile_text", "package_name", "version"),
     [
