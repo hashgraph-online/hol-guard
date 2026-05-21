@@ -99,6 +99,14 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard device rotate
    ```
 
+12. Check supply-chain bundle coverage after sync when you want to see which ecosystems are fully protected, beta, or monitor-only:
+
+   ```bash
+   hol-guard cloud sync-intel
+   ```
+
+   Guard prints the latest bundle summary plus ecosystem support labels. Today `npm` and `PyPI` show **Protected** coverage, Cargo/Go/Maven/Gradle/Composer/RubyGems show **Beta**, and system packages or unsupported package managers stay **Monitor-only** so Guard never pretends advisory blocking where it does not exist.
+
 ## Which command should I use?
 
 | Situation | Command | What it answers |
@@ -113,6 +121,7 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | I need the tracked catalog | `hol-guard inventory` | Which artifacts are currently tracked and present? |
 | I need an exportable evidence artifact | `hol-guard abom` | What local AI-BOM can I attach to an audit or handoff? |
 | I need the chronological log | `hol-guard events` | What happened over time on this machine? |
+| I need supply-chain coverage labels | `hol-guard cloud sync-intel` | Which ecosystems are protected, beta, or monitor-only right now? |
 
 ## One continuity model
 

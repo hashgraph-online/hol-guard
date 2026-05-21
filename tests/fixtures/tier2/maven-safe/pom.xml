@@ -1,0 +1,9 @@
+<project>
+  <dependencies>
+    <dependency>
+      <groupId>org.example</groupId>
+      <artifactId>demo</artifactId>
+      <version>1.2.4</version>
+    </dependency>
+  </dependencies>
+</project>
