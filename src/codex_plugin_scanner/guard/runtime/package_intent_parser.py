@@ -552,6 +552,9 @@ def _redacted_command_text(command_text: str) -> str:
 
 def _strip_redaction_wrappers(segment: list[str]) -> list[str]:
     while segment:
+        if _ENV_ASSIGNMENT_RE.match(segment[0]):
+            segment.pop(0)
+            continue
         command_name = _command_name(segment[0])
         if command_name == "sudo":
             segment = _strip_sudo_prefix(segment[1:])
