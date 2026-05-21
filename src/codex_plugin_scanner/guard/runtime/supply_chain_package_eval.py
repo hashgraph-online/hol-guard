@@ -1352,10 +1352,11 @@ def _is_git_source_url(source_url: str) -> bool:
 def _is_external_https_tarball_source(source_url: str) -> bool:
     parsed = urllib.parse.urlsplit(source_url)
     normalized_path = parsed.path.lower()
+    hostname = parsed.hostname.lower() if parsed.hostname is not None else ""
     return (
         parsed.scheme.lower() == "https"
         and normalized_path.endswith((".tgz", ".tar.gz", ".tar"))
-        and "registry.npmjs.org" not in parsed.netloc.lower()
+        and hostname != "registry.npmjs.org"
     )
 
 
@@ -1486,6 +1487,7 @@ def _pnpm_lock_target_versions(
     importer: str | None = None
     dependency_block: str | None = None
     dependency_name: str | None = None
+    top_level_dependency_sections = {"dependencies", "devDependencies", "optionalDependencies"}
     for raw_line in text.splitlines():
         stripped = raw_line.strip()
         if not stripped or stripped.startswith("#"):
@@ -1496,6 +1498,22 @@ def _pnpm_lock_target_versions(
             importer = None
             dependency_block = None
             dependency_name = None
+            continue
+        if section in top_level_dependency_sections:
+            if indent == 2 and ":" in stripped:
+                raw_name, _, raw_value = stripped.partition(":")
+                dependency_name = raw_name.strip().strip('"').strip("'")
+                direct_value = raw_value.strip().strip('"').strip("'")
+                exact_version = _direct_lockfile_version(direct_value)
+                if exact_version is not None:
+                    direct_versions[dependency_name] = exact_version
+                    dependency_name = None
+                continue
+            if dependency_name is not None and indent >= 4 and stripped.startswith("version:"):
+                exact_version = _direct_lockfile_version(stripped.partition(":")[2].strip().strip('"').strip("'"))
+                if exact_version is not None:
+                    direct_versions[dependency_name] = exact_version
+                dependency_name = None
             continue
         if section != "importers":
             continue
