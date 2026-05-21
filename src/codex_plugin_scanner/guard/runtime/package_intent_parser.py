@@ -96,6 +96,16 @@ def _parse_npm_intent(tokens: tuple[str, ...], *, workspace: Path | None) -> Pac
             manifest_candidates=("package.json",),
             lockfile_candidates=("package-lock.json",),
         )
+    if tokens[1] == "ci" or (len(tokens) >= 3 and tokens[1:3] == ("audit", "fix")):
+        return _build_intent(
+            "npm",
+            "sync",
+            tokens,
+            (),
+            workspace=workspace,
+            manifest_candidates=("package.json",),
+            lockfile_candidates=("package-lock.json",),
+        )
     if tokens[1] in {"exec", "x"}:
         return _parse_exec_intent(tokens, workspace=workspace)
     return None
@@ -488,6 +498,10 @@ def _exec_package_spec(tokens: tuple[str, ...]) -> str | None:
             positional_target = js_target(positional_package)
             explicit_target = js_target(explicit_package)
             if positional_target.package_name == explicit_target.package_name:
+                positional_specifier = positional_target.requested_specifier or positional_target.source_url
+                explicit_specifier = explicit_target.requested_specifier or explicit_target.source_url
+                if positional_specifier is None and explicit_specifier is not None:
+                    return explicit_package
                 return positional_package
             return explicit_package
         return explicit_package or positional_package
