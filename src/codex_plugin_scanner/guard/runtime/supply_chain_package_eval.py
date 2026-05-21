@@ -1205,8 +1205,13 @@ def _local_package_manifest_path(target: dict[str, object], workspace_dir: Path 
     if workspace_dir is None:
         return None
     raw_spec = _optional_string(target.get("raw_spec"))
+    source_url = _optional_string(target.get("source_url"))
+    if source_url is not None and source_url.startswith("file:"):
+        raw_spec = source_url.partition("file:")[2]
     if raw_spec is None or raw_spec.startswith(("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:")):
         return None
+    if raw_spec.startswith("file:"):
+        raw_spec = raw_spec.partition("file:")[2]
     candidate_path = Path(raw_spec)
     disk_path = candidate_path if candidate_path.is_absolute() else workspace_dir / candidate_path
     if disk_path.is_dir():
@@ -1294,6 +1299,8 @@ def _dependency_confusion_selector_matches(selector: str, target_name: str) -> b
     if not selector.startswith("@") or "/" not in selector:
         return False
     selector = selector.split("/", 1)[1]
+    if selector in {"", "*"}:
+        return False
     if selector.endswith("*"):
         return target_name.startswith(selector[:-1])
     return target_name == selector
@@ -1728,7 +1735,7 @@ def _recommended_fix_allow_package_result(
 def _source_url_from_specifier(specifier: str | None) -> str | None:
     if specifier is None:
         return None
-    if "://" in specifier or specifier.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
+    if "://" in specifier or specifier.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
         return specifier
     return None
 
@@ -1745,7 +1752,7 @@ def _source_url_from_raw_spec(raw_spec: str) -> str | None:
         candidate = raw_spec.split("@", 1)[1]
     else:
         candidate = raw_spec
-    if "://" in candidate or candidate.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
+    if "://" in candidate or candidate.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
         return candidate
     return None
 
@@ -1913,7 +1920,7 @@ def _exact_version(value: str | None) -> str | None:
     normalized = _optional_string(value)
     if normalized is None:
         return None
-    if "://" in normalized or normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
+    if "://" in normalized or normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:", "file:")):
         return None
     if normalized.startswith(("^", "~", "<", ">", "!", "*")):
         return None

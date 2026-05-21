@@ -46,6 +46,14 @@ def test_parse_package_intent_js_named_source_specs_capture_source_urls() -> Non
     ]
 
 
+def test_parse_package_intent_js_file_source_specs_capture_local_sources() -> None:
+    intent = parse_package_intent("npm install guard-local@file:../fixtures/guard-local")
+
+    assert intent is not None
+    assert intent.targets[0].package_name == "guard-local"
+    assert intent.targets[0].source_url == "file:../fixtures/guard-local"
+
+
 def test_parse_package_intent_npm_exec_keeps_explicit_version_when_positional_token_is_bare() -> None:
     intent = parse_package_intent("npm exec --package=create-vite@5.1.0 create-vite")
 
