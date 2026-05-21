@@ -42,6 +42,14 @@ _REMOTE_FETCH_EXEC_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bnpx\s+[^\s]+@[^\s]+", re.IGNORECASE),
     re.compile(r"\beval\s*\(\s*(?:fetch|curl|wget)", re.IGNORECASE),
 )
+_PACKAGE_INSTALL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:npm\s+(?:install|i|add|ci)|pnpm\s+(?:install|i|add)|yarn\s+add|bun\s+add|pip\s+install|"
+        r"uv\s+pip\s+install|pipx\s+install|poetry\s+add|cargo\s+install|go\s+install|gem\s+install|"
+        r"brew\s+install)\b",
+        re.IGNORECASE,
+    ),
+)
 _GIT_HOOK_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\.git/hooks/[a-z\-]+", re.IGNORECASE),
     re.compile(r"\bcore\.hooksPath\b", re.IGNORECASE),
@@ -131,6 +139,7 @@ def detect_skill_content_risk(
     _check_secret_read(content, signals)
     _check_exfil_sinks(content, signals)
     _check_remote_fetch_exec(content, signals)
+    _check_package_install_instructions(content, signals)
     _check_git_hooks(content, signals)
     _check_shell_profile_persistence(content, signals)
     _check_launchagent_persistence(content, signals)
@@ -219,6 +228,23 @@ def _check_remote_fetch_exec(content: str, signals: list[RiskSignalV2]) -> None:
                     "Skill fetches and executes remote code",
                     "This skill pipes remote content into a shell or interpreter.",
                     "fetch-and-execute pattern in skill content",
+                )
+            )
+            return
+
+
+def _check_package_install_instructions(content: str, signals: list[RiskSignalV2]) -> None:
+    for pattern in _PACKAGE_INSTALL_PATTERNS:
+        if pattern.search(content):
+            signals.append(
+                _skill_signal(
+                    "skill.package-install",
+                    "supply_chain",
+                    "medium",
+                    "strong",
+                    "Skill instructs the agent to install packages before execution",
+                    "This skill contains package-manager install instructions that can change the local runtime.",
+                    "package install command in skill content",
                 )
             )
             return

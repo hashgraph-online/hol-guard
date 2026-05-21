@@ -74,8 +74,8 @@ def _build_action_identity(
         "network_hosts": _string_sequence(envelope.get("network_hosts")),
         "mcp_server": _optional_text(envelope.get("mcp_server")),
         "mcp_tool": _optional_text(envelope.get("mcp_tool")),
-        "package_manager": _optional_text(envelope.get("package_manager")),
-        "package_name": _optional_text(envelope.get("package_name")),
+        "package_manager": None,
+        "package_name": None,
         "script_name": _optional_text(envelope.get("script_name")),
         "raw_payload_redacted": _stable_identity_payload(envelope.get("raw_payload_redacted")),
     }
