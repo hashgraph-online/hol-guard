@@ -27,6 +27,7 @@ from ..models import HarnessDetection
 from ..policy.engine import build_decision_v2
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
+from ..runtime.signals import RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..store import GuardStore
 from .stdio import _blocked_tool_response, _redact_json
@@ -361,12 +362,9 @@ class RuntimeMcpGuardProxy:
             store=self.store,
             workspace_dir=self.context.workspace_dir,
         )
-        policy_action = package_evaluation.policy_action
-        if (
-            isinstance(stored_policy_action, str)
-            and _guard_action_severity(stored_policy_action) > _guard_action_severity(policy_action)
-        ):
-            policy_action = stored_policy_action
+        policy_action = (
+            stored_policy_action if isinstance(stored_policy_action, str) else package_evaluation.policy_action
+        )
         if policy_action in {"allow", "warn"}:
             response = self._forward_message(
                 message,
@@ -382,7 +380,11 @@ class RuntimeMcpGuardProxy:
                 "redacted_params": _redact_json(params),
             }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
-        decision_v2_payload = build_decision_v2(policy_action, reason=policy_action, signals=()).to_dict()
+        decision_v2_payload = build_decision_v2(
+            policy_action,
+            reason=policy_action,
+            signals=_package_reason_signals(package_evaluation.reasons),
+        ).to_dict()
         decision_v2_payload["user_title"] = package_evaluation.user_copy.title
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
         decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
@@ -930,15 +932,43 @@ def _command_argument(arguments: object) -> str | None:
     return None
 
 
-def _guard_action_severity(action: str) -> int:
-    return {
-        "allow": 0,
-        "warn": 1,
-        "review": 2,
-        "require-reapproval": 3,
-        "sandbox-required": 4,
-        "block": 5,
-    }.get(action, -1)
+def _package_reason_signals(reasons: tuple[dict[str, object], ...]) -> tuple[RiskSignalV2, ...]:
+    signals: list[RiskSignalV2] = []
+    for reason in reasons:
+        code = _optional_text(reason.get("code")) or "package-risk"
+        message = _optional_text(reason.get("message")) or code.replace("_", " ")
+        severity = _package_signal_severity(_optional_text(reason.get("severity")))
+        signals.append(
+            RiskSignalV2(
+                signal_id=f"supply-chain.{code}",
+                category="supply_chain",
+                severity=severity,
+                confidence="strong" if severity in {"high", "critical"} else "likely",
+                detector=_optional_text(reason.get("source")) or "guard.supply-chain",
+                title=message,
+                plain_reason=message,
+                technical_detail=message,
+                evidence_ref=None,
+                redaction_level="summary",
+                false_positive_hint=(
+                    "Review the package request or add a scoped exception only for a verified false positive."
+                ),
+                advisory_id=None,
+            )
+        )
+    return tuple(signals)
+
+
+def _package_signal_severity(value: str | None) -> str:
+    if value in {"info", "low", "medium", "high", "critical"}:
+        return value
+    return "medium"
+
+
+def _optional_text(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _now() -> str:
