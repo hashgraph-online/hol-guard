@@ -2657,6 +2657,8 @@ def run_guard_command(
                 risk_signals.extend(scanner_risk_signals)
                 if scanner_raised_to_block:
                     risk_summary = scanner_risk_signals[0]
+            if action_envelope is not None:
+                action_envelope = action_envelope.with_pre_execution_result(policy_action)
             decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
             decision_v2_payload = decision_v2.to_dict()
             if package_evaluation is not None and package_evaluation.policy_action == policy_action:
@@ -2790,7 +2792,10 @@ def run_guard_command(
                         policy_action=policy_action,
                     )
                     return 0
-                if not _prompt_requires_hard_block(runtime_artifact):
+                should_queue_approval_center = not (
+                    policy_action == "block" and stored_policy_action == "block"
+                )
+                if not _prompt_requires_hard_block(runtime_artifact) and should_queue_approval_center:
                     approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                     approval_center_url = ensure_guard_daemon(guard_home)
                     runtime_detection = _runtime_detection(args.harness, runtime_artifact)
@@ -5159,7 +5164,7 @@ def _load_hook_payload(event_file: str | None, *, input_text: str | None = None)
     return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
 
 
-_ACTION_ENVELOPE_HARNESSES = frozenset({"codex", "claude-code", "opencode", "copilot", "gemini"})
+_ACTION_ENVELOPE_HARNESSES = frozenset({"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw"})
 
 
 def _hook_action_envelope(
