@@ -260,7 +260,37 @@ def test_guard_daemon_connect_complete_persists_cloud_workspace_id(tmp_path) -> 
     assert store.get_cloud_workspace_id() == "workspace-alpha"
 
 
-def test_guard_connect_completion_preserves_existing_workspace_when_missing_from_retry(tmp_path) -> None:
+def test_guard_connect_completion_preserves_existing_workspace_for_same_token_retry(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    first_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+    )
+    store.complete_guard_connect_request(
+        request_id=str(first_request["request_id"]),
+        pairing_secret=str(first_request["pairing_secret"]),
+        token="guard-live-runtime-token-one",
+        now="2026-04-15T00:00:01+00:00",
+        workspace_id="workspace-alpha",
+    )
+    second_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:01:00+00:00",
+    )
+
+    store.complete_guard_connect_request(
+        request_id=str(second_request["request_id"]),
+        pairing_secret=str(second_request["pairing_secret"]),
+        token="guard-live-runtime-token-one",
+        now="2026-04-15T00:01:01+00:00",
+    )
+
+    assert store.get_cloud_workspace_id() == "workspace-alpha"
+
+
+def test_guard_connect_completion_drops_workspace_for_rotated_token_without_workspace(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     first_request = store.create_guard_connect_request(
         sync_url="https://hol.org/api/guard/receipts/sync",
@@ -287,7 +317,7 @@ def test_guard_connect_completion_preserves_existing_workspace_when_missing_from
         now="2026-04-15T00:01:01+00:00",
     )
 
-    assert store.get_cloud_workspace_id() == "workspace-alpha"
+    assert store.get_cloud_workspace_id() is None
 
 
 def test_guard_connect_status_reports_retry_recovery_command(tmp_path, capsys) -> None:
