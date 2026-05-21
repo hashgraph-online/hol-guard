@@ -1883,7 +1883,7 @@ def run_guard_command(
         adv_sub = getattr(args, "advisories_subcommand", None)
         if adv_sub == "sync":
             try:
-                payload = sync_supply_chain_bundle(store)
+                payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
             except GuardSyncNotConfiguredError:
                 _emit(
                     "advisories_sync",
@@ -2132,7 +2132,7 @@ def run_guard_command(
         cloud_command = getattr(args, "cloud_command", None)
         if cloud_command == "sync-intel":
             try:
-                payload = sync_supply_chain_bundle(store)
+                payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
             except GuardSyncNotConfiguredError:
                 message = _guard_sync_prerequisite_message()
                 if getattr(args, "json", False):
@@ -2164,7 +2164,7 @@ def run_guard_command(
             return exit_code
         if supply_chain_command == "sync":
             try:
-                payload = sync_supply_chain_bundle(store)
+                payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
             except GuardSyncNotConfiguredError:
                 message = _guard_sync_prerequisite_message()
                 if getattr(args, "json", False):
@@ -8358,6 +8358,12 @@ def _guard_service_sync_payload(store: GuardStore) -> dict[str, object]:
         "runtime": runtime_summary,
         "receipts": receipts_summary,
     }
+
+
+def _validated_supply_chain_sync_payload(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        raise RuntimeError("Guard Cloud sync returned an invalid response.")
+    return payload
 
 
 def _guard_sync_prerequisite_message() -> str:

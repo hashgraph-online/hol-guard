@@ -5,6 +5,8 @@ import sys
 import types
 from pathlib import Path
 
+from rich.console import Console
+
 from codex_plugin_scanner.guard.cli import render
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 
@@ -404,6 +406,27 @@ def test_guard_connect_render_clarifies_browser_approval_wait(capsys) -> None:
     assert "Browser paired" in output
     assert "Browser approval pending" in output
     assert "Waiting for browser approval" in output
+
+
+def test_supply_chain_posture_panel_shows_unknown_cloud_advisories_consistently() -> None:
+    panel = render._build_supply_chain_posture_panel(
+        {
+            "status": "synced",
+            "policy": {
+                "security_level": "balanced",
+                "cloud_advisory_action": None,
+            },
+        }
+    )
+    console = Console(record=True, width=120)
+
+    console.print(panel)
+
+    output = _normalize_render_output(console.export_text())
+    assert "Security" in output
+    assert "balanced" in output
+    assert "Cloud advisories" in output
+    assert "unknown" in output
 
 
 def test_guard_status_render_rewrites_internal_next_action_labels(capsys) -> None:
