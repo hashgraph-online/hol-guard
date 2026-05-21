@@ -2795,6 +2795,7 @@ class GuardStore:
         pairing_secret: str,
         token: str,
         now: str,
+        workspace_id: str | None = None,
     ) -> dict[str, object]:
         with self._connect() as connection:
             request = persist_connect_request_completion(
@@ -2813,7 +2814,27 @@ class GuardStore:
                     expires_at=str(request["expires_at"]),
                     updated_at=now,
                 )
-            self._set_sync_credentials_in_connection(connection, str(request["sync_url"]), token, now)
+            effective_workspace_id = workspace_id
+            if effective_workspace_id is None:
+                previous_row = connection.execute(
+                    "select payload_json from sync_state where state_key = 'credentials'"
+                ).fetchone()
+                if previous_row is not None:
+                    previous_payload = json.loads(str(previous_row["payload_json"]))
+                    if (
+                        isinstance(previous_payload, dict)
+                        and previous_payload.get("sync_url") == str(request["sync_url"])
+                    ):
+                        previous_workspace_id = previous_payload.get("workspace_id")
+                        if isinstance(previous_workspace_id, str) and previous_workspace_id.strip():
+                            effective_workspace_id = previous_workspace_id.strip()
+            self._set_sync_credentials_in_connection(
+                connection,
+                str(request["sync_url"]),
+                token,
+                now,
+                workspace_id=effective_workspace_id,
+            )
             connection.execute(
                 """
                 insert into guard_events (event_name, payload_json, occurred_at)
