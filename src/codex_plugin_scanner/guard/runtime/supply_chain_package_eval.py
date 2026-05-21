@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -12,6 +13,11 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from xml.etree import ElementTree as ET
+
+try:
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redef]
 
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
@@ -1365,9 +1371,17 @@ def _lockfile_dependency_versions(
             lockfile_text = lockfile_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        if lockfile_path.name != "package-lock.json":
+        if lockfile_path.name == "package-lock.json":
+            versions.update(_package_lock_target_versions(lockfile_text, targets))
             continue
-        versions.update(_package_lock_target_versions(lockfile_text, targets))
+        if lockfile_path.name == "pnpm-lock.yaml":
+            versions.update(_pnpm_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "yarn.lock":
+            versions.update(_yarn_lock_target_versions(lockfile_text, targets))
+            continue
+        if lockfile_path.name == "bun.lock":
+            versions.update(_bun_lock_target_versions(lockfile_text, targets))
     return versions
 
 
@@ -1454,6 +1468,171 @@ def _package_lock_candidate_names(target: dict[str, object]) -> tuple[str, ...]:
     if qualified_name not in candidates:
         candidates.append(qualified_name)
     return tuple(candidates)
+
+
+def _pnpm_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    direct_versions: dict[str, str] = {}
+    section: str | None = None
+    importer: str | None = None
+    dependency_block: str | None = None
+    dependency_name: str | None = None
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        if indent == 0:
+            section = stripped.removesuffix(":")
+            importer = None
+            dependency_block = None
+            dependency_name = None
+            continue
+        if section != "importers":
+            continue
+        if indent == 2 and stripped.endswith(":"):
+            importer = stripped[:-1].strip('"').strip("'")
+            dependency_block = None
+            dependency_name = None
+            continue
+        if importer not in {".", "default"}:
+            continue
+        if indent == 4 and stripped.endswith(":"):
+            block_name = stripped.removesuffix(":")
+            dependency_block = block_name if "dependencies" in block_name.lower() else None
+            dependency_name = None
+            continue
+        if dependency_block is None:
+            continue
+        if indent == 6 and ":" in stripped:
+            raw_name, _, raw_value = stripped.partition(":")
+            dependency_name = raw_name.strip().strip('"').strip("'")
+            direct_value = raw_value.strip().strip('"').strip("'")
+            exact_version = _direct_lockfile_version(direct_value)
+            if exact_version is not None:
+                direct_versions[dependency_name] = exact_version
+                dependency_name = None
+            continue
+        if dependency_name is not None and indent >= 8 and stripped.startswith("version:"):
+            exact_version = _direct_lockfile_version(stripped.partition(":")[2].strip().strip('"').strip("'"))
+            if exact_version is not None:
+                direct_versions[dependency_name] = exact_version
+            dependency_name = None
+    return _target_versions_from_direct_map(targets, direct_versions)
+
+
+def _yarn_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    versions: dict[tuple[str, str | None], str] = {}
+    current_selectors: tuple[str, ...] = ()
+    target_selectors = {_lockfile_target_key(target): set(_expected_yarn_selectors(target)) for target in targets}
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not raw_line.startswith((" ", "\t")):
+            current_selectors = tuple(
+                selector
+                for selector in (part.strip().strip('"').strip("'") for part in stripped.removesuffix(":").split(","))
+                if selector and selector != "__metadata"
+            )
+            continue
+        if not current_selectors:
+            continue
+        version_match = re.match(r'^version\s+"([^"]+)"$', stripped) or re.match(
+            r'^version:\s*"?([^"\s]+)"?$',
+            stripped,
+        )
+        if version_match is None:
+            continue
+        version = version_match.group(1)
+        selector_set = set(current_selectors)
+        for target_key, expected_selectors in target_selectors.items():
+            if target_key in versions or not expected_selectors:
+                continue
+            if selector_set & expected_selectors:
+                versions[target_key] = version
+    return versions
+
+
+def _expected_yarn_selectors(target: dict[str, object]) -> tuple[str, ...]:
+    requested = _optional_string(target.get("version")) or _optional_string(target.get("range"))
+    if requested is None:
+        return ()
+    normalized_name = str(target["normalized_name"])
+    alias = _optional_string(target.get("alias"))
+    selectors = [f"{normalized_name}@{requested}", f"{normalized_name}@npm:{requested}"]
+    if alias is not None:
+        selectors.append(f"{alias}@npm:{normalized_name}@{requested}")
+    return tuple(dict.fromkeys(selectors))
+
+
+def _bun_lock_target_versions(
+    text: str,
+    targets: tuple[dict[str, object], ...],
+) -> dict[tuple[str, str | None], str]:
+    try:
+        payload = tomllib.loads(text or "")
+    except tomllib.TOMLDecodeError:
+        return {}
+    packages = payload.get("package")
+    if not isinstance(packages, list):
+        return {}
+    versions_by_name: dict[str, list[str]] = {}
+    for entry in packages:
+        if not isinstance(entry, dict):
+            continue
+        name = _optional_string(entry.get("name"))
+        version = _optional_string(entry.get("version"))
+        if name is None or version is None:
+            continue
+        versions_by_name.setdefault(name, []).append(version)
+    versions: dict[tuple[str, str | None], str] = {}
+    for target in targets:
+        target_key = _lockfile_target_key(target)
+        requested = _optional_string(target.get("range"))
+        candidates = versions_by_name.get(str(target["normalized_name"]), [])
+        if len(candidates) == 1:
+            versions[target_key] = candidates[0]
+            continue
+        if requested is None:
+            continue
+        matching_versions = [value for value in candidates if version_matches_js_selector(value, requested)]
+        if len(matching_versions) == 1:
+            versions[target_key] = matching_versions[0]
+    return versions
+
+
+def _target_versions_from_direct_map(
+    targets: tuple[dict[str, object], ...],
+    direct_versions: dict[str, str],
+) -> dict[tuple[str, str | None], str]:
+    versions: dict[tuple[str, str | None], str] = {}
+    for target in targets:
+        target_key = _lockfile_target_key(target)
+        for candidate in _package_lock_candidate_names(target):
+            version = direct_versions.get(candidate)
+            if version is not None:
+                versions[target_key] = version
+                break
+    return versions
+
+
+def _direct_lockfile_version(value: str) -> str | None:
+    normalized = value.split("(", 1)[0].strip()
+    if normalized.startswith("npm:"):
+        normalized = normalized.partition("npm:")[2]
+    if "@" in normalized and not normalized.startswith("@"):
+        candidate = normalized.rsplit("@", 1)[-1]
+        if _exact_version(candidate) is not None:
+            return candidate
+    if _exact_version(normalized) is not None:
+        return normalized
+    return None
 
 
 def _lockfile_target_key(target: dict[str, object]) -> tuple[str, str | None]:
@@ -1731,15 +1910,16 @@ def _split_namespace_name(value: str) -> tuple[str | None, str]:
 
 
 def _exact_version(value: str | None) -> str | None:
-    if value is None:
+    normalized = _optional_string(value)
+    if normalized is None:
         return None
-    if "://" in value or value.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
+    if "://" in normalized or normalized.startswith(("git+", "github:", "gitlab:", "bitbucket:")):
         return None
-    if value.startswith(("^", "~", "<", ">", "!", "*")):
+    if normalized.startswith(("^", "~", "<", ">", "!", "*")):
         return None
-    if any(token in value for token in ("||", " - ", ",")):
+    if any(token in normalized for token in ("||", " - ", ",")):
         return None
-    return value
+    return normalized
 
 
 def _optional_string(value: object) -> str | None:
