@@ -248,6 +248,10 @@ class RuntimeMcpGuardProxy:
                     tool_name=tool_name,
                     params=params,
                     artifact=package_artifact,
+                    remember_allow=True,
+                    remember_decision_source="inline-approved",
+                    remember_signals=decision.signals,
+                    remember_risk_categories=decision.risk_categories,
                 )
                 return response, package_event
             if self._allow_after_native_prompt(decision):
@@ -269,16 +273,6 @@ class RuntimeMcpGuardProxy:
                         store=self.store,
                         artifact=artifact,
                         artifact_hash=tool_artifact_hash,
-                        decision_source="inline-approved",
-                        now=_now(),
-                        signals=decision.signals,
-                        risk_categories=decision.risk_categories,
-                        remember=True,
-                    )
-                    allow_tool_call(
-                        store=self.store,
-                        artifact=package_artifact,
-                        artifact_hash=compute_artifact_hash(package_artifact),
                         decision_source="inline-approved",
                         now=_now(),
                         signals=decision.signals,
@@ -465,6 +459,10 @@ class RuntimeMcpGuardProxy:
         tool_name: str,
         params: dict[str, Any],
         artifact: Any,
+        remember_allow: bool = False,
+        remember_decision_source: str | None = None,
+        remember_signals: tuple[str, ...] = (),
+        remember_risk_categories: tuple[str, ...] = (),
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         artifact_digest = compute_artifact_hash(artifact)
         stored_policy_action = self.store.resolve_policy(
@@ -483,6 +481,17 @@ class RuntimeMcpGuardProxy:
         )
         queue_policy_action = "require-reapproval" if policy_action == "review" else policy_action
         if queue_policy_action in {"allow", "warn"}:
+            if remember_allow and remember_decision_source is not None:
+                allow_tool_call(
+                    store=self.store,
+                    artifact=artifact,
+                    artifact_hash=artifact_digest,
+                    decision_source=remember_decision_source,
+                    now=_now(),
+                    signals=remember_signals,
+                    risk_categories=remember_risk_categories,
+                    remember=True,
+                )
             response = self._forward_message(
                 message,
                 child_stdin,
