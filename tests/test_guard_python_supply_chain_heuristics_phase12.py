@@ -102,6 +102,23 @@ def test_evaluate_package_request_artifact_warns_on_python_vcs_and_direct_url_so
     assert result.packages[0]["reasons"][0]["code"] in {"git_dependency_source", "external_tarball_source"}
 
 
+def test_evaluate_package_request_artifact_prefers_editable_vcs_urls_over_local_workspace(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    write_text(
+        workspace_dir / "pyproject.toml",
+        '[build-system]\nrequires=["setuptools>=68"]\nbuild-backend="setuptools.build_meta"\n',
+    )
+    store = GuardStore(home_dir)
+    artifact = artifact_from_command_fixture(
+        'pip install -e "private-demo @ git+https://example.com/org/private-demo.git"', workspace=workspace_dir
+    )
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+    assert result.decision == "warn"
+    assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
+
+
 def test_evaluate_package_request_artifact_warns_on_editable_local_python_builds(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
