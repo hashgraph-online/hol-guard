@@ -161,4 +161,14 @@ def test_parse_package_intent_redacts_pip_index_credentials_from_env_assignments
 
     assert intent is not None
     assert "user:secret@" not in intent.redacted_command
-    assert "PIP_INDEX_URL=https://example.com/simple" in intent.redacted_command
+    assert "PIP_INDEX_URL" not in intent.redacted_command
+    assert intent.redacted_command == "pip install requests==2.31.0"
+
+
+def test_parse_package_intent_strips_non_url_env_assignments_from_redacted_command() -> None:
+    intent = parse_package_intent("API_TOKEN=supersecret pip install requests==2.31.0")
+
+    assert intent is not None
+    assert "API_TOKEN" not in intent.redacted_command
+    assert "supersecret" not in intent.redacted_command
+    assert intent.redacted_command == "pip install requests==2.31.0"
