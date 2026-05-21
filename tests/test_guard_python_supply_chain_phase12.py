@@ -275,6 +275,7 @@ def test_evaluate_package_request_artifact_resolves_ranges_from_supported_python
 @pytest.mark.parametrize(
     ("command", "expected_next_step"),
     [
+        ("uv pip install fastapi==0.115.0", "uv pip install fastapi==0.115.1"),
         ("uv add fastapi==0.115.0", "uv add fastapi==0.115.1"),
         ("poetry add requests@2.31.0", "poetry add requests@2.32.0"),
         ("pipenv install flask==3.0.0", "pipenv install flask==3.0.1"),
