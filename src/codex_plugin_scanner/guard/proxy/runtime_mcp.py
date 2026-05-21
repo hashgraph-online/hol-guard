@@ -15,6 +15,7 @@ from ..config import GuardConfig
 from ..consumer.service import artifact_hash
 from ..daemon import ensure_guard_daemon
 from ..mcp_tool_calls import (
+    ToolCallDecision,
     allow_tool_call,
     block_tool_call,
     build_tool_call_artifact,
@@ -211,19 +212,6 @@ class RuntimeMcpGuardProxy:
 
         tool_name = str(params.get("name") or "unknown")
         arguments = params.get("arguments")
-        package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
-        if package_artifact is not None:
-            response, package_event = self._handle_package_request(
-                message=message,
-                child_stdin=child_stdin,
-                child_stdout=child_stdout,
-                client_input=client_input,
-                server_output=server_output,
-                tool_name=tool_name,
-                params=params,
-                artifact=package_artifact,
-            )
-            return response, package_event
         tool_definition = self._tool_catalog.get(tool_name, {})
         artifact = build_tool_call_artifact(
             harness=self.harness,
@@ -249,6 +237,19 @@ class RuntimeMcpGuardProxy:
             artifact_hash=artifact_hash,
             arguments=arguments,
         )
+        package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
+        if package_artifact is not None and _package_request_routes_through_package_policy(decision):
+            response, package_event = self._handle_package_request(
+                message=message,
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+                tool_name=tool_name,
+                params=params,
+                artifact=package_artifact,
+            )
+            return response, package_event
         if decision.action == "allow" or (decision.source == "policy" and decision.action in {"warn", "review"}):
             return self._allow_and_forward(
                 message=message,
@@ -355,7 +356,7 @@ class RuntimeMcpGuardProxy:
             artifact.harness,
             artifact.artifact_id,
             artifact_hash=artifact_digest,
-            workspace=str(self.context.workspace_dir),
+            workspace=str(self.context.workspace_dir) if self.context.workspace_dir is not None else None,
         )
         package_evaluation = evaluate_package_request_artifact(
             artifact=artifact,
@@ -389,40 +390,44 @@ class RuntimeMcpGuardProxy:
         decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
         decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
         decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
-        queued = queue_blocked_approvals(
-            detection=HarnessDetection(
-                harness=self.harness,
-                installed=True,
-                command_available=True,
-                config_paths=(self.config_path,),
-                artifacts=(artifact,),
-            ),
-            evaluation={
-                "artifacts": [
-                    {
-                        "artifact_id": artifact.artifact_id,
-                        "artifact_name": artifact.name,
-                        "artifact_hash": artifact_digest,
-                        "artifact_type": artifact.artifact_type,
-                        "source_scope": artifact.source_scope,
-                        "config_path": artifact.config_path,
-                        "changed_fields": ["runtime_tool_call", "package_request"],
-                        "policy_action": policy_action,
-                        "launch_target": self._launch_target(tool_name, params.get("arguments")),
-                        "risk_summary": package_evaluation.risk_summary,
-                        "risk_signals": [
-                            str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
-                        ],
-                        "decision_v2_json": decision_v2_payload,
-                        "supply_chain_evaluation": package_evaluation.to_dict(),
-                    }
-                ]
-            },
-            store=self.store,
-            approval_center_url=approval_center_url,
-            now=_now(),
-        )
-        request_id = str(queued[0]["request_id"]) if queued else "unknown"
+        should_queue_approval_center = not (policy_action == "block" and stored_policy_action == "block")
+        queued: list[dict[str, Any]] = []
+        if should_queue_approval_center:
+            queued = queue_blocked_approvals(
+                detection=HarnessDetection(
+                    harness=self.harness,
+                    installed=True,
+                    command_available=True,
+                    config_paths=(self.config_path,),
+                    artifacts=(artifact,),
+                ),
+                evaluation={
+                    "artifacts": [
+                        {
+                            "artifact_id": artifact.artifact_id,
+                            "artifact_name": artifact.name,
+                            "artifact_hash": artifact_digest,
+                            "artifact_type": artifact.artifact_type,
+                            "source_scope": artifact.source_scope,
+                            "config_path": artifact.config_path,
+                            "changed_fields": ["runtime_tool_call", "package_request"],
+                            "policy_action": policy_action,
+                            "launch_target": self._launch_target(tool_name, params.get("arguments")),
+                            "risk_summary": package_evaluation.risk_summary,
+                            "risk_signals": [
+                                str(item.get("message") or item.get("code") or "")
+                                for item in package_evaluation.reasons
+                            ],
+                            "decision_v2_json": decision_v2_payload,
+                            "supply_chain_evaluation": package_evaluation.to_dict(),
+                        }
+                    ]
+                },
+                store=self.store,
+                approval_center_url=approval_center_url,
+                now=_now(),
+            )
+        request_id = str(queued[0]["request_id"]) if queued else "stored-block"
         review_url = first_approval_url(queued) or approval_center_url
         response_data = {
             "approvalCenterUrl": approval_center_url,
@@ -430,18 +435,27 @@ class RuntimeMcpGuardProxy:
             "reviewUrl": review_url,
             "supplyChainEvaluation": package_evaluation.to_dict(),
         }
+        blocked_message = (
+            f"HOL Guard stopped package install request {tool_name} from {self.server_name}. "
+            f"Approve request {request_id} at {review_url}, then retry the same action."
+        )
+        event_decision = "queue-package-approval"
+        if not should_queue_approval_center:
+            blocked_message = (
+                f"HOL Guard blocked package install request {tool_name} from {self.server_name}. "
+                f"This same request is already blocked by stored policy. Review policy settings at {review_url} "
+                f"before retrying."
+            )
+            event_decision = "package-block-stored"
         return _blocked_tool_response(
             message.get("id"),
             tool_name,
-            (
-                f"HOL Guard stopped package install request {tool_name} from {self.server_name}. "
-                f"Approve request {request_id} at {review_url}, then retry the same action."
-            ),
+            blocked_message,
             response_data,
         ), {
             "method": "tools/call",
             "tool_name": tool_name,
-            "decision": "queue-package-approval",
+            "decision": event_decision,
             "redacted_params": _redact_json(params),
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
@@ -968,6 +982,10 @@ def _optional_text(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _package_request_routes_through_package_policy(decision: ToolCallDecision) -> bool:
+    return not (decision.source == "policy" and decision.action not in {"allow", "warn", "review"})
 
 
 def _now() -> str:
