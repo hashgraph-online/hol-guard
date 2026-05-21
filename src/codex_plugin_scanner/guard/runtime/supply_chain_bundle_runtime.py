@@ -223,6 +223,7 @@ def evaluate_cached_supply_chain_bundle(
     *,
     package_name: str,
     package_version: str | None = None,
+    ecosystem: str | None = None,
     now: float | None = None,
 ) -> OfflineSupplyChainDecision:
     """Evaluate one package against the cached supply-chain bundle."""
@@ -232,7 +233,11 @@ def evaluate_cached_supply_chain_bundle(
         check_supply_chain_bundle_freshness(response.bundle, now=now)
     except SupplyChainBundleExpiredError:
         stale = True
-    matches = [item for item in response.bundle.packages if _package_matches(item, package_name, package_version)]
+    matches = [
+        item
+        for item in response.bundle.packages
+        if (ecosystem is None or item.ecosystem == ecosystem) and _package_matches(item, package_name, package_version)
+    ]
     if not matches:
         return OfflineSupplyChainDecision(
             action="monitor",
