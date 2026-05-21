@@ -2820,17 +2820,17 @@ class GuardStore:
                     "select payload_json from sync_state where state_key = 'credentials'"
                 ).fetchone()
                 if previous_row is not None:
-                    previous_payload = json.loads(str(previous_row["payload_json"]))
+                    previous_payload = json.loads(previous_row["payload_json"])
                     if (
                         isinstance(previous_payload, dict)
-                        and previous_payload.get("sync_url") == str(request["sync_url"])
+                        and previous_payload.get("sync_url") == request["sync_url"]
                     ):
                         previous_workspace_id = previous_payload.get("workspace_id")
                         if isinstance(previous_workspace_id, str) and previous_workspace_id.strip():
                             effective_workspace_id = previous_workspace_id.strip()
             self._set_sync_credentials_in_connection(
                 connection,
-                str(request["sync_url"]),
+                request["sync_url"],
                 token,
                 now,
                 workspace_id=effective_workspace_id,
