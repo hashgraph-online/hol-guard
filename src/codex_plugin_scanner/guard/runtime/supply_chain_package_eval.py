@@ -608,6 +608,7 @@ def _evaluate_with_bundle(
             bundle_response,
             package_name=str(target["normalized_name"]),
             package_version=resolved_version,
+            ecosystem=_optional_string(target.get("ecosystem")) or "npm",
         )
         if package_match is None:
             safe_allow = _recommended_fix_allow_package_result(
@@ -2005,6 +2006,9 @@ def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target:
 
 
 def _bundle_package_name_matches(package: SupplyChainBundlePackage, target: dict[str, object]) -> bool:
+    target_ecosystem = _optional_string(target.get("ecosystem"))
+    if target_ecosystem is not None and package.ecosystem != target_ecosystem:
+        return False
     full_name = (
         _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
         if package.namespace is not None
