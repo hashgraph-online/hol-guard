@@ -8535,6 +8535,26 @@ url = http://127.0.0.1:8787/guard-canary
                 "bundle_version": "1747612800000-deadbeef",
                 "package_count": 1,
                 "advisory_count": 1,
+                "ecosystem_support": [
+                    {
+                        "ecosystem": "npm",
+                        "display_name": "npm",
+                        "support_level": "protected",
+                        "support_label": "Protected",
+                    },
+                    {
+                        "ecosystem": "cargo",
+                        "display_name": "Cargo",
+                        "support_level": "beta",
+                        "support_label": "Beta",
+                    },
+                    {
+                        "ecosystem": "system",
+                        "display_name": "System packages",
+                        "support_level": "monitor-only",
+                        "support_label": "Monitor-only",
+                    },
+                ],
             }
 
         monkeypatch.setattr(guard_commands_module, "sync_supply_chain_bundle", _fake_sync_intel)
@@ -8546,6 +8566,8 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["status"] == "synced"
         assert output["bundle_version"] == "1747612800000-deadbeef"
         assert output["workspace_id"] == "workspace-alpha"
+        assert output["ecosystem_support"][0]["support_level"] == "protected"
+        assert output["ecosystem_support"][1]["support_label"] == "Beta"
 
     def test_guard_cloud_sync_intel_without_login_returns_cli_error(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
