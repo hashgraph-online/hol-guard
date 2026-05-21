@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
 from ..approvals import first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
+from ..consumer.service import artifact_hash as compute_artifact_hash
 from ..daemon import ensure_guard_daemon
 from ..mcp_tool_calls import (
     allow_tool_call,
@@ -22,7 +24,11 @@ from ..mcp_tool_calls import (
     tool_call_risk_summary,
 )
 from ..models import HarnessDetection
+from ..policy.engine import build_decision_v2
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
+from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
+from ..runtime.signals import RiskSignalV2
+from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..store import GuardStore
 from .stdio import _blocked_tool_response, _redact_json
 
@@ -222,14 +228,116 @@ class RuntimeMcpGuardProxy:
             tool_schema=tool_definition.get("input_schema"),
             tool_description=tool_definition.get("description"),
         )
-        artifact_hash = build_tool_call_hash(artifact, arguments)
+        tool_artifact_hash = build_tool_call_hash(artifact, arguments)
         decision = evaluate_tool_call(
             store=self.store,
             config=self.config,
             artifact=artifact,
-            artifact_hash=artifact_hash,
+            artifact_hash=tool_artifact_hash,
             arguments=arguments,
         )
+        package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
+        if package_artifact is not None:
+            if decision.action in {"allow", "warn"}:
+                response, package_event = self._handle_package_request(
+                    message=message,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    client_input=client_input,
+                    server_output=server_output,
+                    tool_name=tool_name,
+                    params=params,
+                    artifact=package_artifact,
+                )
+                return response, package_event
+            if self._allow_after_native_prompt(decision):
+                response, package_event = self._handle_package_request(
+                    message=message,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    client_input=client_input,
+                    server_output=server_output,
+                    tool_name=tool_name,
+                    params=params,
+                    artifact=package_artifact,
+                )
+                return response, package_event
+            if self._inline_prompt_available and approval_callback is not None:
+                approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
+                if _approval_allows(approval_result):
+                    allow_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=tool_artifact_hash,
+                        decision_source="inline-approved",
+                        now=_now(),
+                        signals=decision.signals,
+                        risk_categories=decision.risk_categories,
+                        remember=True,
+                    )
+                    response, package_event = self._handle_package_request(
+                        message=message,
+                        child_stdin=child_stdin,
+                        child_stdout=child_stdout,
+                        client_input=client_input,
+                        server_output=server_output,
+                        tool_name=tool_name,
+                        params=params,
+                        artifact=package_artifact,
+                        remember_allow=True,
+                        remember_decision_source="inline-approved",
+                        remember_signals=decision.signals,
+                        remember_risk_categories=decision.risk_categories,
+                    )
+                    return response, package_event
+                if _approval_denies(approval_result):
+                    block_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=tool_artifact_hash,
+                        decision_source="inline-denied",
+                        now=_now(),
+                        signals=decision.signals,
+                        risk_categories=decision.risk_categories,
+                    )
+                    return _blocked_tool_response(
+                        message.get("id"),
+                        tool_name,
+                        f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
+                    ), {
+                        **event,
+                        "decision": "deny-inline",
+                    }
+                if _approval_invalid(approval_result):
+                    block_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=tool_artifact_hash,
+                        decision_source="inline-invalid",
+                        now=_now(),
+                        signals=decision.signals,
+                        risk_categories=decision.risk_categories,
+                    )
+                    return _blocked_tool_response(
+                        message.get("id"),
+                        tool_name,
+                        (
+                            f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
+                            "approval returned an invalid response."
+                        ),
+                    ), {
+                        **event,
+                        "decision": "deny-inline-invalid",
+                    }
+            response, queued_event = self._queue_approval_center_response(
+                message_id=message.get("id"),
+                artifact=artifact,
+                artifact_hash=tool_artifact_hash,
+                tool_name=tool_name,
+                signals=decision.signals,
+                params=params,
+            )
+            return response, queued_event
         if decision.action == "allow" or (decision.source == "policy" and decision.action in {"warn", "review"}):
             return self._allow_and_forward(
                 message=message,
@@ -238,7 +346,7 @@ class RuntimeMcpGuardProxy:
                 client_input=client_input,
                 server_output=server_output,
                 artifact=artifact,
-                artifact_hash=artifact_hash,
+                artifact_hash=tool_artifact_hash,
                 decision_source=_decision_source(decision.action, decision.source),
                 signals=decision.signals,
                 risk_categories=decision.risk_categories,
@@ -252,7 +360,7 @@ class RuntimeMcpGuardProxy:
                 client_input=client_input,
                 server_output=server_output,
                 artifact=artifact,
-                artifact_hash=artifact_hash,
+                artifact_hash=tool_artifact_hash,
                 decision_source="native-approved",
                 signals=decision.signals,
                 risk_categories=decision.risk_categories,
@@ -268,7 +376,7 @@ class RuntimeMcpGuardProxy:
                     client_input=client_input,
                     server_output=server_output,
                     artifact=artifact,
-                    artifact_hash=artifact_hash,
+                    artifact_hash=tool_artifact_hash,
                     decision_source="inline-approved",
                     signals=decision.signals,
                     risk_categories=decision.risk_categories,
@@ -279,7 +387,7 @@ class RuntimeMcpGuardProxy:
                 block_tool_call(
                     store=self.store,
                     artifact=artifact,
-                    artifact_hash=artifact_hash,
+                    artifact_hash=tool_artifact_hash,
                     decision_source="inline-denied",
                     now=_now(),
                     signals=decision.signals,
@@ -293,15 +401,191 @@ class RuntimeMcpGuardProxy:
                     **event,
                     "decision": "deny-inline",
                 }
+            if _approval_invalid(approval_result):
+                block_tool_call(
+                    store=self.store,
+                    artifact=artifact,
+                    artifact_hash=tool_artifact_hash,
+                    decision_source="inline-invalid",
+                    now=_now(),
+                    signals=decision.signals,
+                    risk_categories=decision.risk_categories,
+                )
+                return _blocked_tool_response(
+                    message.get("id"),
+                    tool_name,
+                    (
+                        f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
+                        "approval returned an invalid response."
+                    ),
+                ), {
+                    **event,
+                    "decision": "deny-inline-invalid",
+                }
         response, queued_event = self._queue_approval_center_response(
             message_id=message.get("id"),
             artifact=artifact,
-            artifact_hash=artifact_hash,
+            artifact_hash=tool_artifact_hash,
             tool_name=tool_name,
             signals=decision.signals,
             params=params,
         )
         return response, queued_event
+
+    def _package_request_artifact(self, *, tool_name: str, arguments: object) -> Any | None:
+        intent = extract_package_intent_request(
+            tool_name,
+            arguments,
+            action_envelope_command=_command_argument(arguments),
+            workspace=self.context.workspace_dir,
+        )
+        if intent is None:
+            return None
+        return build_package_request_artifact(
+            harness=self.harness,
+            intent=intent,
+            config_path=self.config_path,
+            source_scope=self.source_scope,
+        )
+
+    def _handle_package_request(
+        self,
+        *,
+        message: dict[str, Any],
+        child_stdin: TextIO,
+        child_stdout: TextIO,
+        client_input: TextIO | None,
+        server_output: TextIO | None,
+        tool_name: str,
+        params: dict[str, Any],
+        artifact: Any,
+        remember_allow: bool = False,
+        remember_decision_source: str | None = None,
+        remember_signals: tuple[str, ...] = (),
+        remember_risk_categories: tuple[str, ...] = (),
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        artifact_digest = compute_artifact_hash(artifact)
+        stored_policy_action = self.store.resolve_policy(
+            artifact.harness,
+            artifact.artifact_id,
+            artifact_hash=artifact_digest,
+            workspace=str(self.context.workspace_dir) if self.context.workspace_dir is not None else None,
+        )
+        package_evaluation = evaluate_package_request_artifact(
+            artifact=artifact,
+            store=self.store,
+            workspace_dir=self.context.workspace_dir,
+        )
+        policy_action = (
+            stored_policy_action if isinstance(stored_policy_action, str) else package_evaluation.policy_action
+        )
+        queue_policy_action = "require-reapproval" if policy_action == "review" else policy_action
+        if queue_policy_action in {"allow", "warn"}:
+            if remember_allow and remember_decision_source is not None:
+                allow_tool_call(
+                    store=self.store,
+                    artifact=artifact,
+                    artifact_hash=artifact_digest,
+                    decision_source=remember_decision_source,
+                    now=_now(),
+                    signals=remember_signals,
+                    risk_categories=remember_risk_categories,
+                    remember=True,
+                )
+            response = self._forward_message(
+                message,
+                child_stdin,
+                child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+            )
+            return response, {
+                "method": "tools/call",
+                "tool_name": tool_name,
+                "decision": f"package-{queue_policy_action}",
+                "redacted_params": _redact_json(params),
+            }
+        approval_center_url = ensure_guard_daemon(self.context.guard_home)
+        decision_v2_payload = build_decision_v2(
+            queue_policy_action,
+            reason=queue_policy_action,
+            signals=_package_reason_signals(package_evaluation.reasons),
+        ).to_dict()
+        decision_v2_payload["user_title"] = package_evaluation.user_copy.title
+        decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
+        decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
+        decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
+        should_queue_approval_center = not (queue_policy_action == "block" and stored_policy_action == "block")
+        queued: list[dict[str, Any]] = []
+        if should_queue_approval_center:
+            queued = queue_blocked_approvals(
+                detection=HarnessDetection(
+                    harness=self.harness,
+                    installed=True,
+                    command_available=True,
+                    config_paths=(self.config_path,),
+                    artifacts=(artifact,),
+                ),
+                evaluation={
+                    "artifacts": [
+                        {
+                            "artifact_id": artifact.artifact_id,
+                            "artifact_name": artifact.name,
+                            "artifact_hash": artifact_digest,
+                            "artifact_type": artifact.artifact_type,
+                            "source_scope": artifact.source_scope,
+                            "config_path": artifact.config_path,
+                            "changed_fields": ["runtime_tool_call", "package_request"],
+                            "policy_action": queue_policy_action,
+                            "launch_target": self._launch_target(tool_name, params.get("arguments")),
+                            "risk_summary": package_evaluation.risk_summary,
+                            "risk_signals": [
+                                str(item.get("message") or item.get("code") or "")
+                                for item in package_evaluation.reasons
+                            ],
+                            "decision_v2_json": decision_v2_payload,
+                            "supply_chain_evaluation": package_evaluation.to_dict(),
+                        }
+                    ]
+                },
+                store=self.store,
+                approval_center_url=approval_center_url,
+                now=_now(),
+            )
+        request_id = str(queued[0]["request_id"]) if queued else "stored-block"
+        review_url = first_approval_url(queued) or approval_center_url
+        response_data = {
+            "approvalCenterUrl": approval_center_url,
+            "approvalRequests": queued,
+            "reviewUrl": review_url,
+            "supplyChainEvaluation": package_evaluation.to_dict(),
+        }
+        blocked_message = (
+            f"HOL Guard stopped package install request {tool_name} from {self.server_name}. "
+            f"Approve request {request_id} at {review_url}, then retry the same action."
+        )
+        event_decision = "queue-package-approval"
+        if not should_queue_approval_center:
+            blocked_message = (
+                f"HOL Guard blocked package install request {tool_name} from {self.server_name}. "
+                f"This same request is already blocked by stored policy. Review policy settings at {review_url} "
+                f"before retrying."
+            )
+            event_decision = "package-block-stored"
+        return _blocked_tool_response(
+            message.get("id"),
+            tool_name,
+            blocked_message,
+            response_data,
+        ), {
+            "method": "tools/call",
+            "tool_name": tool_name,
+            "decision": event_decision,
+            "redacted_params": _redact_json(params),
+            "approval_center_url": approval_center_url,
+            "approval_requests": queued,
+            "review_url": review_url,
+        }
 
     def _record_client_capabilities(self, method: str, params: object) -> None:
         del method, params
@@ -747,6 +1031,17 @@ def _approval_denies(payload: object) -> bool:
     return isinstance(content, dict) and content.get("decision") == "deny"
 
 
+def _approval_invalid(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return True
+    if payload.get("action") != "accept":
+        return False
+    content = payload.get("content")
+    if not isinstance(content, dict):
+        return True
+    return content.get("decision") not in {"approve", "deny"}
+
+
 def _approval_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if "result" in payload:
         result = payload.get("result")
@@ -774,6 +1069,55 @@ def _response_key(value: object) -> str | None:
     if value is None:
         return None
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _command_argument(arguments: object) -> str | None:
+    if not isinstance(arguments, Mapping):
+        return None
+    for key in ("command", "cmd", "shell_command", "shellCommand"):
+        value = arguments.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _package_reason_signals(reasons: tuple[dict[str, object], ...]) -> tuple[RiskSignalV2, ...]:
+    signals: list[RiskSignalV2] = []
+    for reason in reasons:
+        code = _optional_text(reason.get("code")) or "package-risk"
+        message = _optional_text(reason.get("message")) or code.replace("_", " ")
+        severity = _package_signal_severity(_optional_text(reason.get("severity")))
+        signals.append(
+            RiskSignalV2(
+                signal_id=f"supply-chain.{code}",
+                category="supply_chain",
+                severity=severity,
+                confidence="strong" if severity in {"high", "critical"} else "likely",
+                detector=_optional_text(reason.get("source")) or "guard.supply-chain",
+                title=message,
+                plain_reason=message,
+                technical_detail=message,
+                evidence_ref=None,
+                redaction_level="summary",
+                false_positive_hint=(
+                    "Review the package request or add a scoped exception only for a verified false positive."
+                ),
+                advisory_id=None,
+            )
+        )
+    return tuple(signals)
+
+
+def _package_signal_severity(value: str | None) -> str:
+    if value in {"info", "low", "medium", "high", "critical"}:
+        return value
+    return "medium"
+
+
+def _optional_text(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _now() -> str:

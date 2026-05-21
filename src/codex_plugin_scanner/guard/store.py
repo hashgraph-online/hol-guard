@@ -3523,6 +3523,7 @@ class GuardStore:
                 "severity": r.severity,
                 "confidence": r.confidence,
                 "summary": r.summary,
+                "details": r.details,
                 "action_identity": r.action_identity,
                 "created_at": r.created_at,
             }
