@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
+from codex_plugin_scanner.guard.runtime.supply_chain_bundle import load_supply_chain_bundle_response
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -183,7 +185,7 @@ def test_evaluate_package_request_artifact_scopes_offline_decisions_to_python_ec
     )
     pypi_package["riskScore"] = 200
     pypi_package["knownExploited"] = False
-    pypi_package["malwareState"] = "unknown"
+    pypi_package["malwareState"] = "none"
     pypi_package["normalizedSeverity"] = "medium"
     pypi_package["exploitLevel"] = "none"
     store.cache_supply_chain_bundle(
@@ -226,6 +228,78 @@ def test_evaluate_package_request_artifact_does_not_allow_fix_versions_from_othe
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
     assert result.decision == "monitor"
+
+
+def test_transitive_lockfile_results_scope_python_matches_to_python_ecosystem(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    write_text(
+        workspace_dir / "pyproject.toml",
+        "[project]\nname = 'demo'\nversion = '0.1.0'\ndependencies = ['fastapi>=0.110,<0.116']\n",
+    )
+    write_text(
+        workspace_dir / "uv.lock",
+        """
+version = 1
+
+[[package]]
+name = "fastapi"
+version = "0.115.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "requests"
+version = "2.31.0"
+source = { registry = "https://pypi.org/simple" }
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    npm_package = package_fixture(
+        name="requests",
+        version="2.31.0",
+        default_action="block",
+        recommended_fix_version="2.32.0",
+    )
+    npm_package["ecosystem"] = "npm"
+    npm_package["purl"] = "pkg:npm/requests@2.31.0"
+    npm_package["riskScore"] = 999
+    pypi_package = package_fixture(
+        name="requests",
+        version="2.31.0",
+        default_action="block",
+        recommended_fix_version="2.32.0",
+    )
+    pypi_package["riskScore"] = 200
+    pypi_package["knownExploited"] = False
+    pypi_package["malwareState"] = "none"
+    pypi_package["normalizedSeverity"] = "medium"
+    pypi_package["exploitLevel"] = "none"
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(packages=[npm_package, pypi_package]),
+        "2026-05-19T00:00:00Z",
+    )
+    monkeypatch.setattr(
+        supply_chain_package_eval_module,
+        "_safe_dependency_map_for_path",
+        lambda _path, _text, *, deadline: {"requests": "2.31.0"},
+    )
+
+    bundle_response = load_supply_chain_bundle_response(bundle_response_fixture(packages=[npm_package, pypi_package]))
+    artifact = artifact_from_command_fixture("uv add fastapi>=0.110,<0.116", workspace=workspace_dir)
+    results = supply_chain_package_eval_module._transitive_lockfile_results(
+        bundle_response=bundle_response,
+        artifact=artifact,
+        workspace_dir=workspace_dir,
+    )
+
+    assert results == []
 
 
 @pytest.mark.parametrize(
