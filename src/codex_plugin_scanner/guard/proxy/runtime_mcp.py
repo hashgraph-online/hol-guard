@@ -294,6 +294,27 @@ class RuntimeMcpGuardProxy:
                         **event,
                         "decision": "deny-inline",
                     }
+                if _approval_invalid(approval_result):
+                    block_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=artifact_hash,
+                        decision_source="inline-invalid",
+                        now=_now(),
+                        signals=decision.signals,
+                        risk_categories=decision.risk_categories,
+                    )
+                    return _blocked_tool_response(
+                        message.get("id"),
+                        tool_name,
+                        (
+                            f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
+                            "approval returned an invalid response."
+                        ),
+                    ), {
+                        **event,
+                        "decision": "deny-inline-invalid",
+                    }
             response, queued_event = self._queue_approval_center_response(
                 message_id=message.get("id"),
                 artifact=artifact,
@@ -365,6 +386,27 @@ class RuntimeMcpGuardProxy:
                 ), {
                     **event,
                     "decision": "deny-inline",
+                }
+            if _approval_invalid(approval_result):
+                block_tool_call(
+                    store=self.store,
+                    artifact=artifact,
+                    artifact_hash=artifact_hash,
+                    decision_source="inline-invalid",
+                    now=_now(),
+                    signals=decision.signals,
+                    risk_categories=decision.risk_categories,
+                )
+                return _blocked_tool_response(
+                    message.get("id"),
+                    tool_name,
+                    (
+                        f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
+                        "approval returned an invalid response."
+                    ),
+                ), {
+                    **event,
+                    "decision": "deny-inline-invalid",
                 }
         response, queued_event = self._queue_approval_center_response(
             message_id=message.get("id"),
@@ -959,6 +1001,17 @@ def _approval_denies(payload: object) -> bool:
     return isinstance(content, dict) and content.get("decision") == "deny"
 
 
+def _approval_invalid(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return True
+    if payload.get("action") != "accept":
+        return False
+    content = payload.get("content")
+    if not isinstance(content, dict):
+        return True
+    return content.get("decision") not in {"approve", "deny"}
+
+
 def _approval_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if "result" in payload:
         result = payload.get("result")
@@ -1035,6 +1088,8 @@ def _optional_text(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
