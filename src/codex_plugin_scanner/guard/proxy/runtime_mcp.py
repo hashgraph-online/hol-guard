@@ -15,7 +15,6 @@ from ..config import GuardConfig
 from ..consumer.service import artifact_hash
 from ..daemon import ensure_guard_daemon
 from ..mcp_tool_calls import (
-    ToolCallDecision,
     allow_tool_call,
     block_tool_call,
     build_tool_call_artifact,
@@ -238,7 +237,63 @@ class RuntimeMcpGuardProxy:
             arguments=arguments,
         )
         package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
-        if package_artifact is not None and _package_request_requires_tool_policy_review(decision):
+        if package_artifact is not None:
+            if decision.action in {"allow", "warn"}:
+                response, package_event = self._handle_package_request(
+                    message=message,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    client_input=client_input,
+                    server_output=server_output,
+                    tool_name=tool_name,
+                    params=params,
+                    artifact=package_artifact,
+                )
+                return response, package_event
+            if self._allow_after_native_prompt(decision):
+                response, package_event = self._handle_package_request(
+                    message=message,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                    client_input=client_input,
+                    server_output=server_output,
+                    tool_name=tool_name,
+                    params=params,
+                    artifact=package_artifact,
+                )
+                return response, package_event
+            if self._inline_prompt_available and approval_callback is not None:
+                approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
+                if _approval_allows(approval_result):
+                    response, package_event = self._handle_package_request(
+                        message=message,
+                        child_stdin=child_stdin,
+                        child_stdout=child_stdout,
+                        client_input=client_input,
+                        server_output=server_output,
+                        tool_name=tool_name,
+                        params=params,
+                        artifact=package_artifact,
+                    )
+                    return response, package_event
+                if _approval_denies(approval_result):
+                    block_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=artifact_hash,
+                        decision_source="inline-denied",
+                        now=_now(),
+                        signals=decision.signals,
+                        risk_categories=decision.risk_categories,
+                    )
+                    return _blocked_tool_response(
+                        message.get("id"),
+                        tool_name,
+                        f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
+                    ), {
+                        **event,
+                        "decision": "deny-inline",
+                    }
             response, queued_event = self._queue_approval_center_response(
                 message_id=message.get("id"),
                 artifact=artifact,
@@ -248,18 +303,6 @@ class RuntimeMcpGuardProxy:
                 params=params,
             )
             return response, queued_event
-        if package_artifact is not None:
-            response, package_event = self._handle_package_request(
-                message=message,
-                child_stdin=child_stdin,
-                child_stdout=child_stdout,
-                client_input=client_input,
-                server_output=server_output,
-                tool_name=tool_name,
-                params=params,
-                artifact=package_artifact,
-            )
-            return response, package_event
         if decision.action == "allow" or (decision.source == "policy" and decision.action in {"warn", "review"}):
             return self._allow_and_forward(
                 message=message,
@@ -992,17 +1035,6 @@ def _optional_text(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
-
-
-def _package_request_requires_tool_policy_review(decision: ToolCallDecision) -> bool:
-    return decision.source == "policy" and decision.action in {
-        "review",
-        "require-reapproval",
-        "sandbox-required",
-        "block",
-    }
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 

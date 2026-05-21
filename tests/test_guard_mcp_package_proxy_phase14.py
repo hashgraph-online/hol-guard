@@ -197,12 +197,26 @@ def _context_without_workspace(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
 
 
+def _allow_mcp_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "evaluate_tool_call",
+        lambda **_kwargs: ToolCallDecision(
+            action="allow",
+            source="heuristic",
+            signals=(),
+            summary="tool call allowed",
+        ),
+    )
+
+
 @pytest.mark.parametrize("harness", ["cursor", "opencode", "hermes", "openclaw"])
 def test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     harness: str,
 ) -> None:
+    _allow_mcp_tool_calls(monkeypatch)
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     store.set_sync_credentials(
@@ -260,6 +274,7 @@ def test_phase14_runtime_mcp_proxy_forwards_allowed_package_call(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _allow_mcp_tool_calls(monkeypatch)
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     store.set_sync_credentials(
@@ -308,6 +323,7 @@ def test_phase14_runtime_mcp_proxy_honors_stored_allow_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _allow_mcp_tool_calls(monkeypatch)
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     store.set_sync_credentials(
@@ -382,6 +398,7 @@ def test_phase14_runtime_mcp_proxy_honors_stored_allow_override_without_workspac
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _allow_mcp_tool_calls(monkeypatch)
     context = _context_without_workspace(tmp_path)
     store = GuardStore(context.guard_home)
     store.set_sync_credentials(
@@ -456,6 +473,7 @@ def test_phase14_runtime_mcp_proxy_skips_requeue_for_stored_package_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _allow_mcp_tool_calls(monkeypatch)
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     store.set_sync_credentials(
@@ -596,6 +614,60 @@ def test_phase14_runtime_mcp_proxy_enforces_tool_policy_review_before_package_ro
         lambda **_kwargs: ToolCallDecision(
             action="review",
             source="policy",
+            signals=("command_execution",),
+            summary="review before execution",
+            risk_categories=("command_execution",),
+        ),
+    )
+    proxy = RuntimeMcpGuardProxy(
+        harness="cursor",
+        server_name="workspace-tools",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".cursor" / "mcp.json"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "run_terminal_command",
+                    "arguments": {"command": "npm install minimist@1.2.8"},
+                },
+            },
+        ]
+    )
+
+    request = store.list_approval_requests(limit=5)[0]
+
+    assert marker_path.exists() is False
+    assert result["responses"][2]["error"]["code"] == -32001
+    assert request["artifact_type"] == "tool_call"
+
+
+def test_phase14_runtime_mcp_proxy_enforces_non_policy_review_before_package_routing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "cursor-mcp-risk-review.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "evaluate_tool_call",
+        lambda **_kwargs: ToolCallDecision(
+            action="review",
+            source="risk-policy",
             signals=("command_execution",),
             summary="review before execution",
             risk_categories=("command_execution",),
