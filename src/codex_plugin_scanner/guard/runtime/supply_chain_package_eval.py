@@ -1302,9 +1302,12 @@ def _local_python_build_result(target: dict[str, object], workspace_dir: Path | 
 
 def _looks_like_explicit_local_python_path(raw_spec: str) -> bool:
     normalized = raw_spec.strip()
-    return normalized == "." or normalized == "~" or normalized.startswith(
-        ("./", "../", "/", "~/", ".\\", "..\\", "~\\", "\\\\", "//")
-    ) or bool(re.match(r"^[A-Za-z]:[\\\\/]", normalized))
+    return (
+        normalized == "."
+        or normalized == "~"
+        or normalized.startswith(("./", "../", "/", "~/", ".\\", "..\\", "~\\", "\\\\", "//"))
+        or bool(re.match(r"^[A-Za-z]:[\\\\/]", normalized))
+    )
 
 
 def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -> Path | None:
@@ -1331,9 +1334,7 @@ def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -
     parent = disk_path.parent
     if disk_path.name in {"pyproject.toml", "setup.py"} and disk_path.exists():
         return parent
-    workspace_has_python_project = (workspace_dir / "pyproject.toml").exists() or (
-        workspace_dir / "setup.py"
-    ).exists()
+    workspace_has_python_project = (workspace_dir / "pyproject.toml").exists() or (workspace_dir / "setup.py").exists()
     return workspace_dir if editable and workspace_has_python_project else None
 
 
@@ -1863,11 +1864,7 @@ def _poetry_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> 
         name = _optional_string(package.get("name"))
         version = _optional_string(package.get("version"))
         normalized_name = _normalize_package_name("pypi", name) if name is not None else None
-        if (
-            normalized_name is None
-            or version is None
-            or normalized_name not in direct_manifest_names
-        ):
+        if normalized_name is None or version is None or normalized_name not in direct_manifest_names:
             continue
         direct_versions[normalized_name] = version
     return direct_versions
@@ -1899,11 +1896,7 @@ def _uv_lock_direct_versions(text: str, direct_manifest_names: set[str]) -> dict
         name = _optional_string(package.get("name"))
         version = _optional_string(package.get("version"))
         normalized_name = _normalize_package_name("pypi", name) if name is not None else None
-        if (
-            normalized_name is None
-            or version is None
-            or normalized_name not in direct_manifest_names
-        ):
+        if normalized_name is None or version is None or normalized_name not in direct_manifest_names:
             continue
         direct_versions[normalized_name] = version
     return direct_versions
