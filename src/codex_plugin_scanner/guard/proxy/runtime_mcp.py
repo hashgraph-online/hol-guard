@@ -411,8 +411,7 @@ class RuntimeMcpGuardProxy:
                         "launch_target": self._launch_target(tool_name, params.get("arguments")),
                         "risk_summary": package_evaluation.risk_summary,
                         "risk_signals": [
-                            str(item.get("message") or item.get("code") or "")
-                            for item in package_evaluation.reasons
+                            str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
                         ],
                         "decision_v2_json": decision_v2_payload,
                         "supply_chain_evaluation": package_evaluation.to_dict(),
