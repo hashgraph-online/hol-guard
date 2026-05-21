@@ -771,3 +771,29 @@ def test_approvals_render_error_shows_panel(capsys) -> None:
     )
     output = capsys.readouterr().out
     assert "not_found" in output
+
+
+def test_sync_render_shows_ecosystem_support_table(capsys) -> None:
+    emit_guard_payload(
+        "sync",
+        {
+            "status": "synced",
+            "synced_at": "2026-05-19T00:00:00Z",
+            "ecosystem_support": [
+                {"ecosystem": "npm", "display_name": "npm", "support_level": "protected", "support_label": "Protected"},
+                {"ecosystem": "cargo", "display_name": "Cargo", "support_level": "beta", "support_label": "Beta"},
+                {
+                    "ecosystem": "system",
+                    "display_name": "System packages",
+                    "support_level": "monitor-only",
+                    "support_label": "Monitor-only",
+                },
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Ecosystem support" in output
+    assert "Protected" in output
+    assert "Beta" in output
+    assert "Monitor-only" in output

@@ -1157,10 +1157,25 @@ def _render_sync(console: Console, payload: dict[str, object]) -> None:
     if pain_signals_uploaded is not None:
         body.add_row("Pain signals uploaded", str(pain_signals_uploaded or 0))
     console.print(Panel(body, title="Guard sync complete", border_style="green"))
+    ecosystem_support = _coerce_dict_list(payload.get("ecosystem_support"))
+    if ecosystem_support:
+        console.print(_build_ecosystem_support_table(ecosystem_support))
 
 
 def _managed_install_state_text(managed_install: dict[str, object]) -> str:
     return "Installed" if bool(managed_install.get("active")) else "Removed"
+
+
+def _build_ecosystem_support_table(items: list[dict[str, object]]) -> Table:
+    table = Table(title="Ecosystem support", box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Ecosystem", style="bold")
+    table.add_column("Coverage")
+    for item in items:
+        table.add_row(
+            str(item.get("display_name") or item.get("ecosystem") or "unknown"),
+            str(item.get("support_label") or "Monitor-only"),
+        )
+    return table
 
 
 def _managed_install_mode_text(mode: object) -> str | None:
