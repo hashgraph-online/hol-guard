@@ -219,7 +219,7 @@ def _yarn_selector_names(selector_line: str) -> tuple[str, ...]:
     names: list[str] = []
     for part in selector_line.split(","):
         selector = part.strip().strip('"').strip("'")
-        if not selector:
+        if not selector or selector == "__metadata":
             continue
         package_name = _yarn_selector_name(selector)
         if package_name and package_name not in names:

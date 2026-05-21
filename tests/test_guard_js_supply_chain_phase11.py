@@ -279,6 +279,77 @@ def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for
     assert "external tarball source" in result.risk_summary.lower()
 
 
+@pytest.mark.parametrize(
+    ("command", "lockfile_name", "lockfile_text"),
+    [
+        (
+            "pnpm add minimist@^1.2.0",
+            "pnpm-lock.yaml",
+            """
+lockfileVersion: '9.0'
+importers:
+  .:
+    dependencies:
+      minimist:
+        specifier: ^1.2.0
+        version: 1.2.8
+packages:
+  minimist@1.2.8:
+    resolution: {integrity: sha512-demo}
+""",
+        ),
+        (
+            "yarn add minimist@^1.2.0",
+            "yarn.lock",
+            """
+__metadata:
+  version: 4
+  cacheKey: 8
+
+"minimist@^1.2.0":
+  version "1.2.8"
+""",
+        ),
+        (
+            "bun add minimist@^1.2.0",
+            "bun.lock",
+            """
+[[package]]
+name = "minimist"
+version = "1.2.8"
+resolved = "npm:minimist@1.2.8"
+dependencies = []
+""",
+        ),
+    ],
+)
+def test_evaluate_package_request_artifact_resolves_ranges_from_supported_js_lockfiles(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    lockfile_name: str,
+    lockfile_text: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"minimist":"^1.2.0"}}\n')
+    _write_text(workspace_dir / lockfile_name, lockfile_text.strip() + "\n")
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
+        "2026-05-19T00:00:00Z",
+    )
+
+    artifact = _artifact_from_command(command, workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "block"
+    assert result.packages[0]["resolvedVersion"] == "1.2.8"
+
+
 def test_evaluate_package_request_artifact_npm_audit_fix_scans_existing_lockfile_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

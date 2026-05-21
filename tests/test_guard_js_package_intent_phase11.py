@@ -169,6 +169,17 @@ __metadata:
     }
 
 
+def test_parse_manifest_dependency_changes_ignores_yarn_berry_metadata_sections() -> None:
+    result = parse_manifest_dependency_changes(
+        path="yarn.lock",
+        before_text='__metadata:\n  version: 4\n  cacheKey: 8\n',
+        after_text='__metadata:\n  version: 5\n  cacheKey: 9\n',
+    )
+
+    assert result.parse_errors == ()
+    assert result.changes == ()
+
+
 def test_parse_manifest_dependency_changes_supports_bun_text_lock() -> None:
     before_text = """
 [[package]]
