@@ -110,15 +110,23 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
     if lower_path.endswith("pipfile.lock"):
         return _pipfile_lock_dependency_map(text, deadline)
     if lower_path.endswith("cargo.toml"):
-        return _toml_table_dependency_map(text, ("dependencies", "dev-dependencies", "build-dependencies"), deadline)
+        return _cargo_toml_dependency_map(text, deadline)
+    if lower_path.endswith("cargo.lock"):
+        return _cargo_lock_dependency_map(text, deadline)
     if lower_path.endswith("go.mod"):
         return _go_mod_dependency_map(text, deadline)
     if lower_path.endswith("pom.xml"):
         return _pom_dependency_map(text, deadline)
     if lower_path.endswith("build.gradle") or lower_path.endswith("build.gradle.kts"):
         return _gradle_dependency_map(text, deadline)
+    if lower_path.endswith("gradle.lockfile"):
+        return _gradle_lockfile_dependency_map(text, deadline)
+    if lower_path.endswith("composer.lock"):
+        return _composer_lock_dependency_map(text, deadline)
     if lower_path.endswith("gemfile"):
         return _gemfile_dependency_map(text, deadline)
+    if lower_path.endswith("gemfile.lock"):
+        return _gemfile_lock_dependency_map(text, deadline)
     return {}
 
 
@@ -469,6 +477,60 @@ def _toml_table_dependency_map(text: str, sections: tuple[str, ...], deadline: f
     return dependencies
 
 
+def _cargo_toml_dependency_map(text: str, deadline: float) -> dict[str, str]:
+    _ensure_within_deadline(deadline)
+    payload = tomllib.loads(text or "")
+    dependencies: dict[str, str] = {}
+    for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+        _collect_toml_dependency_table(dependencies, payload.get(section), deadline)
+    workspace = payload.get("workspace")
+    if isinstance(workspace, dict):
+        _collect_toml_dependency_table(dependencies, workspace.get("dependencies"), deadline)
+    target = payload.get("target")
+    if isinstance(target, dict):
+        for section_payload in target.values():
+            _ensure_within_deadline(deadline)
+            if not isinstance(section_payload, dict):
+                continue
+            for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+                _collect_toml_dependency_table(dependencies, section_payload.get(section), deadline)
+    return dependencies
+
+
+def _collect_toml_dependency_table(
+    dependencies: dict[str, str],
+    values: object,
+    deadline: float,
+) -> None:
+    if not isinstance(values, dict):
+        return
+    for package_name, value in values.items():
+        _ensure_within_deadline(deadline)
+        if isinstance(value, str):
+            dependencies[str(package_name)] = value
+            continue
+        if isinstance(value, dict) and isinstance(value.get("version"), str):
+            dependencies[str(package_name)] = str(value["version"])
+
+
+def _cargo_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+    _ensure_within_deadline(deadline)
+    payload = tomllib.loads(text or "")
+    packages = payload.get("package")
+    dependencies: dict[str, str] = {}
+    if not isinstance(packages, list):
+        return dependencies
+    for package in packages:
+        _ensure_within_deadline(deadline)
+        if not isinstance(package, dict):
+            continue
+        name = package.get("name")
+        version = package.get("version")
+        if isinstance(name, str) and isinstance(version, str):
+            dependencies[name] = version
+    return dependencies
+
+
 def _go_mod_dependency_map(text: str, deadline: float) -> dict[str, str]:
     dependencies: dict[str, str] = {}
     in_require_block = False
@@ -514,6 +576,38 @@ def _gradle_dependency_map(text: str, deadline: float) -> dict[str, str]:
     return dependencies
 
 
+def _gradle_lockfile_dependency_map(text: str, deadline: float) -> dict[str, str]:
+    dependencies: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        _ensure_within_deadline(deadline)
+        line = raw_line.strip()
+        if not line or line.startswith(("#", "empty=")) or "=" not in line:
+            continue
+        package_name, _, version = line.rpartition(":")
+        if package_name and version:
+            dependencies[package_name] = version
+    return dependencies
+
+
+def _composer_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+    _ensure_within_deadline(deadline)
+    payload = json.loads(text or "{}")
+    dependencies: dict[str, str] = {}
+    for section in ("packages", "packages-dev"):
+        packages = payload.get(section)
+        if not isinstance(packages, list):
+            continue
+        for package in packages:
+            _ensure_within_deadline(deadline)
+            if not isinstance(package, dict):
+                continue
+            name = package.get("name")
+            version = package.get("version")
+            if isinstance(name, str) and isinstance(version, str):
+                dependencies[name] = version
+    return dependencies
+
+
 def _gemfile_dependency_map(text: str, deadline: float) -> dict[str, str]:
     dependencies: dict[str, str] = {}
     for line in text.splitlines():
@@ -521,6 +615,26 @@ def _gemfile_dependency_map(text: str, deadline: float) -> dict[str, str]:
         match = _GEMFILE_RE.search(line)
         if match is not None:
             dependencies[match.group(1)] = match.group(2) or ""
+    return dependencies
+
+
+def _gemfile_lock_dependency_map(text: str, deadline: float) -> dict[str, str]:
+    dependencies: dict[str, str] = {}
+    in_specs_block = False
+    for raw_line in text.splitlines():
+        _ensure_within_deadline(deadline)
+        stripped = raw_line.strip()
+        if stripped == "specs:":
+            in_specs_block = True
+            continue
+        if re.fullmatch(r"[A-Z][A-Z0-9_ ]+", stripped or ""):
+            in_specs_block = False
+            continue
+        if not in_specs_block:
+            continue
+        match = re.match(r"^\s{4}([A-Za-z0-9_.:-]+) \(([^)]+)\)", raw_line)
+        if match is not None:
+            dependencies[match.group(1)] = match.group(2)
     return dependencies
 
 
