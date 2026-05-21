@@ -6,7 +6,6 @@ import base64
 import functools
 import hashlib
 import subprocess
-import sys
 import threading
 import zipfile
 from collections.abc import Iterator
@@ -36,16 +35,10 @@ def _build_wheel(build_root: Path, version: str, dist_dir: Path) -> Path:
     package_files = {
         "labdemo/__init__.py": f'__version__ = "{version}"\n'.encode(),
         f"{dist_info_dir}/WHEEL": (
-            b"Wheel-Version: 1.0\n"
-            b"Generator: hol-guard-test\n"
-            b"Root-Is-Purelib: true\n"
-            b"Tag: py3-none-any\n"
+            b"Wheel-Version: 1.0\nGenerator: hol-guard-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
         ),
         f"{dist_info_dir}/METADATA": (
-            "Metadata-Version: 2.1\n"
-            "Name: labdemo\n"
-            f"Version: {version}\n"
-            "Summary: HOL Guard local lab package\n"
+            f"Metadata-Version: 2.1\nName: labdemo\nVersion: {version}\nSummary: HOL Guard local lab package\n"
         ).encode(),
     }
     record_lines: list[str] = []
@@ -61,8 +54,7 @@ def _build_wheel(build_root: Path, version: str, dist_dir: Path) -> Path:
 
 def _write_simple_index(index_root: Path, wheel_paths: list[Path]) -> None:
     package_links = "\n".join(
-        f'<a href="../../packages/{wheel_path.name}">{wheel_path.name}</a><br/>'
-        for wheel_path in sorted(wheel_paths)
+        f'<a href="../../packages/{wheel_path.name}">{wheel_path.name}</a><br/>' for wheel_path in sorted(wheel_paths)
     )
     write_text(index_root / "simple" / "index.html", '<a href="labdemo/">labdemo</a>\n')
     write_text(index_root / "simple" / "labdemo" / "index.html", package_links + "\n")
@@ -148,7 +140,11 @@ def test_python_simple_index_lab_blocks_vulnerable_version_and_serves_safe_wheel
         download_dir.mkdir()
         subprocess.run(
             [
-                sys.executable,
+                "uv",
+                "run",
+                "--with",
+                "pip",
+                "python",
                 "-m",
                 "pip",
                 "download",
