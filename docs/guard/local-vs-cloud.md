@@ -32,5 +32,8 @@ Use these commands when you need to check or repair optional cloud pairing witho
 hol-guard connect status
 hol-guard connect repair
 hol-guard sync
+hol-guard supply-chain sync
+hol-guard supply-chain scan
+hol-guard supply-chain explain minimist@1.2.5 --ecosystem npm
 hol-guard explain install-connect
 ```
