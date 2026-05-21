@@ -248,10 +248,6 @@ class RuntimeMcpGuardProxy:
                     tool_name=tool_name,
                     params=params,
                     artifact=package_artifact,
-                    remember_allow=True,
-                    remember_decision_source="inline-approved",
-                    remember_signals=decision.signals,
-                    remember_risk_categories=decision.risk_categories,
                 )
                 return response, package_event
             if self._allow_after_native_prompt(decision):
@@ -288,6 +284,10 @@ class RuntimeMcpGuardProxy:
                         tool_name=tool_name,
                         params=params,
                         artifact=package_artifact,
+                        remember_allow=True,
+                        remember_decision_source="inline-approved",
+                        remember_signals=decision.signals,
+                        remember_risk_categories=decision.risk_categories,
                     )
                     return response, package_event
                 if _approval_denies(approval_result):
