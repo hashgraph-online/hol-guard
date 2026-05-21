@@ -17,7 +17,7 @@ IntentKind = Literal["install", "execute", "sync"]
 _EXTRAS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)\[(?P<extras>[A-Za-z0-9_,.-]+)\]$")
 _EGG_FRAGMENT_RE = re.compile(r"(?:^|[#&])egg=([^&#]+)")
 _PYTHON_VERSION_RE = re.compile(r"(?P<name>[^<>=!~\s]+)(?P<op>===|==|~=|!=|<=|>=|<|>|=)?(?P<version>.*)")
-_JS_SOURCE_PREFIXES = ("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:")
+_JS_SOURCE_PREFIXES = ("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:", "file:")
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,7 +369,9 @@ def _looks_like_js_source_spec(value: str | None) -> bool:
 def _source_url_package_name(source_url: str) -> str | None:
     normalized = source_url.strip()
     candidate = (
-        normalized.partition(":")[2] if normalized.startswith(("github:", "gitlab:", "bitbucket:")) else normalized
+        normalized.partition(":")[2]
+        if normalized.startswith(("github:", "gitlab:", "bitbucket:", "file:"))
+        else normalized
     )
     sanitized = _sanitize_url(candidate)
     package_name = PurePath(sanitized).name
