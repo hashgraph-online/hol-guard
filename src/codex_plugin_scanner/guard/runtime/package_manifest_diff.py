@@ -93,8 +93,10 @@ def _dependency_map_for_path(path: str, text: str, *, deadline: float) -> dict[s
         return _bun_lock_dependency_map(text, deadline)
     if lower_path.endswith("composer.json"):
         return _json_dependency_map(text, ("require", "require-dev"), deadline)
-    if lower_path.endswith("requirements.txt") or lower_path.endswith("constraints.txt") or lower_name.endswith(
-        ".requirements.txt"
+    if (
+        lower_path.endswith("requirements.txt")
+        or lower_path.endswith("constraints.txt")
+        or lower_name.endswith(".requirements.txt")
     ):
         return _requirements_dependency_map(text, deadline)
     if lower_path.endswith("pyproject.toml"):
