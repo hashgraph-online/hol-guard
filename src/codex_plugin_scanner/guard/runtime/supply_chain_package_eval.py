@@ -1300,6 +1300,13 @@ def _local_python_build_result(target: dict[str, object], workspace_dir: Path | 
     return None
 
 
+def _looks_like_explicit_local_python_path(raw_spec: str) -> bool:
+    normalized = raw_spec.strip()
+    return normalized == "." or normalized == "~" or normalized.startswith(
+        ("./", "../", "/", "~/", ".\\", "..\\", "~\\", "\\\\", "//")
+    ) or bool(re.match(r"^[A-Za-z]:[\\\\/]", normalized))
+
+
 def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -> Path | None:
     raw_spec = _optional_string(target.get("raw_spec"))
     source_url = _optional_string(target.get("source_url"))
@@ -1310,6 +1317,11 @@ def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -
         return workspace_dir if editable else None
     if raw_spec.startswith(("http://", "https://", "git+", "github:", "gitlab:", "bitbucket:")):
         return None
+    if not _looks_like_explicit_local_python_path(raw_spec):
+        workspace_has_python_project = (workspace_dir / "pyproject.toml").exists() or (
+            workspace_dir / "setup.py"
+        ).exists()
+        return workspace_dir if editable and workspace_has_python_project else None
     candidate_path = Path(raw_spec.partition("file:")[2] if raw_spec.startswith("file:") else raw_spec)
     disk_path = candidate_path if candidate_path.is_absolute() else workspace_dir / candidate_path
     if disk_path.is_dir():
@@ -2162,18 +2174,18 @@ def _bundle_package(
     package_version: str,
     ecosystem: str | None = None,
 ) -> SupplyChainBundlePackage | None:
+    normalized = _normalize_package_name(ecosystem, package_name) if ecosystem is not None else None
     for item in bundle_response.bundle.packages:
-        normalized = _normalize_package_name(
-            ecosystem or item.ecosystem,
-            package_name,
-        )
+        if ecosystem is not None and item.ecosystem != ecosystem:
+            continue
+        target_name = normalized or _normalize_package_name(item.ecosystem, package_name)
         full_name = (
             _normalize_package_name(item.ecosystem, f"{item.namespace}/{item.name}")
             if item.namespace is not None
             else _normalize_package_name(item.ecosystem, item.name)
         )
         normalized_item_name = _normalize_package_name(item.ecosystem, item.name)
-        if normalized not in {normalized_item_name, full_name}:
+        if target_name not in {normalized_item_name, full_name}:
             continue
         if item.version == package_version:
             return item
