@@ -809,6 +809,7 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
         return ()
     parsed: list[dict[str, object]] = []
     package_manager = str(artifact.metadata.get("package_manager") or "npm")
+    redacted_command = _optional_string(artifact.metadata.get("redacted_command"))
     for item in raw_targets:
         if not isinstance(item, dict):
             continue
@@ -841,6 +842,7 @@ def _targets_from_artifact(artifact: GuardArtifact) -> tuple[dict[str, object], 
                 "extras": tuple(item.get("extras")) if isinstance(item.get("extras"), list) else (),
                 "editable": bool(item.get("editable")),
                 "package_manager": package_manager,
+                "redacted_command": redacted_command,
             }
         )
     return tuple(parsed)
@@ -1050,6 +1052,7 @@ def _bundle_package_result(
         "riskScore": package.risk_score,
         "dependencyPath": None,
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
         "reasons": (
             {
@@ -1075,6 +1078,7 @@ def _policy_package_result(target: dict[str, object], *, decision: str, rule_id:
         "riskScore": None,
         "dependencyPath": None,
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
         "ruleId": rule_id,
         "reasons": (
@@ -1115,6 +1119,7 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
         "riskScore": None,
         "dependencyPath": None,
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
         "reasons": (
             {
@@ -1411,6 +1416,7 @@ def _dependency_confusion_policy_package_result(
             "riskScore": None,
             "dependencyPath": None,
             "packageManager": _optional_string(target.get("package_manager")) or "npm",
+            "redactedCommand": _optional_string(target.get("redacted_command")),
             "alias": _optional_string(target.get("alias")),
             "ruleId": rule.rule_id,
             "reasons": (
@@ -1458,6 +1464,7 @@ def _heuristic_package_result(
         "riskScore": None,
         "dependencyPath": None,
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
+        "redactedCommand": _optional_string(target.get("redacted_command")),
         "alias": _optional_string(target.get("alias")),
         "reasons": (
             {
@@ -2049,6 +2056,7 @@ def _recommended_fix_allow_package_result(
             "riskScore": None,
             "dependencyPath": None,
             "packageManager": _optional_string(target.get("package_manager")) or "npm",
+            "redactedCommand": _optional_string(target.get("redacted_command")),
             "alias": _optional_string(target.get("alias")),
             "reasons": (
                 {
@@ -2290,6 +2298,8 @@ def _fix_command(package: dict[str, object]) -> str | None:
         return None
     if ecosystem == "pypi":
         if package_manager == "uv":
+            if _uses_uv_pip_install(package):
+                return f"uv pip install {package_name}=={fix_version}"
             return f"uv add {package_name}=={fix_version}"
         if package_manager == "poetry":
             return f"poetry add {package_name}@{fix_version}"
@@ -2303,6 +2313,11 @@ def _fix_command(package: dict[str, object]) -> str | None:
     if package_manager == "bun":
         return f"bun add {package_name}@{fix_version}"
     return f"npm install {package_name}@{fix_version}"
+
+
+def _uses_uv_pip_install(package: dict[str, object]) -> bool:
+    command = (_optional_string(package.get("redactedCommand")) or "").split()
+    return len(command) >= 3 and tuple(command[:3]) == ("uv", "pip", "install")
 
 
 def _package_install_target(package: dict[str, object]) -> str:
