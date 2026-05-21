@@ -12,6 +12,18 @@ Automated coverage in this phase includes:
 - scheduled self-hosted harness smoke through `.github/workflows/harness-smoke.yml`
 - CLI DX contract tests for summary-first `run`, `explain`, `doctor`, `scan`, `lint`, and `verify` output
 - scanner command consistency tests for nonexistent target handling across `scan`, `lint`, `verify`, `doctor`, and `submit`
+- tier 2 package-request regressions for Cargo, Go, Maven, Gradle, Composer, RubyGems, system package managers, and unsupported-manager fallback
+- support-matrix assertions for `hol-guard cloud sync-intel` so CLI and Cloud surface `Protected`, `Beta`, and `Monitor-only` labels consistently
+
+## Supply-chain ecosystem support labels
+
+Use `hol-guard cloud sync-intel` after a successful bundle refresh to inspect current package-manager coverage:
+
+- **Protected**: `npm`, `PyPI`
+- **Beta**: `Cargo`, `Go modules`, `Maven/Gradle`, `Composer`, `RubyGems`
+- **Monitor-only**: Docker base images, GitHub Actions, system packages, and unsupported package managers
+
+Monitor-only means Guard still records the request and runs generic risk detection, but it does not claim signed-advisory blocking where no exact ecosystem coverage exists yet.
 
 Manual verification should include:
 
@@ -39,6 +51,7 @@ Manual verification should include:
 - `hol-guard connect status`
 - `hol-guard connect repair`
 - `hol-guard sync`
+- `hol-guard cloud sync-intel`
 - `hol-guard explain install-connect`
 - `hol-guard explain codex:project:<artifact-name>`
 - `hol-guard diff codex`

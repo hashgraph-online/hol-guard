@@ -67,6 +67,10 @@ _DOCKER_IMAGE_LATEST = re.compile(
     r"FROM\s+[A-Za-z0-9._/:-]+:latest\b",
     re.IGNORECASE,
 )
+_DOCKER_BASE_IMAGE = re.compile(
+    r"^\s*FROM\s+([A-Za-z0-9._/-]+:[A-Za-z0-9._-]+)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
 _LOCKFILE_SOURCE_DRIFT = re.compile(
     r"\"resolved\"\s*:\s*\"(?!https://registry\.npmjs\.org/)[^\"]+\"",
     re.IGNORECASE,
@@ -96,6 +100,16 @@ _PUBLISH_WITH_TOKEN = re.compile(
     r"|(?:npm|pnpm|yarn|bun)\s+publish\b.*?(?:NPM_TOKEN|NODE_AUTH_TOKEN)\s*=\s*\S+",
     re.IGNORECASE | re.DOTALL,
 )
+_KNOWN_CRITICAL_BASE_IMAGES: dict[str, tuple[str, str]] = {
+    "python:3.6.15": (
+        "Python 3.6 base image is end-of-life",
+        "This exact Python base image tag is end-of-life and no longer receives security fixes.",
+    ),
+    "node:12.22.12": (
+        "Node.js 12 base image is end-of-life",
+        "This exact Node.js base image tag is end-of-life and no longer receives security fixes.",
+    ),
+}
 
 
 def detect_supply_chain_risk(
@@ -115,6 +129,7 @@ def detect_supply_chain_risk(
     _check_shell_curl_pipe_exec(content, signals)
     _check_gh_action_unpinned(content, signals)
     _check_docker_image_latest(content, signals)
+    _check_known_critical_docker_base_image(content, signals)
     _check_lockfile_source_drift(content, signals)
     _check_lockfile_integrity_missing(content, signals)
     _check_script_shell_profile(content, signals)
@@ -315,6 +330,27 @@ def _check_docker_image_latest(content: str, signals: list[RiskSignalV2]) -> Non
                 "FROM image:latest",
             )
         )
+
+
+def _check_known_critical_docker_base_image(content: str, signals: list[RiskSignalV2]) -> None:
+    for match in _DOCKER_BASE_IMAGE.finditer(content):
+        image_ref = match.group(1).lower()
+        title_reason = _KNOWN_CRITICAL_BASE_IMAGES.get(image_ref)
+        if title_reason is None:
+            continue
+        title, plain_reason = title_reason
+        signals.append(
+            _sc_signal(
+                "supply-chain.docker-base-image-known-critical",
+                "supply_chain",
+                "high",
+                "strong",
+                title,
+                plain_reason,
+                f"FROM {image_ref}",
+            )
+        )
+        return
 
 
 def _check_lockfile_source_drift(content: str, signals: list[RiskSignalV2]) -> None:
