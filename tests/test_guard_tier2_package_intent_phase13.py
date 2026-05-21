@@ -10,14 +10,19 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 
 def test_parse_package_intent_supports_cargo_path_system_and_unsupported_package_managers() -> None:
     cargo_path = parse_package_intent("cargo add demo --path crates/demo")
+    cargo_path_equals = parse_package_intent("cargo add demo --path=crates/demo")
     brew = parse_package_intent("brew install ripgrep fd")
     apt = parse_package_intent("apt-get install jq")
+    pacman = parse_package_intent("pacman -Syu jq")
     helm = parse_package_intent("helm install ingress ingress-nginx/ingress-nginx")
 
     assert cargo_path is not None
     assert cargo_path.package_manager == "cargo"
     assert cargo_path.targets[0].package_name == "demo"
     assert cargo_path.targets[0].source_url == "file:crates/demo"
+    assert cargo_path_equals is not None
+    assert "<local-path>" in cargo_path_equals.redacted_command
+    assert "crates/demo" not in cargo_path_equals.redacted_command
 
     assert brew is not None
     assert brew.package_manager == "brew"
@@ -29,6 +34,9 @@ def test_parse_package_intent_supports_cargo_path_system_and_unsupported_package
     assert apt.package_manager == "apt-get"
     assert apt.targets[0].ecosystem == "system"
     assert apt.targets[0].package_name == "jq"
+    assert pacman is not None
+    assert pacman.package_manager == "pacman"
+    assert pacman.targets[0].package_name == "jq"
 
     assert helm is not None
     assert helm.package_manager == "helm"
