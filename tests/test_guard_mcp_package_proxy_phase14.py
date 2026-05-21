@@ -20,7 +20,7 @@ from codex_plugin_scanner.guard.consumer.service import artifact_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
-from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
+from codex_plugin_scanner.guard.proxy.runtime_mcp import CodexMcpGuardProxy, RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     extract_package_intent_request,
@@ -705,3 +705,71 @@ def test_phase14_runtime_mcp_proxy_enforces_non_policy_review_before_package_rou
     assert marker_path.exists() is False
     assert result["responses"][2]["error"]["code"] == -32001
     assert request["artifact_type"] == "tool_call"
+
+
+def test_phase14_codex_package_inline_approval_is_remembered(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="allow"), "2026-05-19T00:00:00Z")
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "codex-inline-package.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace-tools",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    approvals: list[dict[str, object]] = []
+
+    def inline_approval(request: dict[str, object]) -> dict[str, object]:
+        approvals.append(request)
+        return {"action": "accept", "content": {"decision": "approve"}}
+
+    first_result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {"elicitation": {}}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "run_terminal_command",
+                    "arguments": {"command": "npm install minimist@1.2.8"},
+                },
+            },
+        ],
+        inline_approval_callback=inline_approval,
+    )
+    second_result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 11, "method": "initialize", "params": {"capabilities": {"elicitation": {}}}},
+            {"jsonrpc": "2.0", "id": 12, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 13,
+                "method": "tools/call",
+                "params": {
+                    "name": "run_terminal_command",
+                    "arguments": {"command": "npm install minimist@1.2.8"},
+                },
+            },
+        ],
+        inline_approval_callback=inline_approval,
+    )
+
+    assert marker_path.exists() is True
+    assert "error" not in first_result["responses"][2]
+    assert "error" not in second_result["responses"][2]
+    assert len(approvals) == 1

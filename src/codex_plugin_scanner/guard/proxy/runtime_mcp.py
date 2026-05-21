@@ -265,6 +265,16 @@ class RuntimeMcpGuardProxy:
             if self._inline_prompt_available and approval_callback is not None:
                 approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
                 if _approval_allows(approval_result):
+                    allow_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=artifact_hash,
+                        decision_source="inline-approved",
+                        now=_now(),
+                        signals=decision.signals,
+                        risk_categories=decision.risk_categories,
+                        remember=True,
+                    )
                     response, package_event = self._handle_package_request(
                         message=message,
                         child_stdin=child_stdin,
