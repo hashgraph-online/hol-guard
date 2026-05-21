@@ -5,6 +5,8 @@ import sys
 import types
 from pathlib import Path
 
+from rich.console import Console
+
 from codex_plugin_scanner.guard.cli import render
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 
@@ -153,6 +155,111 @@ def test_guard_json_renderer_receives_payload_copy(monkeypatch, capsys) -> None:
     assert "mutated-secret" not in output
 
 
+def test_guard_protect_render_uses_supply_chain_user_copy(capsys) -> None:
+    emit_guard_payload(
+        "protect",
+        {
+            "executed": False,
+            "request": {
+                "command": ["npm", "install", "minimist@1.2.5"],
+                "install_kind": "install",
+            },
+            "verdict": {
+                "action": "block",
+                "reason": "Known exploited package.",
+            },
+            "supply_chain_evaluation": {
+                "decision": "block",
+                "user_copy": {
+                    "title": "HOL Guard blocked `minimist@1.2.5` before install.",
+                    "summary": "Known exploited package.",
+                    "next_step": "Install `minimist@1.2.9` instead.",
+                    "dashboard_url": "https://hol.org/guard/inbox",
+                    "harness_message": (
+                        "HOL Guard blocked `minimist@1.2.5` before install.\n"
+                        "Reason: Known exploited package.\n"
+                        "Fix: Install `minimist@1.2.9` instead.\n"
+                        "Review evidence: https://hol.org/guard/inbox"
+                    ),
+                },
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+
+    assert "HOL Guard blocked" in output
+    assert "Install `minimist@1.2.9` instead." in output
+    assert "Review evidence:" in output
+
+
+def test_guard_protect_render_uses_supply_chain_review_copy(capsys) -> None:
+    emit_guard_payload(
+        "protect",
+        {
+            "executed": False,
+            "request": {
+                "command": ["npm", "install", "left-pad@1.3.0"],
+                "install_kind": "install",
+            },
+            "verdict": {
+                "action": "require-reapproval",
+                "reason": "Package install needs review.",
+            },
+            "supply_chain_evaluation": {
+                "decision": "review",
+                "user_copy": {
+                    "harness_message": (
+                        "HOL Guard paused `left-pad@1.3.0` before install.\n"
+                        "Reason: Package install needs review.\n"
+                        "Choose: approve once, block, or inspect in Guard."
+                    ),
+                },
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+
+    assert "HOL Guard paused" in output
+    assert "approve once, block, or inspect in Guard" in output
+
+
+def test_guard_protect_render_uses_supply_chain_warning_copy(capsys) -> None:
+    emit_guard_payload(
+        "protect",
+        {
+            "executed": False,
+            "request": {
+                "command": ["npm", "install", "left-pad@1.3.0"],
+                "install_kind": "install",
+            },
+            "verdict": {
+                "action": "warn",
+                "reason": "Package looks risky but is not blocked.",
+            },
+            "supply_chain_evaluation": {
+                "decision": "warn",
+                "user_copy": {
+                    "harness_message": (
+                        "HOL Guard warned on `left-pad@1.3.0` before install.\n"
+                        "Reason: Package looks risky but is not blocked.\n"
+                        "Continue only if you trust the source."
+                    ),
+                },
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+
+    assert "HOL Guard warned" in output
+    assert "Continue only if you trust the source." in output
+
+
 def test_guard_settings_json_omits_billing_flag(capsys) -> None:
     emit_guard_payload(
         "settings",
@@ -299,6 +406,27 @@ def test_guard_connect_render_clarifies_browser_approval_wait(capsys) -> None:
     assert "Browser paired" in output
     assert "Browser approval pending" in output
     assert "Waiting for browser approval" in output
+
+
+def test_supply_chain_posture_panel_shows_unknown_cloud_advisories_consistently() -> None:
+    panel = render._build_supply_chain_posture_panel(
+        {
+            "status": "synced",
+            "policy": {
+                "security_level": "balanced",
+                "cloud_advisory_action": None,
+            },
+        }
+    )
+    console = Console(record=True, width=120)
+
+    console.print(panel)
+
+    output = _normalize_render_output(console.export_text())
+    assert "Security" in output
+    assert "balanced" in output
+    assert "Cloud advisories" in output
+    assert "unknown" in output
 
 
 def test_guard_status_render_rewrites_internal_next_action_labels(capsys) -> None:

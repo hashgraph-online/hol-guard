@@ -13,6 +13,8 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
+from .config import GuardConfig
+from .local_supply_chain import build_package_protect_payload
 from .models import GuardReceipt
 from .receipts import build_receipt
 from .redaction import redact_text
@@ -113,12 +115,25 @@ def build_protect_payload(
     workspace_dir: Path,
     dry_run: bool,
     now: str,
+    config: GuardConfig | None = None,
     unsafe_raw_output: bool = False,
 ) -> tuple[dict[str, object], int]:
     """Evaluate and optionally execute an install command."""
 
     if len(command) == 0:
         raise ValueError("Guard protect requires a command to wrap.")
+    package_payload = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=dry_run,
+        now=now,
+        config=config,
+        unsafe_raw_output=unsafe_raw_output,
+        timeout_seconds=_protect_command_timeout_seconds(),
+    )
+    if package_payload is not None:
+        return package_payload
     request = parse_protect_command(command)
     advisories = store.list_cached_advisories(limit=None)
     verdict = evaluate_protect_request(request, advisories)
