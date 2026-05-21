@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.cli import commands as commands_module
 from codex_plugin_scanner.guard.protect import build_protect_payload
@@ -319,6 +321,37 @@ def test_guard_supply_chain_scan_uses_manifest_and_lockfile_context(tmp_path: Pa
     assert output["evaluation"]["packages"][0]["name"] == "minimist"
 
 
+def test_guard_supply_chain_scan_without_supported_manifests_returns_zero(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    _seed_supply_chain_bundle(
+        store,
+        packages=[_package(name="minimist", version="1.2.5", default_action="block")],
+        now="2026-05-19T12:00:00+00:00",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "supply-chain",
+            "scan",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["manifest_paths"] == []
+    assert output["lockfile_paths"] == []
+    assert output["message"] == "No supported manifests or lockfiles found in this workspace."
+
+
 def test_guard_supply_chain_sync_alias_uses_bundle_sync(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
 ) -> None:
@@ -360,6 +393,34 @@ def test_guard_supply_chain_sync_alias_uses_bundle_sync(
     assert rc == 0
     assert output["status"] == "synced"
     assert output["bundle_version"] == "1747612800000-deadbeef"
+
+
+def test_guard_supply_chain_sync_alias_rejects_invalid_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+
+    monkeypatch.setattr(commands_module, "sync_supply_chain_bundle", lambda _store: None)
+
+    rc = main(
+        [
+            "guard",
+            "supply-chain",
+            "sync",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["synced"] is False
+    assert output["error"] == "Guard Cloud sync returned an invalid response."
 
 
 def test_guard_supply_chain_explain_reuses_cached_bundle_context(tmp_path: Path, capsys) -> None:
@@ -435,3 +496,56 @@ def test_runtime_snapshot_marks_supply_chain_policy_as_cloud_managed(tmp_path: P
     assert snapshot["supply_chain"]["policy"]["managed_by_cloud"] is True
     assert snapshot["supply_chain"]["policy"]["team_policy_active"] is True
     assert snapshot["supply_chain"]["policy"]["managed_label"] == "Security team default"
+
+
+@pytest.mark.parametrize(
+    ("raised_error", "expected_fragment"),
+    [
+        (subprocess.TimeoutExpired(cmd=["npm", "install"], timeout=45), "timed out"),
+        (OSError("missing executable"), "missing executable"),
+    ],
+)
+def test_guard_protect_returns_controlled_execution_error_for_install_subprocess_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    raised_error: subprocess.TimeoutExpired | OSError,
+    expected_fragment: str,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    _seed_supply_chain_bundle(
+        store,
+        packages=[
+            _package(
+                name="lodash",
+                version="4.17.21",
+                default_action="allow",
+                normalized_severity="low",
+                recommended_fix_version=None,
+            )
+        ],
+        now="2026-05-19T12:00:00+00:00",
+    )
+
+    def raise_error(*_args: object, **_kwargs: object) -> object:
+        raise raised_error
+
+    monkeypatch.setattr(local_supply_chain_module.subprocess, "run", raise_error)
+
+    payload, exit_code = build_protect_payload(
+        command=["npm", "install", "lodash@4.17.21"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=False,
+        now="2026-05-19T12:00:00+00:00",
+        unsafe_raw_output=False,
+    )
+
+    execution = payload["execution"]
+    assert exit_code == 1
+    assert payload["executed"] is True
+    assert isinstance(execution, dict)
+    assert execution["returncode"] == -1
+    assert expected_fragment in str(execution["stderr"]).lower()

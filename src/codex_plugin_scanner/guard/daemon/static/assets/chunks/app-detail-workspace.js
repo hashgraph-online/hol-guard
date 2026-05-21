@@ -1476,13 +1476,27 @@ function parsePackageTarget(receipt) {
     return { ecosystem: null, packageSpec: spec.packageSpec, packageName: spec.packageName };
   }
   const name = (receipt.artifact_name ?? "").trim();
-  const matchInstall = name.match(/^(npm|pip|pip3|cargo|gem|go|yarn|pnpm|npx|poetry)\s+(?:install\s+)?(\S+)/i);
-  if (matchInstall) {
-    const spec = splitPackageSpec(matchInstall[2]);
-    return { ecosystem: matchInstall[1].toLowerCase().replace("pip3", "pip"), packageSpec: spec.packageSpec, packageName: spec.packageName };
+  const managerMatch = name.match(/^(npm|pip|pip3|cargo|gem|go|yarn|pnpm|npx|poetry)\s+/i);
+  if (managerMatch) {
+    const ecosystem = managerMatch[1].toLowerCase().replace("pip3", "pip");
+    const packageSpec = extractPackageSpecFromCommand(name.slice(managerMatch[0].length));
+    if (packageSpec) {
+      const spec = splitPackageSpec(packageSpec);
+      return { ecosystem, packageSpec: spec.packageSpec, packageName: spec.packageName };
+    }
   }
   const fallback = splitPackageSpec(name || receipt.artifact_id);
   return { ecosystem: null, packageSpec: fallback.packageSpec, packageName: fallback.packageName };
+}
+function extractPackageSpecFromCommand(rawCommand) {
+  const tokens = (rawCommand ?? "").trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return "";
+  }
+  const verb = tokens[0].toLowerCase();
+  const args = verb === "install" || verb === "add" || verb === "get" || verb === "exec" ? tokens.slice(1) : tokens;
+  const candidate = args.find((token) => !token.startsWith("-") && token !== "--" && !/^(https?:|file:|\.{1,2}\/|\/)/i.test(token));
+  return candidate ?? "";
 }
 function PackageEventBadge() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700", "aria-label": "Package install event", children: "Package" });
