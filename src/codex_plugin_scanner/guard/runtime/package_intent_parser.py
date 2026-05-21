@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shlex
+from dataclasses import replace
 from pathlib import Path
 
 from ..protect import _collect_package_specs
@@ -62,7 +63,10 @@ def parse_package_intent(command_text: str, *, workspace: Path | None = None) ->
     handler = handlers.get(command_name)
     if handler is None:
         return None
-    return handler(command_tokens, workspace=workspace)
+    intent = handler(command_tokens, workspace=workspace)
+    if intent is None:
+        return None
+    return replace(intent, redacted_command=_redacted_command_text(command_text))
 
 
 def extract_package_intent_request(
@@ -528,6 +532,41 @@ def _normalized_command_tokens(command_text: str) -> tuple[str, ...]:
     if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
         segment = [segment[2], *segment[3:]]
     return tuple(segment)
+
+
+def _redacted_command_text(command_text: str) -> str:
+    try:
+        tokens = shlex.split(command_text, posix=True)
+    except ValueError:
+        return ""
+    segment: list[str] = []
+    for token in tokens:
+        if token in _CONTROL_TOKENS:
+            break
+        segment.append(token)
+    segment = _strip_redaction_wrappers(segment)
+    if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
+        segment = [segment[2], *segment[3:]]
+    return redacted_command(tuple(segment))
+
+
+def _strip_redaction_wrappers(segment: list[str]) -> list[str]:
+    while segment:
+        if _ENV_ASSIGNMENT_RE.match(segment[0]):
+            segment.pop(0)
+            continue
+        command_name = _command_name(segment[0])
+        if command_name == "sudo":
+            segment = _strip_sudo_prefix(segment[1:])
+            continue
+        if command_name == "env":
+            segment = _strip_env_prefix(segment[1:])
+            continue
+        if command_name in {"command", "time"}:
+            segment = _strip_plain_wrapper_flags(segment[1:])
+            continue
+        break
+    return segment
 
 
 def _strip_wrapper_tokens(segment: list[str]) -> list[str]:
