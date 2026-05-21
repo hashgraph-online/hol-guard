@@ -94,7 +94,7 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
-from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2
+from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
 from ..proxy import (
     CodexMcpGuardProxy,
@@ -2597,7 +2597,7 @@ def run_guard_command(
                     store=store,
                     workspace_dir=runtime_workspace,
                 )
-                if _guard_action_severity(package_evaluation.policy_action) > _guard_action_severity(policy_action):
+                if guard_action_severity(package_evaluation.policy_action) > guard_action_severity(policy_action):
                     policy_action = package_evaluation.policy_action
             if data_flow_signals:
                 data_flow_action = resolve_risk_action(
@@ -2605,13 +2605,13 @@ def run_guard_command(
                     "data_flow_exfiltration",
                     harness=policy_harness,
                 )
-                if _guard_action_severity(data_flow_action) > _guard_action_severity(policy_action):
+                if guard_action_severity(data_flow_action) > guard_action_severity(policy_action):
                     policy_action = data_flow_action
             _pre_scanner_policy_action = policy_action
             package_controls_pre_scanner_summary = (
                 package_evaluation is not None
-                and _guard_action_severity(package_evaluation.policy_action)
-                >= _guard_action_severity(_pre_scanner_policy_action)
+                and guard_action_severity(package_evaluation.policy_action)
+                >= guard_action_severity(_pre_scanner_policy_action)
             )
             if scanner_evidence and requested_policy_action not in VALID_GUARD_ACTIONS:
                 scanner_action = policy_action_for_cisco_signals(
@@ -2619,7 +2619,7 @@ def run_guard_command(
                     config=config,
                     harness=policy_harness,
                 )
-                if _guard_action_severity(scanner_action) > _guard_action_severity(policy_action):
+                if guard_action_severity(scanner_action) > guard_action_severity(policy_action):
                     policy_action = scanner_action
             scanner_raised_to_block = (
                 policy_action == "block" and _pre_scanner_policy_action != "block" and bool(scanner_evidence)
@@ -2657,6 +2657,8 @@ def run_guard_command(
                 risk_signals.extend(scanner_risk_signals)
                 if scanner_raised_to_block:
                     risk_summary = scanner_risk_signals[0]
+            if action_envelope is not None:
+                action_envelope = action_envelope.with_pre_execution_result(policy_action)
             decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
             decision_v2_payload = decision_v2.to_dict()
             if package_evaluation is not None and package_evaluation.policy_action == policy_action:
@@ -2790,7 +2792,10 @@ def run_guard_command(
                         policy_action=policy_action,
                     )
                     return 0
-                if not _prompt_requires_hard_block(runtime_artifact):
+                should_queue_approval_center = not (
+                    policy_action == "block" and stored_policy_action == "block"
+                )
+                if not _prompt_requires_hard_block(runtime_artifact) and should_queue_approval_center:
                     approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                     approval_center_url = ensure_guard_daemon(guard_home)
                     runtime_detection = _runtime_detection(args.harness, runtime_artifact)
@@ -4213,13 +4218,13 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         ]
         resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
         if resolved_actions:
-            return max(resolved_actions, key=_guard_action_severity)
+            return max(resolved_actions, key=guard_action_severity)
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
     risk_actions = [resolve_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes]
     resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
     if resolved_actions:
-        resolved = max(resolved_actions, key=_guard_action_severity)
-        if guard_default_action is not None and _guard_action_severity(guard_default_action) > _guard_action_severity(
+        resolved = max(resolved_actions, key=guard_action_severity)
+        if guard_default_action is not None and guard_action_severity(guard_default_action) > guard_action_severity(
             resolved
         ):
             return guard_default_action
@@ -4274,17 +4279,6 @@ def _runtime_data_flow_sink_type(signals: tuple[RiskSignalV2, ...]) -> str:
     if "data-flow:git-remote-token" in signal_ids:
         return "git remote configuration"
     return "external sink"
-
-
-def _guard_action_severity(action: str) -> int:
-    return {
-        "allow": 0,
-        "warn": 1,
-        "review": 2,
-        "require-reapproval": 3,
-        "sandbox-required": 4,
-        "block": 5,
-    }.get(action, -1)
 
 
 def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
@@ -5159,7 +5153,7 @@ def _load_hook_payload(event_file: str | None, *, input_text: str | None = None)
     return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
 
 
-_ACTION_ENVELOPE_HARNESSES = frozenset({"codex", "claude-code", "opencode", "copilot", "gemini"})
+_ACTION_ENVELOPE_HARNESSES = frozenset({"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw"})
 
 
 def _hook_action_envelope(
