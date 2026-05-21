@@ -2795,6 +2795,7 @@ class GuardStore:
         pairing_secret: str,
         token: str,
         now: str,
+        workspace_id: str | None = None,
     ) -> dict[str, object]:
         with self._connect() as connection:
             request = persist_connect_request_completion(
@@ -2813,7 +2814,13 @@ class GuardStore:
                     expires_at=str(request["expires_at"]),
                     updated_at=now,
                 )
-            self._set_sync_credentials_in_connection(connection, str(request["sync_url"]), token, now)
+            self._set_sync_credentials_in_connection(
+                connection,
+                str(request["sync_url"]),
+                token,
+                now,
+                workspace_id=workspace_id,
+            )
             connection.execute(
                 """
                 insert into guard_events (event_name, payload_json, occurred_at)
