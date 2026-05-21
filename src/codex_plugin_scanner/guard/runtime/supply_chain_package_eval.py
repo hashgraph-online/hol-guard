@@ -1307,6 +1307,8 @@ def _looks_like_explicit_local_python_path(raw_spec: str) -> bool:
         normalized == "."
         or normalized == "~"
         or normalized.startswith(("./", "../", "/", "~/", ".\\", "..\\", "~\\", "\\\\", "//"))
+        or "/" in normalized
+        or "\\" in normalized
         or bool(re.match(r"^[A-Za-z]:[\\\\/]", normalized))
     )
 

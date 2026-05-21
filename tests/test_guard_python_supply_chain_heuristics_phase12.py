@@ -177,6 +177,32 @@ build-backend = "setuptools.build_meta"
     assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
 
 
+def test_evaluate_package_request_artifact_treats_relative_python_project_paths_as_local(
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    project_dir = workspace_dir / "path" / "to" / "local-demo"
+    project_dir.mkdir(parents=True)
+    write_text(
+        project_dir / "pyproject.toml",
+        """
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+
+    artifact = artifact_from_command_fixture("pip install path/to/local-demo", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "warn"
+    assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
+
+
 def test_evaluate_package_request_artifact_keeps_benign_pyproject_urls_as_warn_only(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
