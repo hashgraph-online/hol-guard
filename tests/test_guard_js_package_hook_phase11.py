@@ -145,6 +145,7 @@ def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str)
 @pytest.mark.parametrize(
     ("command", "package_name", "version", "namespace"),
     [
+        ("npm install minimist@1.2.8", "minimist", "1.2.8", None),
         ("npx create-vite@5.1.0", "create-vite", "5.1.0", None),
         ("npm exec --package=create-vite@5.1.0 create-vite", "create-vite", "5.1.0", None),
         ("pnpm dlx create-next-app@14.2.0", "create-next-app", "14.2.0", None),
