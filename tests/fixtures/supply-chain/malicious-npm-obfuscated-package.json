@@ -1,0 +1,7 @@
+{
+  "name": "hol-lab-malicious-obfuscated",
+  "version": "1.0.0",
+  "scripts": {
+    "postinstall": "node -e \"eval(Buffer.from('Y29uc29sZS5sb2coJ3N0YWdlZCcp','base64').toString())\""
+  }
+}
