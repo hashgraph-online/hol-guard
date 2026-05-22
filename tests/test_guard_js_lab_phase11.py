@@ -29,6 +29,8 @@ class _RegistryPackageSpec:
     name: str
     version: str
     scripts: dict[str, str] | None = None
+    deprecated: bool = False
+    yanked: bool = False
 
 
 class _FakeNpmRegistry:
@@ -55,17 +57,26 @@ class _FakeNpmRegistry:
             return None
         tarball_path, tarball_bytes = self._tarballs[package.name]
         integrity = "sha512-" + base64.b64encode(hashlib.sha512(tarball_bytes).digest()).decode("utf-8")
-        return {
+        version_metadata: dict[str, object] = {
+            "name": package.name,
+            "version": package.version,
+            "dist": {"tarball": f"{self.url}{tarball_path}", "integrity": integrity},
+        }
+        if package.deprecated:
+            version_metadata["deprecated"] = "deprecated by fixture"
+        package_metadata: dict[str, object] = {
             "name": package.name,
             "dist-tags": {"latest": package.version},
-            "versions": {
-                package.version: {
-                    "name": package.name,
-                    "version": package.version,
-                    "dist": {"tarball": f"{self.url}{tarball_path}", "integrity": integrity},
-                }
-            },
+            "versions": {package.version: version_metadata},
         }
+        if package.yanked:
+            package_metadata["time"] = {
+                "unpublished": {
+                    "name": "hol-guard-fixture",
+                    "time": "2026-05-19T00:00:00.000Z",
+                }
+            }
+        return package_metadata
 
     def tarball(self, request_path: str) -> bytes | None:
         for tarball_path, tarball_bytes in self._tarballs.values():
@@ -176,7 +187,7 @@ def _evaluate_offline_registry_install(
 
 
 @pytest.mark.skipif(shutil.which("npm") is None, reason="npm required for offline JS lab proof")
-def test_guard_js_offline_fake_registry_lab_covers_safe_vulnerable_and_malware_packages(
+def test_guard_js_offline_fake_registry_lab_covers_safe_vulnerable_malware_yanked_and_typo_packages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -199,6 +210,12 @@ def test_guard_js_offline_fake_registry_lab_covers_safe_vulnerable_and_malware_p
                     default_action="block",
                     recommended_fix_version="1.0.1",
                 ),
+                _package(
+                    name="minimlts",
+                    version="1.0.0",
+                    default_action="block",
+                    recommended_fix_version="1.0.1",
+                ),
             ]
         ),
         "2026-05-19T00:00:00Z",
@@ -216,6 +233,18 @@ def test_guard_js_offline_fake_registry_lab_covers_safe_vulnerable_and_malware_p
                 )
             },
         ),
+        _RegistryPackageSpec(
+            name="install-script-demo",
+            version="1.0.0",
+            scripts={
+                "postinstall": (
+                    "node -e \"require('fs').writeFileSync("
+                    "require('path').join(process.env.INIT_CWD || process.cwd(), 'install-script-marker.txt'),'x')\""
+                )
+            },
+        ),
+        _RegistryPackageSpec(name="yanked-demo", version="1.0.0", deprecated=True, yanked=True),
+        _RegistryPackageSpec(name="minimlts", version="1.0.0"),
     )
 
     with _FakeNpmRegistry(packages) as registry:
@@ -238,10 +267,34 @@ def test_guard_js_offline_fake_registry_lab_covers_safe_vulnerable_and_malware_p
             package_name="malware-demo",
             registry_url=registry.url,
         )
+        install_script_workspace = tmp_path / "install-script-workspace"
+        install_script_result = _evaluate_offline_registry_install(
+            store=store,
+            workspace_dir=install_script_workspace,
+            package_name="install-script-demo",
+            registry_url=registry.url,
+        )
+        yanked_result = _evaluate_offline_registry_install(
+            store=store,
+            workspace_dir=tmp_path / "yanked-workspace",
+            package_name="yanked-demo",
+            registry_url=registry.url,
+        )
+        typo_result = _evaluate_offline_registry_install(
+            store=store,
+            workspace_dir=tmp_path / "typo-workspace",
+            package_name="minimlts",
+            registry_url=registry.url,
+        )
 
     assert safe_result.decision == "monitor"
     assert vulnerable_result.decision == "block"
     assert vulnerable_result.packages[0]["name"] == "vulnerable-demo"
     assert malware_result.decision == "block"
     assert malware_result.packages[0]["name"] == "malware-demo"
+    assert install_script_result.decision == "monitor"
+    assert yanked_result.decision == "monitor"
+    assert typo_result.decision == "block"
+    assert typo_result.packages[0]["name"] == "minimlts"
     assert not (malware_workspace / "malware-marker.txt").exists()
+    assert not (install_script_workspace / "install-script-marker.txt").exists()
