@@ -28,10 +28,27 @@ def test_benign_python_package_has_no_supply_chain_risk() -> None:
     assert detect_supply_chain_risk(content) == ()
 
 
+def test_benign_npm_controls_fixture_has_no_supply_chain_risk() -> None:
+    content = _fixture("benign-npm-controls-package.json")
+    assert detect_supply_chain_risk(content) == ()
+
+
 def test_malicious_npm_postinstall_network_detected() -> None:
     content = _fixture("malicious-npm-package.json")
     signals = detect_supply_chain_risk(content)
     assert any("supply-chain" in s.signal_id for s in signals)
+
+
+def test_malicious_npm_env_fs_network_detected() -> None:
+    content = _fixture("malicious-npm-env-fs-network-package.json")
+    signals = detect_supply_chain_risk(content)
+    assert any("postinstall-secret-read" in s.signal_id for s in signals)
+
+
+def test_malicious_npm_obfuscated_eval_detected() -> None:
+    content = _fixture("malicious-npm-obfuscated-package.json")
+    signals = detect_supply_chain_risk(content)
+    assert any("install-lifecycle-exec" in s.signal_id for s in signals)
 
 
 def test_malicious_dockerfile_curl_shell_detected() -> None:

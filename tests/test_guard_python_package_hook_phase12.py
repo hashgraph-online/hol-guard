@@ -41,6 +41,7 @@ def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str)
 @pytest.mark.parametrize(
     ("command", "package_name", "version"),
     [
+        ("pip install requests==2.31.0", "requests", "2.31.0"),
         ("pipx run httpie==3.2.2", "httpie", "3.2.2"),
         ("uvx ruff==0.6.9", "ruff", "0.6.9"),
     ],
