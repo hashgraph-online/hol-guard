@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import functools
 import hashlib
+import re
 import subprocess
 import threading
 import zipfile
@@ -61,7 +62,8 @@ def _write_simple_index(
     yanked_versions = yanked_versions or set()
     package_link_rows: list[str] = []
     for wheel_path in sorted(wheel_paths):
-        version = wheel_path.name.removeprefix("labdemo-").split("-py3-none-any.whl", 1)[0]
+        match = re.search(r"^labdemo-(.+)-py\d+-none-any\.whl$", wheel_path.name)
+        version = match.group(1) if match is not None else ""
         yanked_attr = ' data-yanked="fixture-yanked"' if version in yanked_versions else ""
         package_link_rows.append(
             f'<a href="../../packages/{wheel_path.name}"{yanked_attr}>{wheel_path.name}</a><br/>'

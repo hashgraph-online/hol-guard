@@ -76,9 +76,7 @@ class _FakeNpmRegistry:
                     "time": "2026-05-19T00:00:00.000Z",
                 }
             }
-        return {
-            **package_metadata,
-        }
+        return package_metadata
 
     def tarball(self, request_path: str) -> bytes | None:
         for tarball_path, tarball_bytes in self._tarballs.values():
