@@ -333,6 +333,7 @@ def test_cloud_app_handoff_page_mints_scoped_browser_session_token(tmp_path: Pat
     assert decoded["harness"] == "codex"
     assert decoded["workspace_id"] == "workspace-1"
     assert decoded["action_path"] == "connect"
+    assert decoded["allowed_action_paths"] == ["connect", "status", "test"]
 
 
 def test_cloud_app_handoff_referrer_page_does_not_mint_browser_session_token(tmp_path: Path) -> None:
@@ -401,6 +402,96 @@ def test_cloud_app_handoff_scoped_session_rejects_settings_reset(tmp_path: Path)
 
     assert reset_status == 401
     assert reset_payload["error"] == "unauthorized"
+
+
+def test_cloud_app_handoff_connect_session_can_run_same_app_proof(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        start_status, start_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={"action": "connect", "workspace_id": "workspace-1"},
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+        assert start_status == 200
+        handoff_url = start_payload["handoff_url"]
+        assert isinstance(handoff_url, str)
+        page_status, body = _read_text_response(
+            _request(
+                daemon.port,
+                handoff_url.removeprefix(f"http://127.0.0.1:{daemon.port}"),
+                method="GET",
+                origin=None,
+            )
+        )
+        assert page_status == 200
+        script_payload = _handoff_script_payload(body)
+        browser_token = script_payload["dashboardSessionToken"]
+        assert isinstance(browser_token, str)
+        proof_status, proof_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/test",
+                payload={"harness": "codex", "operation": "scan", "workspace_id": "workspace-1"},
+                origin="https://hol.org",
+                dashboard_session_token=browser_token,
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert proof_status == 200
+    assert proof_payload["state"]["app_status"] in {"inactive", "observed", "protected"}
+
+
+def test_cloud_app_handoff_connect_session_rejects_other_workspace_proof(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        start_status, start_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={"action": "connect", "workspace_id": "workspace-1"},
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+        assert start_status == 200
+        handoff_url = start_payload["handoff_url"]
+        assert isinstance(handoff_url, str)
+        page_status, body = _read_text_response(
+            _request(
+                daemon.port,
+                handoff_url.removeprefix(f"http://127.0.0.1:{daemon.port}"),
+                method="GET",
+                origin=None,
+            )
+        )
+        assert page_status == 200
+        script_payload = _handoff_script_payload(body)
+        browser_token = script_payload["dashboardSessionToken"]
+        assert isinstance(browser_token, str)
+        proof_status, proof_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/test",
+                payload={"harness": "codex", "operation": "scan", "workspace_id": "workspace-2"},
+                origin="https://hol.org",
+                dashboard_session_token=browser_token,
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert proof_status == 401
+    assert proof_payload["error"] == "unauthorized"
 
 
 def test_cloud_app_handoff_completion_runs_scoped_action_without_daemon_auth_token(tmp_path: Path) -> None:
