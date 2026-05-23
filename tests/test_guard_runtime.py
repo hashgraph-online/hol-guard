@@ -14948,6 +14948,86 @@ def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
     assert payload["receipts_stored"] == 65
 
 
+def test_sync_receipts_marks_latest_connect_first_sync_succeeded(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    connect_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-05-23T19:20:00+00:00",
+    )
+    request_id = str(connect_request["request_id"])
+    store.complete_guard_connect_request(
+        request_id=request_id,
+        pairing_secret=str(connect_request["pairing_secret"]),
+        token="guard-live-token",
+        now="2026-05-23T19:21:00+00:00",
+    )
+    store.record_guard_connect_result(
+        request_id=request_id,
+        status="connected",
+        milestone="first_sync_pending",
+        now="2026-05-23T19:21:10+00:00",
+        reason="waiting_for_first_sync",
+        sync_payload={
+            "runtime_session_id": "runtime-session-1",
+            "runtime_session_synced_at": "2026-05-23T19:21:05+00:00",
+        },
+    )
+    store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-05-23T19:21:30+00:00",
+    )
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-1",
+            timestamp="2026-05-23T19:22:00+00:00",
+            harness="codex",
+            artifact_id="artifact-1",
+            artifact_hash="sha256:receipt",
+            policy_decision="review",
+            artifact_name="Bash",
+            capabilities_summary="runs shell commands",
+            changed_capabilities=("shell_exec",),
+            provenance_summary="local codex workspace",
+        )
+    )
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "syncedAt": "2026-05-23T19:22:36.076Z",
+                    "receiptsStored": 1,
+                    "advisories": [],
+                    "policy": {},
+                    "alertPreferences": {},
+                    "teamPolicyPack": {},
+                    "exceptions": [],
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", lambda request, timeout: _Response())
+
+    payload = guard_runner_module.sync_receipts(store)
+    latest_state = store.get_guard_connect_state(request_id, now="2026-05-23T19:23:00+00:00")
+
+    assert payload["receipts_stored"] == 1
+    assert latest_state is not None
+    assert latest_state["request_id"] == request_id
+    assert latest_state["milestone"] == "first_sync_succeeded"
+    assert latest_state["proof"]["first_synced_at"] == "2026-05-23T19:22:36.076Z"
+    assert latest_state["proof"]["receipts_stored"] == 1
+    assert latest_state["proof"]["runtime_session_id"] == "runtime-session-1"
+    assert latest_state["proof"]["runtime_session_synced_at"] == "2026-05-23T19:21:05+00:00"
+
+
 def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
