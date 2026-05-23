@@ -435,6 +435,17 @@ export type GuardInventoryItem = {
   artifact_hash: string;
 };
 
+export type GuardApprovalGatePublicConfig = {
+  enabled: boolean;
+  configured: boolean;
+  cooldown_seconds: number;
+  cooldown_active: boolean;
+  cooldown_expires_at: string | null;
+  locked_until: string | null;
+  fail_closed: boolean;
+  strict_all_decisions: boolean;
+};
+
 export type GuardSettings = {
   mode: "observe" | "prompt" | "enforce";
   security_level: "relaxed" | "gentle" | "balanced" | "strict" | "custom";
@@ -451,6 +462,7 @@ export type GuardSettings = {
   telemetry: boolean;
   sync: boolean;
   billing: boolean;
+  approval_gate?: GuardApprovalGatePublicConfig;
 };
 
 export type GuardSettingsPayload = {

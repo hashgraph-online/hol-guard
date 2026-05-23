@@ -10,10 +10,12 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from ..approval_gate import ApprovalGateError, ApprovalGateGrant, public_config, require_approval_decision
 from ..consumer import artifact_hash
 from ..models import GuardArtifact, PolicyDecision
 from ..receipts import build_receipt
 from ..store import GuardStore
+from .approval_gate_prompt import prompt_for_approval_gate
 
 PromptChoice = str
 
@@ -83,6 +85,12 @@ def resolve_interactive_decisions(
             _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", "allow-once")
             continue
         if choice == "allow_artifact":
+            approval_gate_grant = _interactive_gate_grant(
+                store,
+                action="allow",
+                scope="artifact",
+                now=now,
+            )
             store.upsert_policy(
                 PolicyDecision(
                     harness=artifact.harness,
@@ -92,6 +100,7 @@ def resolve_interactive_decisions(
                     reason="interactive-allow-artifact",
                 ),
                 now,
+                approval_gate_grant=approval_gate_grant,
             )
             _persist_allowed_artifact(store, artifact, now)
             _record_override_receipt(store, artifact, "allow", "allow-artifact", now)
@@ -99,6 +108,12 @@ def resolve_interactive_decisions(
             continue
         if choice == "allow_publisher":
             if artifact.publisher is None:
+                approval_gate_grant = _interactive_gate_grant(
+                    store,
+                    action="allow",
+                    scope="harness",
+                    now=now,
+                )
                 store.upsert_policy(
                     PolicyDecision(
                         harness=artifact.harness,
@@ -107,9 +122,16 @@ def resolve_interactive_decisions(
                         reason="interactive-allow-harness",
                     ),
                     now,
+                    approval_gate_grant=approval_gate_grant,
                 )
                 decision_scope = "allow-harness"
             else:
+                approval_gate_grant = _interactive_gate_grant(
+                    store,
+                    action="allow",
+                    scope="publisher",
+                    now=now,
+                )
                 store.upsert_policy(
                     PolicyDecision(
                         harness=artifact.harness,
@@ -119,6 +141,7 @@ def resolve_interactive_decisions(
                         reason="interactive-allow-publisher",
                     ),
                     now,
+                    approval_gate_grant=approval_gate_grant,
                 )
                 decision_scope = "allow-publisher"
             _persist_allowed_artifact(store, artifact, now)
@@ -126,6 +149,12 @@ def resolve_interactive_decisions(
             _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", decision_scope)
             continue
 
+        approval_gate_grant = _interactive_gate_grant(
+            store,
+            action="block",
+            scope="artifact",
+            now=now,
+        )
         store.upsert_policy(
             PolicyDecision(
                 harness=artifact.harness,
@@ -135,6 +164,7 @@ def resolve_interactive_decisions(
                 reason="interactive-block",
             ),
             now,
+            approval_gate_grant=approval_gate_grant,
         )
         _record_override_receipt(store, artifact, "block", "block", now)
         _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "block", "block")
@@ -143,6 +173,31 @@ def resolve_interactive_decisions(
     evaluation["artifacts"] = list(decisions_by_artifact.values())
     evaluation["blocked"] = blocked
     return evaluation
+
+
+def _interactive_gate_grant(
+    store: GuardStore,
+    *,
+    action: str,
+    scope: str,
+    now: str,
+) -> ApprovalGateGrant | None:
+    gate = public_config(store.guard_home)
+    gate_input = (
+        prompt_for_approval_gate(store.guard_home)
+        if gate.enabled and (action == "allow" or gate.strict_all_decisions)
+        else None
+    )
+    try:
+        return require_approval_decision(
+            store.guard_home,
+            action=action,
+            scope=scope,
+            approval_gate_input=gate_input,
+            now=now,
+        )
+    except ApprovalGateError as error:
+        raise EOFError(str(error)) from error
 
 
 def _prompt_for_artifact(

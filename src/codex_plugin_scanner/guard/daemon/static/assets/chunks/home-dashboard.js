@@ -28,68 +28,6 @@ function resolveCloudUpsellVisible(pendingCount, cloudState) {
   if (pendingCount > 0) return false;
   return cloudState === "local_only";
 }
-function resolveSupplyChainBundleTone(supplyChain) {
-  if (!supplyChain?.bundle?.synced_at) return "slate";
-  if (supplyChain.bundle.expires_at) {
-    const msLeft = new Date(supplyChain.bundle.expires_at).getTime() - Date.now();
-    if (msLeft < 0 || msLeft < 172800000) return "attention";
-  }
-  return "green";
-}
-function resolveSupportChipClasses(supportLevel) {
-  if (supportLevel === "protected") {
-    return "border-emerald-200 bg-white/80 text-emerald-700";
-  }
-  if (supportLevel === "beta") {
-    return "border-brand-blue/15 bg-brand-blue/[0.06] text-brand-blue";
-  }
-  return "border-slate-200 bg-slate-100/70 text-slate-600";
-}
-function SupplyChainFirewallCard({ supplyChain, onOpenSettings }) {
-  if (!supplyChain) return null;
-  const { bundle, connection, supported_ecosystems: ecosystems = [] } = supplyChain;
-  const bundleTone = resolveSupplyChainBundleTone(supplyChain);
-  const statusLabel = !bundle?.synced_at ? "Offline" : bundleTone === "attention" ? "Bundle stale" : "Active";
-  const isLoggedIn = connection?.logged_in === true;
-  const showUpsell = !isLoggedIn && !!(bundle?.synced_at || bundle?.bundle_version);
-  const advisoryCount = bundle?.advisory_count ?? 0;
-  const packageCount = bundle?.package_count ?? 0;
-  const syncedAt = bundle?.synced_at ?? null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "section",
-    {
-      className: "rounded-2xl border border-emerald-200/70 bg-emerald-50/30 p-5 shadow-sm sm:p-6",
-      "aria-label": "Package firewall status",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700", children: "Package firewall" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: bundleTone === "green" ? "success" : bundleTone === "attention" ? "attention" : "default", children: statusLabel })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/90", children: "Guard reviews install scripts before they run. Supply-chain scripts pause for review." }),
-        ecosystems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Coverage" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1.5 flex flex-wrap gap-1.5", role: "list", "aria-label": "Ecosystem coverage", children: ecosystems.map((eco) => {
-            const label = eco.display_name || eco.ecosystem || String(eco);
-            const key = eco.ecosystem || eco.display_name || label;
-            const supportLabel = eco.support_label || eco.label || "Monitor-only";
-            const supportLevel = eco.support_level || "monitor-only";
-            return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "listitem", className: `rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${resolveSupportChipClasses(supportLevel)}`, children: `${label} · ${supportLabel}` }, key);
-          }) })
-        ] }),
-        bundle && (advisoryCount > 0 || packageCount > 0 || syncedAt) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-3", children: [
-          advisoryCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-slate-500", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: formatNumber(advisoryCount) }), " advisories"] }),
-          packageCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-slate-500", children: [/* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: formatNumber(packageCount) }), " packages"] }),
-          syncedAt && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-slate-400", children: ["Synced ", formatRelativeTime(syncedAt)] })
-        ] }),
-        showUpsell && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-emerald-200/60 bg-white/60 p-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-brand-dark", children: "Cloud Intel adds real-time advisories and team policy." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-xs text-slate-500", children: ["Local protection is active", bundle?.tier ? ` (${bundle.tier})` : "", ". Connect to Guard Cloud for shared advisories and team-managed policy."] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onOpenSettings, children: "Open sync settings" }) })
-        ] })
-      ]
-    }
-  );
-}
 function buildEmptyStateCopy() {
   return {
     title: "No apps connected",
@@ -271,13 +209,6 @@ function HomeWorkspace(props) {
         )
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          SupplyChainFirewallCard,
-          {
-            supplyChain: snapshot.supply_chain ?? null,
-            onOpenSettings: props.onOpenSettings
-          }
-        ),
         /* @__PURE__ */ jsxRuntimeExports.jsx(DeviceProofCard, { device: snapshot.device, proofStatus: snapshot.proof_status }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           CloudStatusCard,

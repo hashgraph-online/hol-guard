@@ -29,10 +29,13 @@ import {
   clearPolicy,
   repairApprovalCenter,
   setupDesktopNotifications,
+  revokeApprovalGateCooldown,
 } from "./guard-api";
+import { approvalGateCooldownLabel } from "./approval-gate-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch, securityLevelLabel } from "./apps/app-catalog";
 import type {
+  GuardApprovalGatePublicConfig,
   GuardNotificationSetupResult,
   GuardRuntimeSnapshot,
   GuardSettings,
@@ -254,9 +257,32 @@ function buildConsequenceSummary(settings: GuardSettings): string {
   return "";
 }
 
-function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
+export function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
   if (saved === null || draft === null) return false;
   return JSON.stringify(saved) !== JSON.stringify(draft);
+}
+
+export function applyApprovalGateDraft(
+  settings: GuardSettings,
+  updates: {
+    enabled: boolean;
+    cooldown_seconds: number;
+  }
+): GuardSettings {
+  const gate = settings.approval_gate;
+  return {
+    ...settings,
+    approval_gate: {
+      enabled: updates.enabled,
+      configured: gate?.configured ?? false,
+      cooldown_seconds: updates.cooldown_seconds,
+      cooldown_active: gate?.cooldown_active ?? false,
+      cooldown_expires_at: gate?.cooldown_expires_at ?? null,
+      locked_until: gate?.locked_until ?? null,
+      fail_closed: gate?.fail_closed ?? false,
+      strict_all_decisions: gate?.strict_all_decisions ?? false,
+    },
+  };
 }
 
 function protectionModeHelp(mode: GuardSettings["mode"]): string {
@@ -276,7 +302,11 @@ function saveStatusText(saveSuccess: boolean, saveError: string | null): string 
   return saveError ?? "";
 }
 
-export function SettingsWorkspace() {
+type SettingsWorkspaceProps = {
+  onApprovalGateChange?: (gate: GuardApprovalGatePublicConfig) => void;
+};
+
+export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspaceProps) {
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -296,6 +326,14 @@ export function SettingsWorkspace() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ "protection": true, "risk": false, "diagnostics": false });
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSettingsRef = useRef<GuardSettings | null>(null);
+  const [approvalGateEnabled, setApprovalGateEnabled] = useState(false);
+  const [approvalGateNewPassword, setApprovalGateNewPassword] = useState("");
+  const [approvalGateConfirmPassword, setApprovalGateConfirmPassword] = useState("");
+  const [approvalGateCurrentPassword, setApprovalGateCurrentPassword] = useState("");
+  const [approvalGateCooldown, setApprovalGateCooldown] = useState(0);
+  const [revokingCooldown, setRevokingCooldown] = useState(false);
+  const [revokePassword, setRevokePassword] = useState("");
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,6 +344,12 @@ export function SettingsWorkspace() {
           setState({ kind: "ready", payload: normalizedPayload });
           setDraft(normalizedPayload.settings);
           savedSettingsRef.current = normalizedPayload.settings;
+          const gate = normalizedPayload.settings.approval_gate;
+          if (gate !== undefined) {
+            setApprovalGateEnabled(gate.enabled);
+            setApprovalGateCooldown(gate.cooldown_seconds);
+            onApprovalGateChange?.(gate);
+          }
         }
       })
       .catch((error: unknown) => {
@@ -314,7 +358,7 @@ export function SettingsWorkspace() {
         }
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [onApprovalGateChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -367,7 +411,14 @@ export function SettingsWorkspace() {
     setDraft((value) => {
       if (value === null) return value;
       if (securityLevel === "custom") return { ...value, security_level: securityLevel };
-      return { ...value, security_level: securityLevel, risk_actions: riskProfileActions[securityLevel], risk_action_overrides: {}, harness_risk_actions: {} };
+      const normalizedLevel = securityLevel === "gentle" ? "relaxed" : securityLevel;
+      return {
+        ...value,
+        security_level: normalizedLevel,
+        risk_actions: riskProfileActions[normalizedLevel],
+        risk_action_overrides: {},
+        harness_risk_actions: {},
+      };
     });
     setSaveError(null);
   }, []);
@@ -422,18 +473,117 @@ export function SettingsWorkspace() {
     []
   );
 
+  const handleApprovalGateToggle = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked;
+    setApprovalGateEnabled(checked);
+    setDraft((value) =>
+      value === null
+        ? value
+        : applyApprovalGateDraft(value, {
+          enabled: checked,
+          cooldown_seconds: approvalGateCooldown,
+        })
+    );
+    setSaveError(null);
+  }, [approvalGateCooldown]);
+
+  const handleApprovalGateNewPassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalGateNewPassword(event.target.value);
+  }, []);
+
+  const handleApprovalGateConfirmPassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalGateConfirmPassword(event.target.value);
+  }, []);
+
+  const handleApprovalGateCurrentPassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalGateCurrentPassword(event.target.value);
+  }, []);
+
+  const handleApprovalGateCooldownChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const next = Number(event.target.value);
+    setApprovalGateCooldown(next);
+    setDraft((value) =>
+      value === null
+        ? value
+        : applyApprovalGateDraft(value, {
+          enabled: approvalGateEnabled,
+          cooldown_seconds: next,
+        })
+    );
+    setSaveError(null);
+  }, [approvalGateEnabled]);
+
+  const handleRevokePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setRevokePassword(event.target.value);
+    setRevokeError(null);
+  }, []);
+
+  const handleRevokeCooldown = useCallback(async () => {
+    if (!revokePassword.trim()) {
+      setRevokeError("Enter the approval password to revoke cooldown.");
+      return;
+    }
+    setRevokingCooldown(true);
+    setRevokeError(null);
+    try {
+      const payload = await revokeApprovalGateCooldown(revokePassword);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== undefined) {
+        onApprovalGateChange?.(gate);
+      }
+      setRevokePassword("");
+      setActionMessage("Cooldown revoked successfully.");
+    } catch (error) {
+      setRevokeError(error instanceof Error ? error.message : "Unable to revoke cooldown.");
+    } finally {
+      setRevokingCooldown(false);
+    }
+  }, [revokePassword, onApprovalGateChange]);
+
   const handleSave = useCallback(async () => {
     if (draft === null) return;
     setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
     try {
-      const payload = await updateSettings({ ...draft, risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides });
+      const approvalGateUpdate: GuardApprovalGatePublicConfig & {
+        current_password?: string;
+        new_password?: string;
+        confirm_password?: string;
+      } = {
+        enabled: approvalGateEnabled,
+        configured: draft.approval_gate?.configured ?? false,
+        cooldown_seconds: approvalGateCooldown,
+        cooldown_active: draft.approval_gate?.cooldown_active ?? false,
+        cooldown_expires_at: draft.approval_gate?.cooldown_expires_at ?? null,
+        locked_until: draft.approval_gate?.locked_until ?? null,
+        fail_closed: draft.approval_gate?.fail_closed ?? false,
+        strict_all_decisions: draft.approval_gate?.strict_all_decisions ?? false,
+        ...(approvalGateCurrentPassword ? { current_password: approvalGateCurrentPassword } : {}),
+        ...(approvalGateNewPassword ? { new_password: approvalGateNewPassword } : {}),
+        ...(approvalGateConfirmPassword ? { confirm_password: approvalGateConfirmPassword } : {}),
+      };
+      const settingsToSave: Partial<GuardSettings> = {
+        ...draft,
+        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+        approval_gate: approvalGateUpdate,
+      };
+      const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
       savedSettingsRef.current = normalizedPayload.settings;
+      if (normalizedPayload.settings.approval_gate !== undefined) {
+        onApprovalGateChange?.(normalizedPayload.settings.approval_gate);
+      }
       setSaveSuccess(true);
+      setApprovalGateNewPassword("");
+      setApprovalGateCurrentPassword("");
+      setApprovalGateConfirmPassword("");
       if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
       saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2000);
     } catch (error) {
@@ -441,21 +591,22 @@ export function SettingsWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [draft]);
+  }, [draft, approvalGateEnabled, approvalGateCooldown, approvalGateCurrentPassword, approvalGateNewPassword, approvalGateConfirmPassword, onApprovalGateChange]);
 
   const handleClearApprovals = useCallback(async () => {
     if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) return;
     setClearingApprovals(true);
     setActionMessage(null);
     try {
-      await clearPolicy({ all: true });
+      await clearPolicy({ all: true, approval_password: approvalGateCurrentPassword || undefined });
       setActionMessage("All saved approvals cleared.");
+      setApprovalGateCurrentPassword("");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear approvals.");
     } finally {
       setClearingApprovals(false);
     }
-  }, []);
+  }, [approvalGateCurrentPassword]);
 
   const handleClearEvidence = useCallback(async () => {
     if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
@@ -655,6 +806,25 @@ export function SettingsWorkspace() {
                 <SettingToggle id="settings-billing" label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
               </fieldset>
             </div>
+
+            <ApprovalGateCard
+              enabled={approvalGateEnabled}
+              gateConfig={draft.approval_gate ?? null}
+              newPassword={approvalGateNewPassword}
+              confirmPassword={approvalGateConfirmPassword}
+              currentPassword={approvalGateCurrentPassword}
+              cooldownSeconds={approvalGateCooldown}
+              revokingCooldown={revokingCooldown}
+              revokePassword={revokePassword}
+              revokeError={revokeError}
+              onToggle={handleApprovalGateToggle}
+              onNewPasswordChange={handleApprovalGateNewPassword}
+              onConfirmPasswordChange={handleApprovalGateConfirmPassword}
+              onCurrentPasswordChange={handleApprovalGateCurrentPassword}
+              onCooldownChange={handleApprovalGateCooldownChange}
+              onRevokePasswordChange={handleRevokePasswordChange}
+              onRevokeCooldown={handleRevokeCooldown}
+            />
           </fieldset>
         </AccordionSection>
 
@@ -1052,6 +1222,128 @@ function RiskControlRow({ risk, value, disabled, onChange, showConsequence }: Ri
         )}
       </div>
       <SettingSelect label="Guard should" value={value} options={actionOptions} onChange={onChange} disabled={disabled} />
+    </div>
+  );
+}
+
+const cooldownOptions = [
+  { value: "0", label: approvalGateCooldownLabel(0) },
+  { value: "900", label: approvalGateCooldownLabel(900) },
+  { value: "3600", label: approvalGateCooldownLabel(3600) },
+];
+
+type ApprovalGateCardProps = {
+  enabled: boolean;
+  gateConfig: GuardApprovalGatePublicConfig | null;
+  newPassword: string;
+  confirmPassword: string;
+  currentPassword: string;
+  cooldownSeconds: number;
+  revokingCooldown: boolean;
+  revokePassword: string;
+  revokeError: string | null;
+  onToggle: (event: ChangeEvent<HTMLInputElement>) => void;
+  onNewPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onConfirmPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onCurrentPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onCooldownChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  onRevokePasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRevokeCooldown: () => void;
+};
+
+function ApprovalGateCard(props: ApprovalGateCardProps) {
+  const wasConfigured = props.gateConfig?.configured === true;
+  const showCurrentPassword = wasConfigured && props.gateConfig?.enabled === true;
+  const cooldownActive = props.gateConfig?.cooldown_active === true;
+  const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
+  const cooldownLabel = cooldownExpiresAt
+    ? new Date(cooldownExpiresAt).toLocaleTimeString()
+    : null;
+
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4">
+      <SettingToggle
+        id="settings-approval-gate"
+        label="Require password for approvals"
+        checked={props.enabled}
+        onChange={props.onToggle}
+      />
+      <p className="mt-1 px-1 text-xs text-slate-500">
+        Ask for a password before each approve or block decision.
+      </p>
+
+      {props.enabled && (
+        <div className="mt-4 space-y-3">
+          {showCurrentPassword && (
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500">Current password</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={props.currentPassword}
+                onChange={props.onCurrentPasswordChange}
+                className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+              />
+            </label>
+          )}
+          <label className="block">
+            <span className="text-xs font-medium text-slate-500">New password</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={props.newPassword}
+              onChange={props.onNewPasswordChange}
+              className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-500">Confirm password</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={props.confirmPassword}
+              onChange={props.onConfirmPasswordChange}
+              className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-500">Cooldown after approval</span>
+            <select
+              value={String(props.cooldownSeconds)}
+              onChange={props.onCooldownChange}
+              className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            >
+              {cooldownOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </label>
+
+          {cooldownActive && cooldownLabel !== null && (
+            <div className="rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2">
+              <p className="text-xs text-brand-dark">Cooldown active until {cooldownLabel}</p>
+              <div className="mt-2 space-y-2">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-500">Password to revoke</span>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={props.revokePassword}
+                    onChange={props.onRevokePasswordChange}
+                    className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                  />
+                </label>
+                {props.revokeError !== null && (
+                  <p className="text-xs text-brand-purple">{props.revokeError}</p>
+                )}
+                <ActionButton onClick={props.onRevokeCooldown} disabled={props.revokingCooldown} variant="outline">
+                  {props.revokingCooldown ? "Revoking…" : "Revoke cooldown"}
+                </ActionButton>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
