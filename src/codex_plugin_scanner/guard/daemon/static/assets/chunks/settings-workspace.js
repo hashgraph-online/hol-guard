@@ -1,80 +1,7 @@
-import { r as reactExports, x as fetchSettings, y as fetchRuntimeSnapshot, z as updateSettings, C as clearPolicy, D as clearEvidence, F as exportDiagnostics, I as repairApprovalCenter, J as setupDesktopNotifications, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, K as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, L as HiMiniLockClosed, M as HiMiniCog6Tooth, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, N as HiMiniBellAlert } from "../guard-dashboard.js";
+import { r as reactExports, x as fetchSettings, y as fetchRuntimeSnapshot, z as revokeApprovalGateCooldown, C as updateSettings, D as clearPolicy, F as clearEvidence, I as exportDiagnostics, J as repairApprovalCenter, K as setupDesktopNotifications, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, L as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, M as HiMiniLockClosed, N as HiMiniCog6Tooth, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, O as HiMiniBellAlert, Q as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { a as resolveProtectionLevelCopy } from "./runtime-overview.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
-function resolveSupportChipClasses(supportLevel) {
-  if (supportLevel === "protected") {
-    return "border-emerald-200 bg-white/80 text-emerald-700";
-  }
-  if (supportLevel === "beta") {
-    return "border-brand-blue/15 bg-brand-blue/[0.06] text-brand-blue";
-  }
-  return "border-slate-200 bg-slate-100/70 text-slate-600";
-}
-function SupplyChainPolicySummary({ draft, supplyChain }) {
-  const packageScriptAction = draft?.risk_actions?.package_script ?? "warn";
-  const cloudAdvisoryAction = draft?.risk_actions?.cloud_advisory ?? "warn";
-  const cloudPolicy = supplyChain?.policy ?? null;
-  const bundle = supplyChain?.bundle ?? null;
-  const ecosystems = supplyChain?.supported_ecosystems ?? [];
-  const status = supplyChain?.status ?? "not_connected";
-  const isCloudManaged = cloudPolicy?.managed_by_cloud === true;
-  const isBundleActive = status === "synced";
-  const managedLabel = cloudPolicy?.managed_label || "Guard Cloud";
-  const managedUpdatedAt = cloudPolicy?.managed_updated_at || null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-emerald-100 bg-emerald-50/30 p-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mt-0.5 h-5 w-5 shrink-0 text-emerald-600", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package firewall" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isBundleActive ? "green" : "slate", children: status === "expired" ? "Bundle expired" : isBundleActive ? "Bundle active" : "Local only" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Guard intercepts package install scripts and cloud advisories independently of the security level." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 grid gap-3 sm:grid-cols-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Package scripts" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "p",
-              {
-                className: `mt-0.5 text-sm font-semibold capitalize ${isCloudManaged ? "text-brand-blue" : "text-brand-dark"}`,
-                children: cloudPolicy?.package_script_action || packageScriptAction
-              }
-            ),
-            isCloudManaged && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-[11px] text-brand-blue/70", children: "Managed in Guard Cloud" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Cloud advisories" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "p",
-              {
-                className: `mt-0.5 text-sm font-semibold capitalize ${isCloudManaged ? "text-brand-blue" : "text-brand-dark"}`,
-                children: cloudPolicy?.cloud_advisory_action || cloudAdvisoryAction
-              }
-            ),
-            isCloudManaged && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-[11px] text-brand-blue/70", children: "Managed in Guard Cloud" })
-          ] })
-        ] }),
-        isCloudManaged && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 rounded-lg border border-brand-blue/10 bg-white/70 px-3 py-2 text-xs text-slate-500", children: [
-          managedLabel,
-          " is managing the synced policy summary for this machine",
-          managedUpdatedAt ? `, updated ${managedUpdatedAt}.` : "."
-        ] }),
-        ecosystems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Coverage by ecosystem" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1.5 flex flex-wrap gap-1.5", role: "list", "aria-label": "Covered ecosystems", children: ecosystems.map((eco) => {
-            const label = eco.display_name || eco.ecosystem || String(eco);
-            const key = eco.ecosystem || eco.display_name || label;
-            const supportLabel = eco.support_label || eco.label || "Monitor-only";
-            const supportLevel = eco.support_level || "monitor-only";
-            return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "listitem", className: `rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${resolveSupportChipClasses(supportLevel)}`, children: `${label} · ${supportLabel}` }, key);
-          }) })
-        ] }),
-        !isBundleActive && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-lg border border-slate-200/70 bg-white/60 px-3 py-2 text-xs text-slate-500", children: "Local fallback mode: Guard applies the package_script policy above without a cloud advisory lookup. Connect to Guard Cloud to enable advisory data from the signed bundle." })
-      ] })
-    ] })
-  ] });
-}
 function resolveSecurityLevelCardDescription(level) {
   if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
   if (level === "balanced") return "Ask before secret access, hidden execution, exfiltration, and destructive actions.";
@@ -271,6 +198,22 @@ function hasUnsavedChanges(saved, draft) {
   if (saved === null || draft === null) return false;
   return JSON.stringify(saved) !== JSON.stringify(draft);
 }
+function applyApprovalGateDraft(settings, updates) {
+  const gate = settings.approval_gate;
+  return {
+    ...settings,
+    approval_gate: {
+      enabled: updates.enabled,
+      configured: gate?.configured ?? false,
+      cooldown_seconds: updates.cooldown_seconds,
+      cooldown_active: gate?.cooldown_active ?? false,
+      cooldown_expires_at: gate?.cooldown_expires_at ?? null,
+      locked_until: gate?.locked_until ?? null,
+      fail_closed: gate?.fail_closed ?? false,
+      strict_all_decisions: gate?.strict_all_decisions ?? false
+    }
+  };
+}
 function protectionModeHelp(mode) {
   if (mode === "enforce") {
     return "Guard blocks risky actions until a saved decision allows them.";
@@ -286,7 +229,7 @@ function saveStatusText(saveSuccess, saveError) {
   }
   return saveError ?? "";
 }
-function SettingsWorkspace() {
+function SettingsWorkspace({ onApprovalGateChange }) {
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [draft, setDraft] = reactExports.useState(null);
   const [saving, setSaving] = reactExports.useState(false);
@@ -306,6 +249,14 @@ function SettingsWorkspace() {
   const [expandedSections, setExpandedSections] = reactExports.useState({ "protection": true, "risk": false, "diagnostics": false });
   const saveSuccessTimerRef = reactExports.useRef(null);
   const savedSettingsRef = reactExports.useRef(null);
+  const [approvalGateEnabled, setApprovalGateEnabled] = reactExports.useState(false);
+  const [approvalGateNewPassword, setApprovalGateNewPassword] = reactExports.useState("");
+  const [approvalGateConfirmPassword, setApprovalGateConfirmPassword] = reactExports.useState("");
+  const [approvalGateCurrentPassword, setApprovalGateCurrentPassword] = reactExports.useState("");
+  const [approvalGateCooldown, setApprovalGateCooldown] = reactExports.useState(0);
+  const [revokingCooldown, setRevokingCooldown] = reactExports.useState(false);
+  const [revokePassword, setRevokePassword] = reactExports.useState("");
+  const [revokeError, setRevokeError] = reactExports.useState(null);
   reactExports.useEffect(() => {
     let cancelled = false;
     fetchSettings().then((payload) => {
@@ -314,6 +265,12 @@ function SettingsWorkspace() {
         setState({ kind: "ready", payload: normalizedPayload });
         setDraft(normalizedPayload.settings);
         savedSettingsRef.current = normalizedPayload.settings;
+        const gate = normalizedPayload.settings.approval_gate;
+        if (gate !== void 0) {
+          setApprovalGateEnabled(gate.enabled);
+          setApprovalGateCooldown(gate.cooldown_seconds);
+          onApprovalGateChange?.(gate);
+        }
       }
     }).catch((error) => {
       if (!cancelled) {
@@ -323,7 +280,7 @@ function SettingsWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [onApprovalGateChange]);
   reactExports.useEffect(() => {
     let cancelled = false;
     fetchRuntimeSnapshot().then((snapshot) => {
@@ -372,7 +329,14 @@ function SettingsWorkspace() {
     setDraft((value) => {
       if (value === null) return value;
       if (securityLevel === "custom") return { ...value, security_level: securityLevel };
-      return { ...value, security_level: securityLevel, risk_actions: riskProfileActions[securityLevel], risk_action_overrides: {}, harness_risk_actions: {} };
+      const normalizedLevel = securityLevel === "gentle" ? "relaxed" : securityLevel;
+      return {
+        ...value,
+        security_level: normalizedLevel,
+        risk_actions: riskProfileActions[normalizedLevel],
+        risk_action_overrides: {},
+        harness_risk_actions: {}
+      };
     });
     setSaveError(null);
   }, []);
@@ -424,18 +388,102 @@ function SettingsWorkspace() {
     },
     []
   );
+  const handleApprovalGateToggle = reactExports.useCallback((event) => {
+    const checked = event.target.checked;
+    setApprovalGateEnabled(checked);
+    setDraft(
+      (value) => value === null ? value : applyApprovalGateDraft(value, {
+        enabled: checked,
+        cooldown_seconds: approvalGateCooldown
+      })
+    );
+    setSaveError(null);
+  }, [approvalGateCooldown]);
+  const handleApprovalGateNewPassword = reactExports.useCallback((event) => {
+    setApprovalGateNewPassword(event.target.value);
+  }, []);
+  const handleApprovalGateConfirmPassword = reactExports.useCallback((event) => {
+    setApprovalGateConfirmPassword(event.target.value);
+  }, []);
+  const handleApprovalGateCurrentPassword = reactExports.useCallback((event) => {
+    setApprovalGateCurrentPassword(event.target.value);
+  }, []);
+  const handleApprovalGateCooldownChange = reactExports.useCallback((event) => {
+    const next = Number(event.target.value);
+    setApprovalGateCooldown(next);
+    setDraft(
+      (value) => value === null ? value : applyApprovalGateDraft(value, {
+        enabled: approvalGateEnabled,
+        cooldown_seconds: next
+      })
+    );
+    setSaveError(null);
+  }, [approvalGateEnabled]);
+  const handleRevokePasswordChange = reactExports.useCallback((event) => {
+    setRevokePassword(event.target.value);
+    setRevokeError(null);
+  }, []);
+  const handleRevokeCooldown = reactExports.useCallback(async () => {
+    if (!revokePassword.trim()) {
+      setRevokeError("Enter the approval password to revoke cooldown.");
+      return;
+    }
+    setRevokingCooldown(true);
+    setRevokeError(null);
+    try {
+      const payload = await revokeApprovalGateCooldown(revokePassword);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== void 0) {
+        onApprovalGateChange?.(gate);
+      }
+      setRevokePassword("");
+      setActionMessage("Cooldown revoked successfully.");
+    } catch (error) {
+      setRevokeError(error instanceof Error ? error.message : "Unable to revoke cooldown.");
+    } finally {
+      setRevokingCooldown(false);
+    }
+  }, [revokePassword, onApprovalGateChange]);
   const handleSave = reactExports.useCallback(async () => {
     if (draft === null) return;
     setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
     try {
-      const payload = await updateSettings({ ...draft, risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides });
+      const approvalGateUpdate = {
+        enabled: approvalGateEnabled,
+        configured: draft.approval_gate?.configured ?? false,
+        cooldown_seconds: approvalGateCooldown,
+        cooldown_active: draft.approval_gate?.cooldown_active ?? false,
+        cooldown_expires_at: draft.approval_gate?.cooldown_expires_at ?? null,
+        locked_until: draft.approval_gate?.locked_until ?? null,
+        fail_closed: draft.approval_gate?.fail_closed ?? false,
+        strict_all_decisions: draft.approval_gate?.strict_all_decisions ?? false,
+        ...approvalGateCurrentPassword ? { current_password: approvalGateCurrentPassword } : {},
+        ...approvalGateNewPassword ? { new_password: approvalGateNewPassword } : {},
+        ...approvalGateConfirmPassword ? { confirm_password: approvalGateConfirmPassword } : {}
+      };
+      const settingsToSave = {
+        ...draft,
+        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
+        approval_gate: approvalGateUpdate
+      };
+      const payload = await updateSettings(settingsToSave);
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
       savedSettingsRef.current = normalizedPayload.settings;
+      if (normalizedPayload.settings.approval_gate !== void 0) {
+        onApprovalGateChange?.(normalizedPayload.settings.approval_gate);
+      }
       setSaveSuccess(true);
+      setApprovalGateNewPassword("");
+      setApprovalGateCurrentPassword("");
+      setApprovalGateConfirmPassword("");
       if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
       saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2e3);
     } catch (error) {
@@ -443,20 +491,21 @@ function SettingsWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [draft]);
+  }, [draft, approvalGateEnabled, approvalGateCooldown, approvalGateCurrentPassword, approvalGateNewPassword, approvalGateConfirmPassword, onApprovalGateChange]);
   const handleClearApprovals = reactExports.useCallback(async () => {
     if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) return;
     setClearingApprovals(true);
     setActionMessage(null);
     try {
-      await clearPolicy({ all: true });
+      await clearPolicy({ all: true, approval_password: approvalGateCurrentPassword || void 0 });
       setActionMessage("All saved approvals cleared.");
+      setApprovalGateCurrentPassword("");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear approvals.");
     } finally {
       setClearingApprovals(false);
     }
-  }, []);
+  }, [approvalGateCurrentPassword]);
   const handleClearEvidence = reactExports.useCallback(async () => {
     if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
     setClearingEvidence(true);
@@ -585,7 +634,6 @@ function SettingsWorkspace() {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: consequenceSummary })
       ] })
     ] }) }),
-    !hasSearch && /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainPolicySummary, { draft, supplyChain: perfSnapshot?.supply_chain ?? null }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", role: "region", "aria-label": "Settings sections", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         AccordionSection,
@@ -636,7 +684,28 @@ function SettingsWorkspace() {
                 /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { id: "settings-cloud-sync", label: "Cloud sync", checked: draft.sync, onChange: handleBooleanChange("sync") }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { id: "settings-billing", label: "Billing features", checked: draft.billing, onChange: handleBooleanChange("billing") })
               ] })
-            ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ApprovalGateCard,
+              {
+                enabled: approvalGateEnabled,
+                gateConfig: draft.approval_gate ?? null,
+                newPassword: approvalGateNewPassword,
+                confirmPassword: approvalGateConfirmPassword,
+                currentPassword: approvalGateCurrentPassword,
+                cooldownSeconds: approvalGateCooldown,
+                revokingCooldown,
+                revokePassword,
+                revokeError,
+                onToggle: handleApprovalGateToggle,
+                onNewPasswordChange: handleApprovalGateNewPassword,
+                onConfirmPasswordChange: handleApprovalGateConfirmPassword,
+                onCurrentPasswordChange: handleApprovalGateCurrentPassword,
+                onCooldownChange: handleApprovalGateCooldownChange,
+                onRevokePasswordChange: handleRevokePasswordChange,
+                onRevokeCooldown: handleRevokeCooldown
+              }
+            )
           ] })
         }
       ),
@@ -931,9 +1000,111 @@ function RiskControlRow({ risk, value, disabled, onChange, showConsequence }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Guard should", value, options: actionOptions, onChange, disabled })
   ] });
 }
+const cooldownOptions = [
+  { value: "0", label: approvalGateCooldownLabel(0) },
+  { value: "900", label: approvalGateCooldownLabel(900) },
+  { value: "3600", label: approvalGateCooldownLabel(3600) }
+];
+function ApprovalGateCard(props) {
+  const wasConfigured = props.gateConfig?.configured === true;
+  const showCurrentPassword = wasConfigured && props.gateConfig?.enabled === true;
+  const cooldownActive = props.gateConfig?.cooldown_active === true;
+  const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
+  const cooldownLabel = cooldownExpiresAt ? new Date(cooldownExpiresAt).toLocaleTimeString() : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-slate-50/40 p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SettingToggle,
+      {
+        id: "settings-approval-gate",
+        label: "Require password for approvals",
+        checked: props.enabled,
+        onChange: props.onToggle
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 px-1 text-xs text-slate-500", children: "Ask for a password before each approve or block decision." }),
+    props.enabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-3", children: [
+      showCurrentPassword && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Current password" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "password",
+            autoComplete: "current-password",
+            value: props.currentPassword,
+            onChange: props.onCurrentPasswordChange,
+            className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "New password" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "password",
+            autoComplete: "new-password",
+            value: props.newPassword,
+            onChange: props.onNewPasswordChange,
+            className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Confirm password" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "password",
+            autoComplete: "new-password",
+            value: props.confirmPassword,
+            onChange: props.onConfirmPasswordChange,
+            className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Cooldown after approval" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "select",
+          {
+            value: String(props.cooldownSeconds),
+            onChange: props.onCooldownChange,
+            className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20",
+            children: cooldownOptions.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
+          }
+        )
+      ] }),
+      cooldownActive && cooldownLabel !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-dark", children: [
+          "Cooldown active until ",
+          cooldownLabel
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 space-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Password to revoke" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "password",
+                autoComplete: "current-password",
+                value: props.revokePassword,
+                onChange: props.onRevokePasswordChange,
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          props.revokeError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", children: props.revokeError }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRevokeCooldown, disabled: props.revokingCooldown, variant: "outline", children: props.revokingCooldown ? "Revoking…" : "Revoke cooldown" })
+        ] })
+      ] })
+    ] })
+  ] });
+}
 export {
   SettingsWorkspace,
+  applyApprovalGateDraft,
   buildClearPolicyPayload,
+  hasUnsavedChanges,
   resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription
 };

@@ -12,6 +12,7 @@ from ...models import ScanOptions
 from ..access_graph_events import queue_access_graph_snapshot
 from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessContext
+from ..approval_gate import ApprovalGateGrant
 from ..capabilities import compute_capability_delta, normalize_artifact_capabilities, severity_from_deltas
 from ..config import GuardConfig
 from ..incident import build_incident_context
@@ -703,6 +704,7 @@ def record_policy(
     owner: str | None = None,
     source: str = "local",
     expires_at: str | None = None,
+    approval_gate_grant: ApprovalGateGrant | None = None,
 ) -> dict[str, object]:
     """Persist an allow or deny action."""
 
@@ -719,7 +721,7 @@ def record_policy(
         source=source,
         expires_at=expires_at,
     )
-    store.upsert_policy(decision, _now())
+    store.upsert_policy(decision, _now(), approval_gate_grant=approval_gate_grant)
     return decision.to_dict()
 
 

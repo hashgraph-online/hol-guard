@@ -92,9 +92,29 @@ type QueueResolutionPayload = Omit<
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(guardApiInput(input), withGuardAuth(init));
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`);
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
   return (await response.json()) as T;
+}
+
+async function requestErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await response.clone().json();
+    if (!isRecord(payload)) {
+      return fallback;
+    }
+    const message = payload["message"];
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+    const error = payload["error"];
+    if (typeof error === "string" && error.trim()) {
+      return `${error} (${response.status})`;
+    }
+  } catch {
+    return fallback;
+  }
+  return fallback;
 }
 
 export class GuardHarnessActionError extends Error {
@@ -906,6 +926,7 @@ export async function clearPolicy(input: {
   artifact_hash_is_null?: boolean;
   workspace?: string;
   publisher?: string;
+  approval_password?: string;
 }): Promise<{ cleared: number; harness: string | null; source: string | null }> {
   if (isGuardDemoMode()) {
     return { cleared: 0, harness: input.harness ?? null, source: input.source ?? null };
@@ -926,7 +947,8 @@ export async function clearPolicy(input: {
       artifact_id_is_null: input.artifact_id_is_null,
       artifact_hash_is_null: input.artifact_hash_is_null,
       workspace: input.workspace,
-      publisher: input.publisher
+      publisher: input.publisher,
+      approval_password: input.approval_password
     })
   });
 }
@@ -1019,12 +1041,32 @@ export async function resolveRequest(input: {
   await resolveRequestWithQueueResult(input);
 }
 
+export async function revokeApprovalGateCooldown(password: string): Promise<GuardSettingsPayload> {
+  if (isGuardDemoMode()) {
+    return fetchSettings();
+  }
+  const response = await fetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({ approval_gate: { password } })
+  }));
+  if (!response.ok) {
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
+  }
+  return (await response.json()) as GuardSettingsPayload;
+}
+
 export async function resolveRequestWithQueueResult(input: {
   requestId: string;
   action: "allow" | "block";
   scope: DecisionScope;
   workspace?: string;
   reason: string;
+  approval_password?: string;
+  approval_gate_use_cooldown?: boolean;
 }): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
     return {
@@ -1053,7 +1095,9 @@ export async function resolveRequestWithQueueResult(input: {
       action: input.action,
       scope: input.scope,
       workspace: input.workspace || undefined,
-      reason: input.reason || undefined
+      reason: input.reason || undefined,
+      ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
+      ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})
     })
   });
   let response = await fetchGuardApi(path, init());
@@ -1064,7 +1108,7 @@ export async function resolveRequestWithQueueResult(input: {
     }
   }
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`);
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
   const payload = (await response.json()) as QueueResolutionPayload;
   return normalizeQueueResolution(payload);
