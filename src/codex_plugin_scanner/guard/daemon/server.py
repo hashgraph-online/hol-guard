@@ -58,7 +58,7 @@ from ..desktop_notifications import (
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..receipts.manager import build_receipt
-from ..runtime.runner import GuardSyncNotConfiguredError, sync_supply_chain_bundle
+from ..runtime.runner import GuardSyncNotConfiguredError, sync_receipts, sync_supply_chain_bundle
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
@@ -281,6 +281,34 @@ def _headless_action_state_payload(
             "timestamp": receipt.get("timestamp"),
         },
         "retryable": operation in {"install", "repair", "scan"},
+    }
+
+
+def _headless_cloud_sync_payload(
+    *,
+    store: GuardStore,
+) -> dict[str, object]:
+    if store.get_sync_credentials() is None:
+        return {
+            "status": "not_configured",
+            "message": "Guard Cloud sync is not paired on this machine.",
+        }
+    try:
+        sync_payload = sync_receipts(store)
+    except GuardSyncNotConfiguredError as error:
+        return {
+            "status": "not_configured",
+            "message": str(error),
+        }
+    except Exception as error:
+        return {
+            "status": "pending",
+            "message": str(error),
+        }
+    return {
+        "status": "synced",
+        "synced_at": sync_payload.get("synced_at"),
+        "receipts_stored": sync_payload.get("receipts_stored", sync_payload.get("receipts", 0)),
     }
 
 
@@ -902,7 +930,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result=result,
             workspace_id=self._optional_string(payload.get("workspace_id")),
         )
+        cloud_sync = _headless_cloud_sync_payload(store=self.server.store)  # type: ignore[attr-defined]
         return 200, {
+            "cloud_sync": cloud_sync,
             "harness": adapter.harness,
             "operation": operation,
             "result": result,
