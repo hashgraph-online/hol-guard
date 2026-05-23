@@ -10,12 +10,13 @@ import {
   fetchReceipts,
   fetchRequest,
   fetchRuntimeSnapshot,
+  fetchSettings,
   guardAwareHref,
   repairApprovalCenter,
   resolveRequestWithQueueResult,
   retryResume,
 } from "./guard-api";
-import { ApprovalCenterLayout } from "./approval-center-layout";
+import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
 import { buildClearPayload } from "./clear-policy-payload";
 import { normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
@@ -36,6 +37,7 @@ function LazyFallback() {
   );
 }
 import type {
+  GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardCodexResumeResult,
@@ -191,6 +193,7 @@ export function App() {
   const [resolvedRequestId, setResolvedRequestId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [clearConfirm, setClearConfirm] = useState<{ harness?: string; all?: boolean } | null>(null);
+  const [approvalGate, setApprovalGate] = useState<GuardApprovalGatePublicConfig | null>(null);
   const resolutionInFlight = useRef(false);
 
   useEffect(() => {
@@ -257,6 +260,18 @@ export function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSettings()
+      .then((payload) => {
+        if (!cancelled && payload.settings.approval_gate !== undefined) {
+          setApprovalGate(payload.settings.approval_gate);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -468,6 +483,8 @@ export function App() {
     scope: DecisionScope;
     workspace?: string;
     reason: string;
+    approval_password?: string;
+    approval_gate_use_cooldown?: boolean;
   }) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
@@ -496,10 +513,10 @@ export function App() {
     setCodexResume(updated);
   }, [resolvedRequestId]);
 
-  const handleBulkApprove = useCallback(async (ids: string[]) => {
+  const handleBulkApprove = useCallback(async (ids: string[], gateCredentials?: BulkGateCredentials) => {
     const results = await Promise.allSettled(
       ids.map((id) =>
-        resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "" })
+        resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
       )
     );
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -513,10 +530,10 @@ export function App() {
     await refreshStateAfterAction();
   }, [refreshStateAfterAction, setResolutionMessage]);
 
-  const handleBulkBlock = useCallback(async (ids: string[], reason: string) => {
+  const handleBulkBlock = useCallback(async (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => {
     const results = await Promise.allSettled(
       ids.map((id) =>
-        resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason })
+        resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason, ...gateCredentials })
       )
     );
     const succeeded = results.filter((result) => result.status === "fulfilled").length;
@@ -625,6 +642,7 @@ export function App() {
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
       codexResume={codexResume}
+      approvalGate={approvalGate}
       onRetryResume={handleRetryResume}
       homeContent={
         <Suspense fallback={<LazyFallback />}>
@@ -678,7 +696,7 @@ export function App() {
       }
       settingsContent={
         <Suspense fallback={<LazyFallback />}>
-          <SettingsWorkspace />
+          <SettingsWorkspace onApprovalGateChange={setApprovalGate} />
         </Suspense>
       }
     />

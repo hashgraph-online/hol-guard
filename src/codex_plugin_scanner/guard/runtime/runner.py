@@ -21,6 +21,7 @@ from typing import Any
 from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..approval_gate import ApprovalGateError
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
@@ -902,7 +903,21 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         store.set_sync_payload("team_policy_pack", team_policy_pack_payload, now)
     else:
         store.set_sync_payload("team_policy_pack", {}, now)
-    store.replace_remote_policies(list(remote_decisions), now)
+    remote_policies_stored = len(remote_decisions)
+    remote_policy_sync_blocked = False
+    try:
+        store.replace_remote_policies(list(remote_decisions), now)
+    except ApprovalGateError as error:
+        remote_policies_stored = 0
+        remote_policy_sync_blocked = True
+        store.add_event(
+            "approval_gate/remote_policy_sync_blocked",
+            {
+                "error": error.code,
+                "remote_policies_count": len(remote_decisions),
+            },
+            now,
+        )
     _record_synced_alert_events(
         store=store,
         advisories=deduped_advisories,
@@ -916,12 +931,14 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "receipts_stored": receipts_stored_total,
         "advisories_stored": advisories_stored,
         "exceptions_stored": len(deduped_exceptions),
-        "remote_policies_stored": len(remote_decisions),
+        "remote_policies_stored": remote_policies_stored,
         "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
         "inventory": 0,
         "inventory_tracked": len(inventory),
     }
+    if remote_policy_sync_blocked:
+        summary["remote_policy_sync_blocked"] = True
     summary["guard_events_v1"] = sync_guard_events(store)
     store.set_sync_payload("sync_summary", summary, now)
     return summary

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
+from ..approval_gate import ApprovalGateError
 from ..approvals import first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
 from ..consumer.service import artifact_hash as compute_artifact_hash
@@ -265,16 +266,26 @@ class RuntimeMcpGuardProxy:
             if self._inline_prompt_available and approval_callback is not None:
                 approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
                 if _approval_allows(approval_result):
-                    allow_tool_call(
-                        store=self.store,
-                        artifact=artifact,
-                        artifact_hash=tool_artifact_hash,
-                        decision_source="inline-approved",
-                        now=_now(),
-                        signals=decision.signals,
-                        risk_categories=decision.risk_categories,
-                        remember=True,
-                    )
+                    try:
+                        allow_tool_call(
+                            store=self.store,
+                            artifact=artifact,
+                            artifact_hash=tool_artifact_hash,
+                            decision_source="inline-approved",
+                            now=_now(),
+                            signals=decision.signals,
+                            risk_categories=decision.risk_categories,
+                            remember=True,
+                        )
+                    except ApprovalGateError:
+                        return self._queue_approval_center_response(
+                            message_id=message.get("id"),
+                            artifact=artifact,
+                            artifact_hash=tool_artifact_hash,
+                            tool_name=tool_name,
+                            signals=decision.signals,
+                            params=params,
+                        )
                     response, package_event = self._handle_package_request(
                         message=message,
                         child_stdin=child_stdin,
@@ -482,16 +493,26 @@ class RuntimeMcpGuardProxy:
         queue_policy_action = "require-reapproval" if policy_action == "review" else policy_action
         if queue_policy_action in {"allow", "warn"}:
             if remember_allow and remember_decision_source is not None:
-                allow_tool_call(
-                    store=self.store,
-                    artifact=artifact,
-                    artifact_hash=artifact_digest,
-                    decision_source=remember_decision_source,
-                    now=_now(),
-                    signals=remember_signals,
-                    risk_categories=remember_risk_categories,
-                    remember=True,
-                )
+                try:
+                    allow_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=artifact_digest,
+                        decision_source=remember_decision_source,
+                        now=_now(),
+                        signals=remember_signals,
+                        risk_categories=remember_risk_categories,
+                        remember=True,
+                    )
+                except ApprovalGateError:
+                    return self._queue_approval_center_response(
+                        message_id=message.get("id"),
+                        artifact=artifact,
+                        artifact_hash=artifact_digest,
+                        tool_name=tool_name,
+                        signals=remember_signals,
+                        params=params,
+                    )
             response = self._forward_message(
                 message,
                 child_stdin,
@@ -613,16 +634,28 @@ class RuntimeMcpGuardProxy:
         params: dict[str, Any],
         remember: bool = False,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        allow_tool_call(
-            store=self.store,
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            decision_source=decision_source,
-            now=_now(),
-            signals=signals,
-            risk_categories=risk_categories,
-            remember=remember,
-        )
+        try:
+            allow_tool_call(
+                store=self.store,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                decision_source=decision_source,
+                now=_now(),
+                signals=signals,
+                risk_categories=risk_categories,
+                remember=remember,
+            )
+        except ApprovalGateError:
+            if remember:
+                return self._queue_approval_center_response(
+                    message_id=message.get("id"),
+                    artifact=artifact,
+                    artifact_hash=artifact_hash,
+                    tool_name=str(params.get("name") or artifact.name),
+                    signals=signals,
+                    params=params,
+                )
+            raise
         response = self._forward_message(
             message,
             child_stdin,

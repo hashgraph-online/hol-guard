@@ -12708,9 +12708,28 @@ let guardTokenLocationKey = null;
 async function readJson(input, init) {
   const response = await fetch(guardApiInput(input), withGuardAuth(init));
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`);
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
   return await response.json();
+}
+async function requestErrorMessage(response, fallback) {
+  try {
+    const payload = await response.clone().json();
+    if (!isRecord(payload)) {
+      return fallback;
+    }
+    const message = payload["message"];
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+    const error = payload["error"];
+    if (typeof error === "string" && error.trim()) {
+      return `${error} (${response.status})`;
+    }
+  } catch {
+    return fallback;
+  }
+  return fallback;
 }
 class GuardHarnessActionError extends Error {
   status;
@@ -13362,7 +13381,8 @@ async function clearPolicy(input) {
       artifact_id_is_null: input.artifact_id_is_null,
       artifact_hash_is_null: input.artifact_hash_is_null,
       workspace: input.workspace,
-      publisher: input.publisher
+      publisher: input.publisher,
+      approval_password: input.approval_password
     })
   });
 }
@@ -13427,6 +13447,23 @@ async function fetchDiff(artifactId, harness) {
 function fetchGuardApi(input, init) {
   return fetch(guardApiInput(input), withGuardAuth(init));
 }
+async function revokeApprovalGateCooldown(password) {
+  if (isGuardDemoMode()) {
+    return fetchSettings();
+  }
+  const response = await fetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({ approval_gate: { password } })
+  }));
+  if (!response.ok) {
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
+  }
+  return await response.json();
+}
 async function resolveRequestWithQueueResult(input) {
   if (isGuardDemoMode()) {
     return {
@@ -13455,7 +13492,9 @@ async function resolveRequestWithQueueResult(input) {
       action: input.action,
       scope: input.scope,
       workspace: input.workspace || void 0,
-      reason: input.reason || void 0
+      reason: input.reason || void 0,
+      ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
+      ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
     })
   });
   let response = await fetchGuardApi(path, init());
@@ -13466,7 +13505,7 @@ async function resolveRequestWithQueueResult(input) {
     }
   }
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`);
+    throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
   const payload = await response.json();
   return normalizeQueueResolution(payload);
@@ -18546,6 +18585,12 @@ function searchQueue(items, term) {
     return parts.join(" ").toLowerCase().includes(normalized);
   });
 }
+function approvalGateCooldownLabel(seconds) {
+  if (seconds === 0) return "Every approval";
+  if (seconds === 900) return "15 minutes";
+  if (seconds === 3600) return "1 hour";
+  return `${seconds} seconds`;
+}
 const scopeChoices = [
   {
     value: "artifact",
@@ -18709,7 +18754,8 @@ function ReviewWorkspace(props) {
         {
           detail,
           onResolve: props.onResolve,
-          onGoHome: props.onGoHome
+          onGoHome: props.onGoHome,
+          approvalGate: props.approvalGate ?? null
         }
       )
     ] })
@@ -19062,6 +19108,8 @@ function ReviewDecisionCard(props) {
   const [showEvidence, setShowEvidence] = reactExports.useState(false);
   const [lastAction, setLastAction] = reactExports.useState(null);
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
+  const [approvalPassword, setApprovalPassword] = reactExports.useState("");
+  const [useCooldown, setUseCooldown] = reactExports.useState(false);
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
   const availableScopeChoices = reactExports.useMemo(
@@ -19087,6 +19135,8 @@ function ReviewDecisionCard(props) {
       setSubmitting(null);
       setLastAction(null);
       setErrorMessage(null);
+      setApprovalPassword("");
+      setUseCooldown(false);
     }
   }, [item?.request_id]);
   reactExports.useEffect(() => {
@@ -19122,13 +19172,21 @@ function ReviewDecisionCard(props) {
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve(buildDecisionPayload({
-          item,
-          action,
-          scope,
-          reason: action === "allow" ? "approved in review" : "blocked in review"
-        }));
+        const gate = props.approvalGate;
+        const includeGateFields = gate?.enabled === true && gate?.configured === true;
+        await props.onResolve({
+          ...buildDecisionPayload({
+            item,
+            action,
+            scope,
+            reason: action === "allow" ? "approved in review" : "blocked in review"
+          }),
+          ...includeGateFields ? { approval_password: approvalPassword } : {},
+          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
+        });
         setResolved(action);
+        setApprovalPassword("");
+        setUseCooldown(false);
         timerRef.current = setTimeout(() => setResolved(null), 2e3);
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
@@ -19136,7 +19194,7 @@ function ReviewDecisionCard(props) {
         setSubmitting(null);
       }
     },
-    [item, scope, props.onResolve]
+    [item, scope, props.onResolve, props.approvalGate, approvalPassword, useCooldown]
   );
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
@@ -19163,6 +19221,12 @@ function ReviewDecisionCard(props) {
       handleRequestResolve(lastAction);
     }
   }, [handleRequestResolve, lastAction]);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setApprovalPassword(event.target.value);
+  }, []);
+  const handleUseCooldownChange = reactExports.useCallback((event) => {
+    setUseCooldown(event.target.checked);
+  }, []);
   if (!detail || !item) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
@@ -19286,6 +19350,16 @@ function ReviewDecisionCard(props) {
           )
         ] })
       ] }) }),
+      props.approvalGate?.enabled === true && props.approvalGate?.configured === true && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ApprovalPasswordPrompt,
+        {
+          gate: props.approvalGate,
+          approvalPassword,
+          useCooldown,
+          onApprovalPasswordChange: handleApprovalPasswordChange,
+          onUseCooldownChange: handleUseCooldownChange
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActionButton,
@@ -19455,6 +19529,38 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
           item
         ] }, item)) })
       ] })
+    ] })
+  ] });
+}
+function ApprovalPasswordPrompt(props) {
+  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3 rounded-xl border border-slate-100 bg-slate-50/40 p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "password",
+          autoComplete: "current-password",
+          value: props.approvalPassword,
+          onChange: props.onApprovalPasswordChange,
+          className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+        }
+      )
+    ] }),
+    showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "checkbox",
+          checked: props.useCooldown,
+          onChange: props.onUseCooldownChange,
+          className: "h-4 w-4 accent-brand-blue"
+        }
+      ),
+      "Skip password for next ",
+      approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
+      " (use cooldown)"
     ] })
   ] });
 }
@@ -19687,6 +19793,7 @@ function ApprovalCenterLayout(props) {
       {
         requests: props.requests.items,
         activeRequestId: props.activeRequestId,
+        approvalGate: props.approvalGate ?? null,
         onClose: handleCloseMobileQueue,
         onOpenRequest: props.onOpenRequest,
         onBulkApprove: props.onBulkApprove,
@@ -19707,6 +19814,7 @@ function ApprovalCenterLayout(props) {
         runtime: props.runtime.kind === "ready" ? props.runtime.snapshot : null,
         resolutionMessage: props.resolutionMessage,
         codexResume: props.codexResume,
+        approvalGate: props.approvalGate ?? null,
         onOpenRequest: props.onOpenRequest,
         onResolve: props.onResolve,
         onGoHome: props.onGoHome,
@@ -19721,6 +19829,7 @@ function ApprovalCenterLayout(props) {
         activeRequestId: props.activeRequestId,
         resolutionMessage: props.resolutionMessage,
         codexResume: props.codexResume,
+        approvalGate: props.approvalGate ?? null,
         onOpenRequest: props.onOpenRequest,
         onGoHome: props.onGoHome,
         onResolve: props.onResolve,
@@ -19766,6 +19875,7 @@ function MobileQueueDrawer(props) {
             {
               activeRequestId: props.activeRequestId,
               items: props.requests,
+              approvalGate: props.approvalGate ?? null,
               onOpenRequest: props.onOpenRequest,
               onBulkApprove: props.onBulkApprove,
               onBulkBlock: props.onBulkBlock
@@ -19858,6 +19968,7 @@ function QueueWorkspace(props) {
         {
           activeRequestId: props.activeRequestId,
           items: props.requests.items,
+          approvalGate: props.approvalGate ?? null,
           onOpenRequest: props.onOpenRequest,
           onBulkApprove: props.onBulkApprove,
           onBulkBlock: props.onBulkBlock
@@ -19916,6 +20027,8 @@ function QueueBrowser(props) {
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [page, setPage] = reactExports.useState(1);
   const [showFilters, setShowFilters] = reactExports.useState(false);
+  const [bulkApprovePassword, setBulkApprovePassword] = reactExports.useState("");
+  const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = reactExports.useState(false);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
   const filteredItems = reactExports.useMemo(() => {
     const byHarness = harnessFilter === "all" ? props.items : props.items.filter((item) => item.harness === harnessFilter);
@@ -19974,19 +20087,56 @@ function QueueBrowser(props) {
     [groups]
   );
   const showBulkApprove = props.onBulkApprove !== void 0 && bulkEligibleGroups.length > 0;
+  const showBulkGateFields = showBulkApprove && props.approvalGate?.enabled === true && props.approvalGate.configured === true;
+  const handleBulkApprovePasswordChange = reactExports.useCallback((event) => {
+    setBulkApprovePassword(event.target.value);
+  }, []);
+  const handleBulkApproveUseCooldownChange = reactExports.useCallback((event) => {
+    setBulkApproveUseCooldown(event.target.checked);
+  }, []);
   const handleBulkApprove = reactExports.useCallback(() => {
     const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
-    props.onBulkApprove?.(ids);
-  }, [props.onBulkApprove, bulkEligibleGroups]);
+    const gateCredentials = showBulkGateFields ? { approval_password: bulkApprovePassword, approval_gate_use_cooldown: bulkApproveUseCooldown } : void 0;
+    props.onBulkApprove?.(ids, gateCredentials);
+  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveUseCooldown]);
   const blockEligibleGroups = reactExports.useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
   const blockEligibleActionCount = reactExports.useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
   const showBulkBlock = props.onBulkBlock !== void 0 && blockEligibleGroups.length > 0;
-  const handleBulkBlockConfirm = reactExports.useCallback((reason) => {
+  const showBulkBlockGateFields = showBulkBlock && props.approvalGate?.enabled === true && props.approvalGate.configured === true && props.approvalGate.strict_all_decisions === true;
+  const handleBulkBlockConfirm = reactExports.useCallback((reason, gateCredentials) => {
     const ids = bulkBlockPrimaryIds(blockEligibleGroups);
-    props.onBulkBlock?.(ids, reason);
+    props.onBulkBlock?.(ids, reason, gateCredentials);
   }, [props.onBulkBlock, blockEligibleGroups]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
     showBulkApprove && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 space-y-2", children: [
+      showBulkGateFields && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Approval password" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "password",
+              value: bulkApprovePassword,
+              onChange: handleBulkApprovePasswordChange,
+              placeholder: "Approval password",
+              autoComplete: "current-password",
+              className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            }
+          )
+        ] }),
+        (props.approvalGate?.cooldown_seconds ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: bulkApproveUseCooldown,
+              onChange: handleBulkApproveUseCooldownChange,
+              className: "rounded"
+            }
+          ),
+          "Skip password for next approvals (use cooldown)"
+        ] })
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
@@ -20017,6 +20167,8 @@ function QueueBrowser(props) {
       QueueBulkBlockForm,
       {
         count: blockEligibleActionCount,
+        showGateFields: showBulkBlockGateFields,
+        cooldownSeconds: props.approvalGate?.cooldown_seconds ?? 0,
         onBlock: handleBulkBlockConfirm
       }
     ),
@@ -20159,19 +20311,32 @@ function QueueCard(props) {
 function QueueBulkBlockForm(props) {
   const [expanded, setExpanded] = reactExports.useState(false);
   const [reason, setReason] = reactExports.useState("");
+  const [gatePassword, setGatePassword] = reactExports.useState("");
+  const [gateUseCooldown, setGateUseCooldown] = reactExports.useState(false);
   const handleExpand = reactExports.useCallback(() => setExpanded(true), []);
   const handleCollapse = reactExports.useCallback(() => {
     setExpanded(false);
     setReason("");
+    setGatePassword("");
+    setGateUseCooldown(false);
   }, []);
   const handleReasonChange = reactExports.useCallback((event) => {
     setReason(event.target.value);
   }, []);
+  const handleGatePasswordChange = reactExports.useCallback((event) => {
+    setGatePassword(event.target.value);
+  }, []);
+  const handleGateUseCooldownChange = reactExports.useCallback((event) => {
+    setGateUseCooldown(event.target.checked);
+  }, []);
   const handleConfirm = reactExports.useCallback(() => {
-    props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group");
+    const gateCredentials = props.showGateFields ? { approval_password: gatePassword, approval_gate_use_cooldown: gateUseCooldown } : void 0;
+    props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group", gateCredentials);
     setExpanded(false);
     setReason("");
-  }, [props.onBlock, reason]);
+    setGatePassword("");
+    setGateUseCooldown(false);
+  }, [props.onBlock, props.showGateFields, reason, gatePassword, gateUseCooldown]);
   if (!expanded) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
@@ -20207,6 +20372,34 @@ function QueueBulkBlockForm(props) {
           className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         }
       )
+    ] }),
+    props.showGateFields && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Approval password for bulk block" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "password",
+            value: gatePassword,
+            onChange: handleGatePasswordChange,
+            placeholder: "Approval password",
+            autoComplete: "current-password",
+            className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      props.cooldownSeconds > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "checkbox",
+            checked: gateUseCooldown,
+            onChange: handleGateUseCooldownChange,
+            className: "rounded"
+          }
+        ),
+        "Skip password for next approvals (use cooldown)"
+      ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -21220,6 +21413,7 @@ function App() {
   const [resolvedRequestId, setResolvedRequestId] = reactExports.useState(null);
   const [helpOpen, setHelpOpen] = reactExports.useState(false);
   const [clearConfirm, setClearConfirm] = reactExports.useState(null);
+  const [approvalGate, setApprovalGate] = reactExports.useState(null);
   const resolutionInFlight = reactExports.useRef(false);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
@@ -21274,6 +21468,18 @@ function App() {
       if (!cancelled) {
         setInventory({ kind: "ready", items: [] });
       }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    fetchSettings().then((payload) => {
+      if (!cancelled && payload.settings.approval_gate !== void 0) {
+        setApprovalGate(payload.settings.approval_gate);
+      }
+    }).catch(() => {
     });
     return () => {
       cancelled = true;
@@ -21491,10 +21697,10 @@ function App() {
     const updated = await retryResume(resolvedRequestId);
     setCodexResume(updated);
   }, [resolvedRequestId]);
-  const handleBulkApprove = reactExports.useCallback(async (ids) => {
+  const handleBulkApprove = reactExports.useCallback(async (ids, gateCredentials) => {
     const results = await Promise.allSettled(
       ids.map(
-        (id) => resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "" })
+        (id) => resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
       )
     );
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -21504,10 +21710,10 @@ function App() {
     navigate("/inbox");
     await refreshStateAfterAction();
   }, [refreshStateAfterAction, setResolutionMessage]);
-  const handleBulkBlock = reactExports.useCallback(async (ids, reason) => {
+  const handleBulkBlock = reactExports.useCallback(async (ids, reason, gateCredentials) => {
     const results = await Promise.allSettled(
       ids.map(
-        (id) => resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason })
+        (id) => resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason, ...gateCredentials })
       )
     );
     const succeeded = results.filter((result) => result.status === "fulfilled").length;
@@ -21602,6 +21808,7 @@ function App() {
         activeRequestId,
         resolutionMessage,
         codexResume,
+        approvalGate,
         onRetryResume: handleRetryResume,
         homeContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           HomeWorkspace,
@@ -21643,7 +21850,7 @@ function App() {
           }
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
-        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, {}) })
+        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) })
       }
     ),
     helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) })
@@ -21657,41 +21864,43 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  GuardHarnessActionError as $,
+  HiMiniChartBar as $,
   ActionButton as A,
   Badge as B,
-  clearPolicy as C,
-  clearEvidence as D,
+  updateSettings as C,
+  clearPolicy as D,
   EmptyState as E,
-  exportDiagnostics as F,
+  clearEvidence as F,
   GuardHero as G,
   HiMiniCheckCircle as H,
-  repairApprovalCenter as I,
-  setupDesktopNotifications as J,
-  HiMiniMagnifyingGlass as K,
-  HiMiniLockClosed as L,
-  HiMiniCog6Tooth as M,
-  HiMiniBellAlert as N,
-  fetchApprovalPage as O,
+  exportDiagnostics as I,
+  repairApprovalCenter as J,
+  setupDesktopNotifications as K,
+  HiMiniMagnifyingGlass as L,
+  HiMiniLockClosed as M,
+  HiMiniCog6Tooth as N,
+  HiMiniBellAlert as O,
   ProofStrip as P,
-  fetchPolicy as Q,
-  HiMiniArrowLeft as R,
+  approvalGateCooldownLabel as Q,
+  fetchApprovalPage as R,
   SectionLabel as S,
   Tag as T,
-  HiMiniHome as U,
-  HiMiniAdjustmentsHorizontal as V,
-  detectCategory as W,
-  CATEGORIES as X,
-  policyIdentityKey as Y,
-  HiMiniChartBar as Z,
-  runHarnessAction as _,
+  fetchPolicy as U,
+  HiMiniArrowLeft as V,
+  HiMiniHome as W,
+  HiMiniAdjustmentsHorizontal as X,
+  detectCategory as Y,
+  CATEGORIES as Z,
+  policyIdentityKey as _,
   HiMiniShieldCheck as a,
-  HiMiniRocketLaunch as a0,
-  HiMiniArrowPath as a1,
-  HiMiniTrash as a2,
-  clearLabelForScope as a3,
-  formatHarnessCommand as a4,
-  HiMiniCommandLine as a5,
+  runHarnessAction as a0,
+  GuardHarnessActionError as a1,
+  HiMiniRocketLaunch as a2,
+  HiMiniArrowPath as a3,
+  HiMiniTrash as a4,
+  clearLabelForScope as a5,
+  formatHarnessCommand as a6,
+  HiMiniCommandLine as a7,
   formatRelativeTime as b,
   HiMiniSparkles as c,
   HiMiniXMark as d,
@@ -21716,5 +21925,5 @@ export {
   HiMiniClipboard as w,
   fetchSettings as x,
   fetchRuntimeSnapshot as y,
-  updateSettings as z
+  revokeApprovalGateCooldown as z
 };
