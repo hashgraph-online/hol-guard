@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import urllib.error
@@ -11,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -31,6 +33,8 @@ from codex_plugin_scanner.guard.consumer.service import record_policy
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
+from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -478,6 +482,59 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
     assert store.list_policy_decisions("codex") == []
     events = store.list_events(event_name="approval_gate/remote_policy_sync_blocked")
     assert events[0]["payload"]["error"] == "approval_gate_required"
+
+
+def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=store.guard_home,
+    )
+    artifact = GuardArtifact(
+        artifact_id="codex:mcp:dangerous-tool",
+        name="dangerous-tool",
+        harness="codex",
+        artifact_type="tool_call",
+        source_scope="project",
+        config_path="/repo/.mcp.json",
+        metadata={"tool_name": "dangerous-tool"},
+    )
+    proxy = RuntimeMcpGuardProxy(
+        harness="codex",
+        server_name="danger-server",
+        command=["node", "server.js"],
+        context=context,
+        store=store,
+        config=load_guard_config(store.guard_home),
+        source_scope="project",
+        config_path="/repo/.mcp.json",
+    )
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
+
+    response, event = proxy._allow_and_forward(
+        message={"id": 1},
+        child_stdin=io.StringIO(),
+        child_stdout=io.StringIO(),
+        client_input=None,
+        server_output=None,
+        artifact=artifact,
+        artifact_hash="hash-mcp",
+        decision_source="inline-approved",
+        signals=("mcp_dangerous_tool",),
+        risk_categories=("mcp",),
+        params={"name": "dangerous-tool", "arguments": {"path": ".env"}},
+        remember=True,
+    )
+
+    assert event["decision"] == "queue-approval"
+    assert response["error"]["message"].startswith("HOL Guard stopped tool call dangerous-tool")
+    assert len(store.list_approval_requests(limit=10)) == 1
+    assert store.list_policy_decisions("codex") == []
 
 
 def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Path) -> None:
