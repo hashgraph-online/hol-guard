@@ -280,13 +280,18 @@ def mark_connect_result(
         raise ValueError("connect_state_not_found")
     proof = _coerce_proof(state.get("proof"))
     if sync_payload is not None:
-        proof["first_synced_at"] = sync_payload.get("synced_at")
-        proof["receipts_stored"] = _coerce_non_negative_int(sync_payload.get("receipts_stored"))
-        proof["inventory_items"] = _coerce_non_negative_int(
-            sync_payload.get("inventory_tracked", sync_payload.get("inventory"))
-        )
-        proof["runtime_session_id"] = sync_payload.get("runtime_session_id")
-        proof["runtime_session_synced_at"] = sync_payload.get("runtime_session_synced_at")
+        if "synced_at" in sync_payload:
+            proof["first_synced_at"] = sync_payload.get("synced_at")
+        if "receipts_stored" in sync_payload:
+            proof["receipts_stored"] = _coerce_non_negative_int(sync_payload.get("receipts_stored"))
+        if "inventory_tracked" in sync_payload or "inventory" in sync_payload:
+            proof["inventory_items"] = _coerce_non_negative_int(
+                sync_payload.get("inventory_tracked", sync_payload.get("inventory"))
+            )
+        if "runtime_session_id" in sync_payload:
+            proof["runtime_session_id"] = sync_payload.get("runtime_session_id")
+        if "runtime_session_synced_at" in sync_payload:
+            proof["runtime_session_synced_at"] = sync_payload.get("runtime_session_synced_at")
     connection.execute(
         """
         update guard_connect_states
