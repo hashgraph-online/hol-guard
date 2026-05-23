@@ -478,6 +478,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, []);
 
   const handleRevokeCooldown = useCallback(async () => {
+    if (!revokePassword.trim()) {
+      setRevokeError("Enter the approval password to revoke cooldown.");
+      return;
+    }
     setRevokingCooldown(true);
     setRevokeError(null);
     try {
