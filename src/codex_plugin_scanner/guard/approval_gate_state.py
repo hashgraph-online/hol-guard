@@ -136,9 +136,7 @@ def optional_bool(value: object, fallback: object) -> bool | None:
 
 def prune_grants(grants: dict[str, dict[str, object]], now_epoch: float) -> None:
     expired = [
-        grant_id
-        for grant_id, metadata in grants.items()
-        if float(metadata.get("expires_epoch", 0.0)) <= now_epoch
+        grant_id for grant_id, metadata in grants.items() if float(metadata.get("expires_epoch", 0.0)) <= now_epoch
     ]
     for grant_id in expired:
         grants.pop(grant_id, None)
