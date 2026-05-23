@@ -1,12 +1,6 @@
-import { r as reactExports, x as fetchSettings, y as fetchRuntimeSnapshot, z as revokeApprovalGateCooldown, C as updateSettings, D as clearPolicy, F as clearEvidence, I as exportDiagnostics, J as repairApprovalCenter, K as setupDesktopNotifications, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, L as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, M as HiMiniLockClosed, N as HiMiniCog6Tooth, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, O as HiMiniBellAlert } from "../guard-dashboard.js";
+import { r as reactExports, x as fetchSettings, y as fetchRuntimeSnapshot, z as revokeApprovalGateCooldown, C as updateSettings, D as clearPolicy, F as clearEvidence, I as exportDiagnostics, J as repairApprovalCenter, K as setupDesktopNotifications, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, L as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, M as HiMiniLockClosed, N as HiMiniCog6Tooth, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, O as HiMiniBellAlert, Q as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { a as resolveProtectionLevelCopy } from "./runtime-overview.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
-function approvalGateCooldownLabel(seconds) {
-  if (seconds === 0) return "Every approval";
-  if (seconds === 900) return "15 minutes";
-  if (seconds === 3600) return "1 hour";
-  return `${seconds} seconds`;
-}
 const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 function resolveSecurityLevelCardDescription(level) {
   if (level === "relaxed") return "Warn on dangerous actions. Most safe actions run without a prompt.";
@@ -219,7 +213,7 @@ function saveStatusText(saveSuccess, saveError) {
   }
   return saveError ?? "";
 }
-function SettingsWorkspace() {
+function SettingsWorkspace({ onApprovalGateChange }) {
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [draft, setDraft] = reactExports.useState(null);
   const [saving, setSaving] = reactExports.useState(false);
@@ -259,6 +253,7 @@ function SettingsWorkspace() {
         if (gate !== void 0) {
           setApprovalGateEnabled(gate.enabled);
           setApprovalGateCooldown(gate.cooldown_seconds);
+          onApprovalGateChange?.(gate);
         }
       }
     }).catch((error) => {
@@ -269,7 +264,7 @@ function SettingsWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [onApprovalGateChange]);
   reactExports.useEffect(() => {
     let cancelled = false;
     fetchRuntimeSnapshot().then((snapshot) => {
@@ -402,7 +397,15 @@ function SettingsWorkspace() {
     setRevokingCooldown(true);
     setRevokeError(null);
     try {
-      await revokeApprovalGateCooldown(revokePassword);
+      const payload = await revokeApprovalGateCooldown(revokePassword);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== void 0) {
+        onApprovalGateChange?.(gate);
+      }
       setRevokePassword("");
       setActionMessage("Cooldown revoked successfully.");
     } catch (error) {
@@ -410,7 +413,7 @@ function SettingsWorkspace() {
     } finally {
       setRevokingCooldown(false);
     }
-  }, [revokePassword]);
+  }, [revokePassword, onApprovalGateChange]);
   const handleSave = reactExports.useCallback(async () => {
     if (draft === null) return;
     setSaving(true);
@@ -440,6 +443,9 @@ function SettingsWorkspace() {
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
       savedSettingsRef.current = normalizedPayload.settings;
+      if (normalizedPayload.settings.approval_gate !== void 0) {
+        onApprovalGateChange?.(normalizedPayload.settings.approval_gate);
+      }
       setSaveSuccess(true);
       setApprovalGateNewPassword("");
       setApprovalGateCurrentPassword("");
@@ -451,7 +457,7 @@ function SettingsWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [draft, approvalGateEnabled, approvalGateCooldown, approvalGateCurrentPassword, approvalGateNewPassword, approvalGateConfirmPassword]);
+  }, [draft, approvalGateEnabled, approvalGateCooldown, approvalGateCurrentPassword, approvalGateNewPassword, approvalGateConfirmPassword, onApprovalGateChange]);
   const handleClearApprovals = reactExports.useCallback(async () => {
     if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) return;
     setClearingApprovals(true);

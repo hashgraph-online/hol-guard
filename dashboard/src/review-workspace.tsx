@@ -83,6 +83,7 @@ import {
   type SemanticGroupId,
 } from "./queue-state";
 import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
+import { approvalGateCooldownLabel } from "./approval-gate-utils";
 
 export type ReviewViewModel = {
   item: GuardApprovalRequest;
@@ -1282,7 +1283,7 @@ function ApprovalPasswordPrompt(props: ApprovalPasswordPromptProps) {
             onChange={props.onUseCooldownChange}
             className="h-4 w-4 accent-brand-blue"
           />
-          Skip password for next {props.gate.cooldown_seconds / 60 >= 60 ? `${props.gate.cooldown_seconds / 3600} hour` : `${props.gate.cooldown_seconds / 60} minutes`} (use cooldown)
+          Skip password for next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (use cooldown)
         </label>
       )}
     </div>

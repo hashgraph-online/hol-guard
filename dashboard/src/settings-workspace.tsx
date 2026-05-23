@@ -279,7 +279,11 @@ function saveStatusText(saveSuccess: boolean, saveError: string | null): string 
   return saveError ?? "";
 }
 
-export function SettingsWorkspace() {
+type SettingsWorkspaceProps = {
+  onApprovalGateChange?: (gate: GuardApprovalGatePublicConfig) => void;
+};
+
+export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspaceProps) {
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -321,6 +325,7 @@ export function SettingsWorkspace() {
           if (gate !== undefined) {
             setApprovalGateEnabled(gate.enabled);
             setApprovalGateCooldown(gate.cooldown_seconds);
+            onApprovalGateChange?.(gate);
           }
         }
       })
@@ -330,7 +335,7 @@ export function SettingsWorkspace() {
         }
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [onApprovalGateChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -476,7 +481,15 @@ export function SettingsWorkspace() {
     setRevokingCooldown(true);
     setRevokeError(null);
     try {
-      await revokeApprovalGateCooldown(revokePassword);
+      const payload = await revokeApprovalGateCooldown(revokePassword);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== undefined) {
+        onApprovalGateChange?.(gate);
+      }
       setRevokePassword("");
       setActionMessage("Cooldown revoked successfully.");
     } catch (error) {
@@ -484,7 +497,7 @@ export function SettingsWorkspace() {
     } finally {
       setRevokingCooldown(false);
     }
-  }, [revokePassword]);
+  }, [revokePassword, onApprovalGateChange]);
 
   const handleSave = useCallback(async () => {
     if (draft === null) return;
@@ -519,6 +532,9 @@ export function SettingsWorkspace() {
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
       savedSettingsRef.current = normalizedPayload.settings;
+      if (normalizedPayload.settings.approval_gate !== undefined) {
+        onApprovalGateChange?.(normalizedPayload.settings.approval_gate);
+      }
       setSaveSuccess(true);
       setApprovalGateNewPassword("");
       setApprovalGateCurrentPassword("");
@@ -530,7 +546,7 @@ export function SettingsWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [draft, approvalGateEnabled, approvalGateCooldown, approvalGateCurrentPassword, approvalGateNewPassword, approvalGateConfirmPassword]);
+  }, [draft, approvalGateEnabled, approvalGateCooldown, approvalGateCurrentPassword, approvalGateNewPassword, approvalGateConfirmPassword, onApprovalGateChange]);
 
   const handleClearApprovals = useCallback(async () => {
     if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) return;

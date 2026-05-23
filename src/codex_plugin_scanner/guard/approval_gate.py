@@ -151,8 +151,41 @@ def update_settings(
     approval_gate_grant: ApprovalGateGrant | None = None,
     now: str | None = None,
 ) -> ApprovalGatePublicConfig:
+    next_state = _next_settings_state(
+        guard_home,
+        payload,
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+    if next_state is not None:
+        _write_state(guard_home, next_state, now=now)
+    return public_config(guard_home, now=now)
+
+
+def validate_settings_update(
+    guard_home: Path,
+    payload: object,
+    *,
+    approval_gate_grant: ApprovalGateGrant | None = None,
+    now: str | None = None,
+) -> None:
+    _next_settings_state(
+        guard_home,
+        payload,
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+
+
+def _next_settings_state(
+    guard_home: Path,
+    payload: object,
+    *,
+    approval_gate_grant: ApprovalGateGrant | None,
+    now: str | None,
+) -> dict[str, object] | None:
     if not isinstance(payload, dict):
-        return public_config(guard_home, now=now)
+        return None
     state = _load_state(guard_home)
     gate_was_enabled = _enabled(state)
     gate_input = input_from_mapping({"approval_gate": payload}) or ApprovalGateInput()
@@ -184,8 +217,7 @@ def update_settings(
         next_state["strict_all_decisions"] = bool(payload.get("strict_all_decisions") is True)
     if next_state.get("enabled") is True and _verifier(next_state) is None:
         raise ApprovalGateError("approval_gate_password_required", "Approval gate password is required.")
-    _write_state(guard_home, next_state, now=now)
-    return public_config(guard_home, now=now)
+    return next_state
 
 
 def revoke_cooldown(guard_home: Path, *, now: str | None = None) -> ApprovalGatePublicConfig:
@@ -468,12 +500,21 @@ def _load_state(guard_home: Path) -> dict[str, object]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"enabled": True, "fail_closed": True, "cooldown_seconds": 0, "strict_all_decisions": False}
+        return _fail_closed_state()
     if not isinstance(payload, dict):
-        return {"enabled": True, "fail_closed": True, "cooldown_seconds": 0, "strict_all_decisions": False}
+        return _fail_closed_state()
     state = _default_state()
     state.update(payload)
-    state["cooldown_seconds"] = _coerce_cooldown_seconds(state.get("cooldown_seconds"))
+    try:
+        state["cooldown_seconds"] = _coerce_cooldown_seconds(state.get("cooldown_seconds"))
+    except ApprovalGateError:
+        state["cooldown_seconds"] = 0
+    return state
+
+
+def _fail_closed_state() -> dict[str, object]:
+    state = _default_state()
+    state.update({"enabled": True, "fail_closed": True})
     return state
 
 
@@ -489,6 +530,6 @@ def _coerce_cooldown_seconds(value: object) -> int:
     if seconds not in APPROVAL_GATE_ALLOWED_COOLDOWNS:
         raise ApprovalGateError(
             "approval_gate_invalid_cooldown",
-            "Approval cooldown must be every approval, 15 minutes, or 1 hour.",
+            "Approval cooldown must be 0 (every approval), 900 (15 minutes), or 3600 (1 hour) seconds.",
         )
     return seconds

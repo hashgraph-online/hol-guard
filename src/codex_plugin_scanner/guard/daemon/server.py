@@ -39,6 +39,9 @@ from ..approval_gate import (
 from ..approval_gate import (
     update_settings as update_approval_gate_settings,
 )
+from ..approval_gate import (
+    validate_settings_update as validate_approval_gate_settings,
+)
 from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
@@ -1690,6 +1693,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 purpose="settings_write",
                 approval_gate_input=gate_input,
             )
+            if isinstance(gate_payload, dict):
+                validate_approval_gate_settings(
+                    guard_home,
+                    gate_payload,
+                    approval_gate_grant=approval_gate_grant,
+                )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
             config = update_guard_settings(guard_home, config_settings, approval_gate_grant=approval_gate_grant)
             if isinstance(gate_payload, dict):
@@ -1725,6 +1734,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 purpose="settings_write",
                 approval_gate_input=gate_input,
             )
+            if isinstance(gate_payload, dict):
+                validate_approval_gate_settings(
+                    guard_home,
+                    gate_payload,
+                    approval_gate_grant=approval_gate_grant,
+                )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
             config = update_guard_settings(guard_home, config_settings, approval_gate_grant=approval_gate_grant)
             if isinstance(gate_payload, dict):

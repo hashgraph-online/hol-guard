@@ -18585,6 +18585,12 @@ function searchQueue(items, term) {
     return parts.join(" ").toLowerCase().includes(normalized);
   });
 }
+function approvalGateCooldownLabel(seconds) {
+  if (seconds === 0) return "Every approval";
+  if (seconds === 900) return "15 minutes";
+  if (seconds === 3600) return "1 hour";
+  return `${seconds} seconds`;
+}
 const scopeChoices = [
   {
     value: "artifact",
@@ -19553,7 +19559,7 @@ function ApprovalPasswordPrompt(props) {
         }
       ),
       "Skip password for next ",
-      props.gate.cooldown_seconds / 60 >= 60 ? `${props.gate.cooldown_seconds / 3600} hour` : `${props.gate.cooldown_seconds / 60} minutes`,
+      approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
       " (use cooldown)"
     ] })
   ] });
@@ -21758,7 +21764,7 @@ function App() {
           }
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
-        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, {}) })
+        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) })
       }
     ),
     helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) })
@@ -21772,7 +21778,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  runHarnessAction as $,
+  HiMiniChartBar as $,
   ActionButton as A,
   Badge as B,
   updateSettings as C,
@@ -21789,25 +21795,26 @@ export {
   HiMiniCog6Tooth as N,
   HiMiniBellAlert as O,
   ProofStrip as P,
-  fetchApprovalPage as Q,
-  fetchPolicy as R,
+  approvalGateCooldownLabel as Q,
+  fetchApprovalPage as R,
   SectionLabel as S,
   Tag as T,
-  HiMiniArrowLeft as U,
-  HiMiniHome as V,
-  HiMiniAdjustmentsHorizontal as W,
-  detectCategory as X,
-  CATEGORIES as Y,
-  policyIdentityKey as Z,
-  HiMiniChartBar as _,
+  fetchPolicy as U,
+  HiMiniArrowLeft as V,
+  HiMiniHome as W,
+  HiMiniAdjustmentsHorizontal as X,
+  detectCategory as Y,
+  CATEGORIES as Z,
+  policyIdentityKey as _,
   HiMiniShieldCheck as a,
-  GuardHarnessActionError as a0,
-  HiMiniRocketLaunch as a1,
-  HiMiniArrowPath as a2,
-  HiMiniTrash as a3,
-  clearLabelForScope as a4,
-  formatHarnessCommand as a5,
-  HiMiniCommandLine as a6,
+  runHarnessAction as a0,
+  GuardHarnessActionError as a1,
+  HiMiniRocketLaunch as a2,
+  HiMiniArrowPath as a3,
+  HiMiniTrash as a4,
+  clearLabelForScope as a5,
+  formatHarnessCommand as a6,
+  HiMiniCommandLine as a7,
   formatRelativeTime as b,
   HiMiniSparkles as c,
   HiMiniXMark as d,

@@ -203,6 +203,71 @@ def test_approval_gate_settings_import_and_reset_cannot_disable_without_password
     assert gate.enabled is True
 
 
+def test_approval_gate_corrupt_cooldown_loads_safe_default(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    (store.guard_home / "approval-gate.json").write_text(
+        json.dumps({"enabled": True, "cooldown_seconds": 123, "failed_attempts": 2}),
+        encoding="utf-8",
+    )
+
+    gate = public_config(store.guard_home)
+
+    assert gate.enabled is True
+    assert gate.cooldown_seconds == 0
+
+
+def test_approval_gate_invalid_cooldown_error_names_allowed_seconds(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    with pytest.raises(ApprovalGateError) as error:
+        update_approval_gate_settings(
+            store.guard_home,
+            {
+                "enabled": True,
+                "new_password": PASSWORD,
+                "confirm_password": PASSWORD,
+                "cooldown_seconds": 123,
+            },
+        )
+
+    assert "0 (every approval), 900 (15 minutes), or 3600 (1 hour) seconds" in str(error.value)
+
+
+def test_approval_gate_settings_update_rejects_invalid_gate_payload_atomically(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        settings_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/settings",
+            data=json.dumps(
+                {
+                    "settings": {
+                        "approval_wait_timeout_seconds": 7,
+                        "approval_gate": {
+                            "enabled": True,
+                            "current_password": PASSWORD,
+                            "cooldown_seconds": 123,
+                        },
+                    }
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as settings_error:
+            urllib.request.urlopen(settings_request, timeout=5)
+        body = json.loads(settings_error.value.read().decode("utf-8"))
+    finally:
+        daemon.stop()
+
+    assert settings_error.value.code == 403
+    assert body["error"] == "approval_gate_invalid_cooldown"
+    assert load_guard_config(store.guard_home).approval_wait_timeout_seconds == 120
+    assert public_config(store.guard_home).cooldown_seconds == 0
+
+
 def test_approval_gate_daemon_api_cannot_bypass_password(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)

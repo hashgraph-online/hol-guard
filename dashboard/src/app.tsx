@@ -696,7 +696,7 @@ export function App() {
       }
       settingsContent={
         <Suspense fallback={<LazyFallback />}>
-          <SettingsWorkspace />
+          <SettingsWorkspace onApprovalGateChange={setApprovalGate} />
         </Suspense>
       }
     />
