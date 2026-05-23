@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import re
+import threading
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -691,10 +692,12 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         workspace_id="workspace-1",
     )
     sync_calls: list[bool] = []
+    sync_finished = threading.Event()
 
     def fake_sync_receipts(current_store: GuardStore) -> dict[str, object]:
         assert current_store is store
         sync_calls.append(True)
+        sync_finished.set()
         return {
             "synced_at": "2026-05-23T17:18:40.061Z",
             "receipts_stored": 1,
@@ -722,13 +725,13 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         daemon.stop()
 
     assert status == 200
-    assert sync_calls == [True]
     assert payload["receipt"]["operation"] == "scan"
     assert payload["cloud_sync"] == {
-        "status": "synced",
-        "synced_at": "2026-05-23T17:18:40.061Z",
-        "receipts_stored": 1,
+        "status": "queued",
+        "message": "Guard Cloud sync started.",
     }
+    assert sync_finished.wait(timeout=2)
+    assert sync_calls == [True]
 
 
 def test_headless_policy_sync_persists_policy_and_receipt(tmp_path: Path) -> None:
