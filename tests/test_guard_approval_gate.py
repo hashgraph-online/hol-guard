@@ -331,6 +331,23 @@ def test_approval_gate_corrupt_cooldown_loads_safe_default(tmp_path: Path) -> No
     assert gate.cooldown_seconds == 0
 
 
+def test_approval_gate_malformed_cooldown_timestamp_does_not_unlock(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store, cooldown_seconds=900)
+    state_path = store.guard_home / "approval-gate.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["cooldown_expires_at"] = "not-a-timestamp"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    _add_request(store, "req-malformed-cooldown")
+
+    with pytest.raises(ApprovalGateError) as error:
+        _approve(store, "req-malformed-cooldown")
+
+    assert error.value.code == "approval_gate_required"
+    assert public_config(store.guard_home).cooldown_active is False
+    assert store.get_approval_request("req-malformed-cooldown")["status"] == "pending"
+
+
 def test_approval_gate_invalid_cooldown_error_names_allowed_seconds(tmp_path: Path) -> None:
     store = _store(tmp_path)
 

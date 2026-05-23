@@ -113,7 +113,7 @@ def epoch(value: str | None) -> float:
     try:
         return datetime.fromisoformat(normalized).timestamp()
     except ValueError:
-        return time.time()
+        return 0.0
 
 
 def iso_from_epoch(value: float) -> str:
