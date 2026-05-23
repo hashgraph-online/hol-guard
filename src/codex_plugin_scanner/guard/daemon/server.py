@@ -116,6 +116,12 @@ _HEADLESS_APP_ACTIONS = {
     "status": ("status", "verify"),
     "test": ("scan", "verify"),
 }
+_CLOUD_APP_DASHBOARD_SESSION_ACTIONS = {
+    "connect": frozenset({"connect", "status", "test"}),
+    "repair": frozenset({"repair", "status", "test"}),
+    "status": frozenset({"status"}),
+    "test": frozenset({"status", "test"}),
+}
 _CLOUD_APP_HANDOFF_ACTIONS = frozenset({"connect", "repair", "status", "test"})
 _HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")
 
@@ -128,6 +134,10 @@ def _headless_safe_failure_reasons() -> dict[str, str]:
         "unsupported": "Harness is not supported by this daemon.",
         "confirmation_required": "Remove actions need the harness confirmation phrase.",
     }
+
+
+def _cloud_app_dashboard_session_actions(action_path: str) -> frozenset[str]:
+    return _CLOUD_APP_DASHBOARD_SESSION_ACTIONS.get(action_path, frozenset({action_path}))
 
 
 def _headless_detection_status_to_app_status(value: object) -> str:
@@ -1241,6 +1251,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload_json = json.dumps(
             {
                 "action_path": action_path,
+                "allowed_action_paths": sorted(_cloud_app_dashboard_session_actions(action_path)),
                 "expires_at": expires_at.isoformat(),
                 "harness": harness,
                 "version": "guard-local-daemon-session.v1",
@@ -2154,7 +2165,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         path_parts = [part for part in path.split("/") if part]
         if path in {"/v1/capabilities", "/v1/harnesses", "/v1/inventory", "/v1/runtime"}:
             return True
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] == action_path:
+        if (
+            len(path_parts) == 3
+            and path_parts[:2] == ["v1", "apps"]
+            and path_parts[2] in _cloud_app_dashboard_session_actions(action_path)
+        ):
             if payload is None:
                 return False
             harness = self._optional_string(claims.get("harness"))
