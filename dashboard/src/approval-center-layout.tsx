@@ -88,6 +88,7 @@ import {
   normalizeDecisionScope,
 } from "./approval-scopes";
 import type {
+  GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardCodexResumeResult,
@@ -126,6 +127,11 @@ type RuntimeState =
   | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
 type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
 
+export type BulkGateCredentials = {
+  approval_password?: string;
+  approval_gate_use_cooldown?: boolean;
+};
+
 type LayoutProps = {
   view: AppView;
   requests: RequestState;
@@ -136,6 +142,7 @@ type LayoutProps = {
   activeRequestId: string | null;
   resolutionMessage: string | null;
   codexResume: GuardCodexResumeResult | null;
+  approvalGate?: GuardApprovalGatePublicConfig | null;
   homeContent: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
@@ -150,9 +157,11 @@ type LayoutProps = {
     scope: DecisionScope;
     workspace?: string;
     reason: string;
+    approval_password?: string;
+    approval_gate_use_cooldown?: boolean;
   }) => void;
-  onBulkApprove?: (ids: string[]) => void;
-  onBulkBlock?: (ids: string[], reason: string) => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
+  onBulkBlock?: (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => void;
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;
   onRetryResume?: () => void;
@@ -218,6 +227,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         <MobileQueueDrawer
           requests={props.requests.items}
           activeRequestId={props.activeRequestId}
+          approvalGate={props.approvalGate ?? null}
           onClose={handleCloseMobileQueue}
           onOpenRequest={props.onOpenRequest}
           onBulkApprove={props.onBulkApprove}
@@ -250,6 +260,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 runtime={props.runtime.kind === "ready" ? props.runtime.snapshot : null}
                 resolutionMessage={props.resolutionMessage}
                 codexResume={props.codexResume}
+                approvalGate={props.approvalGate ?? null}
                 onOpenRequest={props.onOpenRequest}
                 onResolve={props.onResolve}
                 onGoHome={props.onGoHome}
@@ -263,6 +274,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 activeRequestId={props.activeRequestId}
                 resolutionMessage={props.resolutionMessage}
                 codexResume={props.codexResume}
+                approvalGate={props.approvalGate ?? null}
                 onOpenRequest={props.onOpenRequest}
                 onGoHome={props.onGoHome}
                 onResolve={props.onResolve}
@@ -283,10 +295,11 @@ export function ApprovalCenterLayout(props: LayoutProps) {
 function MobileQueueDrawer(props: {
   requests: GuardApprovalRequest[];
   activeRequestId: string | null;
+  approvalGate?: GuardApprovalGatePublicConfig | null;
   onClose: () => void;
   onOpenRequest: (requestId: string) => void;
-  onBulkApprove?: (ids: string[]) => void;
-  onBulkBlock?: (ids: string[], reason: string) => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
+  onBulkBlock?: (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => void;
 }) {
   return (
     <div
@@ -314,6 +327,7 @@ function MobileQueueDrawer(props: {
           <QueueBrowser
             activeRequestId={props.activeRequestId}
             items={props.requests}
+            approvalGate={props.approvalGate ?? null}
             onOpenRequest={props.onOpenRequest}
             onBulkApprove={props.onBulkApprove}
             onBulkBlock={props.onBulkBlock}
@@ -331,11 +345,12 @@ function QueueWorkspace(props: {
   activeRequestId: string | null;
   resolutionMessage: string | null;
   codexResume: GuardCodexResumeResult | null;
+  approvalGate?: GuardApprovalGatePublicConfig | null;
   onOpenRequest: (requestId: string) => void;
   onGoHome: () => void;
   onResolve: LayoutProps["onResolve"];
-  onBulkApprove?: (ids: string[]) => void;
-  onBulkBlock?: (ids: string[], reason: string) => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
+  onBulkBlock?: (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => void;
   onRetry?: () => void;
   onRepair?: () => Promise<void>;
   onRetryResume?: () => void;
@@ -445,6 +460,7 @@ function QueueWorkspace(props: {
             <QueueBrowser
               activeRequestId={props.activeRequestId}
               items={props.requests.items}
+              approvalGate={props.approvalGate ?? null}
               onOpenRequest={props.onOpenRequest}
               onBulkApprove={props.onBulkApprove}
               onBulkBlock={props.onBulkBlock}
@@ -507,15 +523,18 @@ function QueueHeader(props: {
 function QueueBrowser(props: {
   activeRequestId: string | null;
   items: GuardApprovalRequest[];
+  approvalGate?: GuardApprovalGatePublicConfig | null;
   onOpenRequest: (requestId: string) => void;
-  onBulkApprove?: (ids: string[]) => void;
-  onBulkBlock?: (ids: string[], reason: string) => void;
+  onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
+  onBulkBlock?: (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [harnessFilter, setHarnessFilter] = useState("all");
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
+  const [bulkApprovePassword, setBulkApprovePassword] = useState("");
+  const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = useState(false);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
 
   const filteredItems = useMemo(() => {
@@ -595,24 +614,71 @@ function QueueBrowser(props: {
     props.onBulkApprove !== undefined &&
     bulkEligibleGroups.length > 0;
 
+  const showBulkGateFields =
+    showBulkApprove &&
+    props.approvalGate?.enabled === true &&
+    props.approvalGate.configured === true;
+
+  const handleBulkApprovePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setBulkApprovePassword(event.target.value);
+  }, []);
+
+  const handleBulkApproveUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setBulkApproveUseCooldown(event.target.checked);
+  }, []);
+
   const handleBulkApprove = useCallback(() => {
     const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
-    props.onBulkApprove?.(ids);
-  }, [props.onBulkApprove, bulkEligibleGroups]);
+    const gateCredentials: BulkGateCredentials | undefined = showBulkGateFields
+      ? { approval_password: bulkApprovePassword, approval_gate_use_cooldown: bulkApproveUseCooldown }
+      : undefined;
+    props.onBulkApprove?.(ids, gateCredentials);
+  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveUseCooldown]);
 
   const blockEligibleGroups = useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
   const blockEligibleActionCount = useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
   const showBulkBlock = props.onBulkBlock !== undefined && blockEligibleGroups.length > 0;
+  const showBulkBlockGateFields =
+    showBulkBlock &&
+    props.approvalGate?.enabled === true &&
+    props.approvalGate.configured === true &&
+    props.approvalGate.strict_all_decisions === true;
 
-  const handleBulkBlockConfirm = useCallback((reason: string) => {
+  const handleBulkBlockConfirm = useCallback((reason: string, gateCredentials?: BulkGateCredentials) => {
     const ids = bulkBlockPrimaryIds(blockEligibleGroups);
-    props.onBulkBlock?.(ids, reason);
+    props.onBulkBlock?.(ids, reason, gateCredentials);
   }, [props.onBulkBlock, blockEligibleGroups]);
 
   return (
     <section>
       {showBulkApprove && (
         <div className="mb-4 space-y-2">
+          {showBulkGateFields && (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <label className="block">
+                <span className="sr-only">Approval password</span>
+                <input
+                  type="password"
+                  value={bulkApprovePassword}
+                  onChange={handleBulkApprovePasswordChange}
+                  placeholder="Approval password"
+                  autoComplete="current-password"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+              </label>
+              {(props.approvalGate?.cooldown_seconds ?? 0) > 0 && (
+                <label className="flex items-center gap-2 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={bulkApproveUseCooldown}
+                    onChange={handleBulkApproveUseCooldownChange}
+                    className="rounded"
+                  />
+                  Skip password for next approvals (use cooldown)
+                </label>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={handleBulkApprove}
@@ -637,6 +703,8 @@ function QueueBrowser(props: {
       {showBulkBlock && (
         <QueueBulkBlockForm
           count={blockEligibleActionCount}
+          showGateFields={showBulkBlockGateFields}
+          cooldownSeconds={props.approvalGate?.cooldown_seconds ?? 0}
           onBlock={handleBulkBlockConfirm}
         />
       )}
@@ -788,24 +856,41 @@ function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; 
 
 function QueueBulkBlockForm(props: {
   count: number;
-  onBlock: (reason: string) => void;
+  showGateFields: boolean;
+  cooldownSeconds: number;
+  onBlock: (reason: string, gateCredentials?: BulkGateCredentials) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [reason, setReason] = useState("");
+  const [gatePassword, setGatePassword] = useState("");
+  const [gateUseCooldown, setGateUseCooldown] = useState(false);
 
   const handleExpand = useCallback(() => setExpanded(true), []);
   const handleCollapse = useCallback(() => {
     setExpanded(false);
     setReason("");
+    setGatePassword("");
+    setGateUseCooldown(false);
   }, []);
   const handleReasonChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setReason(event.target.value);
   }, []);
+  const handleGatePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setGatePassword(event.target.value);
+  }, []);
+  const handleGateUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setGateUseCooldown(event.target.checked);
+  }, []);
   const handleConfirm = useCallback(() => {
-    props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group");
+    const gateCredentials = props.showGateFields
+      ? { approval_password: gatePassword, approval_gate_use_cooldown: gateUseCooldown }
+      : undefined;
+    props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group", gateCredentials);
     setExpanded(false);
     setReason("");
-  }, [props.onBlock, reason]);
+    setGatePassword("");
+    setGateUseCooldown(false);
+  }, [props.onBlock, props.showGateFields, reason, gatePassword, gateUseCooldown]);
 
   if (!expanded) {
     return (
@@ -839,6 +924,32 @@ function QueueBulkBlockForm(props: {
           className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         />
       </label>
+      {props.showGateFields && (
+        <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <label className="block">
+            <span className="sr-only">Approval password for bulk block</span>
+            <input
+              type="password"
+              value={gatePassword}
+              onChange={handleGatePasswordChange}
+              placeholder="Approval password"
+              autoComplete="current-password"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            />
+          </label>
+          {props.cooldownSeconds > 0 && (
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={gateUseCooldown}
+                onChange={handleGateUseCooldownChange}
+                className="rounded"
+              />
+              Skip password for next approvals (use cooldown)
+            </label>
+          )}
+        </div>
+      )}
       <div className="mt-3 flex gap-2">
         <button
           type="button"

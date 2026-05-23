@@ -594,6 +594,28 @@ assert(resolution.remaining_pending_summaries[0].request_id === "req-next", "L07
 assert(resolution.resolved_request?.status === "resolved", "L077: resolveRequestWithQueueResult normalizes resolved request");
 assert(resolution.resolved_duplicate_ids[0] === "req-dupe", "L077: resolveRequestWithQueueResult returns duplicate ids");
 
+installGuardWindow("?guard-token=token-cooldown-opt-out&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const cooldownOptOutCalls = installFetchStub({
+  "/v1/requests/req-cooldown-opt-out/approve": {
+    resolved: true,
+    item: { ...pageItem, request_id: "req-cooldown-opt-out", status: "resolved" }
+  }
+});
+await resolveRequestWithQueueResult({
+  requestId: "req-cooldown-opt-out",
+  action: "allow",
+  scope: "artifact",
+  reason: "reviewed",
+  approval_password: "local-password",
+  approval_gate_use_cooldown: false
+});
+const cooldownOptOutBody = JSON.parse(String(cooldownOptOutCalls[0].init?.body)) as Record<string, unknown>;
+assert(
+  cooldownOptOutBody["approval_gate_use_cooldown"] === false,
+  "L077c: resolveRequestWithQueueResult preserves explicit cooldown opt-out"
+);
+assert(cooldownOptOutBody["approval_password"] === "local-password", "L077c: resolveRequestWithQueueResult sends approval password");
+
 installGuardWindow("?guard-token=stale-resolve-token&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const recoveryCalls: RecordedFetch[] = [];
 globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

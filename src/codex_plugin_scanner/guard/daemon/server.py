@@ -26,6 +26,22 @@ from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlu
 from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..approval_gate import (
+    ApprovalGateError,
+    require_high_risk,
+)
+from ..approval_gate import (
+    input_from_mapping as approval_gate_input_from_mapping,
+)
+from ..approval_gate import (
+    revoke_cooldown as revoke_approval_gate_cooldown,
+)
+from ..approval_gate import (
+    update_settings as update_approval_gate_settings,
+)
+from ..approval_gate import (
+    validate_settings_update as validate_approval_gate_settings,
+)
 from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
@@ -668,6 +684,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/settings/reset":
             self._handle_settings_reset(payload)
             return
+        if parsed.path == "/v1/approval-gate/cooldown/revoke":
+            self._handle_approval_gate_cooldown_revoke(payload)
+            return
         if parsed.path == "/v1/daemon/repair":
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
             self._write_json(result)
@@ -712,6 +731,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 reason=self._optional_string(payload.get("reason")),
                 return_queue_result=True,
                 resolve_scope_matches=False,
+                approval_gate_input=approval_gate_input_from_mapping(payload),
             )
         except ApprovalRequestNotFoundError:
             self._write_json(
@@ -745,6 +765,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 },
                 status=409,
             )
+            return
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error, resolved=False)
             return
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
@@ -1366,7 +1389,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             source="cloud-sync",
             expires_at=expires_at,
         )
-        self.server.store.upsert_policy(decision, _now())  # type: ignore[attr-defined]
+        try:
+            approval_gate_grant = require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="headless_policy_sync",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+            self.server.store.upsert_policy(  # type: ignore[attr-defined]
+                decision,
+                _now(),
+                approval_gate_grant=approval_gate_grant,
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
         receipt = self._record_headless_receipt(
             harness=adapter.harness,
             operation="policy_sync",
@@ -1474,17 +1510,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not clear_all and harness is None:
             self._write_json({"error": "missing_harness_or_all", "cleared": 0}, status=400)
             return
-        cleared = self.server.store.clear_policy_decisions(  # type: ignore[attr-defined]
-            None if clear_all else harness,
-            source,
-            scope=scope,
-            artifact_id=artifact_id,
-            artifact_hash=artifact_hash,
-            artifact_id_is_null=artifact_id_is_null,
-            artifact_hash_is_null=artifact_hash_is_null,
-            workspace=workspace,
-            publisher=publisher,
-        )
+        try:
+            approval_gate_grant = require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="policy_clear",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+            cleared = self.server.store.clear_policy_decisions(  # type: ignore[attr-defined]
+                None if clear_all else harness,
+                source,
+                scope=scope,
+                artifact_id=artifact_id,
+                artifact_hash=artifact_hash,
+                artifact_id_is_null=artifact_id_is_null,
+                artifact_hash_is_null=artifact_hash_is_null,
+                workspace=workspace,
+                publisher=publisher,
+                approval_gate_grant=approval_gate_grant,
+            )
+        except ApprovalGateError as error:
+            payload = error.to_payload()
+            payload["cleared"] = 0
+            self._write_json(payload, status=error.status)
+            return
         self._write_json(
             {
                 "cleared": cleared,
@@ -1633,17 +1681,51 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return False
         raise ValueError("invalid boolean value")
 
+    def _write_approval_gate_error(self, error: ApprovalGateError, *, resolved: bool | None = None) -> None:
+        payload = error.to_payload()
+        if resolved is not None:
+            payload["resolved"] = resolved
+        self._write_json(payload, status=error.status)
+
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
             self._write_json({"error": "invalid_settings"}, status=400)
             return
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        gate_payload = settings.get("approval_gate")
+        gate_input = (
+            approval_gate_input_from_mapping({"approval_gate": gate_payload})
+            if isinstance(gate_payload, dict)
+            else None
+        )
         try:
-            config = update_guard_settings(self.server.store.guard_home, settings)  # type: ignore[attr-defined]
+            approval_gate_grant = require_high_risk(
+                guard_home,
+                purpose="settings_write",
+                approval_gate_input=gate_input,
+            )
+            if isinstance(gate_payload, dict):
+                validate_approval_gate_settings(
+                    guard_home,
+                    gate_payload,
+                    approval_gate_grant=approval_gate_grant,
+                )
+            config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
+            config = update_guard_settings(guard_home, config_settings, approval_gate_grant=approval_gate_grant)
+            if isinstance(gate_payload, dict):
+                update_approval_gate_settings(
+                    guard_home,
+                    gate_payload,
+                    approval_gate_grant=approval_gate_grant,
+                )
+                config = load_guard_config(guard_home)
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
         except ValueError as error:
             self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
             return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
         self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
 
     def _handle_settings_import(self, payload: dict[str, object]) -> None:
@@ -1651,12 +1733,40 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not isinstance(settings, dict):
             self._write_json({"error": "invalid_settings_import"}, status=400)
             return
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        gate_payload = settings.get("approval_gate")
+        gate_input = (
+            approval_gate_input_from_mapping({"approval_gate": gate_payload})
+            if isinstance(gate_payload, dict)
+            else None
+        )
         try:
-            config = update_guard_settings(self.server.store.guard_home, settings)  # type: ignore[attr-defined]
+            approval_gate_grant = require_high_risk(
+                guard_home,
+                purpose="settings_write",
+                approval_gate_input=gate_input,
+            )
+            if isinstance(gate_payload, dict):
+                validate_approval_gate_settings(
+                    guard_home,
+                    gate_payload,
+                    approval_gate_grant=approval_gate_grant,
+                )
+            config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
+            config = update_guard_settings(guard_home, config_settings, approval_gate_grant=approval_gate_grant)
+            if isinstance(gate_payload, dict):
+                update_approval_gate_settings(
+                    guard_home,
+                    gate_payload,
+                    approval_gate_grant=approval_gate_grant,
+                )
+                config = load_guard_config(guard_home)
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
         except ValueError as error:
             self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
             return
-        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
         self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
 
     def _handle_settings_reset(self, payload: dict[str, object]) -> None:
@@ -1665,8 +1775,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "confirmation_required", "confirm": "reset-local-settings"}, status=400)
             return
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
-        config = reset_guard_settings(guard_home)
+        try:
+            approval_gate_grant = require_high_risk(
+                guard_home,
+                purpose="settings_write",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+            config = reset_guard_settings(guard_home, approval_gate_grant=approval_gate_grant)
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
         self._write_json(_settings_response_payload(guard_home, editable_guard_settings(config)))
+
+    def _handle_approval_gate_cooldown_revoke(self, payload: dict[str, object]) -> None:
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        try:
+            require_high_risk(
+                guard_home,
+                purpose="settings_write",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        gate = revoke_approval_gate_cooldown(guard_home).to_dict()
+        config = load_guard_config(guard_home)
+        settings = editable_guard_settings(config)
+        settings["approval_gate"] = gate
+        self._write_json(_settings_response_payload(guard_home, settings))
 
     def _handle_initialize(self, payload: dict[str, object]) -> None:
         client_name = self._optional_string(payload.get("client_name")) or "guard-client"
@@ -2411,20 +2547,31 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"saved": False, "error": "missing_scope_target"}, status=400)
             return
         store = self.server.store  # type: ignore[attr-defined]
-        from ..models import PolicyDecision
-
-        store.upsert_policy(
-            PolicyDecision(
-                harness=record["harness"],
-                scope=record["scope"],  # type: ignore[arg-type]
-                action=record["action"],  # type: ignore[arg-type]
-                artifact_id=record["artifact_id"],
-                workspace=record["workspace"],
-                publisher=record["publisher"],
-                reason=record["reason"],
-            ),
-            _now(),
+        decision = PolicyDecision(
+            harness=record["harness"],
+            scope=record["scope"],  # type: ignore[arg-type]
+            action=record["action"],  # type: ignore[arg-type]
+            artifact_id=record["artifact_id"],
+            workspace=record["workspace"],
+            publisher=record["publisher"],
+            reason=record["reason"],
         )
+        try:
+            approval_gate_grant = require_high_risk(
+                store.guard_home,
+                purpose="policy_write",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+            store.upsert_policy(
+                decision,
+                _now(),
+                approval_gate_grant=approval_gate_grant,
+            )
+        except ApprovalGateError as error:
+            payload = error.to_payload()
+            payload["saved"] = False
+            self._write_json(payload, status=error.status)
+            return
         self._write_json({"saved": True, "decision": record})
 
     @staticmethod
@@ -2505,6 +2652,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings",
             "/v1/settings/import",
             "/v1/settings/reset",
+            "/v1/approval-gate/cooldown/revoke",
             "/v1/daemon/repair",
             "/v1/notifications/setup",
         }:

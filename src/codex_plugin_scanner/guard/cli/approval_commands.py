@@ -8,12 +8,15 @@ import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..approval_gate import ApprovalGateError, require_high_risk
+from ..approval_gate import public_config as approval_gate_public_config
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
 from ..daemon import load_guard_daemon_url
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 
 _HARNESS_RETRY_COPY: dict[str, str] = {
     "codex": "Return to Codex and retry",
@@ -137,27 +140,67 @@ def run_approval_command(
             }
         target_harness = None if clear_all else harness
         source = getattr(args, "source", None)
-        cleared_resolved_requests = 0
-        if source is None:
-            cleared_resolved_requests = store.clear_approval_requests(harness=target_harness, status="resolved")
+        try:
+            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+            approval_gate_grant = require_high_risk(
+                store.guard_home,
+                purpose="policy_clear",
+                approval_gate_input=gate_input,
+            )
+            cleared_resolved_requests = 0
+            if source is None:
+                cleared_resolved_requests = store.clear_approval_requests(harness=target_harness, status="resolved")
+            cleared_policies = store.clear_policy_decisions(
+                target_harness,
+                source,
+                approval_gate_grant=approval_gate_grant,
+            )
+        except ApprovalGateError as error:
+            return approval_gate_cli_payload(error)
         return {
             "history_cleared": True,
             "harness": target_harness,
             "source": source,
-            "cleared_policies": store.clear_policy_decisions(target_harness, source),
+            "cleared_policies": cleared_policies,
             "cleared_resolved_requests": cleared_resolved_requests,
             "exit_code": 0,
         }
-    item = apply_approval_resolution(
-        store=store,
-        request_id=args.request_id,
-        action=args.approval_action,
-        scope=args.scope,
-        workspace=str(workspace) if workspace is not None else None,
-        reason=args.reason,
-        now=_now(),
-    )
+    try:
+        gate_input = (
+            prompt_for_approval_gate(store.guard_home)
+            if _approval_resolution_needs_gate(
+                store,
+                action=str(args.approval_action),
+                scope=str(args.scope),
+            )
+            else None
+        )
+        item = apply_approval_resolution(
+            store=store,
+            request_id=args.request_id,
+            action=args.approval_action,
+            scope=args.scope,
+            workspace=str(workspace) if workspace is not None else None,
+            reason=args.reason,
+            now=_now(),
+            approval_gate_input=gate_input,
+        )
+    except ApprovalGateError as error:
+        return approval_gate_cli_payload(error)
     return {"resolved": True, "item": item}
+
+
+def _approval_resolution_needs_gate(store: GuardStore, *, action: str, scope: str) -> bool:
+    gate = approval_gate_public_config(store.guard_home)
+    if not gate.enabled:
+        return False
+    if scope == "global":
+        return True
+    if gate.cooldown_active:
+        return False
+    if action == "allow":
+        return True
+    return gate.strict_all_decisions
 
 
 def _auto_open_first_pending_request(*, store: GuardStore, workspace: Path | None) -> dict[str, object]:
