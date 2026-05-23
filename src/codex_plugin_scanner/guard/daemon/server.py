@@ -1000,6 +1000,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         handoff_query = urlencode({"handoffToken": handoff_token})
         self._write_json(
             {
+                "daemon_version": __version__,
                 "handoff_url": f"{local_origin}/v1/apps/{adapter.harness}/cloud?{handoff_query}",
                 "local_origin": local_origin,
                 "status": "ready",
