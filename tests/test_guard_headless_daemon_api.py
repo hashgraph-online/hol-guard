@@ -280,6 +280,8 @@ def test_cloud_app_handoff_start_response_is_not_cacheable(tmp_path: Path) -> No
 
     assert status == 200
     assert payload["local_origin"] == f"http://127.0.0.1:{daemon.port}"
+    assert isinstance(payload["daemon_version"], str)
+    assert payload["daemon_version"]
     assert headers["Cache-Control"] == "no-store, max-age=0"
     assert headers["Pragma"] == "no-cache"
     assert headers["Expires"] == "0"
