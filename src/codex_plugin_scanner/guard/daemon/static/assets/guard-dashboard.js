@@ -19182,7 +19182,7 @@ function ReviewDecisionCard(props) {
             reason: action === "allow" ? "approved in review" : "blocked in review"
           }),
           ...includeGateFields ? { approval_password: approvalPassword } : {},
-          ...includeGateFields && useCooldown ? { approval_gate_use_cooldown: true } : {}
+          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
         setResolved(action);
         setApprovalPassword("");

@@ -167,6 +167,21 @@ def test_approval_gate_cooldown_works_expires_and_revokes(tmp_path: Path) -> Non
     assert revoked.value.code == "approval_gate_required"
 
 
+def test_approval_gate_cooldown_opt_out_does_not_start_session(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store, cooldown_seconds=900)
+    _add_request(store, "req-no-cooldown")
+
+    _approve(
+        store,
+        "req-no-cooldown",
+        gate_input=ApprovalGateInput(password=PASSWORD, use_cooldown=False),
+        now="2026-04-11T00:00:00+00:00",
+    )
+
+    assert public_config(store.guard_home, now="2026-04-11T00:01:00+00:00").cooldown_active is False
+
+
 def test_approval_gate_cli_noninteractive_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
@@ -188,6 +203,31 @@ def test_approval_gate_cli_noninteractive_fails_closed(tmp_path: Path, monkeypat
     assert payload["error"] == "approval_gate_interactive_required"
     assert payload["exit_code"] == 4
     assert store.get_approval_request("req-cli")["status"] == "pending"
+
+
+def test_approval_gate_cli_noninteractive_block_without_strict_mode_does_not_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    _add_request(store, "req-cli-block")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+
+    payload = run_approval_command(
+        SimpleNamespace(
+            approvals_command="approve",
+            request_id="req-cli-block",
+            approval_action="block",
+            scope="artifact",
+            reason=None,
+        ),
+        store=store,
+        workspace=None,
+    )
+
+    assert payload["resolved"] is True
+    assert store.get_approval_request("req-cli-block")["status"] == "resolved"
 
 
 def test_approval_gate_settings_import_and_reset_cannot_disable_without_password(tmp_path: Path) -> None:

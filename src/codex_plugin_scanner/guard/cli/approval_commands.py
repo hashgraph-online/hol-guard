@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..approval_gate import ApprovalGateError, require_high_risk
+from ..approval_gate import public_config as approval_gate_public_config
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..codex_resume import retry_request_resume
 from ..config import load_guard_config
@@ -165,7 +166,15 @@ def run_approval_command(
             "exit_code": 0,
         }
     try:
-        gate_input = prompt_for_approval_gate(store.guard_home)
+        gate_input = (
+            prompt_for_approval_gate(store.guard_home)
+            if _approval_resolution_needs_gate(
+                store,
+                action=str(args.approval_action),
+                scope=str(args.scope),
+            )
+            else None
+        )
         item = apply_approval_resolution(
             store=store,
             request_id=args.request_id,
@@ -179,6 +188,15 @@ def run_approval_command(
     except ApprovalGateError as error:
         return approval_gate_cli_payload(error)
     return {"resolved": True, "item": item}
+
+
+def _approval_resolution_needs_gate(store: GuardStore, *, action: str, scope: str) -> bool:
+    gate = approval_gate_public_config(store.guard_home)
+    if not gate.enabled:
+        return False
+    if action == "allow" or scope == "global":
+        return True
+    return gate.strict_all_decisions
 
 
 def _auto_open_first_pending_request(*, store: GuardStore, workspace: Path | None) -> dict[str, object]:

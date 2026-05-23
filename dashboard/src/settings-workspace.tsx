@@ -1208,7 +1208,7 @@ type ApprovalGateCardProps = {
 
 function ApprovalGateCard(props: ApprovalGateCardProps) {
   const wasConfigured = props.gateConfig?.configured === true;
-  const showCurrentPassword = props.enabled && wasConfigured;
+  const showCurrentPassword = wasConfigured && props.gateConfig?.enabled === true;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const cooldownLabel = cooldownExpiresAt
