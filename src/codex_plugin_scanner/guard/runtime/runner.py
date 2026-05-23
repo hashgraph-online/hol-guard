@@ -941,6 +941,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         summary["remote_policy_sync_blocked"] = True
     summary["guard_events_v1"] = sync_guard_events(store)
     store.set_sync_payload("sync_summary", summary, now)
+    store.record_latest_guard_connect_sync_success(sync_payload=summary, now=now)
     return summary
 
 
