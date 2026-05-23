@@ -2636,6 +2636,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings",
             "/v1/settings/import",
             "/v1/settings/reset",
+            "/v1/approval-gate/cooldown/revoke",
             "/v1/daemon/repair",
             "/v1/notifications/setup",
         }:

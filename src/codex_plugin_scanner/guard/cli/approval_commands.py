@@ -194,7 +194,11 @@ def _approval_resolution_needs_gate(store: GuardStore, *, action: str, scope: st
     gate = approval_gate_public_config(store.guard_home)
     if not gate.enabled:
         return False
-    if action == "allow" or scope == "global":
+    if scope == "global":
+        return True
+    if gate.cooldown_active:
+        return False
+    if action == "allow":
         return True
     return gate.strict_all_decisions
 

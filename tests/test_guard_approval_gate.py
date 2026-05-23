@@ -7,6 +7,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -210,6 +211,38 @@ def test_approval_gate_cli_noninteractive_fails_closed(tmp_path: Path, monkeypat
     assert store.get_approval_request("req-cli")["status"] == "pending"
 
 
+def test_approval_gate_cli_noninteractive_uses_active_cooldown(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store, cooldown_seconds=900)
+    _add_request(store, "req-cooldown-prime")
+    _approve(
+        store,
+        "req-cooldown-prime",
+        gate_input=ApprovalGateInput(password=PASSWORD, use_cooldown=True),
+        now=datetime.now(timezone.utc).isoformat(),
+    )
+    _add_request(store, "req-cli-cooldown")
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+
+    payload = run_approval_command(
+        SimpleNamespace(
+            approvals_command="approve",
+            request_id="req-cli-cooldown",
+            approval_action="allow",
+            scope="artifact",
+            reason=None,
+        ),
+        store=store,
+        workspace=None,
+    )
+
+    assert payload["resolved"] is True
+    assert store.get_approval_request("req-cli-cooldown")["status"] == "resolved"
+
+
 def test_approval_gate_cli_noninteractive_block_without_strict_mode_does_not_prompt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -375,6 +408,16 @@ def test_approval_gate_daemon_api_cannot_bypass_password(tmp_path: Path) -> None
         with pytest.raises(urllib.error.HTTPError) as reset_error:
             urllib.request.urlopen(reset_request, timeout=5)
         reset_body = json.loads(reset_error.value.read().decode("utf-8"))
+
+        revoke_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/approval-gate/cooldown/revoke",
+            data=json.dumps({"approval_gate": {"password": PASSWORD}}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as revoke_error:
+            urllib.request.urlopen(revoke_request, timeout=5)
+        revoke_body = json.loads(revoke_error.value.read().decode("utf-8"))
     finally:
         daemon.stop()
 
@@ -382,10 +425,12 @@ def test_approval_gate_daemon_api_cannot_bypass_password(tmp_path: Path) -> None
     assert policy_error.value.code == 403
     assert sync_error.value.code == 403
     assert reset_error.value.code == 403
+    assert revoke_error.value.code == 401
     assert approval_body["error"] == "approval_gate_required"
     assert policy_body["error"] == "approval_gate_required"
     assert sync_body["error"] == "approval_gate_required"
     assert reset_body["error"] == "approval_gate_required"
+    assert revoke_body["error"] == "unauthorized"
     assert store.get_approval_request("req-daemon")["status"] == "pending"
     assert store.list_policy_decisions("codex") == []
 
