@@ -74,7 +74,12 @@ from ..desktop_notifications import (
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..receipts.manager import build_receipt
-from ..runtime.runner import GuardSyncNotConfiguredError, sync_supply_chain_bundle
+from ..runtime.runner import (
+    GuardSyncNotAvailableError,
+    GuardSyncNotConfiguredError,
+    sync_receipts,
+    sync_supply_chain_bundle,
+)
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
@@ -297,6 +302,57 @@ def _headless_action_state_payload(
             "timestamp": receipt.get("timestamp"),
         },
         "retryable": operation in {"install", "repair", "scan"},
+    }
+
+
+def _run_headless_cloud_sync(
+    *,
+    store: GuardStore,
+) -> None:
+    recorded_at = _now()
+    try:
+        sync_payload = sync_receipts(store)
+        summary = {
+            "status": "synced",
+            "synced_at": sync_payload.get("synced_at"),
+            "receipts_stored": sync_payload.get("receipts_stored", 0),
+        }
+    except GuardSyncNotConfiguredError as error:
+        summary = {
+            "status": "not_configured",
+            "message": str(error),
+        }
+    except GuardSyncNotAvailableError as error:
+        summary = {
+            "status": "not_available",
+            "message": str(error),
+        }
+    except Exception as error:
+        summary = {
+            "status": "pending",
+            "message": str(error),
+        }
+    store.set_sync_payload("headless_app_sync_summary", summary, recorded_at)
+
+
+def _queue_headless_cloud_sync(
+    *,
+    store: GuardStore,
+) -> dict[str, object]:
+    if store.get_sync_credentials() is None:
+        return {
+            "status": "not_configured",
+            "message": "Guard Cloud sync is not paired on this machine.",
+        }
+    threading.Thread(
+        target=_run_headless_cloud_sync,
+        kwargs={"store": store},
+        daemon=True,
+        name="guard-headless-app-cloud-sync",
+    ).start()
+    return {
+        "status": "queued",
+        "message": "Guard Cloud sync started.",
     }
 
 
@@ -925,7 +981,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result=result,
             workspace_id=self._optional_string(payload.get("workspace_id")),
         )
+        cloud_sync = _queue_headless_cloud_sync(store=self.server.store)  # type: ignore[attr-defined]
         return 200, {
+            "cloud_sync": cloud_sync,
             "harness": adapter.harness,
             "operation": operation,
             "result": result,
