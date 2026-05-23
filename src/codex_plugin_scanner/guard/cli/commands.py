@@ -30,6 +30,7 @@ from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError, require_high_risk
+from ..approval_gate import public_config as approval_gate_public_config
 from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
@@ -1427,6 +1428,15 @@ def _run_consumer_scan_with_mode(
     return run_consumer_scan(target, intended_harness=intended_harness, options=options)
 
 
+def _policy_write_needs_approval_gate(store: GuardStore, *, action: str, scope: str) -> bool:
+    gate = approval_gate_public_config(store.guard_home)
+    if not gate.enabled:
+        return False
+    if action == "allow" or scope == "global":
+        return True
+    return gate.strict_all_decisions
+
+
 def run_guard_command(
     args: argparse.Namespace,
     *,
@@ -1978,12 +1988,14 @@ def run_guard_command(
         _validate_policy_scope(args.scope, args.artifact_id, workspace, getattr(args, "publisher", None))
         expires_at = _resolve_policy_expiry(args)
         try:
-            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
-            approval_gate_grant = require_high_risk(
-                store.guard_home,
-                purpose="policy_write",
-                approval_gate_input=gate_input,
-            )
+            approval_gate_grant = None
+            if _policy_write_needs_approval_gate(store, action=args.policy_action, scope=args.scope):
+                gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+                approval_gate_grant = require_high_risk(
+                    store.guard_home,
+                    purpose="policy_write",
+                    approval_gate_input=gate_input,
+                )
             payload = record_policy(
                 store=store,
                 harness=args.harness,

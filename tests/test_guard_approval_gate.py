@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.cli.approval_commands import run_approval_comman
 from codex_plugin_scanner.guard.cli.commands import (
     _persist_claude_native_permission_policy,
     _queue_claude_native_approval_gate_fallback,
+    run_guard_command,
 )
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
@@ -266,6 +267,42 @@ def test_approval_gate_cli_noninteractive_block_without_strict_mode_does_not_pro
 
     assert payload["resolved"] is True
     assert store.get_approval_request("req-cli-block")["status"] == "resolved"
+
+
+def test_approval_gate_cli_deny_policy_write_without_strict_mode_does_not_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+
+    exit_code = run_guard_command(
+        SimpleNamespace(
+            guard_command="deny",
+            guard_home=str(store.guard_home),
+            home=str(tmp_path / "home"),
+            workspace=str(workspace),
+            harness="codex",
+            scope="artifact",
+            artifact_id="codex:project:deny-cli",
+            policy_action="block",
+            publisher=None,
+            reason=None,
+            owner=None,
+            expires_in_hours=None,
+            json=True,
+            cisco_mode="off",
+        ),
+        output_stream=io.StringIO(),
+    )
+
+    assert exit_code == 0
+    policy = GuardStore(store.guard_home).list_policy_decisions("codex")[0]
+    assert policy["action"] == "block"
+    assert policy["artifact_id"] == "codex:project:deny-cli"
 
 
 def test_approval_gate_settings_import_and_reset_cannot_disable_without_password(tmp_path: Path) -> None:
