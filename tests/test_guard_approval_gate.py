@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.consumer.service import record_policy
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.mcp_tool_calls import allow_tool_call
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 PASSWORD = "correct-password"
@@ -422,6 +423,61 @@ def test_approval_gate_direct_lower_layers_cannot_bypass(tmp_path: Path) -> None
         )
 
     assert store.list_policy_decisions("codex") == []
+
+
+def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_guard_device_metadata",
+        lambda _store: ("device-1", "MacBook Pro"),
+    )
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store: 0)
+    monkeypatch.setattr(guard_runner_module, "sync_guard_events", lambda _store: 0)
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "syncedAt": "2026-04-19T00:00:10+00:00",
+                    "exceptions": [
+                        {
+                            "scope": "artifact",
+                            "harness": "codex",
+                            "artifactId": "codex:project:cloud-allow",
+                            "action": "allow",
+                        }
+                    ],
+                }
+            ).encode("utf-8")
+
+    def _urlopen(_request, timeout):
+        return _Response()
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _urlopen)
+
+    payload = guard_runner_module.sync_receipts(store)
+
+    assert payload["remote_policies_stored"] == 0
+    assert payload["remote_policy_sync_blocked"] is True
+    assert store.list_policy_decisions("codex") == []
+    events = store.list_events(event_name="approval_gate/remote_policy_sync_blocked")
+    assert events[0]["payload"]["error"] == "approval_gate_required"
 
 
 def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Path) -> None:
