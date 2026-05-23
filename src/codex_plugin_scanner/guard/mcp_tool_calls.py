@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import PurePath
 
+from .approval_gate import ApprovalGateGrant
 from .config import DEFAULT_SECURITY_LEVEL, GuardConfig, resolve_risk_action
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
@@ -596,6 +597,7 @@ def allow_tool_call(
     signals: tuple[str, ...],
     remember: bool,
     risk_categories: tuple[str, ...] = (),
+    approval_gate_grant: ApprovalGateGrant | None = None,
 ) -> GuardReceipt:
     if remember:
         store.upsert_policy(
@@ -610,6 +612,7 @@ def allow_tool_call(
                 source="runtime-inline",
             ),
             now,
+            approval_gate_grant=approval_gate_grant,
         )
     store.record_inventory_artifact(
         artifact=artifact,

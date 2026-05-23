@@ -10,6 +10,7 @@ import {
   fetchReceipts,
   fetchRequest,
   fetchRuntimeSnapshot,
+  fetchSettings,
   guardAwareHref,
   repairApprovalCenter,
   resolveRequestWithQueueResult,
@@ -36,6 +37,7 @@ function LazyFallback() {
   );
 }
 import type {
+  GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardCodexResumeResult,
@@ -191,6 +193,7 @@ export function App() {
   const [resolvedRequestId, setResolvedRequestId] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [clearConfirm, setClearConfirm] = useState<{ harness?: string; all?: boolean } | null>(null);
+  const [approvalGate, setApprovalGate] = useState<GuardApprovalGatePublicConfig | null>(null);
   const resolutionInFlight = useRef(false);
 
   useEffect(() => {
@@ -257,6 +260,18 @@ export function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSettings()
+      .then((payload) => {
+        if (!cancelled && payload.settings.approval_gate !== undefined) {
+          setApprovalGate(payload.settings.approval_gate);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -468,6 +483,8 @@ export function App() {
     scope: DecisionScope;
     workspace?: string;
     reason: string;
+    approval_password?: string;
+    approval_gate_use_cooldown?: boolean;
   }) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
@@ -625,6 +642,7 @@ export function App() {
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
       codexResume={codexResume}
+      approvalGate={approvalGate}
       onRetryResume={handleRetryResume}
       homeContent={
         <Suspense fallback={<LazyFallback />}>

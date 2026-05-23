@@ -61,6 +61,7 @@ import {
   standardScopeChoicesForRequest,
 } from "./approval-scopes";
 import type {
+  GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardCodexResumeResult,
@@ -97,6 +98,7 @@ type ReviewWorkspaceProps = {
   runtime: GuardRuntimeSnapshot | null;
   resolutionMessage: string | null;
   codexResume: GuardCodexResumeResult | null;
+  approvalGate?: GuardApprovalGatePublicConfig | null;
   onRetryResume?: () => void;
   onOpenRequest: (requestId: string) => void;
   onResolve: (payload: {
@@ -105,6 +107,8 @@ type ReviewWorkspaceProps = {
     scope: DecisionScope;
     workspace?: string;
     reason: string;
+    approval_password?: string;
+    approval_gate_use_cooldown?: boolean;
   }) => Promise<void> | void;
   onGoHome: () => void;
 };
@@ -286,6 +290,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
           detail={detail}
           onResolve={props.onResolve}
           onGoHome={props.onGoHome}
+          approvalGate={props.approvalGate ?? null}
         />
       </div>
     </div>
@@ -678,6 +683,7 @@ function ReviewDecisionCard(props: {
   detail: ReviewViewModel | null;
   onResolve: ReviewWorkspaceProps["onResolve"];
   onGoHome: () => void;
+  approvalGate: GuardApprovalGatePublicConfig | null;
 }) {
   const detail = props.detail;
   const item = detail?.item ?? null;
@@ -688,6 +694,8 @@ function ReviewDecisionCard(props: {
   const [showEvidence, setShowEvidence] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [approvalPassword, setApprovalPassword] = useState("");
+  const [useCooldown, setUseCooldown] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
   const availableScopeChoices = useMemo(
@@ -714,6 +722,8 @@ function ReviewDecisionCard(props: {
       setSubmitting(null);
       setLastAction(null);
       setErrorMessage(null);
+      setApprovalPassword("");
+      setUseCooldown(false);
     }
   }, [item?.request_id]);
 
@@ -753,13 +763,21 @@ function ReviewDecisionCard(props: {
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve(buildDecisionPayload({
-          item,
-          action,
-          scope,
-          reason: action === "allow" ? "approved in review" : "blocked in review",
-        }));
+        const gate = props.approvalGate;
+        const includeGateFields = gate?.enabled === true && gate?.configured === true;
+        await props.onResolve({
+          ...buildDecisionPayload({
+            item,
+            action,
+            scope,
+            reason: action === "allow" ? "approved in review" : "blocked in review",
+          }),
+          ...(includeGateFields ? { approval_password: approvalPassword } : {}),
+          ...(includeGateFields && useCooldown ? { approval_gate_use_cooldown: true } : {}),
+        });
         setResolved(action);
+        setApprovalPassword("");
+        setUseCooldown(false);
         timerRef.current = setTimeout(() => setResolved(null), 2000);
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
@@ -767,7 +785,7 @@ function ReviewDecisionCard(props: {
         setSubmitting(null);
       }
     },
-    [item, scope, props.onResolve]
+    [item, scope, props.onResolve, props.approvalGate, approvalPassword, useCooldown]
   );
 
   const handleRequestResolve = useCallback(
@@ -795,6 +813,14 @@ function ReviewDecisionCard(props: {
       handleRequestResolve(lastAction);
     }
   }, [handleRequestResolve, lastAction]);
+
+  const handleApprovalPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalPassword(event.target.value);
+  }, []);
+
+  const handleUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setUseCooldown(event.target.checked);
+  }, []);
 
   if (!detail || !item) {
     return (
@@ -958,6 +984,16 @@ function ReviewDecisionCard(props: {
               </div>
             </div>
           </div>
+        )}
+
+        {props.approvalGate?.enabled === true && props.approvalGate?.configured === true && (
+          <ApprovalPasswordPrompt
+            gate={props.approvalGate}
+            approvalPassword={approvalPassword}
+            useCooldown={useCooldown}
+            onApprovalPasswordChange={handleApprovalPasswordChange}
+            onUseCooldownChange={handleUseCooldownChange}
+          />
         )}
 
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1210,6 +1246,45 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
           </ul>
         </div>
       </div>
+    </div>
+  );
+}
+
+type ApprovalPasswordPromptProps = {
+  gate: GuardApprovalGatePublicConfig;
+  approvalPassword: string;
+  useCooldown: boolean;
+  onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onUseCooldownChange: (event: ChangeEvent<HTMLInputElement>) => void;
+};
+
+function ApprovalPasswordPrompt(props: ApprovalPasswordPromptProps) {
+  const showCooldownOption =
+    props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active;
+
+  return (
+    <div className="mt-5 space-y-3 rounded-xl border border-slate-100 bg-slate-50/40 p-4">
+      <label className="block">
+        <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+        <input
+          type="password"
+          autoComplete="current-password"
+          value={props.approvalPassword}
+          onChange={props.onApprovalPasswordChange}
+          className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+        />
+      </label>
+      {showCooldownOption && (
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-brand-dark">
+          <input
+            type="checkbox"
+            checked={props.useCooldown}
+            onChange={props.onUseCooldownChange}
+            className="h-4 w-4 accent-brand-blue"
+          />
+          Skip password for next {props.gate.cooldown_seconds / 60 >= 60 ? `${props.gate.cooldown_seconds / 3600} hour` : `${props.gate.cooldown_seconds / 60} minutes`} (use cooldown)
+        </label>
+      )}
     </div>
   );
 }

@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
 from .edge_events import build_receipt_event
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .runtime.scanner_cache import scanner_cache_key
@@ -1337,7 +1338,19 @@ class GuardStore:
         with self._connect() as connection:
             return self._cloud_workspace_id_from_connection(connection)
 
-    def upsert_policy(self, decision: PolicyDecision, now: str) -> None:
+    def upsert_policy(
+        self,
+        decision: PolicyDecision,
+        now: str,
+        *,
+        approval_gate_grant: ApprovalGateGrant | None = None,
+    ) -> None:
+        require_policy_write(
+            self.guard_home,
+            decision=decision,
+            approval_gate_grant=approval_gate_grant,
+            now=now,
+        )
         artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
         with self._connect() as connection:
             connection.execute(
@@ -1374,7 +1387,20 @@ class GuardStore:
                 ),
             )
 
-    def replace_remote_policies(self, decisions: list[PolicyDecision], now: str) -> None:
+    def replace_remote_policies(
+        self,
+        decisions: list[PolicyDecision],
+        now: str,
+        *,
+        approval_gate_grant: ApprovalGateGrant | None = None,
+    ) -> None:
+        for decision in decisions:
+            require_policy_write(
+                self.guard_home,
+                decision=decision,
+                approval_gate_grant=approval_gate_grant,
+                now=now,
+            )
         with self._connect() as connection:
             connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
             for decision in decisions:
@@ -1865,7 +1891,15 @@ class GuardStore:
         resolution_scope: str,
         reason: str | None,
         resolved_at: str,
+        approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> None:
+        require_request_resolution(
+            self.guard_home,
+            resolution_action=resolution_action,
+            resolution_scope=resolution_scope,
+            approval_gate_grant=approval_gate_grant,
+            now=resolved_at,
+        )
         with self._connect() as connection:
             persist_approval_resolution(
                 connection,
@@ -1884,7 +1918,15 @@ class GuardStore:
         resolution_scope: str,
         reason: str | None,
         resolved_at: str,
+        approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> bool:
+        require_request_resolution(
+            self.guard_home,
+            resolution_action=resolution_action,
+            resolution_scope=resolution_scope,
+            approval_gate_grant=approval_gate_grant,
+            now=resolved_at,
+        )
         with self._connect() as connection:
             return persist_one_resolution(
                 connection,
@@ -1904,7 +1946,15 @@ class GuardStore:
         resolution_scope: str,
         reason: str | None,
         resolved_at: str,
+        approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> list[str]:
+        require_request_resolution(
+            self.guard_home,
+            resolution_action=resolution_action,
+            resolution_scope=resolution_scope,
+            approval_gate_grant=approval_gate_grant,
+            now=resolved_at,
+        )
         with self._connect() as connection:
             return persist_duplicate_resolutions(
                 connection,
@@ -1924,7 +1974,15 @@ class GuardStore:
         resolution_scope: str,
         reason: str | None,
         resolved_at: str,
+        approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> dict[str, object]:
+        require_request_resolution(
+            self.guard_home,
+            resolution_action=resolution_action,
+            resolution_scope=resolution_scope,
+            approval_gate_grant=approval_gate_grant,
+            now=resolved_at,
+        )
         with self._connect() as connection:
             return persist_queue_resolution(
                 connection,
@@ -1947,7 +2005,15 @@ class GuardStore:
         resolution_scope: str,
         reason: str | None,
         resolved_at: str,
+        approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> list[str]:
+        require_request_resolution(
+            self.guard_home,
+            resolution_action=resolution_action,
+            resolution_scope=resolution_scope,
+            approval_gate_grant=approval_gate_grant,
+            now=resolved_at,
+        )
         if scope == "workspace":
             if harness is None or workspace is None:
                 return []
@@ -2100,7 +2166,15 @@ class GuardStore:
         resolution_scope: str,
         reason: str | None,
         resolved_at: str,
+        approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> None:
+        require_request_resolution(
+            self.guard_home,
+            resolution_action=resolution_action,
+            resolution_scope=resolution_scope,
+            approval_gate_grant=approval_gate_grant,
+            now=resolved_at,
+        )
         with self._connect() as connection:
             persist_bulk_resolution(
                 connection,
@@ -2204,7 +2278,9 @@ class GuardStore:
         artifact_hash_is_null: bool = False,
         workspace: str | None = None,
         publisher: str | None = None,
+        approval_gate_grant: ApprovalGateGrant | None = None,
     ) -> int:
+        require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant)
         conditions: list[str] = []
         params: list[object] = []
         if harness is not None:

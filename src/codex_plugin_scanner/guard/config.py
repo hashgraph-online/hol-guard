@@ -16,6 +16,7 @@ try:  # pragma: no cover - Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
+from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
 from .models import GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
@@ -379,12 +380,19 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "telemetry": config.telemetry,
         "sync": config.sync,
         "billing": config.billing,
+        "approval_gate": public_config(config.guard_home).to_dict(),
     }
 
 
-def update_guard_settings(guard_home: Path, payload: dict[str, object]) -> GuardConfig:
+def update_guard_settings(
+    guard_home: Path,
+    payload: dict[str, object],
+    *,
+    approval_gate_grant: ApprovalGateGrant | None = None,
+) -> GuardConfig:
     """Persist safe local Guard settings to config.toml and return the updated config."""
 
+    require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     current = _read_toml(guard_home / "config.toml")
     current_config = load_guard_config(guard_home)
     next_payload = dict(current)
@@ -405,9 +413,14 @@ def update_guard_settings(guard_home: Path, payload: dict[str, object]) -> Guard
     return load_guard_config(guard_home)
 
 
-def reset_guard_settings(guard_home: Path) -> GuardConfig:
+def reset_guard_settings(
+    guard_home: Path,
+    *,
+    approval_gate_grant: ApprovalGateGrant | None = None,
+) -> GuardConfig:
     """Reset editable local Guard settings while preserving non-dashboard config."""
 
+    require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     current = _read_toml(guard_home / "config.toml")
     next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
     _write_guard_config(guard_home / "config.toml", next_payload)

@@ -29,6 +29,7 @@ from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..approval_gate import ApprovalGateError, require_high_risk
 from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
@@ -166,6 +167,7 @@ from .approval_commands import (
     run_approval_resume_command,
     run_approval_retry_hint_command,
 )
+from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
 from .connect_flow import (
     DEFAULT_GUARD_CONNECT_URL,
@@ -1823,15 +1825,26 @@ def run_guard_command(
             policy_artifact_hash = getattr(args, "artifact_hash", None)
             workspace = getattr(args, "policy_workspace", None)
             publisher = getattr(args, "publisher", None)
-            cleared = store.clear_policy_decisions(
-                None if clear_all else harness,
-                getattr(args, "source", None),
-                scope=scope,
-                artifact_id=artifact_id,
-                artifact_hash=policy_artifact_hash,
-                workspace=workspace,
-                publisher=publisher,
-            )
+            try:
+                gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+                approval_gate_grant = require_high_risk(
+                    store.guard_home,
+                    purpose="policy_clear",
+                    approval_gate_input=gate_input,
+                )
+                cleared = store.clear_policy_decisions(
+                    None if clear_all else harness,
+                    getattr(args, "source", None),
+                    scope=scope,
+                    artifact_id=artifact_id,
+                    artifact_hash=policy_artifact_hash,
+                    workspace=workspace,
+                    publisher=publisher,
+                    approval_gate_grant=approval_gate_grant,
+                )
+            except ApprovalGateError as error:
+                _emit("policies", approval_gate_cli_payload(error), getattr(args, "json", False))
+                return 4
             _emit(
                 "policies",
                 {
@@ -1858,6 +1871,9 @@ def run_guard_command(
         if settings_sub == "set":
             try:
                 config = _update_guard_cli_settings(args=args, config=config, guard_home=guard_home)
+            except ApprovalGateError as error:
+                _emit("settings", approval_gate_cli_payload(error), getattr(args, "json", False))
+                return 4
             except ValueError as error:
                 print(str(error), file=sys.stderr)
                 return 2
@@ -1961,18 +1977,29 @@ def run_guard_command(
     if args.guard_command in {"allow", "deny"}:
         _validate_policy_scope(args.scope, args.artifact_id, workspace, getattr(args, "publisher", None))
         expires_at = _resolve_policy_expiry(args)
-        payload = record_policy(
-            store=store,
-            harness=args.harness,
-            action=args.policy_action,
-            scope=args.scope,
-            artifact_id=args.artifact_id,
-            workspace=str(workspace) if workspace else None,
-            publisher=getattr(args, "publisher", None),
-            reason=args.reason,
-            owner=getattr(args, "owner", None),
-            expires_at=expires_at,
-        )
+        try:
+            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+            approval_gate_grant = require_high_risk(
+                store.guard_home,
+                purpose="policy_write",
+                approval_gate_input=gate_input,
+            )
+            payload = record_policy(
+                store=store,
+                harness=args.harness,
+                action=args.policy_action,
+                scope=args.scope,
+                artifact_id=args.artifact_id,
+                workspace=str(workspace) if workspace else None,
+                publisher=getattr(args, "publisher", None),
+                reason=args.reason,
+                owner=getattr(args, "owner", None),
+                expires_at=expires_at,
+                approval_gate_grant=approval_gate_grant,
+            )
+        except ApprovalGateError as error:
+            _emit(args.guard_command, approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 4
         _emit(args.guard_command, {"decision": payload}, getattr(args, "json", False))
         return 0
 
@@ -2661,11 +2688,20 @@ def run_guard_command(
                         approval_source="inline",
                     )
                     store.add_receipt(receipt)
+                else:
+                    _queue_claude_native_approval_gate_fallback(
+                        store=store,
+                        harness=policy_harness,
+                        artifact=runtime_artifact,
+                        artifact_digest=runtime_artifact_hash,
+                        approval_center_url=load_guard_daemon_url(guard_home) or "http://127.0.0.1:5474",
+                        action_envelope=action_envelope,
+                    )
                 _record_harness_usage_for_hook(
                     store=store,
                     action_envelope=action_envelope,
                     payload=payload,
-                    policy_action="allow",
+                    policy_action="allow" if saved else "require-reapproval",
                 )
                 return 0
             changed_capabilities = [runtime_artifact.artifact_type]
@@ -3706,7 +3742,7 @@ def _persist_claude_native_permission_policy(
             },
             now,
         )
-    except (OSError, sqlite3.Error):
+    except (ApprovalGateError, OSError, sqlite3.Error):
         return False
     return True
 
@@ -4559,6 +4595,16 @@ def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object
 
 def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig, guard_home: Path) -> GuardConfig:
     settings_command = getattr(args, "settings_set_command", None)
+    gate_input = prompt_for_approval_gate(guard_home, use_cooldown=False)
+    approval_gate_grant = require_high_risk(
+        guard_home,
+        purpose="settings_write",
+        approval_gate_input=gate_input,
+    )
+
+    def persist_settings(payload: dict[str, object]) -> GuardConfig:
+        return update_guard_settings(guard_home, payload, approval_gate_grant=approval_gate_grant)
+
     if settings_command == "security-level":
         payload: dict[str, object] = {"security_level": args.security_level}
         if args.security_level in _NAMED_SECURITY_LEVELS:
@@ -4566,7 +4612,7 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
             payload["harness_risk_actions"] = {}
         elif args.security_level == "custom":
             payload["risk_actions"] = _current_effective_risk_actions(config)
-        return update_guard_settings(guard_home, payload)
+        return persist_settings(payload)
     if settings_command == "preset":
         preset = str(args.preset)
         payload_preset: dict[str, object] = {"security_level": preset}
@@ -4575,26 +4621,26 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
             payload_preset["harness_risk_actions"] = {}
         elif preset == "custom":
             payload_preset["risk_actions"] = _current_effective_risk_actions(config)
-        return update_guard_settings(guard_home, payload_preset)
+        return persist_settings(payload_preset)
     if settings_command == "secret-files":
         action_map = {"ask": "require-reapproval", "warn": "warn", "allow": "allow"}
         mapped = action_map.get(str(args.action), "warn")
         risk_actions = dict(config.risk_actions or {})
         risk_actions["local_secret_read"] = mapped
-        return update_guard_settings(guard_home, {"risk_actions": risk_actions})
+        return persist_settings({"risk_actions": risk_actions})
     if settings_command == "network":
         action_map_net = {"warn": "warn", "ask": "require-reapproval", "block": "block"}
         mapped_net = action_map_net.get(str(args.action), "warn")
         risk_actions_net = dict(config.risk_actions or {})
         risk_actions_net["network_egress"] = mapped_net
-        return update_guard_settings(guard_home, {"risk_actions": risk_actions_net})
+        return persist_settings({"risk_actions": risk_actions_net})
     if settings_command == "encoded-payloads":
         action_map_enc = {"warn": "warn", "ask": "require-reapproval", "block": "block"}
         mapped_enc = action_map_enc.get(str(args.action), "warn")
         risk_actions_enc = dict(config.risk_actions or {})
         risk_actions_enc["encoded_execution"] = mapped_enc
         risk_actions_enc["encoded_exfiltration"] = mapped_enc
-        return update_guard_settings(guard_home, {"risk_actions": risk_actions_enc})
+        return persist_settings({"risk_actions": risk_actions_enc})
     if settings_command in _SETTINGS_POLICY_RISK_ACTIONS:
         policy = str(getattr(args, "policy", "")).strip().lower()
         mapped_actions = _SETTINGS_POLICY_RISK_ACTIONS[settings_command].get(policy)
@@ -4602,7 +4648,7 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
             raise ValueError(f"Unsupported Guard settings policy '{policy}' for {settings_command}.")
         risk_actions = dict(config.risk_actions or {})
         risk_actions.update(mapped_actions)
-        return update_guard_settings(guard_home, {"risk_actions": risk_actions})
+        return persist_settings({"risk_actions": risk_actions})
     if settings_command == "risk":
         risk_class = _guard_risk_action_key(str(args.risk_class))
         action = str(args.action)
@@ -4615,16 +4661,14 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
                 if isinstance(values, dict)
             }
             harness_actions.setdefault(harness_key, {})[risk_class] = action
-            return update_guard_settings(
-                guard_home,
+            return persist_settings(
                 {
                     "harness_risk_actions": harness_actions,
                 },
             )
         risk_actions = dict(config.risk_actions or {})
         risk_actions[risk_class] = action
-        return update_guard_settings(
-            guard_home,
+        return persist_settings(
             {
                 "risk_actions": risk_actions,
             },
@@ -7965,6 +8009,51 @@ def _runtime_detection(harness: str, artifact: GuardArtifact) -> HarnessDetectio
         config_paths=(artifact.config_path,),
         artifacts=(artifact,),
     )
+
+
+def _queue_claude_native_approval_gate_fallback(
+    *,
+    store: GuardStore,
+    harness: str,
+    artifact: GuardArtifact,
+    artifact_digest: str,
+    approval_center_url: str,
+    action_envelope: GuardActionEnvelope | None = None,
+) -> list[dict[str, object]]:
+    now = _now()
+    queued = queue_blocked_approvals(
+        detection=_runtime_detection(harness, artifact),
+        evaluation={
+            "artifacts": [
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "artifact_hash": artifact_digest,
+                    "artifact_type": artifact.artifact_type,
+                    "policy_action": "require-reapproval",
+                    "changed_fields": [artifact.artifact_type, "claude-native-approval-gate"],
+                    "source_scope": artifact.source_scope,
+                    "config_path": artifact.config_path,
+                    "risk_summary": "Native Claude approval requires the HOL Guard approval password.",
+                    "risk_signals": ["approval_gate_required", "claude_native_approval"],
+                    "action_envelope_json": _action_envelope_json(action_envelope),
+                }
+            ]
+        },
+        store=store,
+        approval_center_url=approval_center_url,
+        now=now,
+    )
+    store.add_event(
+        "approval_gate/native_fallback_queued",
+        {
+            "harness": harness,
+            "artifact_id": artifact.artifact_id,
+            "queued_count": len(queued),
+        },
+        now,
+    )
+    return queued
 
 
 def _runtime_capabilities_summary(artifact: GuardArtifact) -> str:

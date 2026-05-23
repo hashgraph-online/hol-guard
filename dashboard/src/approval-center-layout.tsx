@@ -88,6 +88,7 @@ import {
   normalizeDecisionScope,
 } from "./approval-scopes";
 import type {
+  GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardCodexResumeResult,
@@ -136,6 +137,7 @@ type LayoutProps = {
   activeRequestId: string | null;
   resolutionMessage: string | null;
   codexResume: GuardCodexResumeResult | null;
+  approvalGate?: GuardApprovalGatePublicConfig | null;
   homeContent: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
@@ -150,6 +152,8 @@ type LayoutProps = {
     scope: DecisionScope;
     workspace?: string;
     reason: string;
+    approval_password?: string;
+    approval_gate_use_cooldown?: boolean;
   }) => void;
   onBulkApprove?: (ids: string[]) => void;
   onBulkBlock?: (ids: string[], reason: string) => void;
@@ -250,6 +254,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 runtime={props.runtime.kind === "ready" ? props.runtime.snapshot : null}
                 resolutionMessage={props.resolutionMessage}
                 codexResume={props.codexResume}
+                approvalGate={props.approvalGate ?? null}
                 onOpenRequest={props.onOpenRequest}
                 onResolve={props.onResolve}
                 onGoHome={props.onGoHome}
