@@ -257,9 +257,32 @@ function buildConsequenceSummary(settings: GuardSettings): string {
   return "";
 }
 
-function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
+export function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
   if (saved === null || draft === null) return false;
   return JSON.stringify(saved) !== JSON.stringify(draft);
+}
+
+export function applyApprovalGateDraft(
+  settings: GuardSettings,
+  updates: {
+    enabled: boolean;
+    cooldown_seconds: number;
+  }
+): GuardSettings {
+  const gate = settings.approval_gate;
+  return {
+    ...settings,
+    approval_gate: {
+      enabled: updates.enabled,
+      configured: gate?.configured ?? false,
+      cooldown_seconds: updates.cooldown_seconds,
+      cooldown_active: gate?.cooldown_active ?? false,
+      cooldown_expires_at: gate?.cooldown_expires_at ?? null,
+      locked_until: gate?.locked_until ?? null,
+      fail_closed: gate?.fail_closed ?? false,
+      strict_all_decisions: gate?.strict_all_decisions ?? false,
+    },
+  };
 }
 
 function protectionModeHelp(mode: GuardSettings["mode"]): string {
@@ -451,9 +474,18 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   );
 
   const handleApprovalGateToggle = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setApprovalGateEnabled(event.target.checked);
+    const checked = event.target.checked;
+    setApprovalGateEnabled(checked);
+    setDraft((value) =>
+      value === null
+        ? value
+        : applyApprovalGateDraft(value, {
+          enabled: checked,
+          cooldown_seconds: approvalGateCooldown,
+        })
+    );
     setSaveError(null);
-  }, []);
+  }, [approvalGateCooldown]);
 
   const handleApprovalGateNewPassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setApprovalGateNewPassword(event.target.value);
@@ -468,9 +500,18 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, []);
 
   const handleApprovalGateCooldownChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    setApprovalGateCooldown(Number(event.target.value));
+    const next = Number(event.target.value);
+    setApprovalGateCooldown(next);
+    setDraft((value) =>
+      value === null
+        ? value
+        : applyApprovalGateDraft(value, {
+          enabled: approvalGateEnabled,
+          cooldown_seconds: next,
+        })
+    );
     setSaveError(null);
-  }, []);
+  }, [approvalGateEnabled]);
 
   const handleRevokePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setRevokePassword(event.target.value);

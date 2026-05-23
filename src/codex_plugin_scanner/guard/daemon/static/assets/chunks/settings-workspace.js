@@ -198,6 +198,22 @@ function hasUnsavedChanges(saved, draft) {
   if (saved === null || draft === null) return false;
   return JSON.stringify(saved) !== JSON.stringify(draft);
 }
+function applyApprovalGateDraft(settings, updates) {
+  const gate = settings.approval_gate;
+  return {
+    ...settings,
+    approval_gate: {
+      enabled: updates.enabled,
+      configured: gate?.configured ?? false,
+      cooldown_seconds: updates.cooldown_seconds,
+      cooldown_active: gate?.cooldown_active ?? false,
+      cooldown_expires_at: gate?.cooldown_expires_at ?? null,
+      locked_until: gate?.locked_until ?? null,
+      fail_closed: gate?.fail_closed ?? false,
+      strict_all_decisions: gate?.strict_all_decisions ?? false
+    }
+  };
+}
 function protectionModeHelp(mode) {
   if (mode === "enforce") {
     return "Guard blocks risky actions until a saved decision allows them.";
@@ -373,9 +389,16 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     []
   );
   const handleApprovalGateToggle = reactExports.useCallback((event) => {
-    setApprovalGateEnabled(event.target.checked);
+    const checked = event.target.checked;
+    setApprovalGateEnabled(checked);
+    setDraft(
+      (value) => value === null ? value : applyApprovalGateDraft(value, {
+        enabled: checked,
+        cooldown_seconds: approvalGateCooldown
+      })
+    );
     setSaveError(null);
-  }, []);
+  }, [approvalGateCooldown]);
   const handleApprovalGateNewPassword = reactExports.useCallback((event) => {
     setApprovalGateNewPassword(event.target.value);
   }, []);
@@ -386,9 +409,16 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     setApprovalGateCurrentPassword(event.target.value);
   }, []);
   const handleApprovalGateCooldownChange = reactExports.useCallback((event) => {
-    setApprovalGateCooldown(Number(event.target.value));
+    const next = Number(event.target.value);
+    setApprovalGateCooldown(next);
+    setDraft(
+      (value) => value === null ? value : applyApprovalGateDraft(value, {
+        enabled: approvalGateEnabled,
+        cooldown_seconds: next
+      })
+    );
     setSaveError(null);
-  }, []);
+  }, [approvalGateEnabled]);
   const handleRevokePasswordChange = reactExports.useCallback((event) => {
     setRevokePassword(event.target.value);
     setRevokeError(null);
@@ -1072,7 +1102,9 @@ function ApprovalGateCard(props) {
 }
 export {
   SettingsWorkspace,
+  applyApprovalGateDraft,
   buildClearPolicyPayload,
+  hasUnsavedChanges,
   resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription
 };

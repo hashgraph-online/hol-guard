@@ -16,7 +16,7 @@ import {
   resolveRequestWithQueueResult,
   retryResume,
 } from "./guard-api";
-import { ApprovalCenterLayout } from "./approval-center-layout";
+import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
 import { buildClearPayload } from "./clear-policy-payload";
 import { normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
@@ -513,10 +513,10 @@ export function App() {
     setCodexResume(updated);
   }, [resolvedRequestId]);
 
-  const handleBulkApprove = useCallback(async (ids: string[]) => {
+  const handleBulkApprove = useCallback(async (ids: string[], gateCredentials?: BulkGateCredentials) => {
     const results = await Promise.allSettled(
       ids.map((id) =>
-        resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "" })
+        resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
       )
     );
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -530,10 +530,10 @@ export function App() {
     await refreshStateAfterAction();
   }, [refreshStateAfterAction, setResolutionMessage]);
 
-  const handleBulkBlock = useCallback(async (ids: string[], reason: string) => {
+  const handleBulkBlock = useCallback(async (ids: string[], reason: string, gateCredentials?: BulkGateCredentials) => {
     const results = await Promise.allSettled(
       ids.map((id) =>
-        resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason })
+        resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason, ...gateCredentials })
       )
     );
     const succeeded = results.filter((result) => result.status === "fulfilled").length;

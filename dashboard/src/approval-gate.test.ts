@@ -1,10 +1,32 @@
 import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { applyApprovalGateDraft, hasUnsavedChanges } from "./settings-workspace";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new Error(`Assertion failed: ${message}`);
   }
+}
+
+function buildSettings(approvalGate?: GuardApprovalGatePublicConfig): GuardSettings {
+  return {
+    mode: "prompt",
+    security_level: "balanced",
+    default_action: "warn",
+    unknown_publisher_action: "review",
+    changed_hash_action: "require-reapproval",
+    new_network_domain_action: "warn",
+    subprocess_action: "warn",
+    risk_actions: {},
+    risk_action_overrides: {},
+    harness_risk_actions: {},
+    approval_wait_timeout_seconds: 120,
+    approval_surface_policy: "auto-open-once",
+    telemetry: false,
+    sync: false,
+    billing: false,
+    ...(approvalGate !== undefined ? { approval_gate: approvalGate } : {}),
+  };
 }
 
 function testApprovalGatePublicConfigEnabled(): void {
@@ -125,11 +147,76 @@ function testApprovalGatePasswordFieldsNotPersisted(): void {
   );
 }
 
+function testApprovalGateToggleReflectedInDraftApprovalGate(): void {
+  const savedSettings = buildSettings();
+  const draftSettings = applyApprovalGateDraft(savedSettings, { enabled: true, cooldown_seconds: 900 });
+  assert(
+    draftSettings.approval_gate?.enabled === true,
+    "toggling enabled should create a draft approval_gate value"
+  );
+  assert(
+    hasUnsavedChanges(savedSettings, draftSettings),
+    "hasUnsavedChanges should return true after approval gate toggle"
+  );
+}
+
+function testApprovalGateCooldownReflectedInDraftApprovalGate(): void {
+  const savedGate: GuardApprovalGatePublicConfig = {
+    enabled: true,
+    configured: true,
+    cooldown_seconds: 900,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: false,
+    strict_all_decisions: false,
+  };
+  const savedSettings = buildSettings(savedGate);
+  const draftSettings = applyApprovalGateDraft(savedSettings, { enabled: true, cooldown_seconds: 3600 });
+  assert(
+    draftSettings.approval_gate?.cooldown_seconds === 3600,
+    "changing cooldown_seconds should update the draft approval_gate value"
+  );
+  assert(
+    hasUnsavedChanges(savedSettings, draftSettings),
+    "hasUnsavedChanges should return true after approval gate cooldown change"
+  );
+}
+
+function testBulkApproveGateCredentialsPayload(): void {
+  type BulkPayload = {
+    requestId: string;
+    action: string;
+    scope: string;
+    reason: string;
+    approval_password?: string;
+    approval_gate_use_cooldown?: boolean;
+  };
+  const gateCredentials = { approval_password: "secret123", approval_gate_use_cooldown: false };
+  const buildBulkPayload = (id: string, creds?: typeof gateCredentials): BulkPayload => ({
+    requestId: id,
+    action: "allow",
+    scope: "artifact",
+    reason: "",
+    ...creds,
+  });
+  const withGate = buildBulkPayload("req-1", gateCredentials);
+  assert(withGate.approval_password === "secret123", "bulk payload should include approval_password when gate credentials provided");
+  assert(withGate.approval_gate_use_cooldown === false, "bulk payload should include approval_gate_use_cooldown when gate credentials provided");
+
+  const withoutGate = buildBulkPayload("req-2", undefined);
+  assert(!("approval_password" in withoutGate), "bulk payload should not include approval_password when no gate credentials");
+  assert(!("approval_gate_use_cooldown" in withoutGate), "bulk payload should not include approval_gate_use_cooldown when no gate credentials");
+}
+
 const tests: Array<[string, () => void]> = [
   ["testApprovalGatePublicConfigEnabled", testApprovalGatePublicConfigEnabled],
   ["testApprovalGatePublicConfigDisabled", testApprovalGatePublicConfigDisabled],
   ["testApprovalGateCooldownLabels", testApprovalGateCooldownLabels],
   ["testApprovalGatePasswordFieldsNotPersisted", testApprovalGatePasswordFieldsNotPersisted],
+  ["testApprovalGateToggleReflectedInDraftApprovalGate", testApprovalGateToggleReflectedInDraftApprovalGate],
+  ["testApprovalGateCooldownReflectedInDraftApprovalGate", testApprovalGateCooldownReflectedInDraftApprovalGate],
+  ["testBulkApproveGateCredentialsPayload", testBulkApproveGateCredentialsPayload],
 ];
 
 let passed = 0;

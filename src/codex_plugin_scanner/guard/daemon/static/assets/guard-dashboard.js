@@ -19793,6 +19793,7 @@ function ApprovalCenterLayout(props) {
       {
         requests: props.requests.items,
         activeRequestId: props.activeRequestId,
+        approvalGate: props.approvalGate ?? null,
         onClose: handleCloseMobileQueue,
         onOpenRequest: props.onOpenRequest,
         onBulkApprove: props.onBulkApprove,
@@ -19828,6 +19829,7 @@ function ApprovalCenterLayout(props) {
         activeRequestId: props.activeRequestId,
         resolutionMessage: props.resolutionMessage,
         codexResume: props.codexResume,
+        approvalGate: props.approvalGate ?? null,
         onOpenRequest: props.onOpenRequest,
         onGoHome: props.onGoHome,
         onResolve: props.onResolve,
@@ -19873,6 +19875,7 @@ function MobileQueueDrawer(props) {
             {
               activeRequestId: props.activeRequestId,
               items: props.requests,
+              approvalGate: props.approvalGate ?? null,
               onOpenRequest: props.onOpenRequest,
               onBulkApprove: props.onBulkApprove,
               onBulkBlock: props.onBulkBlock
@@ -19965,6 +19968,7 @@ function QueueWorkspace(props) {
         {
           activeRequestId: props.activeRequestId,
           items: props.requests.items,
+          approvalGate: props.approvalGate ?? null,
           onOpenRequest: props.onOpenRequest,
           onBulkApprove: props.onBulkApprove,
           onBulkBlock: props.onBulkBlock
@@ -20023,6 +20027,8 @@ function QueueBrowser(props) {
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [page, setPage] = reactExports.useState(1);
   const [showFilters, setShowFilters] = reactExports.useState(false);
+  const [bulkApprovePassword, setBulkApprovePassword] = reactExports.useState("");
+  const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = reactExports.useState(false);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
   const filteredItems = reactExports.useMemo(() => {
     const byHarness = harnessFilter === "all" ? props.items : props.items.filter((item) => item.harness === harnessFilter);
@@ -20081,19 +20087,56 @@ function QueueBrowser(props) {
     [groups]
   );
   const showBulkApprove = props.onBulkApprove !== void 0 && bulkEligibleGroups.length > 0;
+  const showBulkGateFields = showBulkApprove && props.approvalGate?.enabled === true && props.approvalGate.configured === true;
+  const handleBulkApprovePasswordChange = reactExports.useCallback((event) => {
+    setBulkApprovePassword(event.target.value);
+  }, []);
+  const handleBulkApproveUseCooldownChange = reactExports.useCallback((event) => {
+    setBulkApproveUseCooldown(event.target.checked);
+  }, []);
   const handleBulkApprove = reactExports.useCallback(() => {
     const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
-    props.onBulkApprove?.(ids);
-  }, [props.onBulkApprove, bulkEligibleGroups]);
+    const gateCredentials = showBulkGateFields ? { approval_password: bulkApprovePassword, approval_gate_use_cooldown: bulkApproveUseCooldown } : void 0;
+    props.onBulkApprove?.(ids, gateCredentials);
+  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveUseCooldown]);
   const blockEligibleGroups = reactExports.useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
   const blockEligibleActionCount = reactExports.useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
   const showBulkBlock = props.onBulkBlock !== void 0 && blockEligibleGroups.length > 0;
-  const handleBulkBlockConfirm = reactExports.useCallback((reason) => {
+  const showBulkBlockGateFields = showBulkBlock && props.approvalGate?.enabled === true && props.approvalGate.configured === true && props.approvalGate.strict_all_decisions === true;
+  const handleBulkBlockConfirm = reactExports.useCallback((reason, gateCredentials) => {
     const ids = bulkBlockPrimaryIds(blockEligibleGroups);
-    props.onBulkBlock?.(ids, reason);
+    props.onBulkBlock?.(ids, reason, gateCredentials);
   }, [props.onBulkBlock, blockEligibleGroups]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
     showBulkApprove && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 space-y-2", children: [
+      showBulkGateFields && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Approval password" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "password",
+              value: bulkApprovePassword,
+              onChange: handleBulkApprovePasswordChange,
+              placeholder: "Approval password",
+              autoComplete: "current-password",
+              className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            }
+          )
+        ] }),
+        (props.approvalGate?.cooldown_seconds ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: bulkApproveUseCooldown,
+              onChange: handleBulkApproveUseCooldownChange,
+              className: "rounded"
+            }
+          ),
+          "Skip password for next approvals (use cooldown)"
+        ] })
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
@@ -20124,6 +20167,8 @@ function QueueBrowser(props) {
       QueueBulkBlockForm,
       {
         count: blockEligibleActionCount,
+        showGateFields: showBulkBlockGateFields,
+        cooldownSeconds: props.approvalGate?.cooldown_seconds ?? 0,
         onBlock: handleBulkBlockConfirm
       }
     ),
@@ -20266,19 +20311,32 @@ function QueueCard(props) {
 function QueueBulkBlockForm(props) {
   const [expanded, setExpanded] = reactExports.useState(false);
   const [reason, setReason] = reactExports.useState("");
+  const [gatePassword, setGatePassword] = reactExports.useState("");
+  const [gateUseCooldown, setGateUseCooldown] = reactExports.useState(false);
   const handleExpand = reactExports.useCallback(() => setExpanded(true), []);
   const handleCollapse = reactExports.useCallback(() => {
     setExpanded(false);
     setReason("");
+    setGatePassword("");
+    setGateUseCooldown(false);
   }, []);
   const handleReasonChange = reactExports.useCallback((event) => {
     setReason(event.target.value);
   }, []);
+  const handleGatePasswordChange = reactExports.useCallback((event) => {
+    setGatePassword(event.target.value);
+  }, []);
+  const handleGateUseCooldownChange = reactExports.useCallback((event) => {
+    setGateUseCooldown(event.target.checked);
+  }, []);
   const handleConfirm = reactExports.useCallback(() => {
-    props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group");
+    const gateCredentials = props.showGateFields ? { approval_password: gatePassword, approval_gate_use_cooldown: gateUseCooldown } : void 0;
+    props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group", gateCredentials);
     setExpanded(false);
     setReason("");
-  }, [props.onBlock, reason]);
+    setGatePassword("");
+    setGateUseCooldown(false);
+  }, [props.onBlock, props.showGateFields, reason, gatePassword, gateUseCooldown]);
   if (!expanded) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
@@ -20314,6 +20372,34 @@ function QueueBulkBlockForm(props) {
           className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         }
       )
+    ] }),
+    props.showGateFields && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Approval password for bulk block" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "password",
+            value: gatePassword,
+            onChange: handleGatePasswordChange,
+            placeholder: "Approval password",
+            autoComplete: "current-password",
+            className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      props.cooldownSeconds > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "checkbox",
+            checked: gateUseCooldown,
+            onChange: handleGateUseCooldownChange,
+            className: "rounded"
+          }
+        ),
+        "Skip password for next approvals (use cooldown)"
+      ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -21611,10 +21697,10 @@ function App() {
     const updated = await retryResume(resolvedRequestId);
     setCodexResume(updated);
   }, [resolvedRequestId]);
-  const handleBulkApprove = reactExports.useCallback(async (ids) => {
+  const handleBulkApprove = reactExports.useCallback(async (ids, gateCredentials) => {
     const results = await Promise.allSettled(
       ids.map(
-        (id) => resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "" })
+        (id) => resolveRequestWithQueueResult({ requestId: id, action: "allow", scope: "artifact", reason: "", ...gateCredentials })
       )
     );
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -21624,10 +21710,10 @@ function App() {
     navigate("/inbox");
     await refreshStateAfterAction();
   }, [refreshStateAfterAction, setResolutionMessage]);
-  const handleBulkBlock = reactExports.useCallback(async (ids, reason) => {
+  const handleBulkBlock = reactExports.useCallback(async (ids, reason, gateCredentials) => {
     const results = await Promise.allSettled(
       ids.map(
-        (id) => resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason })
+        (id) => resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason, ...gateCredentials })
       )
     );
     const succeeded = results.filter((result) => result.status === "fulfilled").length;
