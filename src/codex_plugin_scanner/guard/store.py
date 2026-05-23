@@ -2932,6 +2932,40 @@ class GuardStore:
                 sync_payload=sync_payload,
             )
 
+    def record_latest_guard_connect_sync_success(
+        self,
+        *,
+        sync_payload: dict[str, object],
+        now: str,
+    ) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select request_id
+                from guard_connect_states
+                where status = 'connected'
+                  and milestone != 'first_sync_succeeded'
+                order by updated_at desc
+                limit 1
+                """
+            ).fetchone()
+            if row is None:
+                return None
+            latest_state = load_connect_state(connection, str(row["request_id"]), now=now)
+            if latest_state is None:
+                return None
+            if latest_state.get("status") != "connected":
+                return latest_state
+            return persist_connect_result(
+                connection,
+                request_id=str(latest_state["request_id"]),
+                status="connected",
+                milestone="first_sync_succeeded",
+                updated_at=now,
+                reason=None,
+                sync_payload=sync_payload,
+            )
+
     def verify_guard_connect_access(
         self,
         *,
