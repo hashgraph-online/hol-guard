@@ -35,9 +35,13 @@ from ..approval_gate import (
     begin_totp_enrollment,
     confirm_totp_enrollment,
     disable_totp,
-    public_config as approval_gate_public_config,
     require_approval_decision,
     require_high_risk,
+)
+from ..approval_gate import (
+    public_config as approval_gate_public_config,
+)
+from ..approval_gate import (
     update_settings as update_approval_gate_settings,
 )
 from ..approvals import (

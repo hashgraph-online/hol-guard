@@ -31,11 +31,13 @@ from ..approval_gate import (
     begin_totp_enrollment,
     confirm_totp_enrollment,
     disable_totp,
-    public_config as approval_gate_public_config,
     require_high_risk,
 )
 from ..approval_gate import (
     input_from_mapping as approval_gate_input_from_mapping,
+)
+from ..approval_gate import (
+    public_config as approval_gate_public_config,
 )
 from ..approval_gate import (
     revoke_cooldown as revoke_approval_gate_cooldown,
