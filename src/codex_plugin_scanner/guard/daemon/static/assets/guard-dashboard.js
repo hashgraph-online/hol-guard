@@ -18184,8 +18184,17 @@ function dateInputToBoundary(value, boundary) {
   if (value.trim().length === 0) {
     return null;
   }
-  const suffix = boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
-  const timestamp = (/* @__PURE__ */ new Date(`${value}${suffix}`)).getTime();
+  const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) {
+    return null;
+  }
+  const date = new Date(year, month - 1, day);
+  if (boundary === "start") {
+    date.setHours(0, 0, 0, 0);
+  } else {
+    date.setHours(23, 59, 59, 999);
+  }
+  const timestamp = date.getTime();
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 function filterQueueByDateRange(items, range) {
@@ -18205,18 +18214,19 @@ function filterQueueByDateRange(items, range) {
     return true;
   });
 }
+const queueDateFormatter = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit"
+});
 function formatQueueRequestDate(item) {
   const timestamp = queueTimestamp(item);
   if (timestamp === 0) {
     return "Date unknown";
   }
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(new Date(timestamp));
+  return queueDateFormatter.format(new Date(timestamp));
 }
 function queueCategoryById(id) {
   return QUEUE_CATEGORY_BY_ID.get(id) ?? QUEUE_CATEGORIES[QUEUE_CATEGORIES.length - 1];

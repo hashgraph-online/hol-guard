@@ -457,8 +457,17 @@ function dateInputToBoundary(value: string, boundary: "start" | "end"): number |
   if (value.trim().length === 0) {
     return null;
   }
-  const suffix = boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
-  const timestamp = new Date(`${value}${suffix}`).getTime();
+  const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) {
+    return null;
+  }
+  const date = new Date(year, month - 1, day);
+  if (boundary === "start") {
+    date.setHours(0, 0, 0, 0);
+  } else {
+    date.setHours(23, 59, 59, 999);
+  }
+  const timestamp = date.getTime();
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
@@ -483,18 +492,20 @@ export function filterQueueByDateRange(
   });
 }
 
+const queueDateFormatter = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
 export function formatQueueRequestDate(item: GuardApprovalRequest): string {
   const timestamp = queueTimestamp(item);
   if (timestamp === 0) {
     return "Date unknown";
   }
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
+  return queueDateFormatter.format(new Date(timestamp));
 }
 
 export function queueCategoryById(id: QueueCategoryId): QueueCategory {
