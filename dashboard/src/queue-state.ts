@@ -5,6 +5,11 @@ export type QueueSortDirection = "newest" | "oldest" | "category" | "highest_ris
 
 export type SemanticGroupId = "all" | "files" | "shell" | "network" | "tools" | "other";
 
+export type QueueDateRange = {
+  from: string;
+  to: string;
+};
+
 export const REVIEW_SEMANTIC_GROUPS: { id: SemanticGroupId; label: string; matches: QueueCategoryId[] }[] = [
   { id: "all", label: "All", matches: [] },
   {
@@ -444,7 +449,52 @@ export function groupDuplicates(items: GuardApprovalRequest[]): QueueGroup[] {
 }
 
 function queueTimestamp(item: GuardApprovalRequest): number {
-  return new Date(item.last_seen_at ?? item.created_at).getTime();
+  const timestamp = new Date(item.last_seen_at ?? item.created_at).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function dateInputToBoundary(value: string, boundary: "start" | "end"): number | null {
+  if (value.trim().length === 0) {
+    return null;
+  }
+  const suffix = boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
+  const timestamp = new Date(`${value}${suffix}`).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+export function filterQueueByDateRange(
+  items: GuardApprovalRequest[],
+  range: QueueDateRange
+): GuardApprovalRequest[] {
+  const from = dateInputToBoundary(range.from, "start");
+  const to = dateInputToBoundary(range.to, "end");
+  if (from === null && to === null) {
+    return items;
+  }
+  return items.filter((item) => {
+    const timestamp = queueTimestamp(item);
+    if (from !== null && timestamp < from) {
+      return false;
+    }
+    if (to !== null && timestamp > to) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function formatQueueRequestDate(item: GuardApprovalRequest): string {
+  const timestamp = queueTimestamp(item);
+  if (timestamp === 0) {
+    return "Date unknown";
+  }
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
 }
 
 export function queueCategoryById(id: QueueCategoryId): QueueCategory {
