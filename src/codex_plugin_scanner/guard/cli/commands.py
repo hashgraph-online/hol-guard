@@ -29,8 +29,17 @@ from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..approval_gate import ApprovalGateError, require_high_risk
-from ..approval_gate import public_config as approval_gate_public_config
+from ..approval_gate import (
+    ApprovalGateError,
+    ApprovalGateInput,
+    begin_totp_enrollment,
+    confirm_totp_enrollment,
+    disable_totp,
+    public_config as approval_gate_public_config,
+    require_approval_decision,
+    require_high_risk,
+    update_settings as update_approval_gate_settings,
+)
 from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
@@ -652,6 +661,91 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     settings_doctor_parser = settings_subparsers.add_parser("doctor", help="Diagnose Guard settings for common issues")
     _add_guard_common_args(settings_doctor_parser)
     settings_doctor_parser.add_argument("--json", action="store_true")
+    approval_password_parser = settings_subparsers.add_parser(
+        "approval-password",
+        help="Manage local approval password gate state",
+    )
+    _add_guard_common_args(approval_password_parser)
+    approval_password_parser.add_argument("--json", action="store_true")
+    approval_password_subparsers = approval_password_parser.add_subparsers(
+        dest="settings_approval_password_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+    approval_password_status_parser = approval_password_subparsers.add_parser(
+        "status",
+        help="Show approval password gate status",
+    )
+    _add_guard_common_args(approval_password_status_parser)
+    approval_password_status_parser.add_argument("--json", action="store_true")
+    approval_password_enable_parser = approval_password_subparsers.add_parser(
+        "enable",
+        help="Enable the approval password gate",
+    )
+    approval_password_enable_parser.add_argument("--new-password", required=True)
+    approval_password_enable_parser.add_argument("--confirm-password", required=True)
+    approval_password_enable_parser.add_argument("--cooldown-seconds", type=int, choices=(0, 900, 3600))
+    approval_password_enable_parser.add_argument("--strict-all-decisions", action="store_true")
+    approval_password_enable_parser.add_argument("--current-password")
+    approval_password_enable_parser.add_argument("--totp-code")
+    _add_guard_common_args(approval_password_enable_parser)
+    approval_password_enable_parser.add_argument("--json", action="store_true")
+    approval_password_change_parser = approval_password_subparsers.add_parser(
+        "change",
+        help="Change the approval password",
+    )
+    approval_password_change_parser.add_argument("--current-password", required=True)
+    approval_password_change_parser.add_argument("--new-password", required=True)
+    approval_password_change_parser.add_argument("--confirm-password", required=True)
+    approval_password_change_parser.add_argument("--totp-code")
+    _add_guard_common_args(approval_password_change_parser)
+    approval_password_change_parser.add_argument("--json", action="store_true")
+    approval_password_disable_parser = approval_password_subparsers.add_parser(
+        "disable",
+        help="Disable the approval password gate",
+    )
+    approval_password_disable_parser.add_argument("--current-password", required=True)
+    approval_password_disable_parser.add_argument("--totp-code")
+    _add_guard_common_args(approval_password_disable_parser)
+    approval_password_disable_parser.add_argument("--json", action="store_true")
+    approval_totp_parser = settings_subparsers.add_parser(
+        "approval-totp",
+        help="Manage approval gate TOTP enrollment and enforcement",
+    )
+    _add_guard_common_args(approval_totp_parser)
+    approval_totp_parser.add_argument("--json", action="store_true")
+    approval_totp_subparsers = approval_totp_parser.add_subparsers(
+        dest="settings_approval_totp_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+    approval_totp_status_parser = approval_totp_subparsers.add_parser("status", help="Show TOTP enrollment status")
+    _add_guard_common_args(approval_totp_status_parser)
+    approval_totp_status_parser.add_argument("--json", action="store_true")
+    approval_totp_enroll_parser = approval_totp_subparsers.add_parser(
+        "enroll",
+        help="Start TOTP enrollment and emit an otpauth provisioning URI",
+    )
+    approval_totp_enroll_parser.add_argument("--current-password", required=True)
+    approval_totp_enroll_parser.add_argument("--device-label", default="local-device")
+    _add_guard_common_args(approval_totp_enroll_parser)
+    approval_totp_enroll_parser.add_argument("--json", action="store_true")
+    approval_totp_verify_parser = approval_totp_subparsers.add_parser(
+        "verify",
+        help="Verify pending enrollment and enable TOTP",
+    )
+    approval_totp_verify_parser.add_argument("--current-password", required=True)
+    approval_totp_verify_parser.add_argument("--code", required=True)
+    _add_guard_common_args(approval_totp_verify_parser)
+    approval_totp_verify_parser.add_argument("--json", action="store_true")
+    approval_totp_disable_parser = approval_totp_subparsers.add_parser(
+        "disable",
+        help="Disable TOTP with a fresh password and code",
+    )
+    approval_totp_disable_parser.add_argument("--current-password", required=True)
+    approval_totp_disable_parser.add_argument("--code", required=True)
+    _add_guard_common_args(approval_totp_disable_parser)
+    approval_totp_disable_parser.add_argument("--json", action="store_true")
 
     exceptions_parser = guard_subparsers.add_parser("exceptions", help="List active Guard exceptions with expiry")
     exceptions_parser.add_argument("--harness")
@@ -1429,6 +1523,19 @@ def _run_consumer_scan_with_mode(
 
 
 def _policy_write_needs_approval_gate(store: GuardStore, *, action: str, scope: str) -> bool:
+    if not _policy_write_requires_approval_gate(store, action=action, scope=scope):
+        return False
+    gate = approval_gate_public_config(store.guard_home)
+    if scope == "global":
+        return True
+    if gate.cooldown_active and not gate.totp_enabled:
+        return False
+    if action == "allow":
+        return True
+    return gate.strict_all_decisions
+
+
+def _policy_write_requires_approval_gate(store: GuardStore, *, action: str, scope: str) -> bool:
     gate = approval_gate_public_config(store.guard_home)
     if not gate.enabled:
         return False
@@ -1893,6 +2000,28 @@ def run_guard_command(
         elif settings_sub == "doctor":
             _emit("settings.doctor", _guard_settings_doctor_payload(config), getattr(args, "json", False))
             return 0
+        elif settings_sub == "approval-password":
+            try:
+                payload = _run_approval_password_settings_command(args=args, guard_home=guard_home)
+            except ApprovalGateError as error:
+                _emit("settings.approval-password", approval_gate_cli_payload(error), getattr(args, "json", False))
+                return 4
+            except ValueError as error:
+                print(str(error), file=sys.stderr)
+                return 2
+            _emit("settings.approval-password", payload, getattr(args, "json", False))
+            return 0
+        elif settings_sub == "approval-totp":
+            try:
+                payload = _run_approval_totp_settings_command(args=args, guard_home=guard_home)
+            except ApprovalGateError as error:
+                _emit("settings.approval-totp", approval_gate_cli_payload(error), getattr(args, "json", False))
+                return 4
+            except ValueError as error:
+                print(str(error), file=sys.stderr)
+                return 2
+            _emit("settings.approval-totp", payload, getattr(args, "json", False))
+            return 0
         _emit("settings", _guard_cli_settings_payload(config), getattr(args, "json", False))
         return 0
 
@@ -1989,11 +2118,16 @@ def run_guard_command(
         expires_at = _resolve_policy_expiry(args)
         try:
             approval_gate_grant = None
-            if _policy_write_needs_approval_gate(store, action=args.policy_action, scope=args.scope):
-                gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
-                approval_gate_grant = require_high_risk(
+            if _policy_write_requires_approval_gate(store, action=args.policy_action, scope=args.scope):
+                gate_input = (
+                    prompt_for_approval_gate(store.guard_home, use_cooldown=True)
+                    if _policy_write_needs_approval_gate(store, action=args.policy_action, scope=args.scope)
+                    else None
+                )
+                approval_gate_grant = require_approval_decision(
                     store.guard_home,
-                    purpose="policy_write",
+                    action=args.policy_action,
+                    scope=args.scope,
                     approval_gate_input=gate_input,
                 )
             payload = record_policy(
@@ -4603,6 +4737,88 @@ def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object
         }
         for t in result.telemetry
     ]
+
+
+def _run_approval_password_settings_command(*, args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
+    command = str(getattr(args, "settings_approval_password_command", "")).strip().lower()
+    if command == "status":
+        gate = approval_gate_public_config(guard_home)
+        return {"approval_gate": gate.to_dict()}
+    if command == "enable":
+        gate = approval_gate_public_config(guard_home)
+        grant = None
+        current_password = getattr(args, "current_password", None)
+        totp_code = getattr(args, "totp_code", None)
+        if gate.enabled:
+            gate_input = ApprovalGateInput(password=current_password, totp_code=totp_code)
+            grant = require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
+        payload: dict[str, object] = {
+            "enabled": True,
+            "new_password": str(args.new_password),
+            "confirm_password": str(args.confirm_password),
+        }
+        cooldown_seconds = getattr(args, "cooldown_seconds", None)
+        if cooldown_seconds is not None:
+            payload["cooldown_seconds"] = int(cooldown_seconds)
+        payload["strict_all_decisions"] = bool(getattr(args, "strict_all_decisions", False))
+        gate_updated = update_approval_gate_settings(guard_home, payload, approval_gate_grant=grant)
+        return {"approval_gate": gate_updated.to_dict()}
+    if command == "change":
+        gate_input = ApprovalGateInput(password=str(args.current_password), totp_code=getattr(args, "totp_code", None))
+        grant = require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
+        gate_updated = update_approval_gate_settings(
+            guard_home,
+            {
+                "enabled": True,
+                "new_password": str(args.new_password),
+                "confirm_password": str(args.confirm_password),
+            },
+            approval_gate_grant=grant,
+        )
+        return {"approval_gate": gate_updated.to_dict()}
+    if command == "disable":
+        gate_input = ApprovalGateInput(password=str(args.current_password), totp_code=getattr(args, "totp_code", None))
+        grant = require_high_risk(guard_home, purpose="settings_write", approval_gate_input=gate_input)
+        gate_updated = update_approval_gate_settings(
+            guard_home,
+            {"enabled": False},
+            approval_gate_grant=grant,
+        )
+        return {"approval_gate": gate_updated.to_dict()}
+    raise ValueError("Unsupported approval-password command.")
+
+
+def _run_approval_totp_settings_command(*, args: argparse.Namespace, guard_home: Path) -> dict[str, object]:
+    command = str(getattr(args, "settings_approval_totp_command", "")).strip().lower()
+    if command == "status":
+        gate = approval_gate_public_config(guard_home)
+        return {"approval_gate": gate.to_dict()}
+    if command == "enroll":
+        enrollment = begin_totp_enrollment(
+            guard_home,
+            approval_gate_input=ApprovalGateInput(password=str(args.current_password)),
+            device_label=str(getattr(args, "device_label", "local-device")),
+        )
+        return {"enrollment": enrollment, "approval_gate": approval_gate_public_config(guard_home).to_dict()}
+    if command == "verify":
+        gate = confirm_totp_enrollment(
+            guard_home,
+            approval_gate_input=ApprovalGateInput(
+                password=str(args.current_password),
+                totp_code=str(args.code),
+            ),
+        )
+        return {"approval_gate": gate.to_dict()}
+    if command == "disable":
+        gate = disable_totp(
+            guard_home,
+            approval_gate_input=ApprovalGateInput(
+                password=str(args.current_password),
+                totp_code=str(args.code),
+            ),
+        )
+        return {"approval_gate": gate.to_dict()}
+    raise ValueError("Unsupported approval-totp command.")
 
 
 def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig, guard_home: Path) -> GuardConfig:

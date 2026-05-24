@@ -13382,7 +13382,8 @@ async function clearPolicy(input) {
       artifact_hash_is_null: input.artifact_hash_is_null,
       workspace: input.workspace,
       publisher: input.publisher,
-      approval_password: input.approval_password
+      approval_password: input.approval_password,
+      approval_totp_code: input.approval_totp_code
     })
   });
 }
@@ -13447,7 +13448,7 @@ async function fetchDiff(artifactId, harness) {
 function fetchGuardApi(input, init) {
   return fetch(guardApiInput(input), withGuardAuth(init));
 }
-async function revokeApprovalGateCooldown(password) {
+async function revokeApprovalGateCooldown(password, totpCode) {
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
@@ -13457,12 +13458,78 @@ async function revokeApprovalGateCooldown(password) {
       "Content-Type": "application/json",
       ...guardAuthHeaders()
     },
-    body: JSON.stringify({ approval_gate: { password } })
+    body: JSON.stringify({
+      approval_gate: {
+        password,
+        ...totpCode !== void 0 && totpCode.trim().length > 0 ? { totp_code: totpCode } : {}
+      }
+    })
   }));
   if (!response.ok) {
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
   return await response.json();
+}
+async function enrollApprovalGateTotp(currentPassword, deviceLabel) {
+  if (isGuardDemoMode()) {
+    return {
+      ...await fetchSettings(),
+      enrollment: {
+        manual_key: "DEMOSECRET123456",
+        otpauth_uri: "otpauth://totp/HOL%20Guard:local-device?secret=DEMOSECRET123456&issuer=HOL%20Guard&algorithm=SHA1&digits=6&period=30",
+        expires_at: new Date(Date.now() + 10 * 60 * 1e3).toISOString()
+      }
+    };
+  }
+  return readJson("/v1/approval-gate/totp/enroll", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      device_label: deviceLabel,
+      approval_gate: {
+        password: currentPassword
+      }
+    })
+  });
+}
+async function verifyApprovalGateTotp(currentPassword, code) {
+  if (isGuardDemoMode()) {
+    return fetchSettings();
+  }
+  return readJson("/v1/approval-gate/totp/verify", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      approval_gate: {
+        password: currentPassword
+      },
+      approval_totp_code: code
+    })
+  });
+}
+async function disableApprovalGateTotp(currentPassword, code) {
+  if (isGuardDemoMode()) {
+    return fetchSettings();
+  }
+  return readJson("/v1/approval-gate/totp/disable", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      approval_gate: {
+        password: currentPassword
+      },
+      approval_totp_code: code
+    })
+  });
 }
 async function resolveRequestWithQueueResult(input) {
   if (isGuardDemoMode()) {
@@ -13494,6 +13561,7 @@ async function resolveRequestWithQueueResult(input) {
       workspace: input.workspace || void 0,
       reason: input.reason || void 0,
       ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
+      ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {},
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
     })
   });
@@ -18640,6 +18708,15 @@ function approvalGateCooldownLabel(seconds) {
   if (seconds === 3600) return "1 hour";
   return `${seconds} seconds`;
 }
+function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, selectedScope) {
+  if (selectedScope === "global") {
+    return true;
+  }
+  if (!cooldownActive) {
+    return true;
+  }
+  return strictAllDecisions;
+}
 const scopeChoices = [
   {
     value: "artifact",
@@ -19215,6 +19292,7 @@ function ReviewDecisionCard(props) {
   const [lastAction, setLastAction] = reactExports.useState(null);
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
   const [approvalPassword, setApprovalPassword] = reactExports.useState("");
+  const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
   const [useCooldown, setUseCooldown] = reactExports.useState(false);
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
@@ -19242,6 +19320,7 @@ function ReviewDecisionCard(props) {
       setLastAction(null);
       setErrorMessage(null);
       setApprovalPassword("");
+      setApprovalTotpCode("");
       setUseCooldown(false);
     }
   }, [item?.request_id]);
@@ -19279,7 +19358,7 @@ function ReviewDecisionCard(props) {
       setErrorMessage(null);
       try {
         const gate = props.approvalGate;
-        const includeGateFields = gate?.enabled === true && gate?.configured === true;
+        const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
         await props.onResolve({
           ...buildDecisionPayload({
             item,
@@ -19288,10 +19367,12 @@ function ReviewDecisionCard(props) {
             reason: action === "allow" ? "approved in review" : "blocked in review"
           }),
           ...includeGateFields ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && gate?.totp_enabled === true ? { approval_totp_code: approvalTotpCode } : {},
           ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
         });
         setResolved(action);
         setApprovalPassword("");
+        setApprovalTotpCode("");
         setUseCooldown(false);
         timerRef.current = setTimeout(() => setResolved(null), 2e3);
       } catch (err) {
@@ -19300,7 +19381,7 @@ function ReviewDecisionCard(props) {
         setSubmitting(null);
       }
     },
-    [item, scope, props.onResolve, props.approvalGate, approvalPassword, useCooldown]
+    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown]
   );
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
@@ -19329,6 +19410,9 @@ function ReviewDecisionCard(props) {
   }, [handleRequestResolve, lastAction]);
   const handleApprovalPasswordChange = reactExports.useCallback((event) => {
     setApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setApprovalTotpCode(event.target.value);
   }, []);
   const handleUseCooldownChange = reactExports.useCallback((event) => {
     setUseCooldown(event.target.checked);
@@ -19456,13 +19540,19 @@ function ReviewDecisionCard(props) {
           )
         ] })
       ] }) }),
-      props.approvalGate?.enabled === true && props.approvalGate?.configured === true && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      props.approvalGate?.enabled === true && props.approvalGate?.configured === true && requiresApprovalPasswordPrompt(
+        props.approvalGate.cooldown_active,
+        props.approvalGate.strict_all_decisions,
+        scope
+      ) && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalPasswordPrompt,
         {
           gate: props.approvalGate,
           approvalPassword,
+          approvalTotpCode,
           useCooldown,
           onApprovalPasswordChange: handleApprovalPasswordChange,
+          onApprovalTotpCodeChange: handleApprovalTotpCodeChange,
           onUseCooldownChange: handleUseCooldownChange
         }
       ),
@@ -19639,7 +19729,7 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
   ] });
 }
 function ApprovalPasswordPrompt(props) {
-  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active;
+  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3 rounded-xl border border-slate-100 bg-slate-50/40 p-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
@@ -19650,6 +19740,20 @@ function ApprovalPasswordPrompt(props) {
           autoComplete: "current-password",
           value: props.approvalPassword,
           onChange: props.onApprovalPasswordChange,
+          className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+        }
+      )
+    ] }),
+    props.gate.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "text",
+          inputMode: "numeric",
+          pattern: "[0-9]*",
+          value: props.approvalTotpCode,
+          onChange: props.onApprovalTotpCodeChange,
           className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
         }
       )
@@ -20134,6 +20238,7 @@ function QueueBrowser(props) {
   const [page, setPage] = reactExports.useState(1);
   const [showFilters, setShowFilters] = reactExports.useState(false);
   const [bulkApprovePassword, setBulkApprovePassword] = reactExports.useState("");
+  const [bulkApproveTotpCode, setBulkApproveTotpCode] = reactExports.useState("");
   const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = reactExports.useState(false);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
   const filteredItems = reactExports.useMemo(() => {
@@ -20197,14 +20302,21 @@ function QueueBrowser(props) {
   const handleBulkApprovePasswordChange = reactExports.useCallback((event) => {
     setBulkApprovePassword(event.target.value);
   }, []);
+  const handleBulkApproveTotpCodeChange = reactExports.useCallback((event) => {
+    setBulkApproveTotpCode(event.target.value);
+  }, []);
   const handleBulkApproveUseCooldownChange = reactExports.useCallback((event) => {
     setBulkApproveUseCooldown(event.target.checked);
   }, []);
   const handleBulkApprove = reactExports.useCallback(() => {
     const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
-    const gateCredentials = showBulkGateFields ? { approval_password: bulkApprovePassword, approval_gate_use_cooldown: bulkApproveUseCooldown } : void 0;
+    const gateCredentials = showBulkGateFields ? {
+      approval_password: bulkApprovePassword,
+      approval_totp_code: bulkApproveTotpCode,
+      approval_gate_use_cooldown: bulkApproveUseCooldown
+    } : void 0;
     props.onBulkApprove?.(ids, gateCredentials);
-  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveUseCooldown]);
+  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveTotpCode, bulkApproveUseCooldown]);
   const blockEligibleGroups = reactExports.useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
   const blockEligibleActionCount = reactExports.useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
   const showBulkBlock = props.onBulkBlock !== void 0 && blockEligibleGroups.length > 0;
@@ -20230,7 +20342,22 @@ function QueueBrowser(props) {
             }
           )
         ] }),
-        (props.approvalGate?.cooldown_seconds ?? 0) > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
+        props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Authenticator code" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              inputMode: "numeric",
+              pattern: "[0-9]*",
+              value: bulkApproveTotpCode,
+              onChange: handleBulkApproveTotpCodeChange,
+              placeholder: "Authenticator code",
+              className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            }
+          )
+        ] }),
+        (props.approvalGate?.cooldown_seconds ?? 0) > 0 && props.approvalGate?.totp_enabled !== true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
             {
@@ -20275,6 +20402,7 @@ function QueueBrowser(props) {
         count: blockEligibleActionCount,
         showGateFields: showBulkBlockGateFields,
         cooldownSeconds: props.approvalGate?.cooldown_seconds ?? 0,
+        totpEnabled: props.approvalGate?.totp_enabled === true,
         onBlock: handleBulkBlockConfirm
       }
     ),
@@ -20418,12 +20546,14 @@ function QueueBulkBlockForm(props) {
   const [expanded, setExpanded] = reactExports.useState(false);
   const [reason, setReason] = reactExports.useState("");
   const [gatePassword, setGatePassword] = reactExports.useState("");
+  const [gateTotpCode, setGateTotpCode] = reactExports.useState("");
   const [gateUseCooldown, setGateUseCooldown] = reactExports.useState(false);
   const handleExpand = reactExports.useCallback(() => setExpanded(true), []);
   const handleCollapse = reactExports.useCallback(() => {
     setExpanded(false);
     setReason("");
     setGatePassword("");
+    setGateTotpCode("");
     setGateUseCooldown(false);
   }, []);
   const handleReasonChange = reactExports.useCallback((event) => {
@@ -20432,17 +20562,25 @@ function QueueBulkBlockForm(props) {
   const handleGatePasswordChange = reactExports.useCallback((event) => {
     setGatePassword(event.target.value);
   }, []);
+  const handleGateTotpCodeChange = reactExports.useCallback((event) => {
+    setGateTotpCode(event.target.value);
+  }, []);
   const handleGateUseCooldownChange = reactExports.useCallback((event) => {
     setGateUseCooldown(event.target.checked);
   }, []);
   const handleConfirm = reactExports.useCallback(() => {
-    const gateCredentials = props.showGateFields ? { approval_password: gatePassword, approval_gate_use_cooldown: gateUseCooldown } : void 0;
+    const gateCredentials = props.showGateFields ? {
+      approval_password: gatePassword,
+      approval_totp_code: gateTotpCode,
+      approval_gate_use_cooldown: gateUseCooldown
+    } : void 0;
     props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group", gateCredentials);
     setExpanded(false);
     setReason("");
     setGatePassword("");
+    setGateTotpCode("");
     setGateUseCooldown(false);
-  }, [props.onBlock, props.showGateFields, reason, gatePassword, gateUseCooldown]);
+  }, [props.onBlock, props.showGateFields, reason, gatePassword, gateTotpCode, gateUseCooldown]);
   if (!expanded) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
@@ -20494,7 +20632,22 @@ function QueueBulkBlockForm(props) {
           }
         )
       ] }),
-      props.cooldownSeconds > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
+      props.totpEnabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Authenticator code for bulk block" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            inputMode: "numeric",
+            pattern: "[0-9]*",
+            value: gateTotpCode,
+            onChange: handleGateTotpCodeChange,
+            placeholder: "Authenticator code",
+            className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      props.cooldownSeconds > 0 && !props.totpEnabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs text-slate-600", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
           {
@@ -21970,43 +22123,46 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniChartBar as $,
+  detectCategory as $,
   ActionButton as A,
   Badge as B,
-  updateSettings as C,
-  clearPolicy as D,
+  enrollApprovalGateTotp as C,
+  verifyApprovalGateTotp as D,
   EmptyState as E,
-  clearEvidence as F,
+  disableApprovalGateTotp as F,
   GuardHero as G,
   HiMiniCheckCircle as H,
-  exportDiagnostics as I,
-  repairApprovalCenter as J,
-  setupDesktopNotifications as K,
-  HiMiniMagnifyingGlass as L,
-  HiMiniLockClosed as M,
-  HiMiniCog6Tooth as N,
-  HiMiniBellAlert as O,
+  updateSettings as I,
+  clearPolicy as J,
+  clearEvidence as K,
+  exportDiagnostics as L,
+  repairApprovalCenter as M,
+  setupDesktopNotifications as N,
+  HiMiniMagnifyingGlass as O,
   ProofStrip as P,
-  approvalGateCooldownLabel as Q,
-  fetchApprovalPage as R,
+  HiMiniLockClosed as Q,
+  HiMiniCog6Tooth as R,
   SectionLabel as S,
   Tag as T,
-  fetchPolicy as U,
-  HiMiniArrowLeft as V,
-  HiMiniHome as W,
-  HiMiniAdjustmentsHorizontal as X,
-  detectCategory as Y,
-  CATEGORIES as Z,
-  policyIdentityKey as _,
+  HiMiniBellAlert as U,
+  approvalGateCooldownLabel as V,
+  fetchApprovalPage as W,
+  fetchPolicy as X,
+  HiMiniArrowLeft as Y,
+  HiMiniHome as Z,
+  HiMiniAdjustmentsHorizontal as _,
   HiMiniShieldCheck as a,
-  runHarnessAction as a0,
-  GuardHarnessActionError as a1,
-  HiMiniRocketLaunch as a2,
-  HiMiniArrowPath as a3,
-  HiMiniTrash as a4,
-  clearLabelForScope as a5,
-  formatHarnessCommand as a6,
-  HiMiniCommandLine as a7,
+  CATEGORIES as a0,
+  policyIdentityKey as a1,
+  HiMiniChartBar as a2,
+  runHarnessAction as a3,
+  GuardHarnessActionError as a4,
+  HiMiniRocketLaunch as a5,
+  HiMiniArrowPath as a6,
+  HiMiniTrash as a7,
+  clearLabelForScope as a8,
+  formatHarnessCommand as a9,
+  HiMiniCommandLine as aa,
   formatRelativeTime as b,
   HiMiniSparkles as c,
   HiMiniXMark as d,

@@ -28,6 +28,10 @@ from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approval_gate import (
     ApprovalGateError,
+    begin_totp_enrollment,
+    confirm_totp_enrollment,
+    disable_totp,
+    public_config as approval_gate_public_config,
     require_high_risk,
 )
 from ..approval_gate import (
@@ -742,6 +746,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/approval-gate/cooldown/revoke":
             self._handle_approval_gate_cooldown_revoke(payload)
+            return
+        if parsed.path == "/v1/approval-gate/totp/enroll":
+            self._handle_approval_gate_totp_enroll(payload)
+            return
+        if parsed.path == "/v1/approval-gate/totp/verify":
+            self._handle_approval_gate_totp_verify(payload)
+            return
+        if parsed.path == "/v1/approval-gate/totp/disable":
+            self._handle_approval_gate_totp_disable(payload)
             return
         if parsed.path == "/v1/daemon/repair":
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
@@ -1862,6 +1875,55 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         settings["approval_gate"] = gate
         self._write_json(_settings_response_payload(guard_home, settings))
 
+    def _handle_approval_gate_totp_enroll(self, payload: dict[str, object]) -> None:
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        device_label = self._optional_string(payload.get("device_label")) or "local-device"
+        try:
+            enrollment = begin_totp_enrollment(
+                guard_home,
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+                device_label=device_label,
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        config = load_guard_config(guard_home)
+        settings = editable_guard_settings(config)
+        settings["approval_gate"] = approval_gate_public_config(guard_home).to_dict()
+        response = _settings_response_payload(guard_home, settings)
+        response["enrollment"] = enrollment
+        self._write_json(response)
+
+    def _handle_approval_gate_totp_verify(self, payload: dict[str, object]) -> None:
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        try:
+            gate = confirm_totp_enrollment(
+                guard_home,
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        config = load_guard_config(guard_home)
+        settings = editable_guard_settings(config)
+        settings["approval_gate"] = gate.to_dict()
+        self._write_json(_settings_response_payload(guard_home, settings))
+
+    def _handle_approval_gate_totp_disable(self, payload: dict[str, object]) -> None:
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        try:
+            gate = disable_totp(
+                guard_home,
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        config = load_guard_config(guard_home)
+        settings = editable_guard_settings(config)
+        settings["approval_gate"] = gate.to_dict()
+        self._write_json(_settings_response_payload(guard_home, settings))
+
     def _handle_initialize(self, payload: dict[str, object]) -> None:
         client_name = self._optional_string(payload.get("client_name")) or "guard-client"
         surface = self._optional_string(payload.get("surface")) or "cli"
@@ -2711,6 +2773,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/import",
             "/v1/settings/reset",
             "/v1/approval-gate/cooldown/revoke",
+            "/v1/approval-gate/totp/enroll",
+            "/v1/approval-gate/totp/verify",
+            "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
             "/v1/notifications/setup",
         }:

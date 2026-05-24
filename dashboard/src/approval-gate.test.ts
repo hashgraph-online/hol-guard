@@ -1,5 +1,5 @@
 import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types";
-import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import { applyApprovalGateDraft, hasUnsavedChanges } from "./settings-workspace";
 
 function assert(condition: boolean, message: string): void {
@@ -71,6 +71,21 @@ function testApprovalGateCooldownLabels(): void {
   assert(approvalGateCooldownLabel(3600) === "1 hour", "3600 should be '1 hour'");
   assert(approvalGateCooldownLabel(60) === "60 seconds", "60 should be '60 seconds'");
   assert(approvalGateCooldownLabel(1800) === "1800 seconds", "1800 should be '1800 seconds'");
+}
+
+function testApprovalPasswordPromptVisibility(): void {
+  assert(
+    requiresApprovalPasswordPrompt(true, false, "artifact") === false,
+    "active cooldown should hide password prompt for non-strict artifact decisions"
+  );
+  assert(
+    requiresApprovalPasswordPrompt(true, true, "artifact") === true,
+    "strict all decisions should still require password prompt during cooldown"
+  );
+  assert(
+    requiresApprovalPasswordPrompt(true, false, "global") === true,
+    "global scope should always require password prompt"
+  );
 }
 
 function testApprovalGatePasswordFieldsNotPersisted(): void {
@@ -190,9 +205,14 @@ function testBulkApproveGateCredentialsPayload(): void {
     scope: string;
     reason: string;
     approval_password?: string;
+    approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
   };
-  const gateCredentials = { approval_password: "secret123", approval_gate_use_cooldown: false };
+  const gateCredentials = {
+    approval_password: "secret123",
+    approval_totp_code: "123456",
+    approval_gate_use_cooldown: false
+  };
   const buildBulkPayload = (id: string, creds?: typeof gateCredentials): BulkPayload => ({
     requestId: id,
     action: "allow",
@@ -202,10 +222,12 @@ function testBulkApproveGateCredentialsPayload(): void {
   });
   const withGate = buildBulkPayload("req-1", gateCredentials);
   assert(withGate.approval_password === "secret123", "bulk payload should include approval_password when gate credentials provided");
+  assert(withGate.approval_totp_code === "123456", "bulk payload should include approval_totp_code when gate credentials provided");
   assert(withGate.approval_gate_use_cooldown === false, "bulk payload should include approval_gate_use_cooldown when gate credentials provided");
 
   const withoutGate = buildBulkPayload("req-2", undefined);
   assert(!("approval_password" in withoutGate), "bulk payload should not include approval_password when no gate credentials");
+  assert(!("approval_totp_code" in withoutGate), "bulk payload should not include approval_totp_code when no gate credentials");
   assert(!("approval_gate_use_cooldown" in withoutGate), "bulk payload should not include approval_gate_use_cooldown when no gate credentials");
 }
 
@@ -213,6 +235,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalGatePublicConfigEnabled", testApprovalGatePublicConfigEnabled],
   ["testApprovalGatePublicConfigDisabled", testApprovalGatePublicConfigDisabled],
   ["testApprovalGateCooldownLabels", testApprovalGateCooldownLabels],
+  ["testApprovalPasswordPromptVisibility", testApprovalPasswordPromptVisibility],
   ["testApprovalGatePasswordFieldsNotPersisted", testApprovalGatePasswordFieldsNotPersisted],
   ["testApprovalGateToggleReflectedInDraftApprovalGate", testApprovalGateToggleReflectedInDraftApprovalGate],
   ["testApprovalGateCooldownReflectedInDraftApprovalGate", testApprovalGateCooldownReflectedInDraftApprovalGate],

@@ -215,6 +215,39 @@ Use these actions in config or saved decisions:
 - `sandbox-required`
 - `require-reapproval`
 
+## Require proof before remembered trust
+
+The approval gate protects the places where Guard would otherwise remember trust: scoped allow decisions, broad/global allow, policy clears, settings changes, approval-history clears, native approval persistence, and cloud/headless policy sync. Enforcement lives in the daemon and store layer, so the dashboard and CLI cannot bypass it.
+
+Enable password proof:
+
+```bash
+hol-guard settings approval-password enable \
+  --new-password '<password>' \
+  --confirm-password '<password>' \
+  --cooldown-seconds 900
+hol-guard settings approval-password status
+```
+
+The default mode requires proof for allow decisions and broad trust changes. If your team also wants proof before block decisions, enable **Require password for block decisions too** in Settings or pass `--strict-all-decisions` when enabling the gate.
+
+Cooldown is intentionally narrow. A valid cooldown can satisfy ordinary non-global allow decisions, but it cannot satisfy global allow, policy clear, settings import/reset, disabling the password gate, disabling TOTP, recovery, or policy-memory clear. Lock or unlock the current terminal approval window explicitly:
+
+```bash
+hol-guard approvals unlock --duration 15m
+hol-guard approvals lock
+```
+
+Add Google Authenticator-compatible TOTP when password-only proof is not enough:
+
+```bash
+hol-guard settings approval-totp enroll --current-password '<password>' --device-label '<device>'
+hol-guard settings approval-totp verify --current-password '<password>' --code 123456
+hol-guard settings approval-totp status
+```
+
+Guard emits a standard `otpauth://totp/HOL%20Guard:<device>` URI with a Base32 secret, SHA-1, 6 digits, and a 30-second period. The seed is encrypted locally and never appears in public settings, diagnostics export, receipts, URLs, or screenshots. Guard rejects invalid codes, replayed time steps, and stale enrollment state. When TOTP is enabled, protected actions require both the current password and a current authenticator code.
+
 ## What `install` does
 
 `guard install <harness>` creates a local launcher shim under Guard’s home directory:

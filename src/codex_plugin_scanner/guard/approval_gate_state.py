@@ -30,6 +30,8 @@ class ApprovalGatePublicConfig:
     locked_until: str | None
     fail_closed: bool
     strict_all_decisions: bool
+    totp_enabled: bool
+    totp_pending: bool
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -41,6 +43,8 @@ class ApprovalGatePublicConfig:
             "locked_until": self.locked_until,
             "fail_closed": self.fail_closed,
             "strict_all_decisions": self.strict_all_decisions,
+            "totp_enabled": self.totp_enabled,
+            "totp_pending": self.totp_pending,
         }
 
 
@@ -61,6 +65,7 @@ def default_state() -> dict[str, object]:
         "cooldown_seconds": 0,
         "strict_all_decisions": False,
         "failed_attempts": 0,
+        "totp_enabled": False,
     }
 
 

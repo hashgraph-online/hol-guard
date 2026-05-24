@@ -152,6 +152,35 @@ hol-guard approvals clear   # clear all pending approvals (prompts for confirmat
 
 From the dashboard: open `http://localhost:6174`, go to the **Approval Center**, and use the **Clear all** button. You will be asked to confirm before any approvals are removed.
 
+### How do I require human proof before saved approvals?
+
+Enable the local approval gate when saved allow decisions, global trust, policy clears, or settings changes should require a human password before Guard persists them:
+
+```bash
+hol-guard settings approval-password enable \
+  --new-password '<password>' \
+  --confirm-password '<password>' \
+  --cooldown-seconds 900
+hol-guard settings approval-password status
+```
+
+Use cooldown only for ordinary non-global allow decisions. Guard still requires fresh proof for global allow, policy clear, settings import/reset, disabling the gate, disabling TOTP, and recovery. To unlock or lock the current approval window from a terminal:
+
+```bash
+hol-guard approvals unlock --duration 15m
+hol-guard approvals lock
+```
+
+For Google Authenticator-compatible second-factor proof, enroll TOTP after the password gate is enabled:
+
+```bash
+hol-guard settings approval-totp enroll --current-password '<password>' --device-label '<device>'
+hol-guard settings approval-totp verify --current-password '<password>' --code 123456
+hol-guard settings approval-totp status
+```
+
+TOTP uses SHA-1, 6 digits, 30-second steps, and a Base32 `otpauth://totp/HOL%20Guard:<device>` provisioning URI. Guard stores the seed encrypted locally, rejects replayed steps, and never includes the seed in settings export, receipts, or public status. Disabling TOTP or the password gate requires fresh password proof plus a current TOTP code when TOTP is enabled.
+
 ## Guard: Advisory Sync Privacy
 
 Guard's advisory database updates are optional and pull-only. When you run `hol-guard advisories sync`, Guard fetches a signed advisory list from `advisories.hol.org`. No local file paths, harness configs, receipt data, or workspace identifiers are sent to any server during sync.

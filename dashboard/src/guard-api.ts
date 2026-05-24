@@ -927,6 +927,7 @@ export async function clearPolicy(input: {
   workspace?: string;
   publisher?: string;
   approval_password?: string;
+  approval_totp_code?: string;
 }): Promise<{ cleared: number; harness: string | null; source: string | null }> {
   if (isGuardDemoMode()) {
     return { cleared: 0, harness: input.harness ?? null, source: input.source ?? null };
@@ -948,7 +949,8 @@ export async function clearPolicy(input: {
       artifact_hash_is_null: input.artifact_hash_is_null,
       workspace: input.workspace,
       publisher: input.publisher,
-      approval_password: input.approval_password
+      approval_password: input.approval_password,
+      approval_totp_code: input.approval_totp_code
     })
   });
 }
@@ -1041,7 +1043,17 @@ export async function resolveRequest(input: {
   await resolveRequestWithQueueResult(input);
 }
 
-export async function revokeApprovalGateCooldown(password: string): Promise<GuardSettingsPayload> {
+export type GuardApprovalGateTotpEnrollment = {
+  manual_key: string;
+  otpauth_uri: string;
+  expires_at: string;
+};
+
+export type GuardApprovalGateTotpSettingsPayload = GuardSettingsPayload & {
+  enrollment?: GuardApprovalGateTotpEnrollment;
+};
+
+export async function revokeApprovalGateCooldown(password: string, totpCode?: string): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
@@ -1051,12 +1063,91 @@ export async function revokeApprovalGateCooldown(password: string): Promise<Guar
       "Content-Type": "application/json",
       ...guardAuthHeaders()
     },
-    body: JSON.stringify({ approval_gate: { password } })
+    body: JSON.stringify({
+      approval_gate: {
+        password,
+        ...(totpCode !== undefined && totpCode.trim().length > 0 ? { totp_code: totpCode } : {})
+      }
+    })
   }));
   if (!response.ok) {
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
   return (await response.json()) as GuardSettingsPayload;
+}
+
+export async function enrollApprovalGateTotp(
+  currentPassword: string,
+  deviceLabel: string
+): Promise<GuardApprovalGateTotpSettingsPayload> {
+  if (isGuardDemoMode()) {
+    return {
+      ...(await fetchSettings()),
+      enrollment: {
+        manual_key: "DEMOSECRET123456",
+        otpauth_uri:
+          "otpauth://totp/HOL%20Guard:local-device?secret=DEMOSECRET123456&issuer=HOL%20Guard&algorithm=SHA1&digits=6&period=30",
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString()
+      }
+    };
+  }
+  return readJson<GuardApprovalGateTotpSettingsPayload>("/v1/approval-gate/totp/enroll", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      device_label: deviceLabel,
+      approval_gate: {
+        password: currentPassword
+      }
+    })
+  });
+}
+
+export async function verifyApprovalGateTotp(
+  currentPassword: string,
+  code: string
+): Promise<GuardSettingsPayload> {
+  if (isGuardDemoMode()) {
+    return fetchSettings();
+  }
+  return readJson<GuardSettingsPayload>("/v1/approval-gate/totp/verify", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      approval_gate: {
+        password: currentPassword
+      },
+      approval_totp_code: code
+    })
+  });
+}
+
+export async function disableApprovalGateTotp(
+  currentPassword: string,
+  code: string
+): Promise<GuardSettingsPayload> {
+  if (isGuardDemoMode()) {
+    return fetchSettings();
+  }
+  return readJson<GuardSettingsPayload>("/v1/approval-gate/totp/disable", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      approval_gate: {
+        password: currentPassword
+      },
+      approval_totp_code: code
+    })
+  });
 }
 
 export async function resolveRequestWithQueueResult(input: {
@@ -1066,6 +1157,7 @@ export async function resolveRequestWithQueueResult(input: {
   workspace?: string;
   reason: string;
   approval_password?: string;
+  approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
 }): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
@@ -1097,6 +1189,7 @@ export async function resolveRequestWithQueueResult(input: {
       workspace: input.workspace || undefined,
       reason: input.reason || undefined,
       ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
+      ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
       ...(input.approval_gate_use_cooldown !== undefined ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {})
     })
   });
