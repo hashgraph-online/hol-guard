@@ -18177,7 +18177,56 @@ function groupDuplicates(items) {
   return groups;
 }
 function queueTimestamp(item) {
-  return new Date(item.last_seen_at ?? item.created_at).getTime();
+  const timestamp = new Date(item.last_seen_at ?? item.created_at).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+function dateInputToBoundary(value, boundary) {
+  if (value.trim().length === 0) {
+    return null;
+  }
+  const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) {
+    return null;
+  }
+  const date = new Date(year, month - 1, day);
+  if (boundary === "start") {
+    date.setHours(0, 0, 0, 0);
+  } else {
+    date.setHours(23, 59, 59, 999);
+  }
+  const timestamp = date.getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+function filterQueueByDateRange(items, range) {
+  const from = dateInputToBoundary(range.from, "start");
+  const to = dateInputToBoundary(range.to, "end");
+  if (from === null && to === null) {
+    return items;
+  }
+  return items.filter((item) => {
+    const timestamp = queueTimestamp(item);
+    if (from !== null && timestamp < from) {
+      return false;
+    }
+    if (to !== null && timestamp > to) {
+      return false;
+    }
+    return true;
+  });
+}
+const queueDateFormatter = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit"
+});
+function formatQueueRequestDate(item) {
+  const timestamp = queueTimestamp(item);
+  if (timestamp === 0) {
+    return "Date unknown";
+  }
+  return queueDateFormatter.format(new Date(timestamp));
 }
 function queueCategoryById(id) {
   return QUEUE_CATEGORY_BY_ID.get(id) ?? QUEUE_CATEGORIES[QUEUE_CATEGORIES.length - 1];
@@ -18627,6 +18676,8 @@ function ReviewWorkspace(props) {
   const [categoryFilter, setCategoryFilter] = reactExports.useState("all");
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [semanticFilter, setSemanticFilter] = reactExports.useState("all");
+  const [dateFrom, setDateFrom] = reactExports.useState("");
+  const [dateTo, setDateTo] = reactExports.useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [page, setPage] = reactExports.useState(1);
   const handleOpenRequest = reactExports.useCallback((id) => {
@@ -18646,12 +18697,13 @@ function ReviewWorkspace(props) {
     } else if (categoryFilter !== "all") {
       items = filterQueueByCategory(items, categoryFilter);
     }
+    items = filterQueueByDateRange(items, { from: dateFrom, to: dateTo });
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
-  }, [categoryFilter, requests, searchTerm, sortDirection, semanticFilter]);
+  }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, sortDirection, semanticFilter]);
   reactExports.useEffect(() => {
     setPage(1);
-  }, [searchTerm, categoryFilter, sortDirection, semanticFilter]);
+  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, dateFrom, dateTo]);
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
@@ -18738,12 +18790,16 @@ function ReviewWorkspace(props) {
           searchTerm,
           sortDirection,
           semanticFilter,
+          dateFrom,
+          dateTo,
           page: currentPage,
           totalPages,
           onCategoryFilterChange: setCategoryFilter,
           onSearchTermChange: setSearchTerm,
           onSortDirectionChange: setSortDirection,
           onSemanticFilterChange: setSemanticFilter,
+          onDateFromChange: setDateFrom,
+          onDateToChange: setDateTo,
           onPageChange: setPage,
           onOpenRequest: handleOpenRequest,
           ref: queueRef
@@ -18798,12 +18854,16 @@ const ReviewQueueList = reactExports.forwardRef(({
   searchTerm,
   sortDirection,
   semanticFilter,
+  dateFrom,
+  dateTo,
   page,
   totalPages,
   onCategoryFilterChange,
   onSearchTermChange,
   onSortDirectionChange,
   onSemanticFilterChange,
+  onDateFromChange,
+  onDateToChange,
   onPageChange,
   onOpenRequest
 }, ref) => {
@@ -18817,6 +18877,12 @@ const ReviewQueueList = reactExports.forwardRef(({
   const handleSortChange = reactExports.useCallback((event) => {
     onSortDirectionChange(event.target.value);
   }, [onSortDirectionChange]);
+  const handleDateFromChange = reactExports.useCallback((event) => {
+    onDateFromChange(event.target.value);
+  }, [onDateFromChange]);
+  const handleDateToChange = reactExports.useCallback((event) => {
+    onDateToChange(event.target.value);
+  }, [onDateToChange]);
   const handleToggleFilters = reactExports.useCallback(() => {
     setShowFilters((visible) => !visible);
   }, []);
@@ -18825,7 +18891,16 @@ const ReviewQueueList = reactExports.forwardRef(({
     onCategoryFilterChange("all");
     onSortDirectionChange("newest");
     onSemanticFilterChange("all");
-  }, [onCategoryFilterChange, onSearchTermChange, onSemanticFilterChange, onSortDirectionChange]);
+    onDateFromChange("");
+    onDateToChange("");
+  }, [
+    onCategoryFilterChange,
+    onDateFromChange,
+    onDateToChange,
+    onSearchTermChange,
+    onSemanticFilterChange,
+    onSortDirectionChange
+  ]);
   const handlePreviousPage = reactExports.useCallback(() => {
     onPageChange(Math.max(1, page - 1));
   }, [page, onPageChange]);
@@ -18840,7 +18915,7 @@ const ReviewQueueList = reactExports.forwardRef(({
     }
     return REVIEW_SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
   }, [allFilteredRequests]);
-  const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
+  const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest" || dateFrom || dateTo;
   const showPagination = filteredCount > QUEUE_PAGE_SIZE;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
@@ -18890,12 +18965,13 @@ const ReviewQueueList = reactExports.forwardRef(({
           group.id
         )) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Sort review queue" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "Sort by date" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "select",
             {
               value: sortDirection,
               onChange: handleSortChange,
+              "aria-label": "Sort review queue",
               className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "newest", children: "Newest first" }),
@@ -18905,6 +18981,34 @@ const ReviewQueueList = reactExports.forwardRef(({
               ]
             }
           )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-2 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "From date" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "date",
+                value: dateFrom,
+                onChange: handleDateFromChange,
+                "aria-label": "Filter requests from date",
+                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: "To date" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "date",
+                value: dateTo,
+                onChange: handleDateToChange,
+                "aria-label": "Filter requests to date",
+                className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] })
         ] }),
         isFiltered && /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
@@ -19021,7 +19125,9 @@ function QueueItemRow({ item, active, index, onOpenRequest }) {
             /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
               harnessDisplayName(item.harness),
               " · ",
-              category.shortLabel
+              category.shortLabel,
+              " · ",
+              formatQueueRequestDate(item)
             ] })
           ] })
         ] }),
