@@ -72,6 +72,8 @@ import type {
 } from "./guard-types";
 import {
   filterQueueByCategory,
+  filterQueueByDateRange,
+  formatQueueRequestDate,
   queueCategoriesForItems,
   resolveQueueCategory,
   searchQueue,
@@ -152,6 +154,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [categoryFilter, setCategoryFilter] = useState<QueueCategoryId | "all">("all");
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [semanticFilter, setSemanticFilter] = useState<SemanticGroupId>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -174,13 +178,14 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     } else if (categoryFilter !== "all") {
       items = filterQueueByCategory(items, categoryFilter);
     }
+    items = filterQueueByDateRange(items, { from: dateFrom, to: dateTo });
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
-  }, [categoryFilter, requests, searchTerm, sortDirection, semanticFilter]);
+  }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, sortDirection, semanticFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, categoryFilter, sortDirection, semanticFilter]);
+  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -276,12 +281,16 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             searchTerm={searchTerm}
             sortDirection={sortDirection}
             semanticFilter={semanticFilter}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
             page={currentPage}
             totalPages={totalPages}
             onCategoryFilterChange={setCategoryFilter}
             onSearchTermChange={setSearchTerm}
             onSortDirectionChange={setSortDirection}
             onSemanticFilterChange={setSemanticFilter}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
             onPageChange={setPage}
             onOpenRequest={handleOpenRequest}
             ref={queueRef}
@@ -343,12 +352,16 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   searchTerm: string;
   sortDirection: QueueSortDirection;
   semanticFilter: SemanticGroupId;
+  dateFrom: string;
+  dateTo: string;
   page: number;
   totalPages: number;
   onCategoryFilterChange: (category: QueueCategoryId | "all") => void;
   onSearchTermChange: (term: string) => void;
   onSortDirectionChange: (direction: QueueSortDirection) => void;
   onSemanticFilterChange: (group: SemanticGroupId) => void;
+  onDateFromChange: (date: string) => void;
+  onDateToChange: (date: string) => void;
   onPageChange: (page: number) => void;
   onOpenRequest: (requestId: string) => void;
 }>(({
@@ -362,12 +375,16 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   searchTerm,
   sortDirection,
   semanticFilter,
+  dateFrom,
+  dateTo,
   page,
   totalPages,
   onCategoryFilterChange,
   onSearchTermChange,
   onSortDirectionChange,
   onSemanticFilterChange,
+  onDateFromChange,
+  onDateToChange,
   onPageChange,
   onOpenRequest,
 }, ref) => {
@@ -382,6 +399,12 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   const handleSortChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     onSortDirectionChange(event.target.value as QueueSortDirection);
   }, [onSortDirectionChange]);
+  const handleDateFromChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    onDateFromChange(event.target.value);
+  }, [onDateFromChange]);
+  const handleDateToChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    onDateToChange(event.target.value);
+  }, [onDateToChange]);
   const handleToggleFilters = useCallback(() => {
     setShowFilters((visible) => !visible);
   }, []);
@@ -390,7 +413,16 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
     onCategoryFilterChange("all");
     onSortDirectionChange("newest");
     onSemanticFilterChange("all");
-  }, [onCategoryFilterChange, onSearchTermChange, onSemanticFilterChange, onSortDirectionChange]);
+    onDateFromChange("");
+    onDateToChange("");
+  }, [
+    onCategoryFilterChange,
+    onDateFromChange,
+    onDateToChange,
+    onSearchTermChange,
+    onSemanticFilterChange,
+    onSortDirectionChange,
+  ]);
   const handlePreviousPage = useCallback(() => {
     onPageChange(Math.max(1, page - 1));
   }, [page, onPageChange]);
@@ -408,7 +440,13 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
     return REVIEW_SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
   }, [allFilteredRequests]);
 
-  const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
+  const isFiltered =
+    searchTerm ||
+    semanticFilter !== "all" ||
+    categoryFilter !== "all" ||
+    sortDirection !== "newest" ||
+    dateFrom ||
+    dateTo;
   const showPagination = filteredCount > QUEUE_PAGE_SIZE;
 
   return (
@@ -453,10 +491,13 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
               ))}
             </div>
             <label className="block">
-              <span className="sr-only">Sort review queue</span>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Sort by date
+              </span>
               <select
                 value={sortDirection}
                 onChange={handleSortChange}
+                aria-label="Sort review queue"
                 className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               >
                 <option value="newest">Newest first</option>
@@ -465,6 +506,32 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
                 <option value="category">Category</option>
               </select>
             </label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  From date
+                </span>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={handleDateFromChange}
+                  aria-label="Filter requests from date"
+                  className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  To date
+                </span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={handleDateToChange}
+                  aria-label="Filter requests to date"
+                  className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+              </label>
+            </div>
             {isFiltered && (
               <button
                 type="button"
@@ -594,7 +661,7 @@ function QueueItemRow({ item, active, index, onOpenRequest }: {
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-brand-dark">{preview}</p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {harnessDisplayName(item.harness)} · {category.shortLabel}
+              {harnessDisplayName(item.harness)} · {category.shortLabel} · {formatQueueRequestDate(item)}
             </p>
           </div>
         </div>

@@ -16,6 +16,8 @@ import {
   isDuplicateGroup,
   bulkBlockEligibleGroups,
   bulkBlockPrimaryIds,
+  filterQueueByDateRange,
+  formatQueueRequestDate,
 } from "./queue-state";
 
 function assert(condition: boolean, message: string): void {
@@ -161,6 +163,39 @@ const oldestFirst = sortQueue([oldItem, recentItem, midItem], "oldest");
 
 assert(oldestFirst[0].request_id === "req-old", "T-QS-16: sortQueue puts oldest item first when direction is oldest");
 assert(oldestFirst[2].request_id === "req-recent", "T-QS-17: sortQueue puts newest item last when direction is oldest");
+
+const dateRangeFiltered = filterQueueByDateRange([oldItem, midItem, recentItem], {
+  from: "2026-02-01",
+  to: "2026-02-01",
+});
+assert(
+  dateRangeFiltered.length === 1 && dateRangeFiltered[0].request_id === "req-mid",
+  "T-QS-17A: filterQueueByDateRange filters requests by inclusive same-day date range"
+);
+
+const fromOnlyFiltered = filterQueueByDateRange([oldItem, midItem, recentItem], {
+  from: "2026-02-01",
+  to: "",
+});
+assert(
+  fromOnlyFiltered.map((item) => item.request_id).join(",") === "req-mid,req-recent",
+  "T-QS-17B: filterQueueByDateRange keeps requests on or after from date"
+);
+
+const toOnlyFiltered = filterQueueByDateRange([oldItem, midItem, recentItem], {
+  from: "",
+  to: "2026-02-01",
+});
+assert(
+  toOnlyFiltered.map((item) => item.request_id).join(",") === "req-old,req-mid",
+  "T-QS-17C: filterQueueByDateRange keeps requests on or before to date"
+);
+
+const requestDateLabel = formatQueueRequestDate(midItem);
+assert(
+  requestDateLabel.includes("2026") && requestDateLabel.includes("Feb"),
+  "T-QS-17D: formatQueueRequestDate exposes a human-readable request date with year"
+);
 
 const recentlySeenOldItem: GuardApprovalRequest = {
   ...oldItem,
