@@ -1,4 +1,10 @@
-import { resolveSecurityLevelDescription, buildClearPolicyPayload } from "./settings-workspace";
+import {
+  buildClearPolicyPayload,
+  formatTotpEnrollmentExpiry,
+  buildTotpQrImageOptions,
+  formatTotpManualKey,
+  resolveSecurityLevelDescription,
+} from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 
 function assert(condition: boolean, message: string): void {
@@ -29,3 +35,19 @@ assert(clearNonePayload.all === false, "T530: clearPolicy payload with all=false
 
 assert(typeof repairApprovalCenter === "function", "T739: repairApprovalCenter should be exported as a function");
 assert(typeof setupDesktopNotifications === "function", "T740: setupDesktopNotifications should be exported as a function");
+
+const qrOptions = buildTotpQrImageOptions();
+assert(qrOptions.level === "M", "T741: TOTP QR should use medium error correction for authenticator scanning");
+assert(qrOptions.size === 160, "T741: TOTP QR should render at scanner-friendly size");
+assert(qrOptions.fgColor === "#121a3a", "T741: TOTP QR should use brand dark color");
+assert(qrOptions.bgColor === "#ffffff", "T741: TOTP QR should use white background");
+
+assert(
+  formatTotpManualKey("abcd efgh-ijklmnop") === "abcd efgh ijkl mnop",
+  "T742: manual TOTP key should be grouped for fallback entry"
+);
+assert(formatTotpManualKey(null) === "", "T742: manual TOTP key formatter should tolerate null");
+assert(
+  formatTotpEnrollmentExpiry("not-a-date") === "Enrollment expiration unknown.",
+  "T743: invalid TOTP expiry should not render Invalid Date"
+);
