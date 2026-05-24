@@ -22,13 +22,17 @@ import {
 } from "./approval-center-primitives";
 import {
   clearEvidence,
+  disableApprovalGateTotp,
+  enrollApprovalGateTotp,
   exportDiagnostics,
   fetchRuntimeSnapshot,
   fetchSettings,
+  type GuardApprovalGateTotpEnrollment,
   updateSettings,
   clearPolicy,
   repairApprovalCenter,
   setupDesktopNotifications,
+  verifyApprovalGateTotp,
   revokeApprovalGateCooldown,
 } from "./guard-api";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
@@ -267,6 +271,7 @@ export function applyApprovalGateDraft(
   updates: {
     enabled: boolean;
     cooldown_seconds: number;
+    strict_all_decisions?: boolean;
   }
 ): GuardSettings {
   const gate = settings.approval_gate;
@@ -280,7 +285,9 @@ export function applyApprovalGateDraft(
       cooldown_expires_at: gate?.cooldown_expires_at ?? null,
       locked_until: gate?.locked_until ?? null,
       fail_closed: gate?.fail_closed ?? false,
-      strict_all_decisions: gate?.strict_all_decisions ?? false,
+      strict_all_decisions: updates.strict_all_decisions ?? gate?.strict_all_decisions ?? false,
+      totp_enabled: gate?.totp_enabled ?? false,
+      totp_pending: gate?.totp_pending ?? false,
     },
   };
 }
@@ -330,7 +337,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [approvalGateNewPassword, setApprovalGateNewPassword] = useState("");
   const [approvalGateConfirmPassword, setApprovalGateConfirmPassword] = useState("");
   const [approvalGateCurrentPassword, setApprovalGateCurrentPassword] = useState("");
+  const [approvalGateTotpCode, setApprovalGateTotpCode] = useState("");
+  const [approvalGateTotpDeviceLabel, setApprovalGateTotpDeviceLabel] = useState("local-device");
+  const [approvalGateStrictAllDecisions, setApprovalGateStrictAllDecisions] = useState(false);
   const [approvalGateCooldown, setApprovalGateCooldown] = useState(0);
+  const [totpEnrollment, setTotpEnrollment] = useState<GuardApprovalGateTotpEnrollment | null>(null);
+  const [totpActionPending, setTotpActionPending] = useState<"enroll" | "verify" | "disable" | null>(null);
+  const [totpActionError, setTotpActionError] = useState<string | null>(null);
   const [revokingCooldown, setRevokingCooldown] = useState(false);
   const [revokePassword, setRevokePassword] = useState("");
   const [revokeError, setRevokeError] = useState<string | null>(null);
@@ -348,6 +361,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           if (gate !== undefined) {
             setApprovalGateEnabled(gate.enabled);
             setApprovalGateCooldown(gate.cooldown_seconds);
+            setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
             onApprovalGateChange?.(gate);
           }
         }
@@ -482,10 +496,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         : applyApprovalGateDraft(value, {
           enabled: checked,
           cooldown_seconds: approvalGateCooldown,
+          strict_all_decisions: approvalGateStrictAllDecisions,
         })
     );
     setSaveError(null);
-  }, [approvalGateCooldown]);
+  }, [approvalGateCooldown, approvalGateStrictAllDecisions]);
 
   const handleApprovalGateNewPassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setApprovalGateNewPassword(event.target.value);
@@ -498,6 +513,14 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const handleApprovalGateCurrentPassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setApprovalGateCurrentPassword(event.target.value);
   }, []);
+  const handleApprovalGateTotpCode = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalGateTotpCode(event.target.value);
+    setTotpActionError(null);
+  }, []);
+  const handleApprovalGateTotpDeviceLabel = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalGateTotpDeviceLabel(event.target.value);
+    setTotpActionError(null);
+  }, []);
 
   const handleApprovalGateCooldownChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     const next = Number(event.target.value);
@@ -508,10 +531,25 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         : applyApprovalGateDraft(value, {
           enabled: approvalGateEnabled,
           cooldown_seconds: next,
+          strict_all_decisions: approvalGateStrictAllDecisions,
         })
     );
     setSaveError(null);
-  }, [approvalGateEnabled]);
+  }, [approvalGateEnabled, approvalGateStrictAllDecisions]);
+  const handleApprovalGateStrictAllDecisions = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const strict = event.target.checked;
+    setApprovalGateStrictAllDecisions(strict);
+    setDraft((value) =>
+      value === null
+        ? value
+        : applyApprovalGateDraft(value, {
+          enabled: approvalGateEnabled,
+          cooldown_seconds: approvalGateCooldown,
+          strict_all_decisions: strict,
+        })
+    );
+    setSaveError(null);
+  }, [approvalGateEnabled, approvalGateCooldown]);
 
   const handleRevokePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setRevokePassword(event.target.value);
@@ -526,13 +564,19 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setRevokingCooldown(true);
     setRevokeError(null);
     try {
-      const payload = await revokeApprovalGateCooldown(revokePassword);
+      const payload = await revokeApprovalGateCooldown(
+        revokePassword,
+        approvalGateTotpCode.trim().length > 0 ? approvalGateTotpCode : undefined
+      );
       const normalizedPayload = normalizeSettingsPayload(payload);
       const gate = normalizedPayload.settings.approval_gate;
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
       savedSettingsRef.current = normalizedPayload.settings;
       if (gate !== undefined) {
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
         onApprovalGateChange?.(gate);
       }
       setRevokePassword("");
@@ -542,7 +586,107 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     } finally {
       setRevokingCooldown(false);
     }
-  }, [revokePassword, onApprovalGateChange]);
+  }, [revokePassword, approvalGateTotpCode, onApprovalGateChange]);
+
+  const handleStartTotpEnrollment = useCallback(async () => {
+    if (!approvalGateCurrentPassword.trim()) {
+      setTotpActionError("Enter your current approval password to start enrollment.");
+      return;
+    }
+    setTotpActionPending("enroll");
+    setTotpActionError(null);
+    try {
+      const payload = await enrollApprovalGateTotp(
+        approvalGateCurrentPassword,
+        approvalGateTotpDeviceLabel.trim() || "local-device"
+      );
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== undefined) {
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+        onApprovalGateChange?.(gate);
+      }
+      setTotpEnrollment(payload.enrollment ?? null);
+      setActionMessage("TOTP enrollment started. Verify with your authenticator code.");
+    } catch (error) {
+      setTotpActionError(error instanceof Error ? error.message : "Unable to start TOTP enrollment.");
+    } finally {
+      setTotpActionPending(null);
+    }
+  }, [approvalGateCurrentPassword, approvalGateTotpDeviceLabel, onApprovalGateChange]);
+
+  const handleVerifyTotpEnrollment = useCallback(async () => {
+    if (!approvalGateCurrentPassword.trim()) {
+      setTotpActionError("Enter your current approval password before verifying TOTP.");
+      return;
+    }
+    if (!approvalGateTotpCode.trim()) {
+      setTotpActionError("Enter the authenticator code to verify TOTP.");
+      return;
+    }
+    setTotpActionPending("verify");
+    setTotpActionError(null);
+    try {
+      const payload = await verifyApprovalGateTotp(approvalGateCurrentPassword, approvalGateTotpCode);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== undefined) {
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+        onApprovalGateChange?.(gate);
+      }
+      setApprovalGateTotpCode("");
+      setTotpEnrollment(null);
+      setActionMessage("TOTP verified and enabled.");
+    } catch (error) {
+      setTotpActionError(error instanceof Error ? error.message : "Unable to verify TOTP.");
+    } finally {
+      setTotpActionPending(null);
+    }
+  }, [approvalGateCurrentPassword, approvalGateTotpCode, onApprovalGateChange]);
+
+  const handleDisableTotp = useCallback(async () => {
+    if (!approvalGateCurrentPassword.trim()) {
+      setTotpActionError("Enter your current approval password before disabling TOTP.");
+      return;
+    }
+    if (!approvalGateTotpCode.trim()) {
+      setTotpActionError("Enter the authenticator code to disable TOTP.");
+      return;
+    }
+    setTotpActionPending("disable");
+    setTotpActionError(null);
+    try {
+      const payload = await disableApprovalGateTotp(approvalGateCurrentPassword, approvalGateTotpCode);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      const gate = normalizedPayload.settings.approval_gate;
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      if (gate !== undefined) {
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+        onApprovalGateChange?.(gate);
+      }
+      setApprovalGateTotpCode("");
+      setTotpEnrollment(null);
+      setActionMessage("TOTP disabled.");
+    } catch (error) {
+      setTotpActionError(error instanceof Error ? error.message : "Unable to disable TOTP.");
+    } finally {
+      setTotpActionPending(null);
+    }
+  }, [approvalGateCurrentPassword, approvalGateTotpCode, onApprovalGateChange]);
 
   const handleSave = useCallback(async () => {
     if (draft === null) return;
@@ -554,6 +698,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         current_password?: string;
         new_password?: string;
         confirm_password?: string;
+        totp_code?: string;
       } = {
         enabled: approvalGateEnabled,
         configured: draft.approval_gate?.configured ?? false,
@@ -562,10 +707,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         cooldown_expires_at: draft.approval_gate?.cooldown_expires_at ?? null,
         locked_until: draft.approval_gate?.locked_until ?? null,
         fail_closed: draft.approval_gate?.fail_closed ?? false,
-        strict_all_decisions: draft.approval_gate?.strict_all_decisions ?? false,
+        strict_all_decisions: approvalGateStrictAllDecisions,
+        totp_enabled: draft.approval_gate?.totp_enabled ?? false,
+        totp_pending: draft.approval_gate?.totp_pending ?? false,
         ...(approvalGateCurrentPassword ? { current_password: approvalGateCurrentPassword } : {}),
         ...(approvalGateNewPassword ? { new_password: approvalGateNewPassword } : {}),
         ...(approvalGateConfirmPassword ? { confirm_password: approvalGateConfirmPassword } : {}),
+        ...(approvalGateTotpCode ? { totp_code: approvalGateTotpCode } : {}),
       };
       const settingsToSave: Partial<GuardSettings> = {
         ...draft,
@@ -578,12 +726,17 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       setDraft(normalizedPayload.settings);
       savedSettingsRef.current = normalizedPayload.settings;
       if (normalizedPayload.settings.approval_gate !== undefined) {
-        onApprovalGateChange?.(normalizedPayload.settings.approval_gate);
+        const gate = normalizedPayload.settings.approval_gate;
+        setApprovalGateEnabled(gate.enabled);
+        setApprovalGateCooldown(gate.cooldown_seconds);
+        setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+        onApprovalGateChange?.(gate);
       }
       setSaveSuccess(true);
       setApprovalGateNewPassword("");
       setApprovalGateCurrentPassword("");
       setApprovalGateConfirmPassword("");
+      setApprovalGateTotpCode("");
       if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
       saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2000);
     } catch (error) {
@@ -591,22 +744,27 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     } finally {
       setSaving(false);
     }
-  }, [draft, approvalGateEnabled, approvalGateCooldown, approvalGateCurrentPassword, approvalGateNewPassword, approvalGateConfirmPassword, onApprovalGateChange]);
+  }, [draft, approvalGateEnabled, approvalGateCooldown, approvalGateStrictAllDecisions, approvalGateCurrentPassword, approvalGateNewPassword, approvalGateConfirmPassword, approvalGateTotpCode, onApprovalGateChange]);
 
   const handleClearApprovals = useCallback(async () => {
     if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) return;
     setClearingApprovals(true);
     setActionMessage(null);
     try {
-      await clearPolicy({ all: true, approval_password: approvalGateCurrentPassword || undefined });
+      await clearPolicy({
+        all: true,
+        approval_password: approvalGateCurrentPassword || undefined,
+        approval_totp_code: approvalGateTotpCode || undefined,
+      });
       setActionMessage("All saved approvals cleared.");
       setApprovalGateCurrentPassword("");
+      setApprovalGateTotpCode("");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear approvals.");
     } finally {
       setClearingApprovals(false);
     }
-  }, [approvalGateCurrentPassword]);
+  }, [approvalGateCurrentPassword, approvalGateTotpCode]);
 
   const handleClearEvidence = useCallback(async () => {
     if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
@@ -813,7 +971,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               newPassword={approvalGateNewPassword}
               confirmPassword={approvalGateConfirmPassword}
               currentPassword={approvalGateCurrentPassword}
+              totpCode={approvalGateTotpCode}
+              totpDeviceLabel={approvalGateTotpDeviceLabel}
+              strictAllDecisions={approvalGateStrictAllDecisions}
               cooldownSeconds={approvalGateCooldown}
+              totpEnrollment={totpEnrollment}
+              totpActionPending={totpActionPending}
+              totpActionError={totpActionError}
               revokingCooldown={revokingCooldown}
               revokePassword={revokePassword}
               revokeError={revokeError}
@@ -821,7 +985,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               onNewPasswordChange={handleApprovalGateNewPassword}
               onConfirmPasswordChange={handleApprovalGateConfirmPassword}
               onCurrentPasswordChange={handleApprovalGateCurrentPassword}
+              onTotpCodeChange={handleApprovalGateTotpCode}
+              onTotpDeviceLabelChange={handleApprovalGateTotpDeviceLabel}
+              onStrictAllDecisionsChange={handleApprovalGateStrictAllDecisions}
               onCooldownChange={handleApprovalGateCooldownChange}
+              onStartTotpEnrollment={handleStartTotpEnrollment}
+              onVerifyTotpEnrollment={handleVerifyTotpEnrollment}
+              onDisableTotp={handleDisableTotp}
               onRevokePasswordChange={handleRevokePasswordChange}
               onRevokeCooldown={handleRevokeCooldown}
             />
@@ -1238,7 +1408,13 @@ type ApprovalGateCardProps = {
   newPassword: string;
   confirmPassword: string;
   currentPassword: string;
+  totpCode: string;
+  totpDeviceLabel: string;
+  strictAllDecisions: boolean;
   cooldownSeconds: number;
+  totpEnrollment: GuardApprovalGateTotpEnrollment | null;
+  totpActionPending: "enroll" | "verify" | "disable" | null;
+  totpActionError: string | null;
   revokingCooldown: boolean;
   revokePassword: string;
   revokeError: string | null;
@@ -1246,7 +1422,13 @@ type ApprovalGateCardProps = {
   onNewPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onConfirmPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onCurrentPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onTotpDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onStrictAllDecisionsChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onCooldownChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  onStartTotpEnrollment: () => void;
+  onVerifyTotpEnrollment: () => void;
+  onDisableTotp: () => void;
   onRevokePasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onRevokeCooldown: () => void;
 };
@@ -1256,6 +1438,9 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   const showCurrentPassword = wasConfigured && props.gateConfig?.enabled === true;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
+  const totpEnabled = props.gateConfig?.totp_enabled === true;
+  const totpPending = props.gateConfig?.totp_pending === true;
+  const failClosed = props.gateConfig?.fail_closed === true;
   const cooldownLabel = cooldownExpiresAt
     ? new Date(cooldownExpiresAt).toLocaleTimeString()
     : null;
@@ -1269,7 +1454,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
         onChange={props.onToggle}
       />
       <p className="mt-1 px-1 text-xs text-slate-500">
-        Ask for a password before each approve or block decision.
+        By default, password proof protects allow decisions and broad trust changes. Enable strict mode below to require proof for block decisions too.
       </p>
 
       {props.enabled && (
@@ -1286,6 +1471,12 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
               />
             </label>
           )}
+          <SettingToggle
+            id="settings-approval-gate-strict"
+            label="Require password for block decisions too"
+            checked={props.strictAllDecisions}
+            onChange={props.onStrictAllDecisionsChange}
+          />
           <label className="block">
             <span className="text-xs font-medium text-slate-500">New password</span>
             <input
@@ -1318,6 +1509,87 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
               ))}
             </select>
           </label>
+          {failClosed && (
+            <div className="rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2">
+              <p className="text-xs text-brand-purple">
+                Guard is in fail-closed mode. Fix approval gate state before making trust or policy changes.
+              </p>
+            </div>
+          )}
+          <div className="space-y-2 rounded-lg border border-slate-200 bg-white px-3 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <SectionLabel>TOTP authenticator</SectionLabel>
+              <Tag tone={totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
+                {totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Disabled"}
+              </Tag>
+            </div>
+            <p className="text-xs text-slate-500">
+              Add an authenticator code as a second factor for high-risk approvals and settings writes.
+            </p>
+            {!totpEnabled && (
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500">Device label</span>
+                <input
+                  type="text"
+                  value={props.totpDeviceLabel}
+                  onChange={props.onTotpDeviceLabelChange}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                />
+              </label>
+            )}
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500">Authenticator code</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={props.totpCode}
+                onChange={props.onTotpCodeChange}
+                className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+              />
+            </label>
+            {totpPending && props.totpEnrollment !== null && (
+              <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Manual key</p>
+                <p className="break-all font-mono text-xs text-brand-dark">{props.totpEnrollment.manual_key}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Provisioning URI</p>
+                <p className="break-all font-mono text-xs text-brand-dark">{props.totpEnrollment.otpauth_uri}</p>
+                <p className="text-[11px] text-slate-500">Enrollment expires at {new Date(props.totpEnrollment.expires_at).toLocaleString()}.</p>
+              </div>
+            )}
+            {props.totpActionError !== null && (
+              <p className="text-xs text-brand-purple">{props.totpActionError}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {!totpEnabled && (
+                <ActionButton
+                  onClick={props.onStartTotpEnrollment}
+                  disabled={props.totpActionPending !== null}
+                  variant="outline"
+                >
+                  {props.totpActionPending === "enroll" ? "Starting…" : "Start enrollment"}
+                </ActionButton>
+              )}
+              {totpPending && (
+                <ActionButton
+                  onClick={props.onVerifyTotpEnrollment}
+                  disabled={props.totpActionPending !== null}
+                  variant="outline"
+                >
+                  {props.totpActionPending === "verify" ? "Verifying…" : "Verify code"}
+                </ActionButton>
+              )}
+              {totpEnabled && (
+                <ActionButton
+                  onClick={props.onDisableTotp}
+                  disabled={props.totpActionPending !== null}
+                  variant="outline"
+                >
+                  {props.totpActionPending === "disable" ? "Disabling…" : "Disable authenticator"}
+                </ActionButton>
+              )}
+            </div>
+          </div>
 
           {cooldownActive && cooldownLabel !== null && (
             <div className="rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2">
@@ -1333,8 +1605,21 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                     className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
                   />
                 </label>
+                {totpEnabled && (
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-500">Authenticator code to revoke</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={props.totpCode}
+                      onChange={props.onTotpCodeChange}
+                      className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                    />
+                  </label>
+                )}
                 {props.revokeError !== null && (
-                  <p className="text-xs text-brand-purple">{props.revokeError}</p>
+                <p className="text-xs text-brand-purple">{props.revokeError}</p>
                 )}
                 <ActionButton onClick={props.onRevokeCooldown} disabled={props.revokingCooldown} variant="outline">
                   {props.revokingCooldown ? "Revoking…" : "Revoke cooldown"}

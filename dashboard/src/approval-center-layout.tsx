@@ -129,6 +129,7 @@ type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detai
 
 export type BulkGateCredentials = {
   approval_password?: string;
+  approval_totp_code?: string;
   approval_gate_use_cooldown?: boolean;
 };
 
@@ -158,6 +159,7 @@ type LayoutProps = {
     workspace?: string;
     reason: string;
     approval_password?: string;
+    approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
   }) => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void;
@@ -534,6 +536,7 @@ function QueueBrowser(props: {
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [bulkApprovePassword, setBulkApprovePassword] = useState("");
+  const [bulkApproveTotpCode, setBulkApproveTotpCode] = useState("");
   const [bulkApproveUseCooldown, setBulkApproveUseCooldown] = useState(false);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
 
@@ -622,6 +625,9 @@ function QueueBrowser(props: {
   const handleBulkApprovePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setBulkApprovePassword(event.target.value);
   }, []);
+  const handleBulkApproveTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setBulkApproveTotpCode(event.target.value);
+  }, []);
 
   const handleBulkApproveUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setBulkApproveUseCooldown(event.target.checked);
@@ -630,10 +636,14 @@ function QueueBrowser(props: {
   const handleBulkApprove = useCallback(() => {
     const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
     const gateCredentials: BulkGateCredentials | undefined = showBulkGateFields
-      ? { approval_password: bulkApprovePassword, approval_gate_use_cooldown: bulkApproveUseCooldown }
+      ? {
+          approval_password: bulkApprovePassword,
+          approval_totp_code: bulkApproveTotpCode,
+          approval_gate_use_cooldown: bulkApproveUseCooldown
+        }
       : undefined;
     props.onBulkApprove?.(ids, gateCredentials);
-  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveUseCooldown]);
+  }, [props.onBulkApprove, bulkEligibleGroups, showBulkGateFields, bulkApprovePassword, bulkApproveTotpCode, bulkApproveUseCooldown]);
 
   const blockEligibleGroups = useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
   const blockEligibleActionCount = useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
@@ -666,7 +676,21 @@ function QueueBrowser(props: {
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                 />
               </label>
-              {(props.approvalGate?.cooldown_seconds ?? 0) > 0 && (
+              {props.approvalGate?.totp_enabled === true && (
+                <label className="block">
+                  <span className="sr-only">Authenticator code</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={bulkApproveTotpCode}
+                    onChange={handleBulkApproveTotpCodeChange}
+                    placeholder="Authenticator code"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  />
+                </label>
+              )}
+              {(props.approvalGate?.cooldown_seconds ?? 0) > 0 && props.approvalGate?.totp_enabled !== true && (
                 <label className="flex items-center gap-2 text-xs text-slate-600">
                   <input
                     type="checkbox"
@@ -705,6 +729,7 @@ function QueueBrowser(props: {
           count={blockEligibleActionCount}
           showGateFields={showBulkBlockGateFields}
           cooldownSeconds={props.approvalGate?.cooldown_seconds ?? 0}
+          totpEnabled={props.approvalGate?.totp_enabled === true}
           onBlock={handleBulkBlockConfirm}
         />
       )}
@@ -858,11 +883,13 @@ function QueueBulkBlockForm(props: {
   count: number;
   showGateFields: boolean;
   cooldownSeconds: number;
+  totpEnabled: boolean;
   onBlock: (reason: string, gateCredentials?: BulkGateCredentials) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [reason, setReason] = useState("");
   const [gatePassword, setGatePassword] = useState("");
+  const [gateTotpCode, setGateTotpCode] = useState("");
   const [gateUseCooldown, setGateUseCooldown] = useState(false);
 
   const handleExpand = useCallback(() => setExpanded(true), []);
@@ -870,6 +897,7 @@ function QueueBulkBlockForm(props: {
     setExpanded(false);
     setReason("");
     setGatePassword("");
+    setGateTotpCode("");
     setGateUseCooldown(false);
   }, []);
   const handleReasonChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -878,19 +906,27 @@ function QueueBulkBlockForm(props: {
   const handleGatePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setGatePassword(event.target.value);
   }, []);
+  const handleGateTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setGateTotpCode(event.target.value);
+  }, []);
   const handleGateUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setGateUseCooldown(event.target.checked);
   }, []);
   const handleConfirm = useCallback(() => {
     const gateCredentials = props.showGateFields
-      ? { approval_password: gatePassword, approval_gate_use_cooldown: gateUseCooldown }
+      ? {
+          approval_password: gatePassword,
+          approval_totp_code: gateTotpCode,
+          approval_gate_use_cooldown: gateUseCooldown
+        }
       : undefined;
     props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group", gateCredentials);
     setExpanded(false);
     setReason("");
     setGatePassword("");
+    setGateTotpCode("");
     setGateUseCooldown(false);
-  }, [props.onBlock, props.showGateFields, reason, gatePassword, gateUseCooldown]);
+  }, [props.onBlock, props.showGateFields, reason, gatePassword, gateTotpCode, gateUseCooldown]);
 
   if (!expanded) {
     return (
@@ -937,7 +973,21 @@ function QueueBulkBlockForm(props: {
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
             />
           </label>
-          {props.cooldownSeconds > 0 && (
+          {props.totpEnabled && (
+            <label className="block">
+              <span className="sr-only">Authenticator code for bulk block</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={gateTotpCode}
+                onChange={handleGateTotpCodeChange}
+                placeholder="Authenticator code"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              />
+            </label>
+          )}
+          {props.cooldownSeconds > 0 && !props.totpEnabled && (
             <label className="flex items-center gap-2 text-xs text-slate-600">
               <input
                 type="checkbox"

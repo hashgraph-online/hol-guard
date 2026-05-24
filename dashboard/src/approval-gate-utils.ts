@@ -4,3 +4,17 @@ export function approvalGateCooldownLabel(seconds: number): string {
   if (seconds === 3600) return "1 hour";
   return `${seconds} seconds`;
 }
+
+export function requiresApprovalPasswordPrompt(
+  cooldownActive: boolean,
+  strictAllDecisions: boolean,
+  selectedScope: "artifact" | "workspace" | "publisher" | "harness" | "global"
+): boolean {
+  if (selectedScope === "global") {
+    return true;
+  }
+  if (!cooldownActive) {
+    return true;
+  }
+  return strictAllDecisions;
+}
