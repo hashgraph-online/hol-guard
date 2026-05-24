@@ -151,6 +151,6 @@ def totp_code_at_counter(*, secret: str, counter: int) -> str:
 
 
 def _normalize_base32(value: str) -> str:
-    normalized = value.strip().replace(" ", "").upper()
+    normalized = value.strip().replace(" ", "").replace("-", "").upper()
     padding = "=" * ((8 - len(normalized) % 8) % 8)
     return normalized + padding

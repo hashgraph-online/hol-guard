@@ -164,7 +164,7 @@ hol-guard settings approval-password enable \
 hol-guard settings approval-password status
 ```
 
-Use cooldown only for ordinary non-global allow decisions. Guard still requires fresh proof for global allow, policy clear, settings import/reset, disabling the gate, disabling TOTP, and recovery. To unlock or lock the current approval window from a terminal:
+Use cooldown only for ordinary non-global allow decisions. Guard still requires fresh proof for global allow, policy clear, settings import/reset, disabling the gate, disabling TOTP, and recovery. When TOTP is enabled, cooldown is disabled so every protected action requires both factors. To unlock or lock the current password-only approval window from a terminal:
 
 ```bash
 hol-guard approvals unlock --duration 15m

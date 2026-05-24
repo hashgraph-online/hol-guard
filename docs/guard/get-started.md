@@ -231,7 +231,7 @@ hol-guard settings approval-password status
 
 The default mode requires proof for allow decisions and broad trust changes. If your team also wants proof before block decisions, enable **Require password for block decisions too** in Settings or pass `--strict-all-decisions` when enabling the gate.
 
-Cooldown is intentionally narrow. A valid cooldown can satisfy ordinary non-global allow decisions, but it cannot satisfy global allow, policy clear, settings import/reset, disabling the password gate, disabling TOTP, recovery, or policy-memory clear. Lock or unlock the current terminal approval window explicitly:
+Cooldown is intentionally narrow. A valid cooldown can satisfy ordinary non-global allow decisions, but it cannot satisfy global allow, policy clear, settings import/reset, disabling the password gate, disabling TOTP, recovery, or policy-memory clear. When TOTP is enabled, cooldown is disabled so every protected action requires both the password and a current authenticator code. Lock or unlock the current password-only terminal approval window explicitly:
 
 ```bash
 hol-guard approvals unlock --duration 15m

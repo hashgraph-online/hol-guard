@@ -269,7 +269,6 @@ def unlock_cooldown(
         raise ApprovalGateError("approval_gate_invalid_password", "Approval password is invalid.")
     state["failed_attempts"] = 0
     state.pop("locked_until", None)
-    state["cooldown_seconds"] = seconds
     state["cooldown_expires_at"] = _iso_from_epoch(now_epoch + seconds)
     _write_state(guard_home, state, now=now)
     return public_config(guard_home, now=now)
@@ -723,15 +722,7 @@ def _verify_totp_or_raise(
     code: str,
     now_epoch: float,
 ) -> int:
-    _validate_totp_state_or_raise(guard_home, state)
-    secret_id = _optional_string(state.get("totp_secret_id"))
-    secret = TotpSecretStore(guard_home).get_secret(secret_id or "")
-    if secret is None:
-        raise ApprovalGateError(
-            "approval_gate_recovery_required",
-            "Approval gate TOTP secret is unavailable.",
-            status=423,
-        )
+    secret = _validate_totp_state_or_raise(guard_home, state)
     accepted_counter = verify_totp_code(
         secret=secret,
         code=code,
@@ -745,7 +736,7 @@ def _verify_totp_or_raise(
     return accepted_counter
 
 
-def _validate_totp_state_or_raise(guard_home: Path, state: dict[str, object]) -> None:
+def _validate_totp_state_or_raise(guard_home: Path, state: dict[str, object]) -> str:
     secret_id = _optional_string(state.get("totp_secret_id"))
     if secret_id is None:
         raise ApprovalGateError(
@@ -753,12 +744,14 @@ def _validate_totp_state_or_raise(guard_home: Path, state: dict[str, object]) ->
             "Approval gate TOTP secret is unavailable.",
             status=423,
         )
-    if TotpSecretStore(guard_home).get_secret(secret_id) is None:
+    secret = TotpSecretStore(guard_home).get_secret(secret_id)
+    if secret is None:
         raise ApprovalGateError(
             "approval_gate_recovery_required",
             "Approval gate TOTP secret is unavailable.",
             status=423,
         )
+    return secret
 
 
 def _requires_decision_gate(state: dict[str, object], *, action: str, scope: str) -> bool:

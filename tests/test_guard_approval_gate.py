@@ -464,7 +464,7 @@ def test_approval_password_cli_command_family_status_enable_change_disable(tmp_p
 
 def test_approval_gate_cli_unlock_and_lock_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
-    _enable_gate(store, cooldown_seconds=900)
+    _enable_gate(store, cooldown_seconds=3600)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.approval_gate_prompt.getpass.getpass",
@@ -481,6 +481,7 @@ def test_approval_gate_cli_unlock_and_lock_commands(tmp_path: Path, monkeypatch:
     )
     assert unlock_payload["unlocked"] is True
     assert unlock_payload["cooldown_active"] is True
+    assert public_config(store.guard_home).cooldown_seconds == 3600
 
     lock_payload = run_approval_command(
         SimpleNamespace(
@@ -590,6 +591,15 @@ def test_approval_gate_totp_clock_skew_boundary(tmp_path: Path) -> None:
             now=skew_now,
         )
     assert old_error.value.code == "approval_gate_totp_invalid"
+
+
+def test_approval_gate_totp_manual_key_accepts_readability_dashes(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    secret = _enable_totp(store, now="2026-04-11T00:00:00+00:00")
+    dashed_secret = "-".join(secret[index : index + 4] for index in range(0, len(secret), 4))
+
+    assert totp_code_at_counter(secret=dashed_secret, counter=_counter("2026-04-11T00:01:00+00:00"))
 
 
 def test_approval_gate_disable_totp_requires_password_and_totp(tmp_path: Path) -> None:
