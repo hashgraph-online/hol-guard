@@ -142,12 +142,9 @@ def totp_code_at_counter(*, secret: str, counter: int) -> str:
     digest = hmac.new(secret_bytes, message, hashlib.sha1).digest()
     offset = digest[-1] & 0x0F
     binary = (
-        ((digest[offset] & 0x7F) << 24)
-        | (digest[offset + 1] << 16)
-        | (digest[offset + 2] << 8)
-        | digest[offset + 3]
+        ((digest[offset] & 0x7F) << 24) | (digest[offset + 1] << 16) | (digest[offset + 2] << 8) | digest[offset + 3]
     )
-    return f"{binary % (10 ** _TOTP_DIGITS):0{_TOTP_DIGITS}d}"
+    return f"{binary % (10**_TOTP_DIGITS):0{_TOTP_DIGITS}d}"
 
 
 def _normalize_base32(value: str) -> str:
