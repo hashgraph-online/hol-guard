@@ -607,6 +607,7 @@ await resolveRequestWithQueueResult({
   scope: "artifact",
   reason: "reviewed",
   approval_password: "local-password",
+  approval_totp_code: "123456",
   approval_gate_use_cooldown: false
 });
 const cooldownOptOutBody = JSON.parse(String(cooldownOptOutCalls[0].init?.body)) as Record<string, unknown>;
@@ -615,6 +616,7 @@ assert(
   "L077c: resolveRequestWithQueueResult preserves explicit cooldown opt-out"
 );
 assert(cooldownOptOutBody["approval_password"] === "local-password", "L077c: resolveRequestWithQueueResult sends approval password");
+assert(cooldownOptOutBody["approval_totp_code"] === "123456", "L077c: resolveRequestWithQueueResult sends approval TOTP code");
 
 installGuardWindow("?guard-token=stale-resolve-token&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const recoveryCalls: RecordedFetch[] = [];

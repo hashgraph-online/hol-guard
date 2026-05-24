@@ -484,6 +484,7 @@ export function App() {
     workspace?: string;
     reason: string;
     approval_password?: string;
+    approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
   }) => {
     resolutionInFlight.current = true;

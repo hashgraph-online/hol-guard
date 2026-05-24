@@ -85,7 +85,7 @@ import {
   type SemanticGroupId,
 } from "./queue-state";
 import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
-import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 
 export type ReviewViewModel = {
   item: GuardApprovalRequest;
@@ -111,6 +111,7 @@ type ReviewWorkspaceProps = {
     workspace?: string;
     reason: string;
     approval_password?: string;
+    approval_totp_code?: string;
     approval_gate_use_cooldown?: boolean;
   }) => Promise<void> | void;
   onGoHome: () => void;
@@ -763,6 +764,7 @@ function ReviewDecisionCard(props: {
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [approvalPassword, setApprovalPassword] = useState("");
+  const [approvalTotpCode, setApprovalTotpCode] = useState("");
   const [useCooldown, setUseCooldown] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
@@ -791,6 +793,7 @@ function ReviewDecisionCard(props: {
       setLastAction(null);
       setErrorMessage(null);
       setApprovalPassword("");
+      setApprovalTotpCode("");
       setUseCooldown(false);
     }
   }, [item?.request_id]);
@@ -832,7 +835,10 @@ function ReviewDecisionCard(props: {
       setErrorMessage(null);
       try {
         const gate = props.approvalGate;
-        const includeGateFields = gate?.enabled === true && gate?.configured === true;
+        const includeGateFields =
+          gate?.enabled === true &&
+          gate?.configured === true &&
+          requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
         await props.onResolve({
           ...buildDecisionPayload({
             item,
@@ -841,10 +847,14 @@ function ReviewDecisionCard(props: {
             reason: action === "allow" ? "approved in review" : "blocked in review",
           }),
           ...(includeGateFields ? { approval_password: approvalPassword } : {}),
+          ...(includeGateFields && gate?.totp_enabled === true
+            ? { approval_totp_code: approvalTotpCode }
+            : {}),
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
         });
         setResolved(action);
         setApprovalPassword("");
+        setApprovalTotpCode("");
         setUseCooldown(false);
         timerRef.current = setTimeout(() => setResolved(null), 2000);
       } catch (err) {
@@ -853,7 +863,7 @@ function ReviewDecisionCard(props: {
         setSubmitting(null);
       }
     },
-    [item, scope, props.onResolve, props.approvalGate, approvalPassword, useCooldown]
+    [item, scope, props.onResolve, props.approvalGate, approvalPassword, approvalTotpCode, useCooldown]
   );
 
   const handleRequestResolve = useCallback(
@@ -884,6 +894,9 @@ function ReviewDecisionCard(props: {
 
   const handleApprovalPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalTotpCode(event.target.value);
   }, []);
 
   const handleUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -1054,12 +1067,20 @@ function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {props.approvalGate?.enabled === true && props.approvalGate?.configured === true && (
+        {props.approvalGate?.enabled === true &&
+          props.approvalGate?.configured === true &&
+          requiresApprovalPasswordPrompt(
+            props.approvalGate.cooldown_active,
+            props.approvalGate.strict_all_decisions,
+            scope
+          ) && (
           <ApprovalPasswordPrompt
             gate={props.approvalGate}
             approvalPassword={approvalPassword}
+            approvalTotpCode={approvalTotpCode}
             useCooldown={useCooldown}
             onApprovalPasswordChange={handleApprovalPasswordChange}
+            onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
             onUseCooldownChange={handleUseCooldownChange}
           />
         )}
@@ -1321,14 +1342,18 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 type ApprovalPasswordPromptProps = {
   gate: GuardApprovalGatePublicConfig;
   approvalPassword: string;
+  approvalTotpCode: string;
   useCooldown: boolean;
   onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onUseCooldownChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
 function ApprovalPasswordPrompt(props: ApprovalPasswordPromptProps) {
   const showCooldownOption =
-    props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active;
+    props.gate.cooldown_seconds > 0 &&
+    !props.gate.cooldown_active &&
+    props.gate.totp_enabled !== true;
 
   return (
     <div className="mt-5 space-y-3 rounded-xl border border-slate-100 bg-slate-50/40 p-4">
@@ -1342,6 +1367,19 @@ function ApprovalPasswordPrompt(props: ApprovalPasswordPromptProps) {
           className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
         />
       </label>
+      {props.gate.totp_enabled === true && (
+        <label className="block">
+          <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={props.approvalTotpCode}
+            onChange={props.onApprovalTotpCodeChange}
+            className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+          />
+        </label>
+      )}
       {showCooldownOption && (
         <label className="flex cursor-pointer items-center gap-2 text-sm text-brand-dark">
           <input
