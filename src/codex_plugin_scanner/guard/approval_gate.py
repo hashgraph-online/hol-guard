@@ -56,10 +56,13 @@ from .approval_gate_state import (
     write_state as _write_state,
 )
 from .models import PolicyDecision
+from .totp import TotpSecretStore, build_otpauth_uri, generate_totp_secret, verify_totp_code
 
 APPROVAL_GATE_MIN_PASSWORD_LENGTH = 8
 APPROVAL_GATE_GRANT_TTL_SECONDS = 30
 APPROVAL_GATE_HASH_ITERATIONS = 310_000
+APPROVAL_GATE_TOTP_SKEW_STEPS = 1
+APPROVAL_GATE_TOTP_PENDING_TTL_SECONDS = 600
 
 ApprovalGatePurpose = Literal[
     "approval_decision",
@@ -93,6 +96,7 @@ class ApprovalGateInput:
     password: str | None = None
     new_password: str | None = None
     confirm_password: str | None = None
+    totp_code: str | None = None
     use_cooldown: bool | None = None
     revoke_cooldown: bool = False
 
@@ -107,6 +111,7 @@ class ApprovalGateGrant:
     strict: bool
     used_cooldown: bool
     cooldown_expires_at: str | None
+    totp_verified: bool
 
 
 def input_from_mapping(payload: object) -> ApprovalGateInput | None:
@@ -118,10 +123,12 @@ def input_from_mapping(payload: object) -> ApprovalGateInput | None:
     gate_mapping = gate_payload if isinstance(gate_payload, dict) else {}
     password = _optional_string(payload.get("approval_password")) or _optional_string(gate_mapping.get("password"))
     current_password = _optional_string(gate_mapping.get("current_password"))
+    totp_code = _optional_string(payload.get("approval_totp_code")) or _optional_string(gate_mapping.get("totp_code"))
     return ApprovalGateInput(
         password=current_password or password,
         new_password=_optional_string(gate_mapping.get("new_password")),
         confirm_password=_optional_string(gate_mapping.get("confirm_password")),
+        totp_code=totp_code,
         use_cooldown=_optional_bool(payload.get("approval_gate_use_cooldown"), gate_mapping.get("use_cooldown")),
         revoke_cooldown=_optional_bool(gate_mapping.get("revoke_cooldown"), False) is True,
     )
@@ -141,6 +148,8 @@ def public_config(guard_home: Path, *, now: str | None = None) -> ApprovalGatePu
         locked_until=locked_until if _is_future(locked_until, now_epoch) else None,
         fail_closed=bool(state.get("fail_closed") is True),
         strict_all_decisions=bool(state.get("strict_all_decisions") is True),
+        totp_enabled=bool(state.get("totp_enabled") is True),
+        totp_pending=_has_pending_totp(state, now_epoch),
     )
 
 
@@ -223,6 +232,208 @@ def _next_settings_state(
 def revoke_cooldown(guard_home: Path, *, now: str | None = None) -> ApprovalGatePublicConfig:
     state = _load_state(guard_home)
     state.pop("cooldown_expires_at", None)
+    _write_state(guard_home, state, now=now)
+    return public_config(guard_home, now=now)
+
+
+def unlock_cooldown(
+    guard_home: Path,
+    *,
+    duration_seconds: int,
+    approval_gate_input: ApprovalGateInput | None = None,
+    now: str | None = None,
+) -> ApprovalGatePublicConfig:
+    state = _load_state(guard_home)
+    if not _enabled(state):
+        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+    if _verifier(state) is None:
+        raise ApprovalGateError(
+            "approval_gate_recovery_required",
+            "Approval gate is enabled but no verifier is configured.",
+            status=423,
+        )
+    if _totp_enabled(state):
+        raise ApprovalGateError("approval_gate_totp_required", "Cooldown unlock is unavailable while TOTP is enabled.")
+    seconds = _coerce_cooldown_seconds(duration_seconds)
+    if seconds == 0:
+        raise ApprovalGateError("approval_gate_invalid_cooldown", "Cooldown unlock requires 900 or 3600 seconds.")
+    now_epoch = _epoch(now)
+    locked_until = _optional_string(state.get("locked_until"))
+    if _is_future(locked_until, now_epoch):
+        raise ApprovalGateError("approval_gate_locked", "Approval gate is temporarily locked.", status=423)
+    gate_input = approval_gate_input or ApprovalGateInput()
+    if gate_input.password is None:
+        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+    if not _verify_password(gate_input.password, _verifier(state)):
+        _record_failed_attempt(guard_home, state, now=now)
+        raise ApprovalGateError("approval_gate_invalid_password", "Approval password is invalid.")
+    state["failed_attempts"] = 0
+    state.pop("locked_until", None)
+    state["cooldown_expires_at"] = _iso_from_epoch(now_epoch + seconds)
+    _write_state(guard_home, state, now=now)
+    return public_config(guard_home, now=now)
+
+
+def begin_totp_enrollment(
+    guard_home: Path,
+    *,
+    approval_gate_input: ApprovalGateInput | None = None,
+    device_label: str = "local-device",
+    now: str | None = None,
+) -> dict[str, object]:
+    state = _load_state(guard_home)
+    if not _enabled(state):
+        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+    if _totp_enabled(state):
+        raise ApprovalGateError("approval_gate_totp_enabled", "TOTP is already enabled.")
+    _verify_or_raise(
+        guard_home,
+        state,
+        purpose="settings_write",
+        approval_gate_input=approval_gate_input,
+        strict=True,
+        now=now,
+    )
+    store = TotpSecretStore(guard_home)
+    pending_secret_id = str(state.get("totp_pending_secret_id") or "")
+    if pending_secret_id:
+        store.delete_secret(pending_secret_id)
+    secret = generate_totp_secret()
+    next_secret_id = secrets.token_urlsafe(12)
+    store.set_secret(next_secret_id, secret)
+    now_epoch = _epoch(now)
+    state["totp_pending_secret_id"] = next_secret_id
+    state["totp_pending_expires_at"] = _iso_from_epoch(now_epoch + APPROVAL_GATE_TOTP_PENDING_TTL_SECONDS)
+    state["totp_enabled"] = bool(state.get("totp_enabled") is True)
+    state.pop("cooldown_expires_at", None)
+    _write_state(guard_home, state, now=now)
+    return {
+        "pending": True,
+        "manual_key": secret,
+        "expires_at": state["totp_pending_expires_at"],
+        "otpauth_uri": build_otpauth_uri(secret=secret, device_label=device_label),
+    }
+
+
+def confirm_totp_enrollment(
+    guard_home: Path,
+    *,
+    approval_gate_input: ApprovalGateInput | None = None,
+    now: str | None = None,
+) -> ApprovalGatePublicConfig:
+    state = _load_state(guard_home)
+    if not _enabled(state):
+        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+    _verify_or_raise(
+        guard_home,
+        state,
+        purpose="settings_write",
+        approval_gate_input=approval_gate_input,
+        strict=True,
+        now=now,
+    )
+    pending_secret_id = _optional_string(state.get("totp_pending_secret_id"))
+    pending_expires_at = _optional_string(state.get("totp_pending_expires_at"))
+    now_epoch = _epoch(now)
+    if pending_secret_id is None or not _is_future(pending_expires_at, now_epoch):
+        raise ApprovalGateError("approval_gate_totp_pending_required", "No pending TOTP enrollment is available.")
+    gate_input = approval_gate_input or ApprovalGateInput()
+    if gate_input.totp_code is None:
+        raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
+    store = TotpSecretStore(guard_home)
+    pending_secret = store.get_secret(pending_secret_id)
+    if pending_secret is None:
+        raise ApprovalGateError(
+            "approval_gate_recovery_required",
+            "Approval gate TOTP secret is unavailable.",
+            status=423,
+        )
+    accepted_counter = verify_totp_code(
+        secret=pending_secret,
+        code=gate_input.totp_code,
+        now_epoch=now_epoch,
+        skew_steps=APPROVAL_GATE_TOTP_SKEW_STEPS,
+        last_accepted_counter=None,
+    )
+    if accepted_counter is None:
+        _record_failed_attempt(guard_home, state, now=now)
+        raise ApprovalGateError("approval_gate_totp_invalid", "TOTP code is invalid.")
+    active_secret_id = _optional_string(state.get("totp_secret_id"))
+    if active_secret_id is not None and active_secret_id != pending_secret_id:
+        store.delete_secret(active_secret_id)
+    state["totp_secret_id"] = pending_secret_id
+    state["totp_enabled"] = True
+    state["totp_last_counter"] = accepted_counter
+    state["failed_attempts"] = 0
+    state.pop("locked_until", None)
+    state.pop("totp_pending_secret_id", None)
+    state.pop("totp_pending_expires_at", None)
+    state.pop("cooldown_expires_at", None)
+    _write_state(guard_home, state, now=now)
+    return public_config(guard_home, now=now)
+
+
+def disable_totp(
+    guard_home: Path,
+    *,
+    approval_gate_input: ApprovalGateInput | None = None,
+    now: str | None = None,
+) -> ApprovalGatePublicConfig:
+    state = _load_state(guard_home)
+    if not _enabled(state):
+        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+    if _verifier(state) is None:
+        raise ApprovalGateError(
+            "approval_gate_recovery_required",
+            "Approval gate is enabled but no verifier is configured.",
+            status=423,
+        )
+    now_epoch = _epoch(now)
+    locked_until = _optional_string(state.get("locked_until"))
+    if _is_future(locked_until, now_epoch):
+        raise ApprovalGateError("approval_gate_locked", "Approval gate is temporarily locked.", status=423)
+    gate_input = approval_gate_input or ApprovalGateInput()
+    if gate_input.password is None:
+        raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+    if not _verify_password(gate_input.password, _verifier(state)):
+        _record_failed_attempt(guard_home, state, now=now)
+        raise ApprovalGateError("approval_gate_invalid_password", "Approval password is invalid.")
+    secret_id = _optional_string(state.get("totp_secret_id"))
+    if secret_id is None:
+        state["totp_enabled"] = False
+        _write_state(guard_home, state, now=now)
+        return public_config(guard_home, now=now)
+    if gate_input.totp_code is None:
+        raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
+    secret = TotpSecretStore(guard_home).get_secret(secret_id)
+    if secret is None:
+        raise ApprovalGateError(
+            "approval_gate_recovery_required",
+            "Approval gate TOTP secret is unavailable.",
+            status=423,
+        )
+    accepted_counter = verify_totp_code(
+        secret=secret,
+        code=gate_input.totp_code,
+        now_epoch=now_epoch,
+        skew_steps=APPROVAL_GATE_TOTP_SKEW_STEPS,
+        last_accepted_counter=_optional_int(state.get("totp_last_counter")),
+    )
+    if accepted_counter is None:
+        _record_failed_attempt(guard_home, state, now=now)
+        raise ApprovalGateError("approval_gate_totp_invalid", "TOTP code is invalid.")
+    state["failed_attempts"] = 0
+    state.pop("locked_until", None)
+    state["totp_enabled"] = False
+    state.pop("totp_secret_id", None)
+    state.pop("totp_last_counter", None)
+    pending_secret_id = _optional_string(state.get("totp_pending_secret_id"))
+    state.pop("totp_pending_secret_id", None)
+    state.pop("totp_pending_expires_at", None)
+    store = TotpSecretStore(guard_home)
+    store.delete_secret(secret_id)
+    if pending_secret_id is not None:
+        store.delete_secret(pending_secret_id)
     _write_state(guard_home, state, now=now)
     return public_config(guard_home, now=now)
 
@@ -370,6 +581,11 @@ def validate_grant(
         raise ApprovalGateError("approval_gate_required", "Approval password is required.")
     if strict and not approval_gate_grant.strict:
         raise ApprovalGateError("approval_gate_required", "Approval password is required.")
+    state = _load_state(guard_home)
+    if _totp_enabled(state):
+        _validate_totp_state_or_raise(guard_home, state)
+        if not approval_gate_grant.totp_verified:
+            raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
 
 
 def audit_payload(
@@ -410,13 +626,14 @@ def _verify_or_raise(
     locked_until = _optional_string(state.get("locked_until"))
     if _is_future(locked_until, now_epoch):
         raise ApprovalGateError("approval_gate_locked", "Approval gate is temporarily locked.", status=423)
-    if not strict and _cooldown_active(state, now_epoch):
+    if not strict and _cooldown_active(state, now_epoch) and not _totp_enabled(state):
         return _register_grant(
             guard_home,
             purpose=purpose,
             strict=False,
             used_cooldown=True,
             cooldown_expires_at=_optional_string(state.get("cooldown_expires_at")),
+            totp_verified=False,
             now=now,
         )
     gate_input = approval_gate_input or ApprovalGateInput()
@@ -425,10 +642,27 @@ def _verify_or_raise(
     if not _verify_password(gate_input.password, _verifier(state)):
         _record_failed_attempt(guard_home, state, now=now)
         raise ApprovalGateError("approval_gate_invalid_password", "Approval password is invalid.")
+    totp_verified = False
+    if _totp_enabled(state):
+        if gate_input.totp_code is None:
+            raise ApprovalGateError("approval_gate_totp_required", "TOTP code is required.")
+        accepted_counter = _verify_totp_or_raise(
+            guard_home,
+            state,
+            code=gate_input.totp_code,
+            now_epoch=now_epoch,
+        )
+        state["totp_last_counter"] = accepted_counter
+        totp_verified = True
     state["failed_attempts"] = 0
     state.pop("locked_until", None)
     cooldown_expires_at: str | None = None
-    if not strict and _cooldown_seconds(state) > 0 and gate_input.use_cooldown is not False:
+    if (
+        not strict
+        and not _totp_enabled(state)
+        and _cooldown_seconds(state) > 0
+        and gate_input.use_cooldown is not False
+    ):
         cooldown_expires_at = _iso_from_epoch(now_epoch + _cooldown_seconds(state))
         state["cooldown_expires_at"] = cooldown_expires_at
     _write_state(guard_home, state, now=now)
@@ -438,6 +672,7 @@ def _verify_or_raise(
         strict=strict,
         used_cooldown=False,
         cooldown_expires_at=cooldown_expires_at,
+        totp_verified=totp_verified,
         now=now,
     )
 
@@ -449,6 +684,7 @@ def _register_grant(
     strict: bool,
     used_cooldown: bool,
     cooldown_expires_at: str | None,
+    totp_verified: bool,
     now: str | None,
 ) -> ApprovalGateGrant:
     now_epoch = _epoch(now)
@@ -459,6 +695,7 @@ def _register_grant(
         strict=strict,
         used_cooldown=used_cooldown,
         cooldown_expires_at=cooldown_expires_at,
+        totp_verified=totp_verified,
     )
     _ACTIVE_GRANTS[grant.grant_id] = {
         "guard_home": str(guard_home),
@@ -466,6 +703,55 @@ def _register_grant(
     }
     _prune_grants(_ACTIVE_GRANTS, now_epoch)
     return grant
+
+
+def _totp_enabled(state: dict[str, object]) -> bool:
+    return bool(state.get("totp_enabled") is True)
+
+
+def _has_pending_totp(state: dict[str, object], now_epoch: float) -> bool:
+    pending_secret_id = _optional_string(state.get("totp_pending_secret_id"))
+    pending_expires_at = _optional_string(state.get("totp_pending_expires_at"))
+    return pending_secret_id is not None and _is_future(pending_expires_at, now_epoch)
+
+
+def _verify_totp_or_raise(
+    guard_home: Path,
+    state: dict[str, object],
+    *,
+    code: str,
+    now_epoch: float,
+) -> int:
+    secret = _validate_totp_state_or_raise(guard_home, state)
+    accepted_counter = verify_totp_code(
+        secret=secret,
+        code=code,
+        now_epoch=now_epoch,
+        skew_steps=APPROVAL_GATE_TOTP_SKEW_STEPS,
+        last_accepted_counter=_optional_int(state.get("totp_last_counter")),
+    )
+    if accepted_counter is None:
+        _record_failed_attempt(guard_home, state, now=_iso_from_epoch(now_epoch))
+        raise ApprovalGateError("approval_gate_totp_invalid", "TOTP code is invalid.")
+    return accepted_counter
+
+
+def _validate_totp_state_or_raise(guard_home: Path, state: dict[str, object]) -> str:
+    secret_id = _optional_string(state.get("totp_secret_id"))
+    if secret_id is None:
+        raise ApprovalGateError(
+            "approval_gate_recovery_required",
+            "Approval gate TOTP secret is unavailable.",
+            status=423,
+        )
+    secret = TotpSecretStore(guard_home).get_secret(secret_id)
+    if secret is None:
+        raise ApprovalGateError(
+            "approval_gate_recovery_required",
+            "Approval gate TOTP secret is unavailable.",
+            status=423,
+        )
+    return secret
 
 
 def _requires_decision_gate(state: dict[str, object], *, action: str, scope: str) -> bool:
@@ -533,3 +819,14 @@ def _coerce_cooldown_seconds(value: object) -> int:
             "Approval cooldown must be 0 (every approval), 900 (15 minutes), or 3600 (1 hour) seconds.",
         )
     return seconds
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None

@@ -87,6 +87,71 @@ def test_guard_help_uses_ai_antivirus_product_language() -> None:
     assert "Watched Apps" not in help_text
 
 
+def test_guard_cli_parses_approval_password_and_unlock_lock_commands() -> None:
+    parser = argparse.ArgumentParser(prog="hol-guard")
+    guard_commands_module.add_guard_root_parser(parser)
+
+    status_args = parser.parse_args(["settings", "approval-password", "status"])
+    enable_args = parser.parse_args(
+        [
+            "settings",
+            "approval-password",
+            "enable",
+            "--new-password",
+            "hunter42!",
+            "--confirm-password",
+            "hunter42!",
+        ]
+    )
+    unlock_args = parser.parse_args(["approvals", "unlock", "--duration", "1h"])
+    lock_args = parser.parse_args(["approvals", "lock"])
+    totp_status_args = parser.parse_args(["settings", "approval-totp", "status"])
+    totp_enroll_args = parser.parse_args(
+        [
+            "settings",
+            "approval-totp",
+            "enroll",
+            "--current-password",
+            "hunter42!",
+            "--device-label",
+            "my-device",
+        ]
+    )
+    totp_verify_args = parser.parse_args(
+        [
+            "settings",
+            "approval-totp",
+            "verify",
+            "--current-password",
+            "hunter42!",
+            "--code",
+            "123456",
+        ]
+    )
+    totp_disable_args = parser.parse_args(
+        [
+            "settings",
+            "approval-totp",
+            "disable",
+            "--current-password",
+            "hunter42!",
+            "--code",
+            "123456",
+        ]
+    )
+
+    assert status_args.settings_command == "approval-password"
+    assert status_args.settings_approval_password_command == "status"
+    assert enable_args.settings_approval_password_command == "enable"
+    assert unlock_args.approvals_command == "unlock"
+    assert lock_args.approvals_command == "lock"
+    assert totp_status_args.settings_command == "approval-totp"
+    assert totp_status_args.settings_approval_totp_command == "status"
+    assert totp_enroll_args.settings_approval_totp_command == "enroll"
+    assert totp_verify_args.settings_approval_totp_command == "verify"
+    assert totp_disable_args.settings_approval_totp_command == "disable"
+
+
 def test_guard_settings_show_and_update_security_level(tmp_path, capsys):
     home_dir = tmp_path / "home"
     _write_text(

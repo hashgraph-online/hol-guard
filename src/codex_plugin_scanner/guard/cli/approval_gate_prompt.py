@@ -23,9 +23,11 @@ def prompt_for_approval_gate(
             "Approval password is required from an interactive terminal.",
         )
     password = getpass.getpass("Approval password: ")
+    totp_code = getpass.getpass("Authenticator code: ") if gate.totp_enabled else None
     return ApprovalGateInput(
         password=password,
-        use_cooldown=use_cooldown and gate.cooldown_seconds > 0,
+        totp_code=totp_code,
+        use_cooldown=use_cooldown and gate.cooldown_seconds > 0 and not gate.totp_enabled,
     )
 
 
