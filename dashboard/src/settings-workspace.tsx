@@ -38,6 +38,13 @@ import {
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch, securityLevelLabel } from "./apps/app-catalog";
+export {
+  buildTotpQrImageOptions,
+  formatTotpEnrollmentExpiry,
+  formatTotpManualKey,
+  TotpEnrollmentQrPanel,
+} from "./totp-enrollment-qr-panel";
+import { TotpEnrollmentQrPanel } from "./totp-enrollment-qr-panel";
 import type {
   GuardApprovalGatePublicConfig,
   GuardNotificationSetupResult,
@@ -1548,15 +1555,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                 className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
               />
             </label>
-            {totpPending && props.totpEnrollment !== null && (
-              <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Manual key</p>
-                <p className="break-all font-mono text-xs text-brand-dark">{props.totpEnrollment.manual_key}</p>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Provisioning URI</p>
-                <p className="break-all font-mono text-xs text-brand-dark">{props.totpEnrollment.otpauth_uri}</p>
-                <p className="text-[11px] text-slate-500">Enrollment expires at {new Date(props.totpEnrollment.expires_at).toLocaleString()}.</p>
-              </div>
-            )}
+            {totpPending && props.totpEnrollment !== null && <TotpEnrollmentQrPanel enrollment={props.totpEnrollment} />}
             {props.totpActionError !== null && (
               <p className="text-xs text-brand-purple">{props.totpActionError}</p>
             )}
