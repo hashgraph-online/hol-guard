@@ -8,7 +8,7 @@ import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..approval_gate import ApprovalGateError, require_high_risk
+from ..approval_gate import ApprovalGateError, require_high_risk, revoke_cooldown, unlock_cooldown
 from ..approval_gate import public_config as approval_gate_public_config
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..codex_resume import retry_request_resume
@@ -103,6 +103,21 @@ def add_approval_parser(
     add_common_args(resume_parser)
     resume_parser.add_argument("--json", action="store_true")
 
+    unlock_parser = approvals_subparsers.add_parser(
+        "unlock",
+        help="Unlock approval gate cooldown for 15m or 1h",
+    )
+    unlock_parser.add_argument("--duration", choices=("15m", "1h"), default="15m")
+    add_common_args(unlock_parser)
+    unlock_parser.add_argument("--json", action="store_true")
+
+    lock_parser = approvals_subparsers.add_parser(
+        "lock",
+        help="End the active approval gate cooldown immediately",
+    )
+    add_common_args(lock_parser)
+    lock_parser.add_argument("--json", action="store_true")
+
 
 def run_approval_command(
     args: argparse.Namespace,
@@ -165,6 +180,42 @@ def run_approval_command(
             "cleared_resolved_requests": cleared_resolved_requests,
             "exit_code": 0,
         }
+    if command == "unlock":
+        gate = approval_gate_public_config(store.guard_home)
+        if gate.totp_enabled:
+            return {
+                "unlocked": False,
+                "error": "approval_gate_totp_required",
+                "message": "Cooldown unlock is unavailable while TOTP is enabled.",
+                "exit_code": 4,
+            }
+        duration_map = {"15m": 900, "1h": 3600}
+        duration_value = duration_map.get(str(getattr(args, "duration", "15m")), 900)
+        try:
+            gate_input = prompt_for_approval_gate(store.guard_home, use_cooldown=False)
+            gate = unlock_cooldown(
+                store.guard_home,
+                duration_seconds=duration_value,
+                approval_gate_input=gate_input,
+                now=_now(),
+            )
+        except ApprovalGateError as error:
+            return approval_gate_cli_payload(error)
+        return {
+            "unlocked": True,
+            "cooldown_seconds": gate.cooldown_seconds,
+            "cooldown_active": gate.cooldown_active,
+            "cooldown_expires_at": gate.cooldown_expires_at,
+            "exit_code": 0,
+        }
+    if command == "lock":
+        gate = revoke_cooldown(store.guard_home, now=_now())
+        return {
+            "locked": True,
+            "cooldown_active": gate.cooldown_active,
+            "cooldown_expires_at": gate.cooldown_expires_at,
+            "exit_code": 0,
+        }
     try:
         gate_input = (
             prompt_for_approval_gate(store.guard_home)
@@ -196,7 +247,7 @@ def _approval_resolution_needs_gate(store: GuardStore, *, action: str, scope: st
         return False
     if scope == "global":
         return True
-    if gate.cooldown_active:
+    if gate.cooldown_active and not gate.totp_enabled:
         return False
     if action == "allow":
         return True

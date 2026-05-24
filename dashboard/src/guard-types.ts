@@ -444,6 +444,8 @@ export type GuardApprovalGatePublicConfig = {
   locked_until: string | null;
   fail_closed: boolean;
   strict_all_decisions: boolean;
+  totp_enabled?: boolean;
+  totp_pending?: boolean;
 };
 
 export type GuardSettings = {
