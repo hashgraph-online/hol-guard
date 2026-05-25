@@ -577,12 +577,10 @@ def _evaluate_with_bundle(
     refresh_required = False
     packages: list[dict[str, object]] = []
     lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
-    allow_registry_fallback = _allow_registry_range_resolution(artifact)
     for target in targets:
         resolved_version = _resolved_target_version(
             target=target,
             lockfile_versions=lockfile_versions,
-            allow_registry_fallback=allow_registry_fallback,
         )
         package_match = (
             _bundle_package(
@@ -2282,7 +2280,6 @@ def _resolved_target_version(
     *,
     target: dict[str, object],
     lockfile_versions: dict[tuple[str, str | None], str],
-    allow_registry_fallback: bool = True,
 ) -> str | None:
     exact_version = _optional_string(target.get("version"))
     if exact_version is not None:
@@ -2296,18 +2293,10 @@ def _resolved_target_version(
     exact_version = _exact_version(requested_range)
     if exact_version is not None:
         return exact_version
-    if allow_registry_fallback:
-        registry_version = _registry_resolved_target_version(target=target, requested_range=requested_range)
-        if registry_version is not None:
-            return registry_version
+    registry_version = _registry_resolved_target_version(target=target, requested_range=requested_range)
+    if registry_version is not None:
+        return registry_version
     return None
-
-
-def _allow_registry_range_resolution(artifact: GuardArtifact) -> bool:
-    lockfile_paths = artifact.metadata.get("lockfile_paths")
-    if not isinstance(lockfile_paths, list):
-        return True
-    return not any(isinstance(path, str) and path.strip() for path in lockfile_paths)
 
 
 def _registry_resolved_target_version(*, target: dict[str, object], requested_range: str) -> str | None:
@@ -2379,8 +2368,11 @@ def _pypi_registry_resolved_version(*, package_name: str, requested_range: str) 
     releases_payload = payload.get("releases")
     if not isinstance(releases_payload, dict):
         return None
+    normalized_range = _normalized_pypi_requested_range(requested_range)
+    if normalized_range is None:
+        return None
     try:
-        specifier = SpecifierSet(requested_range)
+        specifier = SpecifierSet(normalized_range)
     except InvalidSpecifier:
         return None
     matching_versions: list[Version] = []
@@ -2397,6 +2389,54 @@ def _pypi_registry_resolved_version(*, package_name: str, requested_range: str) 
         return None
     matching_versions.sort()
     return str(matching_versions[-1])
+
+
+def _normalized_pypi_requested_range(requested_range: str) -> str | None:
+    normalized = requested_range.strip()
+    if not normalized:
+        return None
+    if normalized.startswith("~="):
+        return normalized
+    if normalized.startswith("^"):
+        return _pypi_caret_specifier(normalized[1:])
+    if normalized.startswith("~"):
+        return _pypi_tilde_specifier(normalized[1:])
+    return normalized
+
+
+def _pypi_caret_specifier(value: str) -> str | None:
+    base = _optional_string(value)
+    if base is None:
+        return None
+    try:
+        parsed_version = Version(base)
+    except InvalidVersion:
+        return None
+    release = parsed_version.release
+    major = release[0] if len(release) >= 1 else 0
+    minor = release[1] if len(release) >= 2 else 0
+    patch = release[2] if len(release) >= 3 else 0
+    if major > 0:
+        upper_bound = f"{major + 1}"
+    elif minor > 0:
+        upper_bound = f"0.{minor + 1}"
+    else:
+        upper_bound = f"0.0.{patch + 1}"
+    return f">={base},<{upper_bound}"
+
+
+def _pypi_tilde_specifier(value: str) -> str | None:
+    base = _optional_string(value)
+    if base is None:
+        return None
+    try:
+        parsed_version = Version(base)
+    except InvalidVersion:
+        return None
+    release = parsed_version.release
+    major = release[0] if len(release) >= 1 else 0
+    upper_bound = f"{major}.{release[1] + 1}" if len(release) >= 2 else f"{major + 1}"
+    return f">={base},<{upper_bound}"
 
 
 def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target: dict[str, object]) -> list[str]:
