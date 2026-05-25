@@ -13,7 +13,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/hol-guard?style=social)](https://github.com/hashgraph-online/hol-guard/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![HOL Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Protect your harness locally with `hol-guard`.** Use `plugin-scanner` when you need maintainer and CI checks for plugins, skills, MCP servers, and marketplace packages.<br><br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
+| ![HOL whole dark logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Protect your harness locally with `hol-guard`.** Use `plugin-scanner` when you need maintainer and CI checks for plugins, skills, MCP servers, and marketplace packages.<br><br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
 | :--- | :--- |
 
 ## Start Here
