@@ -325,6 +325,31 @@ setup(name="local-demo", version="0.1.0")
     assert result.packages[0]["reasons"][0]["code"] == "setup_py_exec_risk"
 
 
+def test_evaluate_package_request_artifact_does_not_execute_local_setup_py(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    marker_path = workspace_dir / "setup-executed.marker"
+    write_text(
+        workspace_dir / "setup.py",
+        f"""
+from pathlib import Path
+from setuptools import setup
+
+Path(r"{marker_path}").write_text("executed", encoding="utf-8")
+setup(name="local-demo", version="0.1.0")
+""".strip()
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+
+    artifact = artifact_from_command_fixture("uv pip install -e .", workspace=workspace_dir)
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "monitor"
+    assert marker_path.exists() is False
+
+
 @pytest.mark.parametrize(
     ("command", "manifest_name", "manifest_text", "lockfile_name", "lockfile_text"),
     [
