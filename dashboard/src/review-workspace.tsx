@@ -1354,34 +1354,62 @@ function ApprovalPasswordPrompt(props: ApprovalPasswordPromptProps) {
     props.gate.cooldown_seconds > 0 &&
     !props.gate.cooldown_active &&
     props.gate.totp_enabled !== true;
+  const codePreview = (props.approvalTotpCode ?? "").padEnd(6, " ").slice(0, 6).split("");
 
   return (
-    <div className="mt-5 space-y-3 rounded-xl border border-slate-100 bg-slate-50/40 p-4">
-      <label className="block">
-        <span className="text-sm font-semibold text-brand-dark">Approval password</span>
-        <input
-          type="password"
-          autoComplete="current-password"
-          value={props.approvalPassword}
-          onChange={props.onApprovalPasswordChange}
-          className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-        />
-      </label>
-      {props.gate.totp_enabled === true && (
+    <div className="mt-5 overflow-hidden rounded-2xl border border-brand-blue/20 bg-white shadow-sm">
+      <div className="flex items-start gap-3 border-b border-brand-blue/10 bg-brand-blue/[0.04] p-4">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-blue/10 text-brand-blue">
+          <HiMiniKey className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-brand-dark">
+            {props.gate.totp_enabled === true ? "Authenticator check required" : "Approval password required"}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Guard needs a fresh proof before it can save this decision.
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-4 p-4 md:grid-cols-[1fr_220px]">
         <label className="block">
-          <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
           <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            value={props.approvalTotpCode}
-            onChange={props.onApprovalTotpCodeChange}
-            className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            type="password"
+            autoComplete="current-password"
+            value={props.approvalPassword}
+            onChange={props.onApprovalPasswordChange}
+            className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
-      )}
+        {props.gate.totp_enabled === true && (
+          <div>
+            <div className="block">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
+            </div>
+            <div className="mt-2 grid grid-cols-6 gap-1.5" aria-hidden="true">
+              {codePreview.map((digit, index) => (
+                <span key={`${index}-${digit}`} className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg font-semibold text-brand-dark">
+                  {digit.trim() ? digit : "•"}
+                </span>
+              ))}
+            </div>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={props.approvalTotpCode}
+              onChange={props.onApprovalTotpCodeChange}
+              placeholder="123456"
+              className="mt-2 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              aria-label="Enter authenticator code"
+            />
+          </div>
+        )}
+      </div>
       {showCooldownOption && (
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-brand-dark">
+        <label className="mx-4 mb-4 flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-brand-dark">
           <input
             type="checkbox"
             checked={props.useCooldown}

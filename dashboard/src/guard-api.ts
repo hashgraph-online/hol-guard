@@ -955,6 +955,35 @@ export async function clearPolicy(input: {
   });
 }
 
+export async function clearReviewQueue(input: {
+  status?: "pending" | "resolved" | "expired";
+  harness?: string;
+  approval_password?: string;
+  approval_totp_code?: string;
+}): Promise<{ cleared: number; status: string; harness: string | null }> {
+  if (isGuardDemoMode()) {
+    return { cleared: 0, status: input.status ?? "pending", harness: input.harness ?? null };
+  }
+  return readJson<{ cleared: number; status: string; harness: string | null }>("/v1/requests/clear", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      status: input.status ?? "pending",
+      harness: input.harness,
+      approval_gate:
+        input.approval_password || input.approval_totp_code
+          ? {
+              password: input.approval_password,
+              totp_code: input.approval_totp_code
+            }
+          : undefined
+    })
+  });
+}
+
 export function formatHarnessCommand(command: string[]): string {
   return command
     .map((part) => (/\s/.test(part) ? JSON.stringify(part) : part))
@@ -1211,10 +1240,10 @@ export async function clearEvidence(): Promise<void> {
   if (isGuardDemoMode()) {
     return;
   }
-  const response = await fetch(guardApiInput("/v1/evidence"), withGuardAuth({ method: "DELETE" }));
-  if (!response.ok) {
-    throw new Error(`Clear evidence failed with ${response.status}`);
-  }
+  await readJson<{ deleted: number }>("/v1/evidence", {
+    method: "DELETE",
+    headers: guardAuthHeaders()
+  });
 }
 
 export async function exportDiagnostics(): Promise<Blob> {

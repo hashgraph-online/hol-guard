@@ -1,5 +1,6 @@
 import {
   buildClearPolicyPayload,
+  buildClearReviewQueuePayload,
   formatTotpEnrollmentExpiry,
   buildTotpQrImageOptions,
   formatTotpManualKey,
@@ -32,6 +33,14 @@ assert(!("harness" in clearAllPayload) || clearAllPayload.harness === undefined,
 
 const clearNonePayload = buildClearPolicyPayload(false);
 assert(clearNonePayload.all === false, "T530: clearPolicy payload with all=false should have all=false");
+
+const clearQueuePayload = buildClearReviewQueuePayload({
+  approvalPassword: "local-password",
+  approvalTotpCode: "123456",
+});
+assert(clearQueuePayload.status === "pending", "T744: clearReviewQueue payload should target pending reviews");
+assert(clearQueuePayload.approval_password === "local-password", "T744: clearReviewQueue payload should include approval password");
+assert(clearQueuePayload.approval_totp_code === "123456", "T744: clearReviewQueue payload should include authenticator code");
 
 assert(typeof repairApprovalCenter === "function", "T739: repairApprovalCenter should be exported as a function");
 assert(typeof setupDesktopNotifications === "function", "T740: setupDesktopNotifications should be exported as a function");
