@@ -105,6 +105,7 @@ from ..local_supply_chain import (
     build_local_supply_chain_posture,
     build_supply_chain_explain_payload,
     build_supply_chain_status_payload,
+    build_workspace_audit_payload,
     build_workspace_scan_payload,
 )
 from ..mcp_tool_calls import (
@@ -882,6 +883,17 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
     _add_guard_common_args(supply_chain_scan_parser)
     supply_chain_scan_parser.add_argument("--json", action="store_true")
+    supply_chain_audit_parser = supply_chain_subparsers.add_parser(
+        "audit",
+        help="Audit workspace dependencies with local inventory extraction and Guard Cloud batch evaluation",
+    )
+    _add_guard_common_args(supply_chain_audit_parser)
+    supply_chain_audit_parser.add_argument("--after-workspace")
+    supply_chain_audit_parser.add_argument("--before-workspace")
+    supply_chain_audit_parser.add_argument("--ci", action="store_true")
+    supply_chain_audit_parser.add_argument("--fail-on", choices=("low", "medium", "high", "critical"), default="high")
+    supply_chain_audit_parser.add_argument("--sbom", action="append", default=[])
+    supply_chain_audit_parser.add_argument("--json", action="store_true")
     supply_chain_sync_parser = supply_chain_subparsers.add_parser(
         "sync",
         help="Fetch and verify the latest signed supply-chain bundle for this workspace",
@@ -2375,6 +2387,27 @@ def run_guard_command(
                 now=_now(),
             )
             _emit("supply-chain-scan", payload, getattr(args, "json", False))
+            return exit_code
+        if supply_chain_command == "audit":
+            before_workspace = getattr(args, "before_workspace", None)
+            after_workspace = getattr(args, "after_workspace", None)
+            payload, exit_code = build_workspace_audit_payload(
+                store=store,
+                config=config,
+                workspace_dir=workspace_dir,
+                now=_now(),
+                command_name="audit",
+                sbom_paths=tuple(str(item) for item in getattr(args, "sbom", []) if isinstance(item, str)),
+                ci=bool(getattr(args, "ci", False)),
+                fail_on=str(getattr(args, "fail_on", "high")),
+                before_workspace_dir=(
+                    Path(str(before_workspace)).expanduser() if isinstance(before_workspace, str) else None
+                ),
+                after_workspace_dir=(
+                    Path(str(after_workspace)).expanduser() if isinstance(after_workspace, str) else None
+                ),
+            )
+            _emit("supply-chain-audit", payload, getattr(args, "json", False))
             return exit_code
         if supply_chain_command == "sync":
             try:
