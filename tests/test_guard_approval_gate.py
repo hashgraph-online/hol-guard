@@ -88,6 +88,21 @@ def _add_request(store: GuardStore, request_id: str) -> None:
     store.add_approval_request(_request(request_id), "2026-04-11T00:00:00+00:00")
 
 
+def _post_daemon_json(
+    daemon: GuardDaemonServer,
+    path: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{daemon.port}{path}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Guard-Token": daemon._server.auth_token},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 def _approve(
     store: GuardStore,
     request_id: str,
@@ -829,6 +844,35 @@ def test_approval_gate_settings_import_and_reset_require_totp_when_enabled(tmp_p
     assert reset_error.value.code == 403
     assert import_body["error"] == "approval_gate_totp_required"
     assert reset_body["error"] == "approval_gate_totp_required"
+
+
+def test_approval_gate_clear_review_queue_route_requires_proof_and_preserves_history(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    _add_request(store, "req-pending")
+    _add_request(store, "req-resolved")
+    _approve(store, "req-resolved", gate_input=ApprovalGateInput(password=PASSWORD))
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        with pytest.raises(urllib.error.HTTPError) as missing_error:
+            _post_daemon_json(daemon, "/v1/requests/clear", {"status": "pending"})
+        missing_body = json.loads(missing_error.value.read().decode("utf-8"))
+
+        clear_body = _post_daemon_json(
+            daemon,
+            "/v1/requests/clear",
+            {"status": "pending", "approval_gate": {"password": PASSWORD}},
+        )
+    finally:
+        daemon.stop()
+
+    assert missing_error.value.code == 403
+    assert missing_body["error"] == "approval_gate_required"
+    assert clear_body["cleared"] == 1
+    assert clear_body["status"] == "pending"
+    assert store.count_approval_requests(status="pending") == 0
+    assert store.count_approval_requests(status="resolved") == 1
 
 
 def test_approval_gate_daemon_totp_routes_round_trip(tmp_path: Path) -> None:

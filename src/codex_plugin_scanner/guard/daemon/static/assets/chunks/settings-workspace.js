@@ -1,4 +1,4 @@
-import { x as requireReact, y as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, z as fetchSettings, C as fetchRuntimeSnapshot, D as revokeApprovalGateCooldown, F as enrollApprovalGateTotp, I as verifyApprovalGateTotp, J as disableApprovalGateTotp, K as updateSettings, L as clearPolicy, M as clearEvidence, N as exportDiagnostics, O as repairApprovalCenter, Q as setupDesktopNotifications, E as EmptyState, G as GuardHero, T as Tag, R as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, U as HiMiniLockClosed, V as HiMiniCog6Tooth, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, W as HiMiniBellAlert, X as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { x as requireReact, y as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, z as fetchSettings, C as fetchRuntimeSnapshot, D as revokeApprovalGateCooldown, F as enrollApprovalGateTotp, I as verifyApprovalGateTotp, J as disableApprovalGateTotp, K as updateSettings, L as clearPolicy, M as clearReviewQueue, N as clearEvidence, O as exportDiagnostics, Q as repairApprovalCenter, R as setupDesktopNotifications, E as EmptyState, G as GuardHero, T as Tag, U as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, V as HiMiniLockClosed, W as HiMiniCog6Tooth, B as Badge, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, X as HiMiniBellAlert, Y as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { a as resolveProtectionLevelCopy } from "./runtime-overview.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 var lib = {};
@@ -1279,6 +1279,13 @@ function resolveSecurityLevelCardDescription(level) {
 function buildClearPolicyPayload(all) {
   return { all };
 }
+function buildClearReviewQueuePayload(input) {
+  return {
+    status: "pending",
+    ...input.approvalPassword ? { approval_password: input.approvalPassword } : {},
+    ...input.approvalTotpCode ? { approval_totp_code: input.approvalTotpCode } : {}
+  };
+}
 const actionOptions = [
   { value: "allow", label: "Allow" },
   { value: "warn", label: "Warn" },
@@ -1507,6 +1514,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const [saveError, setSaveError] = reactExports.useState(null);
   const [clearingApprovals, setClearingApprovals] = reactExports.useState(false);
   const [clearingEvidence, setClearingEvidence] = reactExports.useState(false);
+  const [clearingReviewQueue, setClearingReviewQueue] = reactExports.useState(false);
   const [exporting, setExporting] = reactExports.useState(false);
   const [repairing, setRepairing] = reactExports.useState(false);
   const [settingUpNotifications, setSettingUpNotifications] = reactExports.useState(false);
@@ -1912,13 +1920,31 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         approval_password: approvalGateCurrentPassword || void 0,
         approval_totp_code: approvalGateTotpCode || void 0
       });
-      setActionMessage("All saved approvals cleared.");
+      setActionMessage("Saved approvals cleared. Guard will ask again for future matching actions.");
       setApprovalGateCurrentPassword("");
       setApprovalGateTotpCode("");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear approvals.");
     } finally {
       setClearingApprovals(false);
+    }
+  }, [approvalGateCurrentPassword, approvalGateTotpCode]);
+  const handleClearReviewQueue = reactExports.useCallback(async () => {
+    if (!window.confirm("Clear the pending review queue? Guard will remove waiting items without creating allow or block decisions.")) return;
+    setClearingReviewQueue(true);
+    setActionMessage(null);
+    try {
+      const result = await clearReviewQueue(buildClearReviewQueuePayload({
+        approvalPassword: approvalGateCurrentPassword,
+        approvalTotpCode: approvalGateTotpCode
+      }));
+      setActionMessage(`Review queue cleared. Removed ${result.cleared} pending ${result.cleared === 1 ? "item" : "items"}.`);
+      setApprovalGateCurrentPassword("");
+      setApprovalGateTotpCode("");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to clear review queue.");
+    } finally {
+      setClearingReviewQueue(false);
     }
   }, [approvalGateCurrentPassword, approvalGateTotpCode]);
   const handleClearEvidence = reactExports.useCallback(async () => {
@@ -2224,12 +2250,56 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 }
               ),
               perfSnapshot !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Approval gate proof" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-xs text-slate-500", children: "If approval gate or authenticator is enabled, enter the proof here before clearing approvals or the queue." })
+                  ] }),
+                  draft.approval_gate?.totp_enabled === true ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "blue", children: "Authenticator required" }) : null
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 grid gap-3 sm:grid-cols-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "password",
+                        autoComplete: "current-password",
+                        value: approvalGateCurrentPassword,
+                        onChange: handleApprovalGateCurrentPassword,
+                        className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      }
+                    )
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "input",
+                      {
+                        type: "text",
+                        inputMode: "numeric",
+                        pattern: "[0-9]*",
+                        value: approvalGateTotpCode,
+                        onChange: handleApprovalGateTotpCode,
+                        placeholder: "123456",
+                        className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      }
+                    )
+                  ] })
+                ] })
+              ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear saved approvals" }),
                     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Removes all stored allow and block decisions. Guard will ask again for every action that was previously approved." }),
                     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleClearApprovals, disabled: clearingApprovals, variant: "outline", children: clearingApprovals ? "Clearing…" : "Clear approvals" }) })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear review queue" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Removes pending review items only. It does not save allow/block decisions or clear audit evidence." }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleClearReviewQueue, disabled: clearingReviewQueue, variant: "outline", children: clearingReviewQueue ? "Clearing…" : "Clear review queue" }) })
                   ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear evidence log" }),
@@ -2250,7 +2320,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   ] })
                 ] })
               ] }),
-              actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: actionMessage }) : null
+              actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-sm font-medium text-brand-dark", role: "status", children: actionMessage }) : null
             ] })
           }
         )
@@ -2623,6 +2693,7 @@ export {
   TotpEnrollmentQrPanel,
   applyApprovalGateDraft,
   buildClearPolicyPayload,
+  buildClearReviewQueuePayload,
   buildTotpQrImageOptions,
   formatTotpEnrollmentExpiry,
   formatTotpManualKey,
