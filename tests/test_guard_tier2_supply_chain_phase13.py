@@ -79,7 +79,7 @@ version = "4.5.7"
     assert result.packages[0]["supportLevel"] == "beta"
 
 
-def test_evaluate_package_request_artifact_warns_on_cargo_local_path_without_leaking_path(
+def test_evaluate_package_request_artifact_requires_review_on_cargo_local_path_without_leaking_path(
     tmp_path: Path,
 ) -> None:
     workspace_dir = tmp_path / "workspace"
@@ -94,13 +94,13 @@ def test_evaluate_package_request_artifact_warns_on_cargo_local_path_without_lea
 
     payload = json.dumps(result.to_dict())
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "local_path_dependency_source"
     assert result.packages[0]["supportLevel"] == "beta"
     assert "crates/demo" not in payload
 
 
-def test_evaluate_package_request_artifact_warns_on_cargo_git_sources(
+def test_evaluate_package_request_artifact_requires_review_on_cargo_git_sources(
     tmp_path: Path,
 ) -> None:
     workspace_dir = tmp_path / "workspace"
@@ -116,7 +116,7 @@ def test_evaluate_package_request_artifact_warns_on_cargo_git_sources(
         workspace_dir=workspace_dir,
     )
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
     assert result.packages[0]["supportLevel"] == "beta"
 
@@ -165,7 +165,7 @@ require github.com/gin-gonic/gin v1.10.0
     assert result.packages[0]["supportLevel"] == "beta"
 
 
-def test_evaluate_package_request_artifact_warns_on_go_replace_local_path_without_leaking_path(
+def test_evaluate_package_request_artifact_requires_review_on_go_replace_local_path_without_leaking_path(
     tmp_path: Path,
 ) -> None:
     workspace_dir = tmp_path / "workspace"
@@ -193,7 +193,7 @@ replace github.com/gin-gonic/gin => ../forks/gin
 
     payload = json.dumps(result.to_dict())
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "go_replace_local_source"
     assert result.packages[0]["supportLevel"] == "beta"
     assert "../forks/gin" not in payload

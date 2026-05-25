@@ -236,13 +236,13 @@ def test_evaluate_package_request_artifact_uses_manager_specific_fix_command(
 @pytest.mark.parametrize(
     ("command", "expected_decision", "expected_code"),
     [
-        ("npm install guard-github@github:hashgraph-online/hol-guard", "warn", "git_dependency_source"),
+        ("npm install guard-github@github:hashgraph-online/hol-guard", "ask", "git_dependency_source"),
         ("npm install guard-http@http://example.com/guard.tgz", "block", "insecure_source_url"),
-        ("npm install guard-https@https://example.com/guard.tgz", "warn", "external_tarball_source"),
-        ("npm install guard-query@https://example.com/guard.tgz?token=demo", "warn", "external_tarball_source"),
+        ("npm install guard-https@https://example.com/guard.tgz", "ask", "external_tarball_source"),
+        ("npm install guard-query@https://example.com/guard.tgz?token=demo", "ask", "external_tarball_source"),
         (
             "npm install guard-lookalike@https://registry.npmjs.org.evil.com/guard.tgz",
-            "warn",
+            "ask",
             "external_tarball_source",
         ),
     ],
@@ -266,7 +266,7 @@ def test_evaluate_package_request_artifact_applies_js_source_heuristics(
     assert result.packages[0]["reasons"][0]["code"] == expected_code
 
 
-def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for_warned_tarballs(
+def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for_reviewed_tarballs(
     tmp_path: Path,
 ) -> None:
     home_dir = tmp_path / "home"
@@ -280,7 +280,7 @@ def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for
     )
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert "external tarball source" in result.risk_summary.lower()
 
 
