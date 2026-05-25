@@ -319,7 +319,7 @@ def test_phase14_runtime_mcp_proxy_forwards_allowed_package_call(
     assert store.list_approval_requests(limit=5) == []
 
 
-def test_phase14_runtime_mcp_proxy_honors_stored_allow_override(
+def test_phase14_runtime_mcp_proxy_rejects_stored_allow_when_current_package_blocks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -389,12 +389,12 @@ def test_phase14_runtime_mcp_proxy_honors_stored_allow_override(
         ]
     )
 
-    assert marker_path.exists() is True
-    assert "error" not in result["responses"][2]
-    assert store.list_approval_requests(limit=5) == []
+    assert marker_path.exists() is False
+    assert result["responses"][2]["error"]["code"] == -32001
+    assert store.list_approval_requests(limit=5)
 
 
-def test_phase14_runtime_mcp_proxy_honors_stored_allow_override_without_workspace(
+def test_phase14_runtime_mcp_proxy_rejects_stored_allow_without_workspace_when_current_package_blocks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -464,9 +464,9 @@ def test_phase14_runtime_mcp_proxy_honors_stored_allow_override_without_workspac
         ]
     )
 
-    assert marker_path.exists() is True
-    assert "error" not in result["responses"][2]
-    assert store.list_approval_requests(limit=5) == []
+    assert marker_path.exists() is False
+    assert result["responses"][2]["error"]["code"] == -32001
+    assert store.list_approval_requests(limit=5)
 
 
 def test_phase14_runtime_mcp_proxy_skips_requeue_for_stored_package_block(
