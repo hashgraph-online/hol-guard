@@ -2727,6 +2727,12 @@ def run_guard_command(
                     metadata={
                         "tool_name": str(payload.get("tool_name", "")),
                         "hook_name": "permissionRequest",
+                        "hook_event_name": "PermissionRequest",
+                        "codex_hook_waits_for_browser_approval": _codex_hook_waits_for_browser_approval(
+                            args=args,
+                            event_name="PermissionRequest",
+                            policy_action=policy_action,
+                        ),
                         "command_text": _hook_command_text(payload),
                         "workspace": str(runtime_workspace) if runtime_workspace else None,
                         **codex_resume_metadata_from_hook_payload(payload),
@@ -3195,6 +3201,12 @@ def run_guard_command(
                             metadata={
                                 "tool_name": str(payload.get("tool_name", "")),
                                 "event": str(payload.get("event", "")),
+                                "hook_event_name": event_name,
+                                "codex_hook_waits_for_browser_approval": _codex_hook_waits_for_browser_approval(
+                                    args=args,
+                                    event_name=event_name,
+                                    policy_action=policy_action,
+                                ),
                                 "command_text": _hook_command_text(payload),
                                 "workspace": str(workspace) if workspace else None,
                                 **codex_resume_metadata_from_hook_payload(payload),
@@ -3600,13 +3612,7 @@ def _codex_browser_approval_decision(
     config: GuardConfig,
     daemon_client: object | None = None,
 ) -> str | None:
-    if _canonical_harness_name(args.harness) != "codex":
-        return None
-    if getattr(args, "json", False):
-        return None
-    if event_name not in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}:
-        return None
-    if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+    if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return None
     if event_name == "PreToolUse" and not _is_codex_native_runtime():
         return None
@@ -3643,6 +3649,27 @@ def _codex_browser_approval_decision(
     _update_codex_browser_operation_status(response_payload, daemon_client, "completed")
     response_payload["review_hint"] = "Approval received in HOL Guard. Codex is resuming this action."
     return "allow"
+
+
+def _codex_can_use_browser_approval(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
+    return (
+        _canonical_harness_name(args.harness) == "codex"
+        and not getattr(args, "json", False)
+        and event_name in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}
+        and policy_action in {"block", "sandbox-required", "require-reapproval"}
+    )
+
+
+def _codex_hook_waits_for_browser_approval(
+    args: argparse.Namespace,
+    *,
+    event_name: str,
+    policy_action: str,
+) -> bool:
+    return (
+        _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action)
+        and event_name != "PreToolUse"
+    )
 
 
 def _update_codex_browser_operation_status(
