@@ -1632,6 +1632,10 @@ def _render_fallback(console: Console, payload: dict[str, object]) -> None:
 def _build_supply_chain_posture_panel(supply_chain: dict[str, object]) -> Panel:
     body = Table.grid(padding=(0, 1))
     body.add_row("Status", str(supply_chain.get("status") or "unknown"))
+    body.add_row(
+        "Protection",
+        str(supply_chain.get("health_status") or supply_chain.get("status") or "unknown"),
+    )
     detail = supply_chain.get("detail")
     if detail:
         body.add_row("Detail", str(detail))
@@ -1643,6 +1647,8 @@ def _build_supply_chain_posture_panel(supply_chain: dict[str, object]) -> Panel:
             body.add_row("Tier", str(bundle.get("tier")))
         if bundle.get("workspace_id"):
             body.add_row("Workspace", str(bundle.get("workspace_id")))
+        if bundle.get("next_refresh_at"):
+            body.add_row("Next refresh", str(bundle.get("next_refresh_at")))
     policy = supply_chain.get("policy")
     if isinstance(policy, dict):
         body.add_row("Security", str(policy.get("security_level") or "unknown"))
