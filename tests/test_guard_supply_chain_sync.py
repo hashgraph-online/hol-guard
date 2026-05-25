@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import threading
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -127,13 +128,138 @@ def _bundle_response(
     }
 
 
+def _partition_bundle_response(
+    private_key_pem: bytes,
+    public_key_pem: bytes,
+    *,
+    advisory_id: str,
+    bundle_version: str,
+    ecosystem: str,
+    package_name: str,
+    partition: int,
+    partition_count: int,
+) -> dict[str, object]:
+    generated_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+    expires_at = generated_at + timedelta(hours=12)
+    bundle = {
+        "advisories": [
+            {
+                "advisoryId": advisory_id,
+                "aliases": [],
+                "confidence": 990,
+                "exploitLevel": "active",
+                "knownExploited": True,
+                "malwareState": "none",
+                "normalizedSeverity": "critical",
+                "recommendedFixVersion": "1.0.1",
+                "sourceKey": "ghsa",
+                "summary": f"{advisory_id} summary",
+                "title": f"{advisory_id} title",
+            }
+        ],
+        "bundleVersion": bundle_version,
+        "expiresAt": _iso(expires_at),
+        "feedSnapshotHash": "feed-snapshot-2",
+        "generatedAt": _iso(generated_at),
+        "keyId": "guard-bundle-key-2026-05",
+        "packages": [
+            {
+                "confidence": 990,
+                "defaultAction": "block",
+                "ecosystem": ecosystem,
+                "exploitLevel": "active",
+                "knownExploited": True,
+                "malwareState": "known",
+                "name": package_name,
+                "namespace": None,
+                "normalizedSeverity": "critical",
+                "packageAgeState": "watch",
+                "purl": f"pkg:{ecosystem}/{package_name}@1.0.0",
+                "reachability": "reachable",
+                "recommendedFixVersion": "1.0.1",
+                "relatedAdvisoryIds": [advisory_id],
+                "riskScore": 980,
+                "sourceIntegrityState": "high-risk",
+                "version": "1.0.0",
+            }
+        ],
+        "policyHash": "policy-hash-2",
+        "policyRules": [],
+        "scoringVersion": "scf-v1",
+        "sourceHashes": [{"payloadHash": "ghsa-feed-hash", "sourceKey": "ghsa", "staleStatus": "fresh"}],
+        "tier": "premium",
+        "workspaceId": WORKSPACE_ID,
+    }
+    canonical_payload = canonical_supply_chain_bundle_payload(bundle)
+    payload_hash = hashlib.sha256(canonical_payload).hexdigest()
+    loaded_key = serialization.load_pem_private_key(private_key_pem, password=None)
+    assert isinstance(loaded_key, RSAPrivateKey)
+    signature = loaded_key.sign(
+        canonical_payload,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256(),
+    )
+    return {
+        "bundle": bundle,
+        "payloadHash": payload_hash,
+        "signature": base64.b64encode(signature).decode("utf-8"),
+        "signatureAlgorithm": "rsa-pss-sha256",
+        "verificationKeys": [
+            {
+                "fingerprintSha256": _fingerprint(public_key_pem),
+                "keyId": "guard-bundle-key-2026-05",
+                "publicKeyPem": public_key_pem.decode("utf-8").strip(),
+                "state": "active",
+                "validUntil": None,
+            }
+        ],
+        "partitionDescriptor": {
+            "advisoryCount": 1,
+            "ecosystem": ecosystem,
+            "packageCount": 1,
+            "partition": partition,
+            "partitionCount": partition_count,
+            "payloadHash": payload_hash,
+        },
+    }
+
+
 class _BundleSyncHandler(BaseHTTPRequestHandler):
     captured_accept_encodings: ClassVar[list[str | None]] = []
+    captured_paths: ClassVar[list[str]] = []
+    index_payload: ClassVar[dict[str, object] | None] = None
+    partition_payloads: ClassVar[dict[tuple[str, int], dict[str, object]]] = {}
     response_payload: ClassVar[dict[str, object]] = {}
 
     def do_GET(self) -> None:
+        self.__class__.captured_paths.append(self.path)
         self.__class__.captured_accept_encodings.append(self.headers.get("Accept-Encoding"))
-        if self.path.startswith("/api/guard/supply-chain/bundle"):
+        parsed = urllib.parse.urlsplit(self.path)
+        if parsed.path.startswith("/api/guard/supply-chain/bundle/index"):
+            if self.__class__.index_payload is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+            body = json.dumps(self.__class__.index_payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path.startswith("/api/guard/supply-chain/bundle"):
+            query = urllib.parse.parse_qs(parsed.query)
+            ecosystem = query.get("ecosystem", [None])[0]
+            partition_raw = query.get("partition", [None])[0]
+            if isinstance(ecosystem, str) and isinstance(partition_raw, str):
+                key = (ecosystem, int(partition_raw))
+                partition_payload = self.__class__.partition_payloads.get(key)
+                if partition_payload is not None:
+                    body = json.dumps(partition_payload).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
             body = json.dumps(self.__class__.response_payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -151,6 +277,9 @@ class _BundleSyncHandler(BaseHTTPRequestHandler):
 def test_sync_supply_chain_bundle_fetches_and_caches_bundle(tmp_path: Path) -> None:
     private_key_pem, public_key_pem = _generate_key_pair()
     _BundleSyncHandler.captured_accept_encodings = []
+    _BundleSyncHandler.captured_paths = []
+    _BundleSyncHandler.index_payload = None
+    _BundleSyncHandler.partition_payloads = {}
     _BundleSyncHandler.response_payload = _bundle_response(private_key_pem, public_key_pem)
     server = HTTPServer(("127.0.0.1", 0), _BundleSyncHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -236,6 +365,106 @@ def test_supply_chain_bundle_refresh_keeps_approval_queue_quiet(tmp_path: Path) 
     assert summary["bundle_version"] == "1747616400000-refresh"
     assert store.get_cached_supply_chain_bundle(WORKSPACE_ID)["bundle"]["bundleVersion"] == "1747616400000-refresh"
     assert store.list_approval_requests() == []
+
+
+def test_sync_supply_chain_bundle_refresh_downloads_only_changed_partitions(tmp_path: Path) -> None:
+    private_key_pem, public_key_pem = _generate_key_pair()
+    unchanged_partition = _partition_bundle_response(
+        private_key_pem,
+        public_key_pem,
+        advisory_id="GHSA-unchanged",
+        bundle_version="1747612800000-old",
+        ecosystem="npm",
+        package_name="minimist",
+        partition=1,
+        partition_count=1,
+    )
+    changed_partition = _partition_bundle_response(
+        private_key_pem,
+        public_key_pem,
+        advisory_id="GHSA-changed",
+        bundle_version="1747616400000-refresh",
+        ecosystem="pypi",
+        package_name="requests",
+        partition=1,
+        partition_count=1,
+    )
+    _BundleSyncHandler.captured_accept_encodings = []
+    _BundleSyncHandler.captured_paths = []
+    _BundleSyncHandler.response_payload = {}
+    _BundleSyncHandler.partition_payloads = {
+        ("pypi", 1): changed_partition,
+    }
+    _BundleSyncHandler.index_payload = {
+        "bundleVersion": "1747616400000-refresh",
+        "emergencyDenyCount": 0,
+        "expiresAt": changed_partition["bundle"]["expiresAt"],
+        "feedSnapshotHash": "feed-snapshot-2",
+        "generatedAt": changed_partition["bundle"]["generatedAt"],
+        "partitions": [
+            {
+                "advisoryCount": 1,
+                "ecosystem": "npm",
+                "packageCount": 1,
+                "partition": 1,
+                "partitionCount": 1,
+                "payloadHash": unchanged_partition["payloadHash"],
+            },
+            {
+                "advisoryCount": 1,
+                "ecosystem": "pypi",
+                "packageCount": 1,
+                "partition": 1,
+                "partitionCount": 1,
+                "payloadHash": changed_partition["payloadHash"],
+            },
+        ],
+        "policyHash": "policy-hash-2",
+        "sourceHashes": [{"payloadHash": "ghsa-feed-hash", "sourceKey": "ghsa", "staleStatus": "fresh"}],
+        "tier": "premium",
+        "workspaceId": WORKSPACE_ID,
+    }
+    server = HTTPServer(("127.0.0.1", 0), _BundleSyncHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            "demo-token",
+            "2026-05-19T00:00:00Z",
+            workspace_id=WORKSPACE_ID,
+        )
+        store.cache_supply_chain_bundle(WORKSPACE_ID, unchanged_partition, "2026-05-19T00:00:00Z")
+        store.set_sync_payload(
+            "supply_chain_bundle_partition_cache",
+            {
+                "bundle_version": "1747612800000-old",
+                "partitions": {
+                    "npm:1": {
+                        "payload_hash": unchanged_partition["payloadHash"],
+                        "response": unchanged_partition,
+                    }
+                },
+                "workspace_id": WORKSPACE_ID,
+            },
+            "2026-05-19T00:00:00Z",
+        )
+
+        summary = sync_supply_chain_bundle(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    requested_paths = "".join(_BundleSyncHandler.captured_paths)
+    assert "/api/guard/supply-chain/bundle/index" in requested_paths
+    assert "ecosystem=pypi&partition=1" in requested_paths
+    assert "ecosystem=npm&partition=1" not in requested_paths
+    assert not any(
+        path.startswith("/api/guard/supply-chain/bundle?") and "ecosystem=" not in path
+        for path in _BundleSyncHandler.captured_paths
+    )
+    assert summary["status"] == "synced"
 
 
 def test_supply_chain_cache_and_eval_cache_clear_on_sync_token_rotation(tmp_path: Path) -> None:
