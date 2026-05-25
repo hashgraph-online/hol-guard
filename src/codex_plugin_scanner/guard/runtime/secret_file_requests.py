@@ -23,6 +23,7 @@ from .false_positive_rules import (
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
     fd_arg_requests_exec,
+    fd_args_follow_symlinks,
     fd_exec_token_is_plain_sed,
     fd_search_targets,
     split_fd_args_and_exec,
@@ -4008,6 +4009,8 @@ def _read_only_lookup_search_args_are_safe(args: list[str], *, home_dir: Path | 
 
 
 def _read_only_lookup_fd_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
+    if fd_args_follow_symlinks(args):
+        return False
     if any(fd_arg_requests_exec(arg) for arg in args):
         return _fd_exec_sed_read_only_args_are_safe(args, home_dir=home_dir)
     targets = fd_search_targets(args)
@@ -4019,6 +4022,8 @@ def _read_only_lookup_fd_args_are_safe(args: list[str], *, home_dir: Path | None
 
 
 def _fd_exec_sed_read_only_args_are_safe(args: list[str], *, home_dir: Path | None = None) -> bool:
+    if fd_args_follow_symlinks(args):
+        return False
     parsed = split_fd_args_and_exec(args)
     if parsed is None:
         return False

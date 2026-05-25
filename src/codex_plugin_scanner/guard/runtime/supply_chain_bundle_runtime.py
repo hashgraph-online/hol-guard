@@ -128,12 +128,23 @@ def check_supply_chain_bundle_rollback(bundle: SupplyChainBundle, cached_bundle_
         )
 
 
-def _response_keyring_is_anchored(
-    response: SupplyChainBundleResponse,
+def _computed_key_fingerprint(key: SupplyChainVerificationKey) -> str:
+    normalized_pem = key.public_key_pem.replace("\r\n", "\n").strip()
+    return hashlib.sha256(normalized_pem.encode("utf-8")).hexdigest()
+
+
+def _validate_key_fingerprints(response: SupplyChainBundleResponse) -> None:
+    for key in response.verification_keys:
+        if key.fingerprint_sha256 != _computed_key_fingerprint(key):
+            raise SupplyChainBundleKeyringError("Verification key fingerprint does not match its public key")
+
+
+def _signing_key_is_trusted(
+    signing_key: SupplyChainVerificationKey,
     trusted_keys: tuple[SupplyChainVerificationKey, ...],
 ) -> bool:
     trusted_fingerprints = {item.fingerprint_sha256 for item in trusted_keys}
-    return any(item.fingerprint_sha256 in trusted_fingerprints for item in response.verification_keys)
+    return signing_key.fingerprint_sha256 in trusted_fingerprints
 
 
 def verify_supply_chain_bundle_response(
@@ -157,8 +168,9 @@ def verify_supply_chain_bundle_response(
     )
     if signing_key is None:
         raise SupplyChainBundleKeyringError("Bundle keyId is not present in the advertised verification keyring")
-    if trusted_keys and not _response_keyring_is_anchored(response, trusted_keys):
-        raise SupplyChainBundleKeyringError("Bundle verification keyring is not anchored to the trusted keyring")
+    _validate_key_fingerprints(response)
+    if trusted_keys and not _signing_key_is_trusted(signing_key, trusted_keys):
+        raise SupplyChainBundleKeyringError("Bundle signing key is not anchored to the trusted keyring")
     current_time = now if now is not None else time.time()
     if signing_key.state == "revoked":
         raise SupplyChainBundleKeyringError("Revoked verification key cannot sign supply-chain bundles")
