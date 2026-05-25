@@ -10,6 +10,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -208,12 +209,20 @@ def test_gr080_codex_permission_request_uses_native_review_message(tmp_path: Pat
     assert "HOL Guard" in str(payload["systemMessage"])
 
 
-def test_gr081_codex_native_runtime_hard_stops_yolo_shell_exfil(
+def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     tmp_path: Path,
     monkeypatch,
     capsys,
 ) -> None:
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
+
+    def fail_on_wait(**kwargs):
+        raise AssertionError("Codex PreToolUse must return JSON denial without waiting for browser approval")
+
+    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", fail_on_wait)
 
     exit_code, output = _run_hook(
         tmp_path,
@@ -228,12 +237,16 @@ def test_gr081_codex_native_runtime_hard_stops_yolo_shell_exfil(
         },
     )
 
-    stderr = capsys.readouterr().err
+    captured = capsys.readouterr()
+    payload = _json_line(output)
+    hook_output = payload["hookSpecificOutput"]
 
-    assert exit_code == 2
-    assert output == ""
-    assert "HOL Guard" in stderr
-    assert "retry" in stderr.lower()
+    assert exit_code == 0
+    assert captured.err == ""
+    assert hook_output["hookEventName"] == "PreToolUse"
+    assert hook_output["permissionDecision"] == "deny"
+    assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
+    assert "retry" in str(hook_output["permissionDecisionReason"]).lower()
 
 
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
@@ -439,4 +452,3 @@ def test_gr097_hook_reason_deduplicates_duplicate_copy() -> None:
     reason = _native_hook_reason("HOL Guard blocked this action.", "HOL Guard blocked this action.", "Retry.")
 
     assert reason == "HOL Guard blocked this action. Retry."
-
