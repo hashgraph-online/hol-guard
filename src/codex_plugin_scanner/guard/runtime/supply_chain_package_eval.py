@@ -2319,9 +2319,7 @@ def _registry_package_name(target: dict[str, object]) -> str | None:
 
 
 def _npm_registry_resolved_version(*, package_name: str, requested_range: str) -> str | None:
-    metadata_url = (
-        f"{_NPM_REGISTRY_METADATA_BASE_URL.rstrip('/')}/{urllib.parse.quote(package_name, safe='')}"
-    )
+    metadata_url = f"{_NPM_REGISTRY_METADATA_BASE_URL.rstrip('/')}/{urllib.parse.quote(package_name, safe='')}"
     request = urllib.request.Request(
         metadata_url,
         headers={
