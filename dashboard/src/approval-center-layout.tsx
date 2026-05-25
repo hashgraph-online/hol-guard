@@ -62,10 +62,12 @@ import {
   isCodexHarness,
   buildCodexResumeUx,
 } from "./approval-center-utils";
+import { requiresApprovalPasswordPrompt } from "./approval-gate-utils";
 import {
   WhyThisPaused,
   ApproveConsequence,
   BlockConsequence,
+  ApprovalPasswordModal,
 } from "./approval-center-review-cards";
 import {
   buildProgressCopy,
@@ -473,6 +475,7 @@ function QueueWorkspace(props: {
               detail={props.detail}
               onGoHome={props.onGoHome}
               onResolve={props.onResolve}
+              approvalGate={props.approvalGate ?? null}
             />
           </div>
         </div>
@@ -490,6 +493,7 @@ function QueueWorkspace(props: {
             detail={props.detail}
             onGoHome={props.onGoHome}
             onResolve={props.onResolve}
+            approvalGate={props.approvalGate ?? null}
           />
         </div>
       )}
@@ -1135,6 +1139,7 @@ function DecisionWorkspace(props: {
   detail: DetailState;
   onGoHome: () => void;
   onResolve: LayoutProps["onResolve"];
+  approvalGate?: GuardApprovalGatePublicConfig | null;
 }) {
   const [scope, setScope] = useState<DecisionScope>("artifact");
   const [reason, setReason] = useState("approved in local approval center");
@@ -1142,8 +1147,21 @@ function DecisionWorkspace(props: {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resolvedBanner, setResolvedBanner] = useState<"allow" | "block" | null>(null);
   const [resolvedState, setResolvedState] = useState<"idle" | "decided" | "loaded">("idle");
+  const [approvalPassword, setApprovalPassword] = useState("");
+  const [approvalTotpCode, setApprovalTotpCode] = useState("");
+  const [useCooldown, setUseCooldown] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevRequestIdRef = useRef<string | null>(null);
+
+  const gateRequiresPassword = useMemo(() => {
+    const gate = props.approvalGate;
+    return (
+      gate?.enabled === true &&
+      gate?.configured === true &&
+      requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope)
+    );
+  }, [props.approvalGate, scope]);
 
   useEffect(() => {
     if (props.detail.kind === "ready") {
@@ -1152,6 +1170,10 @@ function DecisionWorkspace(props: {
       if (isNewItem) {
         setResolvedBanner(null);
         setResolvedState("loaded");
+        setApprovalPassword("");
+        setApprovalTotpCode("");
+        setUseCooldown(false);
+        setPendingAction(null);
         if (bannerTimerRef.current !== null) {
           clearTimeout(bannerTimerRef.current);
           bannerTimerRef.current = null;
@@ -1179,14 +1201,30 @@ function DecisionWorkspace(props: {
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve(buildDecisionPayload({
-          item: readyItem,
-          action,
-          scope,
-          reason,
-        }));
+        const gate = props.approvalGate;
+        const includeGateFields =
+          gate?.enabled === true &&
+          gate?.configured === true &&
+          requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
+        await props.onResolve({
+          ...buildDecisionPayload({
+            item: readyItem,
+            action,
+            scope,
+            reason,
+          }),
+          ...(includeGateFields ? { approval_password: approvalPassword } : {}),
+          ...(includeGateFields && gate?.totp_enabled === true
+            ? { approval_totp_code: approvalTotpCode }
+            : {}),
+          ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
+        });
         setResolvedState("decided");
         setResolvedBanner(action);
+        setApprovalPassword("");
+        setApprovalTotpCode("");
+        setUseCooldown(false);
+        setPendingAction(null);
         bannerTimerRef.current = setTimeout(() => {
           setResolvedBanner(null);
         }, 1500);
@@ -1195,23 +1233,51 @@ function DecisionWorkspace(props: {
         setSubmitting(null);
       }
     },
-    [props.onResolve, readyItem, reason, scope]
+    [props.onResolve, props.approvalGate, readyItem, reason, scope, approvalPassword, approvalTotpCode, useCooldown]
   );
 
   const handleRequestResolve = useCallback(
     (action: "allow" | "block") => {
+      if (gateRequiresPassword) {
+        setPendingAction(action);
+        setErrorMessage(null);
+        return;
+      }
       void handleResolve(action);
     },
-    [handleResolve]
+    [handleResolve, gateRequiresPassword]
   );
 
   const handleAllowDirect = useCallback(() => handleRequestResolve("allow"), [handleRequestResolve]);
   const handleBlockDirect = useCallback(() => handleRequestResolve("block"), [handleRequestResolve]);
 
+  const handleModalSubmit = useCallback(() => {
+    if (pendingAction !== null) {
+      void handleResolve(pendingAction);
+    }
+  }, [pendingAction, handleResolve]);
+
+  const handleModalCancel = useCallback(() => {
+    setPendingAction(null);
+    setApprovalPassword("");
+    setApprovalTotpCode("");
+    setUseCooldown(false);
+  }, []);
+
+  const handleApprovalPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setApprovalTotpCode(event.target.value);
+  }, []);
+  const handleUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setUseCooldown(event.target.checked);
+  }, []);
+
   useEffect(() => {
     if (props.detail.kind !== "ready") return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (submitting !== null) return;
+      if (submitting !== null || pendingAction !== null) return;
       const target = event.target as HTMLElement;
       if (
         target.tagName === "INPUT" ||
@@ -1224,7 +1290,7 @@ function DecisionWorkspace(props: {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.detail.kind, submitting, handleRequestResolve]);
+  }, [props.detail.kind, submitting, pendingAction, handleRequestResolve]);
 
   if (props.detail.kind === "loading") {
     return (
@@ -1333,6 +1399,20 @@ function DecisionWorkspace(props: {
       />
       <ScannerEvidenceSectionFull item={item} />
       <WhatChanged item={item} diff={diff} receipt={receipt} policy={policy} />
+      {pendingAction !== null && props.approvalGate != null && (
+        <ApprovalPasswordModal
+          gate={props.approvalGate}
+          approvalPassword={approvalPassword}
+          approvalTotpCode={approvalTotpCode}
+          useCooldown={useCooldown}
+          onApprovalPasswordChange={handleApprovalPasswordChange}
+          onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
+          onUseCooldownChange={handleUseCooldownChange}
+          onSubmit={handleModalSubmit}
+          onCancel={handleModalCancel}
+          submitLabel={pendingAction === "allow" ? allowLabel : "Keep blocked"}
+        />
+      )}
     </div>
   );
 }
