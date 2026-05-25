@@ -5302,6 +5302,13 @@ def _emit_native_hook_response(
         if policy_action in {"block", "sandbox-required", "require-reapproval"} and not additional_context:
             payload["decision"] = "block"
             payload["reason"] = reason
+            if _canonical_harness_name(harness) == "codex":
+                payload["continue"] = False
+                payload["stopReason"] = reason
+                payload["hookSpecificOutput"] = {
+                    "hookEventName": event_name,
+                    "additionalContext": reason,
+                }
         elif additional_context:
             payload["hookSpecificOutput"] = {
                 "hookEventName": event_name,
