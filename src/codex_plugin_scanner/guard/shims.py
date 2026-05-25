@@ -181,7 +181,7 @@ def get_real_binary_info(
     mtime = p.stat().st_mtime
     path_str = str(p)
     if redact_path_prefix and path_str.startswith(redact_path_prefix):
-        path_display = "…" + path_str[len(redact_path_prefix):]
+        path_display = "…" + path_str[len(redact_path_prefix) :]
     else:
         path_display = path_str
     return {
@@ -319,11 +319,13 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
         else:
             missing_managers.append(manager)
             integrity = "missing"
-        manager_details.append({
-            "integrity": integrity,
-            "manager": manager,
-            "shim_path": str(shim_path),
-        })
+        manager_details.append(
+            {
+                "integrity": integrity,
+                "manager": manager,
+                "shim_path": str(shim_path),
+            }
+        )
     return {
         "active_managers": active_managers,
         "installed_managers": installed_managers,
