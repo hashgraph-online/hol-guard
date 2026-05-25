@@ -171,7 +171,7 @@ def test_codex_block_resume_prompt_includes_request_id_and_safe_alternative(
     def _fake_send(**kwargs):
         payloads = kwargs["payloads"]
         captured_payloads.extend(payloads)
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
+        return {"id": 3, "result": {"turnId": "turn-2"}}, "turn_completed"
 
     monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
 
@@ -199,7 +199,13 @@ def test_codex_block_resume_prompt_includes_request_id_and_safe_alternative(
         daemon.stop()
 
     assert payload["codex_resume"]["status"] == "sent"
-    prompt = captured_payloads[2]["params"]["input"][0]["text"]
+    assert [payload["method"] for payload in captured_payloads] == [
+        "initialize",
+        "initialized",
+        "thread/resume",
+        "turn/start",
+    ]
+    prompt = captured_payloads[3]["params"]["input"][0]["text"]
     assert prompt == "HOL Guard blocked request `req-block`. Do not retry that action. Explain a safe alternative."
 
 
@@ -441,7 +447,7 @@ def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_prese
         daemon.stop()
 
     assert payload["codex_resume"]["status"] == "sent"
-    prompt = captured_payloads[2]["params"]["input"][0]["text"]
+    prompt = captured_payloads[3]["params"]["input"][0]["text"]
     assert "HOL Guard approved request `req-allow-command` for this exact command:" in prompt
     assert "python - <<'PY'" in prompt
     assert "Retry that exact command now using the existing saved approval." in prompt
@@ -593,7 +599,8 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     assert payload["codex_resume"]["status"] == "sent"
     assert payload["codex_resume"]["reason"] == "headless_resume_started"
     assert payload["codex_resume"]["strategy"] == "codex-headless-exec"
-    assert "original chat" in payload["codex_resume"]["message"]
+    assert "background" in payload["codex_resume"]["message"]
+    assert "open Codex App chat" in payload["codex_resume"]["message"]
     assert launched[0][:5] == ["/usr/local/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
     assert "--" in launched[0]
 
