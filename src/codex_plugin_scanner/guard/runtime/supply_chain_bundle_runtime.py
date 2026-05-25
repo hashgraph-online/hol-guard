@@ -160,6 +160,8 @@ def verify_supply_chain_bundle_response(
     if trusted_keys and not _response_keyring_is_anchored(response, trusted_keys):
         raise SupplyChainBundleKeyringError("Bundle verification keyring is not anchored to the trusted keyring")
     current_time = now if now is not None else time.time()
+    if signing_key.state == "revoked":
+        raise SupplyChainBundleKeyringError("Revoked verification key cannot sign supply-chain bundles")
     if (
         signing_key.state == "grace"
         and signing_key.valid_until_timestamp is not None
