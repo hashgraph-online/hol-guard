@@ -179,6 +179,23 @@ def test_sync_supply_chain_bundle_fetches_and_caches_bundle(tmp_path: Path) -> N
     assert isinstance(keyring, dict)
     assert keyring["workspace_id"] == WORKSPACE_ID
     assert _BundleSyncHandler.captured_accept_encodings[0] == "identity"
+    assert store.list_approval_requests() == []
+
+
+def test_supply_chain_bundle_cache_persists_across_store_restart(tmp_path: Path) -> None:
+    private_key_pem, public_key_pem = _generate_key_pair()
+    response_payload = _bundle_response(private_key_pem, public_key_pem)
+    guard_home = tmp_path / "guard-home"
+    first_store = GuardStore(guard_home)
+    first_store.cache_supply_chain_bundle(WORKSPACE_ID, response_payload, "2026-05-19T00:00:00Z")
+
+    restarted_store = GuardStore(guard_home)
+    cached = restarted_store.get_cached_supply_chain_bundle(WORKSPACE_ID)
+
+    assert isinstance(cached, dict)
+    bundle = cached.get("bundle")
+    assert isinstance(bundle, dict)
+    assert bundle["bundleVersion"] == "1747612800000-deadbeef"
 
 
 def test_supply_chain_cache_and_eval_cache_clear_on_sync_token_rotation(tmp_path: Path) -> None:
