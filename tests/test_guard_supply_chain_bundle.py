@@ -161,14 +161,14 @@ def _sign_bundle_response(
     }
 
 
-def test_supply_chain_bundle_verification_accepts_rotated_keyring() -> None:
+def test_supply_chain_bundle_rejects_untrusted_signing_key_even_when_keyring_contains_trusted_key() -> None:
     old_private_key, old_public_key = _generate_key_pair()
     first_response = load_supply_chain_bundle_response(
         json.dumps(_sign_bundle_response(_bundle_dict(), private_key_pem=old_private_key))
     )
     verify_supply_chain_bundle_response(first_response, now=first_response.bundle.generated_at_timestamp + 5)
 
-    new_private_key, new_public_key = _generate_key_pair()
+    new_private_key, _new_public_key = _generate_key_pair()
     rotated_response = load_supply_chain_bundle_response(
         json.dumps(
             _sign_bundle_response(
@@ -187,12 +187,13 @@ def test_supply_chain_bundle_verification_accepts_rotated_keyring() -> None:
         )
     )
 
-    verify_supply_chain_bundle_response(
-        rotated_response,
-        trusted_keys=first_response.verification_keys,
-        cached_bundle_version=first_response.bundle.bundle_version,
-        now=rotated_response.bundle.generated_at_timestamp + 5,
-    )
+    with pytest.raises(SupplyChainBundleKeyringError):
+        verify_supply_chain_bundle_response(
+            rotated_response,
+            trusted_keys=first_response.verification_keys,
+            cached_bundle_version=first_response.bundle.bundle_version,
+            now=rotated_response.bundle.generated_at_timestamp + 5,
+        )
 
     unanchored = load_supply_chain_bundle_response(
         json.dumps(
@@ -211,7 +212,49 @@ def test_supply_chain_bundle_verification_accepts_rotated_keyring() -> None:
             now=unanchored.bundle.generated_at_timestamp + 5,
         )
 
-    assert _fingerprint(new_public_key)
+
+def test_supply_chain_bundle_accepts_trusted_signing_key_refresh() -> None:
+    private_key, _public_key = _generate_key_pair()
+    first_response = load_supply_chain_bundle_response(
+        json.dumps(_sign_bundle_response(_bundle_dict(), private_key_pem=private_key))
+    )
+    refreshed_response = load_supply_chain_bundle_response(
+        json.dumps(
+            _sign_bundle_response(
+                _bundle_dict(bundle_version="1747616400000-refresh"),
+                private_key_pem=private_key,
+            )
+        )
+    )
+
+    verify_supply_chain_bundle_response(
+        refreshed_response,
+        trusted_keys=first_response.verification_keys,
+        cached_bundle_version=first_response.bundle.bundle_version,
+        now=refreshed_response.bundle.generated_at_timestamp + 5,
+    )
+
+
+def test_supply_chain_bundle_rejects_signing_key_fingerprint_mismatch() -> None:
+    old_private_key, old_public_key = _generate_key_pair()
+    first_response = load_supply_chain_bundle_response(
+        json.dumps(_sign_bundle_response(_bundle_dict(), private_key_pem=old_private_key))
+    )
+    new_private_key, _new_public_key = _generate_key_pair()
+    spoofed_payload = _sign_bundle_response(
+        _bundle_dict(bundle_version="1747616400000-spoofed"),
+        private_key_pem=new_private_key,
+    )
+    spoofed_payload["verificationKeys"][0]["fingerprintSha256"] = _fingerprint(old_public_key)
+    spoofed_response = load_supply_chain_bundle_response(json.dumps(spoofed_payload))
+
+    with pytest.raises(SupplyChainBundleKeyringError):
+        verify_supply_chain_bundle_response(
+            spoofed_response,
+            trusted_keys=first_response.verification_keys,
+            cached_bundle_version=first_response.bundle.bundle_version,
+            now=spoofed_response.bundle.generated_at_timestamp + 5,
+        )
 
 
 def test_supply_chain_bundle_rejects_payload_hash_mismatch_and_rollback() -> None:
