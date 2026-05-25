@@ -97,6 +97,8 @@ _DEFAULT_BUNDLE_REFRESH_INTERVAL_SECONDS = 15 * 60
 _STALE_REFRESH_GRACE_SECONDS = 5 * 60
 _CLOUD_AUDIT_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_PAGE_SIZE = 500
+_CLOUD_AUDIT_MAX_PAGES = 100
+_MAX_SBOM_BYTES = 10 * 1024 * 1024
 _ECOSYSTEM_BY_LOCKFILE = {
     "package-lock.json": "npm",
     "pnpm-lock.yaml": "npm",
@@ -766,9 +768,12 @@ def _workspace_audit_inventory(
     inventory_map = {_inventory_key(item): dict(item) for item in inventory}
     for sbom_path in normalized_sbom_paths:
         disk_path = workspace_dir / sbom_path
+        sbom_text = _read_sbom_text(disk_path)
+        if sbom_text is None:
+            continue
         try:
-            parsed_items = _inventory_from_sbom_text(disk_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError):
+            parsed_items = _inventory_from_sbom_text(sbom_text)
+        except ValueError:
             continue
         for item in parsed_items:
             _merge_inventory_item(inventory_map, item)
@@ -825,9 +830,12 @@ def _workspace_diff_audit_inventory(
             )
     for sbom_path in normalized_sbom_paths:
         disk_path = after_workspace_dir / sbom_path
+        sbom_text = _read_sbom_text(disk_path)
+        if sbom_text is None:
+            continue
         try:
-            parsed_items = _inventory_from_sbom_text(disk_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError):
+            parsed_items = _inventory_from_sbom_text(sbom_text)
+        except ValueError:
             continue
         for item in parsed_items:
             _merge_inventory_item(inventory_map, item)
@@ -982,6 +990,15 @@ def _inventory_from_sbom_text(text: str) -> tuple[dict[str, object], ...]:
     raise ValueError("Unsupported SBOM format")
 
 
+def _read_sbom_text(disk_path: Path) -> str | None:
+    try:
+        if disk_path.stat().st_size > _MAX_SBOM_BYTES:
+            return None
+        return disk_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def _inventory_from_cyclonedx(payload: dict[str, object]) -> tuple[dict[str, object], ...]:
     components = payload.get("components")
     if not isinstance(components, list):
@@ -1077,15 +1094,15 @@ def _inventory_from_purl(purl: str | None) -> dict[str, object] | None:
         namespace, _, name = package_path.rpartition("/")
         return {
             "ecosystem": ecosystem,
-            "namespace": namespace or None,
-            "name": name,
-            "version": package_version or None,
+            "namespace": urllib.parse.unquote(namespace) if namespace else None,
+            "name": urllib.parse.unquote(name),
+            "version": urllib.parse.unquote(package_version) if package_version else None,
         }
     return {
         "ecosystem": ecosystem,
         "namespace": None,
-        "name": package_path,
-        "version": package_version or None,
+        "name": urllib.parse.unquote(package_path),
+        "version": urllib.parse.unquote(package_version) if package_version else None,
     }
 
 
@@ -1119,7 +1136,7 @@ def _run_cloud_workspace_audit(
     aggregated_reasons: list[dict[str, object]] = []
     cursor: str | None = None
     last_response: dict[str, object] | None = None
-    while True:
+    for _ in range(_CLOUD_AUDIT_MAX_PAGES):
         page_payload = dict(request_payload)
         if cursor is not None:
             page_payload["cursor"] = cursor
@@ -1131,7 +1148,7 @@ def _run_cloud_workspace_audit(
         )
         try:
             with urllib.request.urlopen(request, timeout=_CLOUD_AUDIT_TIMEOUT_SECONDS) as response:
-                response_payload = json.loads(response.read().decode("utf-8"))
+                response_payload = json.load(response)
         except urllib.error.HTTPError as error:
             return (
                 None,
@@ -1167,6 +1184,14 @@ def _run_cloud_workspace_audit(
         if not isinstance(next_cursor, str) or not next_cursor:
             break
         cursor = next_cursor
+    else:
+        return (
+            None,
+            {
+                "code": "cloud_page_limit",
+                "message": "Guard cloud evaluation exceeded the maximum page count, so Guard fell back locally.",
+            },
+        )
     if last_response is None:
         return (None, None)
     merged_response = dict(last_response)
