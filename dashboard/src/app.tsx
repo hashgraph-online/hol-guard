@@ -411,9 +411,9 @@ export function App() {
     setClearConfirm(scope);
   }, []);
 
-  const handleConfirmClear = useCallback(async () => {
+  const handleConfirmClear = useCallback(async (credentials?: { approval_password?: string; approval_totp_code?: string }) => {
     if (clearConfirm === null) return;
-    await clearPolicy(clearConfirm);
+    await clearPolicy({ ...clearConfirm, ...credentials });
     setClearConfirm(null);
     const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
     if (snapshotResult.status === "fulfilled") {
@@ -658,6 +658,7 @@ export function App() {
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}
             clearConfirm={clearConfirm}
+            approvalGate={approvalGate}
             onConfirmClear={handleConfirmClear}
             onCancelClear={handleCancelClear}
             onOpenHelp={handleOpenHelp}

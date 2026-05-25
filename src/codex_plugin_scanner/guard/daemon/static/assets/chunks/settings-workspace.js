@@ -1,6 +1,7 @@
-import { x as requireReact, y as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, z as fetchSettings, C as fetchRuntimeSnapshot, D as revokeApprovalGateCooldown, F as enrollApprovalGateTotp, I as verifyApprovalGateTotp, J as disableApprovalGateTotp, K as updateSettings, L as clearPolicy, M as clearReviewQueue, N as clearEvidence, O as exportDiagnostics, Q as repairApprovalCenter, R as setupDesktopNotifications, E as EmptyState, G as GuardHero, T as Tag, U as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, V as HiMiniLockClosed, W as HiMiniCog6Tooth, B as Badge, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, X as HiMiniBellAlert, Y as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { x as requireReact, y as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, z as fetchSettings, C as fetchRuntimeSnapshot, D as revokeApprovalGateCooldown, F as enrollApprovalGateTotp, I as verifyApprovalGateTotp, J as disableApprovalGateTotp, K as updateSettings, L as clearPolicy, M as clearReviewQueue, N as clearEvidence, O as exportDiagnostics, Q as repairApprovalCenter, R as setupDesktopNotifications, E as EmptyState, G as GuardHero, T as Tag, U as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, V as HiMiniLockClosed, W as HiMiniCog6Tooth, B as Badge, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, X as HiMiniBellAlert, Y as approvalGateCooldownLabel, d as HiMiniXMark } from "../guard-dashboard.js";
 import { a as resolveProtectionLevelCopy } from "./runtime-overview.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
+import { u as useFocusTrap } from "./use-focus-trap.js";
 var lib = {};
 var propTypes = { exports: {} };
 var ReactPropTypesSecret_1;
@@ -1537,6 +1538,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const [approvalGateStrictAllDecisions, setApprovalGateStrictAllDecisions] = reactExports.useState(false);
   const [approvalGateCooldown, setApprovalGateCooldown] = reactExports.useState(0);
   const [totpEnrollment, setTotpEnrollment] = reactExports.useState(null);
+  const [totpSetupOpen, setTotpSetupOpen] = reactExports.useState(false);
   const [totpActionPending, setTotpActionPending] = reactExports.useState(null);
   const [totpActionError, setTotpActionError] = reactExports.useState(null);
   const [revokingCooldown, setRevokingCooldown] = reactExports.useState(false);
@@ -1703,6 +1705,12 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     setApprovalGateTotpDeviceLabel(event.target.value);
     setTotpActionError(null);
   }, []);
+  const handleOpenTotpSetup = reactExports.useCallback(() => {
+    setTotpSetupOpen(true);
+  }, []);
+  const handleCloseTotpSetup = reactExports.useCallback(() => {
+    setTotpSetupOpen(false);
+  }, []);
   const handleApprovalGateCooldownChange = reactExports.useCallback((event) => {
     const next = Number(event.target.value);
     setApprovalGateCooldown(next);
@@ -1787,6 +1795,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         onApprovalGateChange?.(gate);
       }
       setTotpEnrollment(payload.enrollment ?? null);
+      setTotpSetupOpen(payload.enrollment !== void 0 && payload.enrollment !== null);
       setActionMessage("TOTP enrollment started. Verify with your authenticator code.");
       setActionMessageKind("success");
     } catch (error) {
@@ -1821,6 +1830,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       }
       setApprovalGateTotpCode("");
       setTotpEnrollment(null);
+      setTotpSetupOpen(false);
       setActionMessage("TOTP verified and enabled.");
       setActionMessageKind("success");
     } catch (error) {
@@ -1855,6 +1865,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       }
       setApprovalGateTotpCode("");
       setTotpEnrollment(null);
+      setTotpSetupOpen(false);
       setActionMessage("TOTP disabled.");
       setActionMessageKind("success");
     } catch (error) {
@@ -2158,6 +2169,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 strictAllDecisions: approvalGateStrictAllDecisions,
                 cooldownSeconds: approvalGateCooldown,
                 totpEnrollment,
+                totpSetupOpen,
                 totpActionPending,
                 totpActionError,
                 revokingCooldown,
@@ -2169,6 +2181,8 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 onCurrentPasswordChange: handleApprovalGateCurrentPassword,
                 onTotpCodeChange: handleApprovalGateTotpCode,
                 onTotpDeviceLabelChange: handleApprovalGateTotpDeviceLabel,
+                onOpenTotpSetup: handleOpenTotpSetup,
+                onCloseTotpSetup: handleCloseTotpSetup,
                 onStrictAllDecisionsChange: handleApprovalGateStrictAllDecisions,
                 onCooldownChange: handleApprovalGateCooldownChange,
                 onStartTotpEnrollment: handleStartTotpEnrollment,
@@ -2610,69 +2624,80 @@ function ApprovalGateCard(props) {
         )
       ] }),
       failClosed && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", children: "Guard is in fail-closed mode. Fix approval gate state before making trust or policy changes." }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-lg border border-slate-200 bg-white px-3 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl border border-brand-blue/15 bg-white", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "TOTP authenticator" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: totpEnabled ? "green" : totpPending ? "blue" : "slate", children: totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Disabled" })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Authenticator app" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-xs leading-5 text-slate-500", children: "Add a six-digit code from Google Authenticator, 1Password, Authy, or iCloud Passwords for high-risk approvals." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: totpEnabled ? "green" : totpPending ? "blue" : "slate", children: totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected" }) })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Add an authenticator code as a second factor for high-risk approvals and settings writes." }),
-        !totpEnabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Device label" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "text",
-              value: props.totpDeviceLabel,
-              onChange: props.onTotpDeviceLabelChange,
-              className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-            }
-          )
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 bg-slate-50/50 px-4 py-3", children: [
+          !totpEnabled && !totpPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Scan a QR code to connect an authenticator app." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ActionButton,
+              {
+                onClick: props.onStartTotpEnrollment,
+                disabled: props.totpActionPending !== null,
+                variant: "outline",
+                children: props.totpActionPending === "enroll" ? "Opening setup..." : "Set up authenticator"
+              }
+            )
+          ] }),
+          totpPending && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Setup pending. Open the QR screen and enter the current code to finish." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ActionButton,
+              {
+                onClick: props.totpEnrollment ? props.onOpenTotpSetup : props.onStartTotpEnrollment,
+                disabled: props.totpActionPending !== null,
+                variant: "outline",
+                children: props.totpEnrollment ? "Open setup" : "Restart setup"
+              }
+            )
+          ] }),
+          totpEnabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Authenticator code to disable" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "text",
+                  inputMode: "numeric",
+                  pattern: "[0-9]*",
+                  value: props.totpCode,
+                  onChange: props.onTotpCodeChange,
+                  className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ActionButton,
+              {
+                onClick: props.onDisableTotp,
+                disabled: props.totpActionPending !== null,
+                variant: "outline",
+                children: props.totpActionPending === "disable" ? "Disabling..." : "Disable authenticator"
+              }
+            )
+          ] }),
+          props.totpActionError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-purple", children: props.totpActionError })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Authenticator code" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "text",
-              inputMode: "numeric",
-              pattern: "[0-9]*",
-              value: props.totpCode,
-              onChange: props.onTotpCodeChange,
-              className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-            }
-          )
-        ] }),
-        totpPending && props.totpEnrollment !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(TotpEnrollmentQrPanel, { enrollment: props.totpEnrollment }),
-        props.totpActionError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", children: props.totpActionError }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          !totpEnabled && /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ActionButton,
-            {
-              onClick: props.onStartTotpEnrollment,
-              disabled: props.totpActionPending !== null,
-              variant: "outline",
-              children: props.totpActionPending === "enroll" ? "Starting…" : "Start enrollment"
-            }
-          ),
-          totpPending && /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ActionButton,
-            {
-              onClick: props.onVerifyTotpEnrollment,
-              disabled: props.totpActionPending !== null,
-              variant: "outline",
-              children: props.totpActionPending === "verify" ? "Verifying…" : "Verify code"
-            }
-          ),
-          totpEnabled && /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ActionButton,
-            {
-              onClick: props.onDisableTotp,
-              disabled: props.totpActionPending !== null,
-              variant: "outline",
-              children: props.totpActionPending === "disable" ? "Disabling…" : "Disable authenticator"
-            }
-          )
-        ] })
+        props.totpSetupOpen && props.totpEnrollment !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          TotpSetupModal,
+          {
+            enrollment: props.totpEnrollment,
+            deviceLabel: props.totpDeviceLabel,
+            totpCode: props.totpCode,
+            pending: props.totpActionPending,
+            error: props.totpActionError,
+            onDeviceLabelChange: props.onTotpDeviceLabelChange,
+            onTotpCodeChange: props.onTotpCodeChange,
+            onVerify: props.onVerifyTotpEnrollment,
+            onClose: props.onCloseTotpSetup
+          }
+        )
       ] }),
       cooldownActive && cooldownLabel !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-dark", children: [
@@ -2713,6 +2738,73 @@ function ApprovalGateCard(props) {
       ] })
     ] })
   ] });
+}
+function TotpSetupModal(props) {
+  const modalRef = reactExports.useRef(null);
+  useFocusTrap(true, modalRef);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/45 p-4 backdrop-blur-sm",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": "Set up authenticator app",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: modalRef, className: "w-full max-w-3xl overflow-hidden rounded-3xl border border-brand-blue/15 bg-white shadow-2xl", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Authenticator setup" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: "Scan this QR code" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-600", children: "Open your authenticator app, add account, scan code, then enter current six-digit code to finish." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onClose,
+              className: "inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-dark",
+              "aria-label": "Close authenticator setup",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_260px]", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(TotpEnrollmentQrPanel, { enrollment: props.enrollment }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Device label" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "text",
+                  value: props.deviceLabel,
+                  onChange: props.onDeviceLabelChange,
+                  className: "mt-2 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Six-digit code" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "text",
+                  inputMode: "numeric",
+                  pattern: "[0-9]*",
+                  maxLength: 6,
+                  value: props.totpCode,
+                  onChange: props.onTotpCodeChange,
+                  placeholder: "123456",
+                  className: "mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                }
+              )
+            ] }),
+            props.error !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: props.error }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onVerify, disabled: props.pending !== null, children: props.pending === "verify" ? "Verifying..." : "Finish setup" })
+          ] })
+        ] })
+      ] })
+    }
+  );
 }
 export {
   SettingsWorkspace,

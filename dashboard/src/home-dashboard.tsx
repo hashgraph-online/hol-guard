@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniMinusCircle,
@@ -25,6 +25,7 @@ import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarn
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, resolveCloudIntelCopy } from "./runtime-overview";
 import type {
+  GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardManagedInstall,
   GuardPolicyDecision,
@@ -130,11 +131,16 @@ export function HomeWorkspace(props: {
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
   onOpenAppDetail: (harness: string) => void;
   clearConfirm: { harness?: string; all?: boolean } | null;
-  onConfirmClear: () => Promise<void>;
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  onConfirmClear: (credentials?: { approval_password?: string; approval_totp_code?: string }) => Promise<void>;
   onCancelClear: () => void;
   onOpenHelp?: () => void;
 }) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [clearPassword, setClearPassword] = useState("");
+  const [clearTotpCode, setClearTotpCode] = useState("");
+  const [clearError, setClearError] = useState<string | null>(null);
+  const [clearSubmitting, setClearSubmitting] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -153,15 +159,38 @@ export function HomeWorkspace(props: {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
 
+  const handleClearPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setClearPassword(event.target.value);
+    setClearError(null);
+  }, []);
+
+  const handleClearTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setClearTotpCode(event.target.value);
+    setClearError(null);
+  }, []);
+
   const handleConfirmClearWithToast = useCallback(async () => {
     const confirm = props.clearConfirm;
-    await props.onConfirmClear();
-    if (confirm?.harness) {
-      showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
-    } else if (confirm?.all) {
-      showToast("Cleared all decisions");
+    setClearSubmitting(true);
+    setClearError(null);
+    try {
+      await props.onConfirmClear({
+        ...(clearPassword ? { approval_password: clearPassword } : {}),
+        ...(clearTotpCode ? { approval_totp_code: clearTotpCode } : {}),
+      });
+      setClearPassword("");
+      setClearTotpCode("");
+      if (confirm?.harness) {
+        showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
+      } else if (confirm?.all) {
+        showToast("Cleared all decisions");
+      }
+    } catch (error) {
+      setClearError(error instanceof Error ? error.message : "Unable to clear remembered decisions.");
+    } finally {
+      setClearSubmitting(false);
     }
-  }, [props.clearConfirm, props.onConfirmClear, showToast]);
+  }, [clearPassword, clearTotpCode, props.clearConfirm, props.onConfirmClear, showToast]);
 
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
@@ -345,6 +374,13 @@ export function HomeWorkspace(props: {
       {props.clearConfirm && (
         <ClearConfirmDialog
           clearConfirm={props.clearConfirm}
+          approvalGate={props.approvalGate}
+          clearPassword={clearPassword}
+          clearTotpCode={clearTotpCode}
+          clearError={clearError}
+          clearSubmitting={clearSubmitting}
+          onClearPasswordChange={handleClearPasswordChange}
+          onClearTotpCodeChange={handleClearTotpCodeChange}
           onCancelClear={props.onCancelClear}
           onConfirmClear={handleConfirmClearWithToast}
         />
@@ -355,11 +391,19 @@ export function HomeWorkspace(props: {
 
 function ClearConfirmDialog(props: {
   clearConfirm: { harness?: string; all?: boolean };
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  clearPassword: string;
+  clearTotpCode: string;
+  clearError: string | null;
+  clearSubmitting: boolean;
+  onClearPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onClearTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onCancelClear: () => void;
   onConfirmClear: () => Promise<void>;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(true, dialogRef);
+  const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
 
   return (
     <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirm clear decisions">
@@ -373,6 +417,40 @@ function ClearConfirmDialog(props: {
                 <p className="mt-2 text-sm text-muted-foreground">
                   This will remove {props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`}. Guard will ask again next time matching actions run.
                 </p>
+                {needsProof && (
+                  <div className="mt-4 grid gap-3">
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={props.clearPassword}
+                        onChange={props.onClearPasswordChange}
+                        className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      />
+                    </label>
+                    {props.approvalGate?.totp_enabled === true && (
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={6}
+                          value={props.clearTotpCode}
+                          onChange={props.onClearTotpCodeChange}
+                          placeholder="123456"
+                          className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
+                {props.clearError !== null && (
+                  <p className="mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-sm text-brand-dark">
+                    {props.clearError}
+                  </p>
+                )}
               </div>
             </div>
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -386,9 +464,10 @@ function ClearConfirmDialog(props: {
               <button
                 type="button"
                 onClick={props.onConfirmClear}
-                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90"
+                disabled={props.clearSubmitting}
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-60"
               >
-                Clear decisions
+                {props.clearSubmitting ? "Clearing..." : "Clear decisions"}
               </button>
             </div>
           </div>

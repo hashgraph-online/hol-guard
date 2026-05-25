@@ -161,6 +161,7 @@
     --radius-lg: .5rem;
     --radius-xl: .75rem;
     --radius-2xl: 1rem;
+    --radius-3xl: 1.5rem;
     --animate-spin: spin 1s linear infinite;
     --blur-sm: 8px;
     --blur-3xl: 64px;
@@ -929,6 +930,10 @@
     min-height: calc(var(--spacing) * 11);
   }
 
+  .min-h-12 {
+    min-height: calc(var(--spacing) * 12);
+  }
+
   .min-h-16 {
     min-height: calc(var(--spacing) * 16);
   }
@@ -1238,6 +1243,10 @@
     gap: calc(var(--spacing) * 4);
   }
 
+  .gap-5 {
+    gap: calc(var(--spacing) * 5);
+  }
+
   .gap-6 {
     gap: calc(var(--spacing) * 6);
   }
@@ -1393,6 +1402,10 @@
 
   .rounded-2xl {
     border-radius: var(--radius-2xl);
+  }
+
+  .rounded-3xl {
+    border-radius: var(--radius-3xl);
   }
 
   .rounded-\[1\.35rem\] {
@@ -2087,8 +2100,14 @@
     }
   }
 
-  .bg-brand-dark {
+  .bg-brand-dark, .bg-brand-dark\/45 {
     background-color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-dark\/45 {
+      background-color: color-mix(in oklab, var(--brand-dark) 45%, transparent);
+    }
   }
 
   .bg-brand-green {
@@ -2358,6 +2377,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-slate-50\/60 {
       background-color: color-mix(in oklab, var(--color-slate-50) 60%, transparent);
+    }
+  }
+
+  .bg-slate-50\/70 {
+    background-color: #f8fafcb3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-slate-50\/70 {
+      background-color: color-mix(in oklab, var(--color-slate-50) 70%, transparent);
     }
   }
 
@@ -3104,6 +3133,11 @@
   .tracking-\[0\.28em\] {
     --tw-tracking: .28em;
     letter-spacing: .28em;
+  }
+
+  .tracking-\[0\.35em\] {
+    --tw-tracking: .35em;
+    letter-spacing: .35em;
   }
 
   .tracking-tight {
@@ -4418,6 +4452,10 @@
 
     .lg\:grid-cols-\[minmax\(0\,1\.4fr\)_minmax\(0\,0\.8fr\)\] {
       grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr);
+    }
+
+    .lg\:grid-cols-\[minmax\(0\,1fr\)_260px\] {
+      grid-template-columns: minmax(0, 1fr) 260px;
     }
 
     .lg\:grid-cols-\[minmax\(0\,1fr\)_minmax\(0\,0\.8fr\)\] {
