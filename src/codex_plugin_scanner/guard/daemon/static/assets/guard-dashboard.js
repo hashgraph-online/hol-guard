@@ -13387,6 +13387,26 @@ async function clearPolicy(input) {
     })
   });
 }
+async function clearReviewQueue(input) {
+  if (isGuardDemoMode()) {
+    return { cleared: 0, status: input.status ?? "pending", harness: input.harness ?? null };
+  }
+  return readJson("/v1/requests/clear", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      status: input.status ?? "pending",
+      harness: input.harness,
+      approval_gate: input.approval_password || input.approval_totp_code ? {
+        password: input.approval_password,
+        totp_code: input.approval_totp_code
+      } : void 0
+    })
+  });
+}
 function formatHarnessCommand(command) {
   return command.map((part) => /\s/.test(part) ? JSON.stringify(part) : part).join(" ");
 }
@@ -13582,10 +13602,10 @@ async function clearEvidence() {
   if (isGuardDemoMode()) {
     return;
   }
-  const response = await fetch(guardApiInput("/v1/evidence"), withGuardAuth({ method: "DELETE" }));
-  if (!response.ok) {
-    throw new Error(`Clear evidence failed with ${response.status}`);
-  }
+  await readJson("/v1/evidence", {
+    method: "DELETE",
+    headers: guardAuthHeaders()
+  });
 }
 async function exportDiagnostics() {
   if (isGuardDemoMode()) {
@@ -19730,35 +19750,49 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 }
 function ApprovalPasswordPrompt(props) {
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3 rounded-xl border border-slate-100 bg-slate-50/40 p-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "password",
-          autoComplete: "current-password",
-          value: props.approvalPassword,
-          onChange: props.onApprovalPasswordChange,
-          className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-        }
-      )
+  const codePreview = (props.approvalTotpCode ?? "").padEnd(6, " ").slice(0, 6).split("");
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 overflow-hidden rounded-2xl border border-brand-blue/20 bg-white shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 border-b border-brand-blue/10 bg-brand-blue/[0.04] p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5", "aria-hidden": "true" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.gate.totp_enabled === true ? "Authenticator check required" : "Approval password required" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: "Guard needs a fresh proof before it can save this decision." })
+      ] })
     ] }),
-    props.gate.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "text",
-          inputMode: "numeric",
-          pattern: "[0-9]*",
-          value: props.approvalTotpCode,
-          onChange: props.onApprovalTotpCodeChange,
-          className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-        }
-      )
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 p-4 md:grid-cols-[1fr_220px]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "password",
+            autoComplete: "current-password",
+            value: props.approvalPassword,
+            onChange: props.onApprovalPasswordChange,
+            className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      props.gate.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "block", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid grid-cols-6 gap-1.5", "aria-hidden": "true", children: codePreview.map((digit, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg font-semibold text-brand-dark", children: digit.trim() ? digit : "•" }, `${index}-${digit}`)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            inputMode: "numeric",
+            pattern: "[0-9]*",
+            maxLength: 6,
+            value: props.approvalTotpCode,
+            onChange: props.onApprovalTotpCodeChange,
+            placeholder: "123456",
+            className: "mt-2 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+            "aria-label": "Enter authenticator code"
+          }
+        )
+      ] })
     ] }),
-    showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-sm text-brand-dark", children: [
+    showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mx-4 mb-4 flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-brand-dark", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "input",
         {
@@ -22123,7 +22157,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniHome as $,
+  HiMiniArrowLeft as $,
   ActionButton as A,
   Badge as B,
   fetchRuntimeSnapshot as C,
@@ -22136,35 +22170,36 @@ export {
   disableApprovalGateTotp as J,
   updateSettings as K,
   clearPolicy as L,
-  clearEvidence as M,
-  exportDiagnostics as N,
-  repairApprovalCenter as O,
+  clearReviewQueue as M,
+  clearEvidence as N,
+  exportDiagnostics as O,
   ProofStrip as P,
-  setupDesktopNotifications as Q,
-  HiMiniMagnifyingGlass as R,
+  repairApprovalCenter as Q,
+  setupDesktopNotifications as R,
   SectionLabel as S,
   Tag as T,
-  HiMiniLockClosed as U,
-  HiMiniCog6Tooth as V,
-  HiMiniBellAlert as W,
-  approvalGateCooldownLabel as X,
-  fetchApprovalPage as Y,
-  fetchPolicy as Z,
-  HiMiniArrowLeft as _,
+  HiMiniMagnifyingGlass as U,
+  HiMiniLockClosed as V,
+  HiMiniCog6Tooth as W,
+  HiMiniBellAlert as X,
+  approvalGateCooldownLabel as Y,
+  fetchApprovalPage as Z,
+  fetchPolicy as _,
   HiMiniShieldCheck as a,
-  HiMiniAdjustmentsHorizontal as a0,
-  detectCategory as a1,
-  CATEGORIES as a2,
-  policyIdentityKey as a3,
-  HiMiniChartBar as a4,
-  runHarnessAction as a5,
-  GuardHarnessActionError as a6,
-  HiMiniRocketLaunch as a7,
-  HiMiniArrowPath as a8,
-  HiMiniTrash as a9,
-  clearLabelForScope as aa,
-  formatHarnessCommand as ab,
-  HiMiniCommandLine as ac,
+  HiMiniHome as a0,
+  HiMiniAdjustmentsHorizontal as a1,
+  detectCategory as a2,
+  CATEGORIES as a3,
+  policyIdentityKey as a4,
+  HiMiniChartBar as a5,
+  runHarnessAction as a6,
+  GuardHarnessActionError as a7,
+  HiMiniRocketLaunch as a8,
+  HiMiniArrowPath as a9,
+  HiMiniTrash as aa,
+  clearLabelForScope as ab,
+  formatHarnessCommand as ac,
+  HiMiniCommandLine as ad,
   formatRelativeTime as b,
   HiMiniSparkles as c,
   HiMiniXMark as d,

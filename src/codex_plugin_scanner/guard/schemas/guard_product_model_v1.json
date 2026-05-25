@@ -506,6 +506,13 @@
       "writes_state": true
     },
     {
+      "path": "/v1/requests/clear",
+      "method": "POST",
+      "category": "destructive",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
       "path": "/v1/artifacts/{id}/diff",
       "method": "GET",
       "category": "unknown",

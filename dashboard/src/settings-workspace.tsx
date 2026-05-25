@@ -22,6 +22,7 @@ import {
 } from "./approval-center-primitives";
 import {
   clearEvidence,
+  clearReviewQueue,
   disableApprovalGateTotp,
   enrollApprovalGateTotp,
   exportDiagnostics,
@@ -64,6 +65,21 @@ export function resolveSecurityLevelCardDescription(level: "relaxed" | "balanced
 
 export function buildClearPolicyPayload(all: boolean): { harness?: string; all?: boolean } {
   return { all };
+}
+
+export function buildClearReviewQueuePayload(input: {
+  approvalPassword?: string;
+  approvalTotpCode?: string;
+}): {
+  status: "pending";
+  approval_password?: string;
+  approval_totp_code?: string;
+} {
+  return {
+    status: "pending",
+    ...(input.approvalPassword ? { approval_password: input.approvalPassword } : {}),
+    ...(input.approvalTotpCode ? { approval_totp_code: input.approvalTotpCode } : {}),
+  };
 }
 
 type SettingsState =
@@ -328,11 +344,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [saveError, setSaveError] = useState<string | null>(null);
   const [clearingApprovals, setClearingApprovals] = useState(false);
   const [clearingEvidence, setClearingEvidence] = useState(false);
+  const [clearingReviewQueue, setClearingReviewQueue] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [settingUpNotifications, setSettingUpNotifications] = useState(false);
   const [notificationSetup, setNotificationSetup] = useState<GuardNotificationSetupResult | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionMessageKind, setActionMessageKind] = useState<"success" | "error">("success");
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -588,6 +606,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       }
       setRevokePassword("");
       setActionMessage("Cooldown revoked successfully.");
+      setActionMessageKind("success");
     } catch (error) {
       setRevokeError(error instanceof Error ? error.message : "Unable to revoke cooldown.");
     } finally {
@@ -620,6 +639,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       }
       setTotpEnrollment(payload.enrollment ?? null);
       setActionMessage("TOTP enrollment started. Verify with your authenticator code.");
+      setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to start TOTP enrollment.");
     } finally {
@@ -654,6 +674,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       setApprovalGateTotpCode("");
       setTotpEnrollment(null);
       setActionMessage("TOTP verified and enabled.");
+      setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to verify TOTP.");
     } finally {
@@ -688,6 +709,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       setApprovalGateTotpCode("");
       setTotpEnrollment(null);
       setActionMessage("TOTP disabled.");
+      setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to disable TOTP.");
     } finally {
@@ -763,13 +785,36 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         approval_password: approvalGateCurrentPassword || undefined,
         approval_totp_code: approvalGateTotpCode || undefined,
       });
-      setActionMessage("All saved approvals cleared.");
+      setActionMessage("Saved approvals cleared. Guard will ask again for future matching actions.");
+      setActionMessageKind("success");
       setApprovalGateCurrentPassword("");
       setApprovalGateTotpCode("");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear approvals.");
+      setActionMessageKind("error");
     } finally {
       setClearingApprovals(false);
+    }
+  }, [approvalGateCurrentPassword, approvalGateTotpCode]);
+
+  const handleClearReviewQueue = useCallback(async () => {
+    if (!window.confirm("Clear the pending review queue? Guard will remove waiting items without creating allow or block decisions.")) return;
+    setClearingReviewQueue(true);
+    setActionMessage(null);
+    try {
+      const result = await clearReviewQueue(buildClearReviewQueuePayload({
+        approvalPassword: approvalGateCurrentPassword,
+        approvalTotpCode: approvalGateTotpCode,
+      }));
+      setActionMessage(`Review queue cleared. Removed ${result.cleared} pending ${result.cleared === 1 ? "item" : "items"}.`);
+      setActionMessageKind("success");
+      setApprovalGateCurrentPassword("");
+      setApprovalGateTotpCode("");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to clear review queue.");
+      setActionMessageKind("error");
+    } finally {
+      setClearingReviewQueue(false);
     }
   }, [approvalGateCurrentPassword, approvalGateTotpCode]);
 
@@ -780,8 +825,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     try {
       await clearEvidence();
       setActionMessage("Evidence log cleared.");
+      setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear evidence.");
+      setActionMessageKind("error");
     } finally {
       setClearingEvidence(false);
     }
@@ -799,8 +846,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       anchor.click();
       URL.revokeObjectURL(url);
       setActionMessage("Diagnostics exported.");
+      setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to export diagnostics.");
+      setActionMessageKind("error");
     } finally {
       setExporting(false);
     }
@@ -813,8 +862,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     try {
       await repairApprovalCenter();
       setActionMessage("Approval center repaired. Restart Guard to reconnect.");
+      setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
+      setActionMessageKind("error");
     } finally {
       setRepairing(false);
     }
@@ -828,15 +879,19 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       setNotificationSetup(result);
       if (!result.supported) {
         setActionMessage("Desktop notification setup is not available on this OS.");
+        setActionMessageKind("error");
       } else if (result.settings_opened) {
         setActionMessage("Notification settings opened. Enable terminal-notifier alerts, banners, and sounds.");
+        setActionMessageKind("success");
       } else {
         setActionMessage(
           "Notification setup ran, but macOS did not open Settings. Open System Settings > Notifications and choose terminal-notifier."
         );
+        setActionMessageKind("success");
       }
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to set up notifications.");
+      setActionMessageKind("error");
     } finally {
       setSettingUpNotifications(false);
     }
@@ -1084,6 +1139,43 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               onSetup={handleSetupNotifications}
             />
             {perfSnapshot !== null && <DiagnosticsPerfCard snapshot={perfSnapshot} />}
+            <div className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-brand-dark">Approval gate proof</p>
+                  <p className="mt-1 max-w-2xl text-xs text-slate-500">
+                    If approval gate or authenticator is enabled, enter the proof here before clearing approvals or the queue.
+                  </p>
+                </div>
+                {draft.approval_gate?.totp_enabled === true ? (
+                  <Badge tone="blue">Authenticator required</Badge>
+                ) : null}
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={approvalGateCurrentPassword}
+                    onChange={handleApprovalGateCurrentPassword}
+                    className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={approvalGateTotpCode}
+                    onChange={handleApprovalGateTotpCode}
+                    placeholder="123456"
+                    className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  />
+                </label>
+              </div>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-3">
                 <div>
@@ -1091,6 +1183,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                   <p className="text-xs text-slate-500">Removes all stored allow and block decisions. Guard will ask again for every action that was previously approved.</p>
                   <div className="mt-2">
                     <ActionButton onClick={handleClearApprovals} disabled={clearingApprovals} variant="outline">{clearingApprovals ? "Clearing…" : "Clear approvals"}</ActionButton>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-brand-dark">Clear review queue</p>
+                  <p className="text-xs text-slate-500">Removes pending review items only. It does not save allow/block decisions or clear audit evidence.</p>
+                  <div className="mt-2">
+                    <ActionButton onClick={handleClearReviewQueue} disabled={clearingReviewQueue} variant="outline">{clearingReviewQueue ? "Clearing…" : "Clear review queue"}</ActionButton>
                   </div>
                 </div>
                 <div>
@@ -1118,7 +1217,18 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 </div>
               </div>
             </div>
-            {actionMessage ? <p className="text-sm text-slate-600">{actionMessage}</p> : null}
+            {actionMessage ? (
+              <div
+                className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+                  actionMessageKind === "error"
+                    ? "border-brand-attention/20 bg-brand-attention/[0.04] text-brand-dark"
+                    : "border-brand-blue/15 bg-brand-blue/[0.04] text-brand-dark"
+                }`}
+                role={actionMessageKind === "error" ? "alert" : "status"}
+              >
+                {actionMessage}
+              </div>
+            ) : null}
           </div>
         </AccordionSection>
           </>
