@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
@@ -1111,6 +1112,47 @@ def test_transitive_lockfile_resolution_uses_bounded_deadline(
     )
 
     assert captured["deadline"] == pytest.approx(100.2)
+
+
+def test_transitive_lockfile_timeout_surfaces_warn_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "package-lock.json").write_text(
+        json.dumps({"packages": {"": {"name": "demo-app"}, "node_modules/react/node_modules/minimist": {"version": "1.2.8"}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "_package_lock_entries",
+        lambda _text, *, deadline=None: (_ for _ in ()).throw(_DeadlineExceededError("deadline_exceeded")),
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("react@18.0.0", lockfile_paths=("package-lock.json",)),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "warn"
+    assert any(reason["code"] == "transitive_lockfile_timeout" for reason in result.reasons)
+    assert "package-lock.json" in result.user_copy.harness_message
 
 
 def test_package_from_cloud_result_preserves_direct_and_dependency_path_schema() -> None:

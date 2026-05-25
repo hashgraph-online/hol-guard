@@ -39,7 +39,9 @@ from .runner import (
 )
 from .supply_chain import detect_supply_chain_risk
 from .supply_chain_bundle import (
+    SupplyChainBundleExpiredError,
     SupplyChainBundleMalformedError,
+    check_supply_chain_bundle_freshness,
     evaluate_cached_supply_chain_bundle,
     load_supply_chain_bundle_response,
 )
@@ -968,7 +970,7 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
     except (OSError, UnicodeDecodeError):
         return None
     dependencies = _safe_dependency_map_for_path(
-        str(lockfile_path.name), lockfile_text, deadline=time.monotonic() + 0.2
+        str(lockfile_path.name), lockfile_text, deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS
     )
     manifest_hashes = _hash_paths(workspace_dir, artifact.metadata.get("manifest_paths"))
     return {
@@ -993,9 +995,12 @@ def _transitive_lockfile_results(
     if not isinstance(lockfile_paths, list):
         return []
     results: list[dict[str, object]] = []
+    bundle_stale = _is_bundle_stale(bundle_response, now_timestamp=now_timestamp)
+    bundle_index = _bundle_package_index(bundle_response)
     direct_target_names_by_ecosystem: dict[str, set[str]] = {}
     all_direct_target_names: set[str] = set()
-    for target in _targets_from_artifact(artifact):
+    direct_targets = _targets_from_artifact(artifact)
+    for target in direct_targets:
         ecosystem = _optional_string(target.get("ecosystem")) or "npm"
         candidate_names = {str(target["normalized_name"]), *_target_candidate_names(target)}
         direct_target_names_by_ecosystem.setdefault(ecosystem, set()).update(candidate_names)
@@ -1016,60 +1021,65 @@ def _transitive_lockfile_results(
             continue
         dependency_entries: list[tuple[str, str, str, bool]] = []
         parse_deadline = time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS
-        if lockfile_path.name == "package-lock.json":
-            dependency_entries = [
-                (
-                    dependency_path,
-                    package_name,
-                    version,
-                    dependency_path in direct_target_names,
-                )
-                for dependency_path, package_name, version, _direct in _package_lock_entries(
-                    lockfile_text, deadline=parse_deadline
-                )
-            ]
-        else:
-            dependency_map = _safe_dependency_map_for_path(
-                str(lockfile_path.name),
-                lockfile_text,
-                deadline=parse_deadline,
-            )
-            for dependency_path, version in dependency_map.items():
-                normalized_dependency_path = dependency_path.strip("/")
-                if not normalized_dependency_path:
-                    continue
-                package_name = _dependency_package_name(normalized_dependency_path)
-                if package_name is None:
-                    continue
-                dependency_entries.append(
+        try:
+            if lockfile_path.name == "package-lock.json":
+                dependency_entries = [
                     (
                         dependency_path,
                         package_name,
                         version,
-                        normalized_dependency_path in direct_target_names,
+                        dependency_path in direct_target_names,
                     )
+                    for dependency_path, package_name, version, _direct in _package_lock_entries(
+                        lockfile_text, deadline=parse_deadline
+                    )
+                ]
+            else:
+                dependency_map = _safe_dependency_map_for_path(
+                    str(lockfile_path.name),
+                    lockfile_text,
+                    deadline=parse_deadline,
                 )
+                for dependency_path, version in dependency_map.items():
+                    normalized_dependency_path = dependency_path.strip("/")
+                    if not normalized_dependency_path:
+                        continue
+                    package_name = _dependency_package_name(normalized_dependency_path)
+                    if package_name is None:
+                        continue
+                    dependency_entries.append(
+                        (
+                            dependency_path,
+                            package_name,
+                            version,
+                            normalized_dependency_path in direct_target_names,
+                        )
+                    )
+        except _DeadlineExceededError:
+            timeout_warning = _transitive_lockfile_timeout_warning(
+                targets=direct_targets,
+                lockfile_name=lockfile_path.name,
+            )
+            if timeout_warning is not None:
+                results.append(timeout_warning)
+            continue
         for dependency_path, package_name, version, direct in dependency_entries:
             if direct:
                 continue
-            offline = evaluate_cached_supply_chain_bundle(
-                bundle_response,
-                package_name=package_name,
-                package_version=version,
-                ecosystem=lockfile_ecosystem,
-                now=now_timestamp,
-            )
-            package_match = _bundle_package(
-                bundle_response,
+            package_match = _bundle_package_from_index(
+                bundle_index,
                 package_name=package_name,
                 package_version=version,
                 ecosystem=lockfile_ecosystem,
             )
             if package_match is None:
                 continue
-            decision = _transitive_lockfile_decision(package=package_match, offline_action=offline.action)
+            decision = _transitive_lockfile_decision(package=package_match, stale=bundle_stale)
             if decision not in {"ask", "block", "warn"}:
                 continue
+            downgraded_low_confidence = (
+                decision == "warn" and _normalize_bundle_action(package_match.default_action) == "block"
+            )
             results.append(
                 {
                     "decision": decision,
@@ -1086,17 +1096,15 @@ def _transitive_lockfile_results(
                     "redactedCommand": _optional_string(artifact.metadata.get("redacted_command")),
                     "reasons": (
                         {
-                            "code": (
-                                "transitive_low_confidence_match"
-                                if decision == "warn" and _normalize_bundle_action(offline.action) == "block"
-                                else "transitive_lockfile_match"
-                            ),
+                            "code": "transitive_low_confidence_match"
+                            if downgraded_low_confidence
+                            else "transitive_lockfile_match",
                             "message": (
                                 (
                                     "Existing lockfile includes transitive dependency path "
                                     f"{dependency_path} with lower-confidence risk signals."
                                 )
-                                if decision == "warn" and _normalize_bundle_action(offline.action) == "block"
+                                if downgraded_low_confidence
                                 else f"Existing lockfile already includes vulnerable dependency path {dependency_path}."
                             ),
                             "severity": package_match.normalized_severity,
@@ -1108,8 +1116,10 @@ def _transitive_lockfile_results(
     return results
 
 
-def _transitive_lockfile_decision(*, package: SupplyChainBundlePackage, offline_action: str) -> str:
-    decision = _normalize_bundle_action(offline_action)
+def _transitive_lockfile_decision(*, package: SupplyChainBundlePackage, stale: bool) -> str:
+    decision = _normalize_bundle_action(package.default_action if package.default_action != "allow" else "monitor")
+    if stale and not _is_high_confidence_block(package):
+        return "warn" if decision in {"block", "ask", "warn"} else "monitor"
     if decision != "block":
         return decision
     if _is_high_confidence_block(package):
@@ -1117,6 +1127,59 @@ def _transitive_lockfile_decision(*, package: SupplyChainBundlePackage, offline_
     if package.confidence >= _TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD:
         return "block"
     return "warn"
+
+
+def _is_bundle_stale(bundle_response: SupplyChainBundleResponse, *, now_timestamp: float | None) -> bool:
+    try:
+        check_supply_chain_bundle_freshness(bundle_response.bundle, now=now_timestamp)
+    except SupplyChainBundleExpiredError:
+        return True
+    return False
+
+
+def _bundle_package_index(
+    bundle_response: SupplyChainBundleResponse,
+) -> dict[tuple[str, str, str], SupplyChainBundlePackage]:
+    index: dict[tuple[str, str, str], SupplyChainBundlePackage] = {}
+    for package in bundle_response.bundle.packages:
+        normalized_name = _normalize_package_name(package.ecosystem, package.name)
+        index[(package.ecosystem, normalized_name, package.version)] = package
+        if package.namespace is not None:
+            qualified_name = _normalize_package_name(package.ecosystem, f"{package.namespace}/{package.name}")
+            index[(package.ecosystem, qualified_name, package.version)] = package
+    return index
+
+
+def _bundle_package_from_index(
+    index: dict[tuple[str, str, str], SupplyChainBundlePackage],
+    *,
+    package_name: str,
+    package_version: str,
+    ecosystem: str | None = None,
+) -> SupplyChainBundlePackage | None:
+    if ecosystem is None:
+        return None
+    normalized_name = _normalize_package_name(ecosystem, package_name)
+    return index.get((ecosystem, normalized_name, package_version))
+
+
+def _transitive_lockfile_timeout_warning(
+    *,
+    targets: tuple[dict[str, object], ...],
+    lockfile_name: str,
+) -> dict[str, object] | None:
+    if not targets:
+        return None
+    return _heuristic_package_result(
+        target=targets[0],
+        decision="warn",
+        code="transitive_lockfile_timeout",
+        message=(
+            f"Guard only partially scanned {lockfile_name} before the resolver deadline; "
+            "transitive dependency results may be incomplete."
+        ),
+        severity="unknown",
+    )
 
 
 def _parse_evaluation_timestamp(now_value: str) -> float | None:
@@ -1915,7 +1978,10 @@ def _package_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    entries = _package_lock_entries(text, deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS)
+    try:
+        entries = _package_lock_entries(text, deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS)
+    except _DeadlineExceededError:
+        return {}
     versions: dict[tuple[str, str | None], str] = {}
     for target in targets:
         target_key = _lockfile_target_key(target)
