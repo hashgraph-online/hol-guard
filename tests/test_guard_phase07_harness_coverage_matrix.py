@@ -81,5 +81,6 @@ def test_phase07_harness_coverage_matrix_extracts_package_intent(
 
     assert intent is not None
     assert intent.intent_kind == "install"
-    assert intent.package_manager in {"npm", "pnpm", "yarn", "bun", "pip", "uv", "poetry", "pipenv", "cargo"}
+    assert intent.package_manager == "npm"
+    assert Path(entry["proof_test"].split("::")[0]).exists()
     assert entry["proof_test"].startswith("tests/test_guard_")
