@@ -56,6 +56,7 @@ _TIMEOUT_SECONDS = 1
 _RETRY_TIMEOUT_SECONDS = 1
 _CLOUD_DASHBOARD_URL = "https://hol.org/guard/inbox"
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
+_PYPI_REGISTRY_METADATA_BASE_URL = "https://pypi.org/pypi"
 
 
 @dataclass(frozen=True, slots=True)
@@ -576,10 +577,12 @@ def _evaluate_with_bundle(
     refresh_required = False
     packages: list[dict[str, object]] = []
     lockfile_versions = _lockfile_dependency_versions(workspace_dir, artifact, targets)
+    allow_registry_fallback = _allow_registry_range_resolution(artifact)
     for target in targets:
         resolved_version = _resolved_target_version(
             target=target,
             lockfile_versions=lockfile_versions,
+            allow_registry_fallback=allow_registry_fallback,
         )
         package_match = (
             _bundle_package(
@@ -2279,6 +2282,7 @@ def _resolved_target_version(
     *,
     target: dict[str, object],
     lockfile_versions: dict[tuple[str, str | None], str],
+    allow_registry_fallback: bool = True,
 ) -> str | None:
     exact_version = _optional_string(target.get("version"))
     if exact_version is not None:
@@ -2292,22 +2296,33 @@ def _resolved_target_version(
     exact_version = _exact_version(requested_range)
     if exact_version is not None:
         return exact_version
-    registry_version = _registry_resolved_target_version(target=target, requested_range=requested_range)
-    if registry_version is not None:
-        return registry_version
+    if allow_registry_fallback:
+        registry_version = _registry_resolved_target_version(target=target, requested_range=requested_range)
+        if registry_version is not None:
+            return registry_version
     return None
+
+
+def _allow_registry_range_resolution(artifact: GuardArtifact) -> bool:
+    lockfile_paths = artifact.metadata.get("lockfile_paths")
+    if not isinstance(lockfile_paths, list):
+        return True
+    return not any(isinstance(path, str) and path.strip() for path in lockfile_paths)
 
 
 def _registry_resolved_target_version(*, target: dict[str, object], requested_range: str) -> str | None:
     ecosystem = _optional_string(target.get("ecosystem")) or "npm"
-    if ecosystem != "npm":
-        return None
     if _optional_string(target.get("source_url")) is not None:
         return None
     package_name = _registry_package_name(target)
     if package_name is None:
         return None
-    return _npm_registry_resolved_version(package_name=package_name, requested_range=requested_range)
+    if ecosystem == "npm":
+        return _npm_registry_resolved_version(package_name=package_name, requested_range=requested_range)
+    if ecosystem == "pypi":
+        normalized_name = _normalize_package_name("pypi", package_name)
+        return _pypi_registry_resolved_version(package_name=normalized_name, requested_range=requested_range)
+    return None
 
 
 def _registry_package_name(target: dict[str, object]) -> str | None:
@@ -2342,6 +2357,46 @@ def _npm_registry_resolved_version(*, package_name: str, requested_range: str) -
     if not versions:
         return None
     return highest_js_version_for_selector(versions, requested_range)
+
+
+def _pypi_registry_resolved_version(*, package_name: str, requested_range: str) -> str | None:
+    metadata_url = f"{_PYPI_REGISTRY_METADATA_BASE_URL.rstrip('/')}/{urllib.parse.quote(package_name, safe='')}/json"
+    request = urllib.request.Request(
+        metadata_url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "hol-guard-local",
+        },
+    )
+    try:
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
+        )
+    except (OSError, RuntimeError, ValueError):
+        return None
+    releases_payload = payload.get("releases")
+    if not isinstance(releases_payload, dict):
+        return None
+    try:
+        specifier = SpecifierSet(requested_range)
+    except InvalidSpecifier:
+        return None
+    matching_versions: list[Version] = []
+    for release in releases_payload:
+        if not isinstance(release, str):
+            continue
+        try:
+            parsed_version = Version(release)
+        except InvalidVersion:
+            continue
+        if parsed_version in specifier:
+            matching_versions.append(parsed_version)
+    if not matching_versions:
+        return None
+    matching_versions.sort()
+    return str(matching_versions[-1])
 
 
 def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target: dict[str, object]) -> list[str]:
