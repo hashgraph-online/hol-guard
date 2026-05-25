@@ -292,7 +292,13 @@ LOCAL_API_OWNERSHIP = (
     ApiOwnership(path="/v1/policy", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/policy/decisions", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/policy/clear", method="POST", category="config", auth_required=True, writes_state=True),
-    ApiOwnership(path="/v1/requests/clear", method="POST", category="destructive", auth_required=True, writes_state=True),
+    ApiOwnership(
+        path="/v1/requests/clear",
+        method="POST",
+        category="destructive",
+        auth_required=True,
+        writes_state=True,
+    ),
     ApiOwnership(
         path="/v1/artifacts/{id}/diff",
         method="GET",
