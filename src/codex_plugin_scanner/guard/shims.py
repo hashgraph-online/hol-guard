@@ -201,9 +201,7 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
     ]
     shim_dir = context.guard_home / "package-shims" / "bin"
     active_managers = [
-        manager
-        for manager in installed_managers
-        if (shim_dir / _PACKAGE_SHIM_COMMANDS[manager]).exists()
+        manager for manager in installed_managers if (shim_dir / _PACKAGE_SHIM_COMMANDS[manager]).exists()
     ]
     missing_managers = [manager for manager in installed_managers if manager not in active_managers]
     return {
