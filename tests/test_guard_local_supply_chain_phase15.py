@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -308,6 +309,76 @@ def test_supply_chain_posture_reports_protected_degraded_stale_and_next_refresh(
     assert degraded_posture["health_status"] == "degraded"
 
 
+def test_supply_chain_posture_reports_package_shim_path_and_unprotected_managers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    store = GuardStore(home_dir)
+    _seed_supply_chain_bundle(
+        store,
+        packages=[_package(name="minimist", version="1.2.5", default_action="block")],
+        now="2026-05-19T12:00:00+00:00",
+    )
+    shim_root = home_dir / "package-shims"
+    shim_dir = shim_root / "bin"
+    shim_dir.mkdir(parents=True, exist_ok=True)
+    (shim_dir / "npm").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (shim_dir / "npm").chmod(0o755)
+    (shim_root / "manifest.json").write_text(
+        json.dumps({"installed_managers": ["npm", "pnpm"], "shim_dir": str(shim_dir)}, sort_keys=True),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{tmp_path}")
+
+    posture = local_supply_chain_module.build_local_supply_chain_posture(
+        store,
+        load_guard_config(home_dir),
+        now="2026-05-19T12:04:00+00:00",
+    )
+
+    protection = posture["package_manager_protection"]
+    assert protection["path_status"] == "in_path"
+    assert protection["path_contains_shim_dir"] is True
+    assert protection["protected_managers"] == ["npm"]
+    assert "pnpm" in protection["unprotected_managers"]
+    assert protection["missing_shims"] == ["pnpm"]
+
+
+def test_supply_chain_posture_marks_shim_path_missing_from_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    store = GuardStore(home_dir)
+    _seed_supply_chain_bundle(
+        store,
+        packages=[_package(name="minimist", version="1.2.5", default_action="block")],
+        now="2026-05-19T12:00:00+00:00",
+    )
+    shim_root = home_dir / "package-shims"
+    shim_dir = shim_root / "bin"
+    shim_dir.mkdir(parents=True, exist_ok=True)
+    (shim_dir / "npm").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (shim_dir / "npm").chmod(0o755)
+    (shim_root / "manifest.json").write_text(
+        json.dumps({"installed_managers": ["npm"], "shim_dir": str(shim_dir)}, sort_keys=True),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    posture = local_supply_chain_module.build_local_supply_chain_posture(
+        store,
+        load_guard_config(home_dir),
+        now="2026-05-19T12:04:00+00:00",
+    )
+
+    protection = posture["package_manager_protection"]
+    assert protection["path_status"] == "missing_from_path"
+    assert protection["path_contains_shim_dir"] is False
+    assert "npm" in protection["unprotected_managers"]
+
+
 def test_guard_supply_chain_scan_uses_manifest_and_lockfile_context(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -506,6 +577,7 @@ def test_runtime_snapshot_includes_supply_chain_block(tmp_path: Path) -> None:
     assert snapshot["supply_chain"]["bundle"]["bundle_version"] == "1747612800000-deadbeef"
     assert snapshot["supply_chain"]["policy"]["cloud_advisory_action"] == "warn"
     assert snapshot["supply_chain"]["policy"]["managed_by_cloud"] is False
+    assert "package_manager_protection" in snapshot["supply_chain"]
 
 
 def test_runtime_snapshot_marks_supply_chain_policy_as_cloud_managed(tmp_path: Path) -> None:
