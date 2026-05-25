@@ -1,5 +1,6 @@
 import {
   buildDemoRuntimeSnapshot,
+  clearReviewQueue,
   fetchApprovalPage,
   fetchQueueSummary,
   fetchResumeStatus,
@@ -554,6 +555,28 @@ const runtimeUrl = new URL(fetchQueueCalls[0].url);
 assert(runtimeUrl.searchParams.get("active_request_id") === "req-active", "L079: fetchQueueSummary forwards active request id");
 assert(queueSummary.remaining_pending_count === 2, "L079: fetchQueueSummary returns queue count");
 assert(queueSummary.next_selectable_request_id === "req-next", "L079: fetchQueueSummary returns next selectable id");
+
+installGuardWindow("?guard-token=token-clear-queue&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const clearQueueCalls = installFetchStub({
+  "/v1/requests/clear": {
+    cleared: 2,
+    status: "pending",
+    harness: null
+  }
+});
+const clearQueueResult = await clearReviewQueue({
+  status: "pending",
+  approval_password: "local-password",
+  approval_totp_code: "123456"
+});
+const clearQueueBody = JSON.parse(String(clearQueueCalls[0].init?.body)) as Record<string, unknown>;
+assert(clearQueueCalls[0].url === "http://127.0.0.1:4781/v1/requests/clear", "L079b: clearReviewQueue posts to clear route");
+assert(headerValue(clearQueueCalls[0].init, "X-Guard-Token") === "token-clear-queue", "L079b: clearReviewQueue sends Guard token");
+assert(clearQueueBody["status"] === "pending", "L079b: clearReviewQueue clears pending reviews");
+const clearQueueGate = clearQueueBody["approval_gate"] as Record<string, unknown>;
+assert(clearQueueGate["password"] === "local-password", "L079b: clearReviewQueue sends approval password");
+assert(clearQueueGate["totp_code"] === "123456", "L079b: clearReviewQueue sends authenticator code");
+assert(clearQueueResult.cleared === 2, "L079b: clearReviewQueue returns cleared count");
 
 installGuardWindow("?guard-token=token-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchResolveCalls = installFetchStub({

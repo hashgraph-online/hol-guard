@@ -734,6 +734,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/policy/clear":
             self._handle_policy_clear(payload)
             return
+        if parsed.path == "/v1/requests/clear":
+            self._handle_requests_clear(payload)
+            return
         if parsed.path == "/v1/policy/sync":
             self._handle_headless_policy_sync(payload)
             return
@@ -1620,6 +1623,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "publisher": publisher,
             }
         )
+
+    def _handle_requests_clear(self, payload: dict[str, object]) -> None:
+        status = self._optional_string(payload.get("status")) or "pending"
+        harness = self._optional_string(payload.get("harness"))
+        if status not in {"pending", "resolved", "expired"}:
+            self._write_json({"error": "invalid_status", "cleared": 0, "status": status}, status=400)
+            return
+        try:
+            require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="queue_clear",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+            cleared = self.server.store.clear_approval_requests(  # type: ignore[attr-defined]
+                harness=harness,
+                status=status,
+            )
+        except ApprovalGateError as error:
+            payload = error.to_payload()
+            payload["cleared"] = 0
+            payload["status"] = status
+            self._write_json(payload, status=error.status)
+            return
+        self._write_json({"cleared": cleared, "status": status, "harness": harness})
 
     def _harness_context(self, payload: dict[str, object]) -> HarnessContext:
         del payload
@@ -2537,6 +2564,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/receipts",
             "/v1/receipts/latest",
             "/v1/requests",
+            "/v1/requests/clear",
             "/v1/runtime",
             "/v1/settings",
             "/v1/settings/export",
@@ -2771,6 +2799,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/decisions",
             "/v1/policy/clear",
             "/v1/policy/sync",
+            "/v1/requests/clear",
             "/v1/settings",
             "/v1/settings/import",
             "/v1/settings/reset",
