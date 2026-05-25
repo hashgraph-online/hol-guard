@@ -252,6 +252,10 @@ def uninstall_package_shims(
     }
 
 
+def package_shim_supported_managers() -> tuple[str, ...]:
+    return tuple(sorted(_PACKAGE_SHIM_COMMANDS.keys()))
+
+
 def _build_package_manager_python_shim(context: HarnessContext, command: str) -> str:
     workspace_args: list[str] = []
     if context.workspace_dir is not None:
@@ -346,6 +350,7 @@ def _path_export_hint(shim_dir: Path) -> str:
 __all__ = [
     "install_guard_shim",
     "install_package_shims",
+    "package_shim_supported_managers",
     "package_shim_status",
     "remove_guard_shim",
     "uninstall_package_shims",
