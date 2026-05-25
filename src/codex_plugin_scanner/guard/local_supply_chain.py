@@ -534,9 +534,14 @@ def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
 
 
 def _paths_match(left: str | Path, right: str | Path) -> bool:
-    left_path = Path(str(left)).expanduser()
-    right_path = Path(str(right)).expanduser()
-    return os.path.normcase(os.path.abspath(left_path)) == os.path.normcase(os.path.abspath(right_path))
+    try:
+        left_path = Path(str(left)).expanduser().resolve()
+        right_path = Path(str(right)).expanduser().resolve()
+        return left_path == right_path
+    except (OSError, RuntimeError):
+        left_path = Path(str(left)).expanduser()
+        right_path = Path(str(right)).expanduser()
+        return os.path.normcase(os.path.abspath(left_path)) == os.path.normcase(os.path.abspath(right_path))
 
 
 def _workspace_scan_intent(workspace_dir: Path) -> PackageIntent | None:

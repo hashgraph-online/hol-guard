@@ -350,8 +350,8 @@ def _path_export_hint(shim_dir: Path) -> str:
 __all__ = [
     "install_guard_shim",
     "install_package_shims",
-    "package_shim_supported_managers",
     "package_shim_status",
+    "package_shim_supported_managers",
     "remove_guard_shim",
     "uninstall_package_shims",
 ]
