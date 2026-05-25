@@ -25,7 +25,7 @@ from packaging.version import InvalidVersion, Version
 from ..models import GuardArtifact
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
-from .js_semver import version_matches_js_selector
+from .js_semver import highest_js_version_for_selector, version_matches_js_selector
 from .package_intent_common import split_python_extras
 from .package_manifest_diff import (
     _DeadlineExceededError,
@@ -55,6 +55,7 @@ _SEVERITY_RANK = {"unknown": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 _TIMEOUT_SECONDS = 1
 _RETRY_TIMEOUT_SECONDS = 1
 _CLOUD_DASHBOARD_URL = "https://hol.org/guard/inbox"
+_NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
 
 
 @dataclass(frozen=True, slots=True)
@@ -930,6 +931,7 @@ def _build_request_payload(
         "packages": [
             {
                 "direct": True,
+                "dependencyPath": None,
                 "ecosystem": str(target["ecosystem"]),
                 "name": str(target["name"]),
                 "namespace": target["namespace"],
@@ -1060,6 +1062,7 @@ def _transitive_lockfile_results(
                     "resolvedVersion": version,
                     "recommendedFixVersion": package_match.recommended_fix_version,
                     "riskScore": package_match.risk_score,
+                    "direct": False,
                     "dependencyPath": dependency_path,
                     "packageManager": str(artifact.metadata.get("package_manager") or "npm"),
                     "redactedCommand": _optional_string(artifact.metadata.get("redacted_command")),
@@ -1117,6 +1120,7 @@ def _bundle_package_result(
         "resolvedVersion": resolved_version,
         "recommendedFixVersion": package.recommended_fix_version,
         "riskScore": package.risk_score,
+        "direct": True,
         "dependencyPath": None,
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
@@ -1202,6 +1206,7 @@ def _policy_package_result(target: dict[str, object], *, decision: str, rule_id:
         "resolvedVersion": _optional_string(target.get("version")),
         "recommendedFixVersion": None,
         "riskScore": None,
+        "direct": True,
         "dependencyPath": None,
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
@@ -1219,6 +1224,9 @@ def _policy_package_result(target: dict[str, object], *, decision: str, rule_id:
 
 
 def _package_from_cloud_result(item: dict[str, object]) -> dict[str, object]:
+    dependency_path = _optional_string(item.get("dependencyPath"))
+    direct_value = item.get("direct")
+    direct = direct_value if isinstance(direct_value, bool) else dependency_path is None
     return {
         "decision": _normalize_bundle_action(str(item.get("decision") or "monitor")),
         "ecosystem": str(item.get("ecosystem") or "npm"),
@@ -1228,7 +1236,8 @@ def _package_from_cloud_result(item: dict[str, object]) -> dict[str, object]:
         "resolvedVersion": _optional_string(item.get("resolvedVersion")),
         "recommendedFixVersion": _optional_string(item.get("recommendedFixVersion")),
         "riskScore": item.get("riskScore"),
-        "dependencyPath": None,
+        "direct": direct,
+        "dependencyPath": dependency_path,
         "reasons": tuple(reason for reason in item.get("reasons", []) if isinstance(reason, dict)),
     }
 
@@ -1243,6 +1252,7 @@ def _unknown_package_result(target: dict[str, object]) -> dict[str, object]:
         "resolvedVersion": _optional_string(target.get("version")),
         "recommendedFixVersion": None,
         "riskScore": None,
+        "direct": True,
         "dependencyPath": None,
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
@@ -1546,6 +1556,7 @@ def _dependency_confusion_policy_package_result(
             "resolvedVersion": _optional_string(target.get("version")),
             "recommendedFixVersion": None,
             "riskScore": None,
+            "direct": True,
             "dependencyPath": None,
             "packageManager": _optional_string(target.get("package_manager")) or "npm",
             "redactedCommand": _optional_string(target.get("redacted_command")),
@@ -1594,6 +1605,7 @@ def _heuristic_package_result(
         "resolvedVersion": _optional_string(target.get("version")),
         "recommendedFixVersion": None,
         "riskScore": None,
+        "direct": True,
         "dependencyPath": None,
         "packageManager": _optional_string(target.get("package_manager")) or "npm",
         "redactedCommand": _optional_string(target.get("redacted_command")),
@@ -2277,7 +2289,59 @@ def _resolved_target_version(
     requested_range = _optional_string(target.get("range"))
     if requested_range is None:
         return None
-    return _exact_version(requested_range)
+    exact_version = _exact_version(requested_range)
+    if exact_version is not None:
+        return exact_version
+    registry_version = _registry_resolved_target_version(target=target, requested_range=requested_range)
+    if registry_version is not None:
+        return registry_version
+    return None
+
+
+def _registry_resolved_target_version(*, target: dict[str, object], requested_range: str) -> str | None:
+    ecosystem = _optional_string(target.get("ecosystem")) or "npm"
+    if ecosystem != "npm":
+        return None
+    if _optional_string(target.get("source_url")) is not None:
+        return None
+    package_name = _registry_package_name(target)
+    if package_name is None:
+        return None
+    return _npm_registry_resolved_version(package_name=package_name, requested_range=requested_range)
+
+
+def _registry_package_name(target: dict[str, object]) -> str | None:
+    package_name = _optional_string(target.get("name"))
+    if package_name is None:
+        return None
+    namespace = _optional_string(target.get("namespace"))
+    return f"{namespace}/{package_name}" if namespace is not None else package_name
+
+
+def _npm_registry_resolved_version(*, package_name: str, requested_range: str) -> str | None:
+    metadata_url = f"{_NPM_REGISTRY_METADATA_BASE_URL.rstrip('/')}/{urllib.parse.quote(package_name, safe='')}"
+    request = urllib.request.Request(
+        metadata_url,
+        headers={
+            "Accept": "application/vnd.npm.install-v1+json",
+            "User-Agent": "hol-guard-local",
+        },
+    )
+    try:
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
+        )
+    except (OSError, RuntimeError, ValueError):
+        return None
+    versions_payload = payload.get("versions")
+    if not isinstance(versions_payload, dict):
+        return None
+    versions = [version for version in versions_payload if isinstance(version, str)]
+    if not versions:
+        return None
+    return highest_js_version_for_selector(versions, requested_range)
 
 
 def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target: dict[str, object]) -> list[str]:
@@ -2324,6 +2388,7 @@ def _recommended_fix_allow_package_result(
             "resolvedVersion": resolved_version,
             "recommendedFixVersion": None,
             "riskScore": None,
+            "direct": True,
             "dependencyPath": None,
             "packageManager": _optional_string(target.get("package_manager")) or "npm",
             "redactedCommand": _optional_string(target.get("redacted_command")),
