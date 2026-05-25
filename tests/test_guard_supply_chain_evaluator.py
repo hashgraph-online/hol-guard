@@ -318,6 +318,8 @@ def test_evaluate_package_request_artifact_posts_cloud_request_and_maps_block_re
     assert request_payload["commandShape"]["verb"] == "install"
     assert request_payload["lockfileContext"]["fileName"] == "package-lock.json"
     assert request_payload["packages"][0]["name"] == "minimist"
+    assert request_payload["packages"][0]["direct"] is True
+    assert request_payload["packages"][0]["dependencyPath"] is None
     assert request_payload["policyVersion"]
     assert request_payload["workspaceFingerprint"]
     assert result.decision == "block"
@@ -1005,7 +1007,79 @@ def test_evaluate_package_request_artifact_blocks_transitive_lockfile_match_with
     )
 
     assert result.decision == "block"
+    transitive_match = next(package for package in result.packages if package["name"] == "minimist")
+    assert transitive_match["dependencyPath"] == "react/node_modules/minimist"
+    assert transitive_match["direct"] is False
     assert any("react/node_modules/minimist" in reason["message"] for reason in result.reasons)
+
+
+def test_package_from_cloud_result_preserves_direct_and_dependency_path_schema() -> None:
+    transitive_item = evaluator_module._package_from_cloud_result(
+        {
+            "decision": "block",
+            "ecosystem": "npm",
+            "name": "minimist",
+            "namespace": None,
+            "requestedVersion": "^1.2.0",
+            "resolvedVersion": "1.2.8",
+            "recommendedFixVersion": "1.2.9",
+            "riskScore": 980,
+            "dependencyPath": "react/node_modules/minimist",
+            "direct": False,
+            "reasons": [{"code": "known_advisory", "message": "Prototype pollution", "severity": "critical"}],
+        }
+    )
+    direct_item = evaluator_module._package_from_cloud_result(
+        {
+            "decision": "allow",
+            "ecosystem": "npm",
+            "name": "react",
+            "requestedVersion": "18.0.0",
+            "resolvedVersion": "18.0.0",
+            "reasons": [],
+        }
+    )
+
+    assert transitive_item["dependencyPath"] == "react/node_modules/minimist"
+    assert transitive_item["direct"] is False
+    assert direct_item["dependencyPath"] is None
+    assert direct_item["direct"] is True
+
+
+def test_resolved_target_version_uses_registry_metadata_for_npm_ranges(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_urlopen_json_with_timeout_retry(
+        *, request: urllib.request.Request, timeout_seconds: int, retry_timeout_seconds: int
+    ) -> dict[str, object]:
+        captured["url"] = request.full_url
+        assert timeout_seconds == 1
+        assert retry_timeout_seconds == 1
+        return {
+            "versions": {
+                "1.1.9": {},
+                "1.2.0": {},
+                "1.4.2": {},
+                "2.0.0": {},
+            }
+        }
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry)
+    resolved = evaluator_module._resolved_target_version(
+        target={
+            "ecosystem": "npm",
+            "name": "minimist",
+            "normalized_name": "minimist",
+            "namespace": None,
+            "range": "^1.2.0",
+            "version": None,
+            "source_url": None,
+        },
+        lockfile_versions={},
+    )
+
+    assert captured["url"].endswith("/minimist")
+    assert resolved == "1.4.2"
 
 
 def test_evaluate_package_request_artifact_blocks_hoisted_lockfile_match(
