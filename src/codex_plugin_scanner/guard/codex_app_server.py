@@ -618,7 +618,10 @@ def _is_safe_codex_thread_id(thread_id: str) -> bool:
 
 def _is_safe_codex_model(model: str) -> bool:
     return (
-        0 < len(model) <= 128 and not model.startswith("-") and all(char.isalnum() or char in "-_.:" for char in model)
+        0 < len(model) <= 128
+        and not model.startswith("-")
+        and bool(model.strip())
+        and all(char.isalnum() or char in "-_.:" for char in model)
     )
 
 
