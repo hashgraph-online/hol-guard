@@ -21609,7 +21609,7 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
 }
 const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,2,4]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,2,4,1]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([6,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([7,1]) : void 0).then((m) => ({ default: m.HelpModal })));
 function LazyFallback() {
@@ -21904,9 +21904,9 @@ function App() {
   const handleClearPolicies = reactExports.useCallback(async (scope) => {
     setClearConfirm(scope);
   }, []);
-  const handleConfirmClear = reactExports.useCallback(async () => {
+  const handleConfirmClear = reactExports.useCallback(async (credentials) => {
     if (clearConfirm === null) return;
-    await clearPolicy(clearConfirm);
+    await clearPolicy({ ...clearConfirm, ...credentials });
     setClearConfirm(null);
     const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
     if (snapshotResult.status === "fulfilled") {
@@ -22116,6 +22116,7 @@ function App() {
             onClearPolicies: handleClearPolicies,
             onOpenAppDetail: handleOpenAppDetail,
             clearConfirm,
+            approvalGate,
             onConfirmClear: handleConfirmClear,
             onCancelClear: handleCancelClear,
             onOpenHelp: handleOpenHelp

@@ -59,6 +59,10 @@ function buildRecentProtectionCopy(receipt) {
 }
 function HomeWorkspace(props) {
   const [toastMessage, setToastMessage] = reactExports.useState(null);
+  const [clearPassword, setClearPassword] = reactExports.useState("");
+  const [clearTotpCode, setClearTotpCode] = reactExports.useState("");
+  const [clearError, setClearError] = reactExports.useState(null);
+  const [clearSubmitting, setClearSubmitting] = reactExports.useState(false);
   const toastTimerRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     return () => {
@@ -73,15 +77,36 @@ function HomeWorkspace(props) {
   const handleClearPolicies = reactExports.useCallback((scope) => {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
+  const handleClearPasswordChange = reactExports.useCallback((event) => {
+    setClearPassword(event.target.value);
+    setClearError(null);
+  }, []);
+  const handleClearTotpCodeChange = reactExports.useCallback((event) => {
+    setClearTotpCode(event.target.value);
+    setClearError(null);
+  }, []);
   const handleConfirmClearWithToast = reactExports.useCallback(async () => {
     const confirm = props.clearConfirm;
-    await props.onConfirmClear();
-    if (confirm?.harness) {
-      showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
-    } else if (confirm?.all) {
-      showToast("Cleared all decisions");
+    setClearSubmitting(true);
+    setClearError(null);
+    try {
+      await props.onConfirmClear({
+        ...clearPassword ? { approval_password: clearPassword } : {},
+        ...clearTotpCode ? { approval_totp_code: clearTotpCode } : {}
+      });
+      setClearPassword("");
+      setClearTotpCode("");
+      if (confirm?.harness) {
+        showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
+      } else if (confirm?.all) {
+        showToast("Cleared all decisions");
+      }
+    } catch (error) {
+      setClearError(error instanceof Error ? error.message : "Unable to clear remembered decisions.");
+    } finally {
+      setClearSubmitting(false);
     }
-  }, [props.clearConfirm, props.onConfirmClear, showToast]);
+  }, [clearPassword, clearTotpCode, props.clearConfirm, props.onConfirmClear, showToast]);
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
   const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
@@ -238,6 +263,13 @@ function HomeWorkspace(props) {
       ClearConfirmDialog,
       {
         clearConfirm: props.clearConfirm,
+        approvalGate: props.approvalGate,
+        clearPassword,
+        clearTotpCode,
+        clearError,
+        clearSubmitting,
+        onClearPasswordChange: handleClearPasswordChange,
+        onClearTotpCodeChange: handleClearTotpCodeChange,
         onCancelClear: props.onCancelClear,
         onConfirmClear: handleConfirmClearWithToast
       }
@@ -247,6 +279,7 @@ function HomeWorkspace(props) {
 function ClearConfirmDialog(props) {
   const dialogRef = reactExports.useRef(null);
   useFocusTrap(true, dialogRef);
+  const needsProof = props.approvalGate?.enabled === true && props.approvalGate.configured === true;
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", role: "dialog", "aria-modal": "true", "aria-label": "Confirm clear decisions", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: dialogRef, className: "guard-fade-in w-full max-w-md rounded-2xl border border-brand-attention/20 bg-white p-6 shadow-2xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
@@ -256,7 +289,39 @@ function ClearConfirmDialog(props) {
           "This will remove ",
           props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`,
           ". Guard will ask again next time matching actions run."
-        ] })
+        ] }),
+        needsProof && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "password",
+                autoComplete: "current-password",
+                value: props.clearPassword,
+                onChange: props.onClearPasswordChange,
+                className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          props.approvalGate?.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "text",
+                inputMode: "numeric",
+                pattern: "[0-9]*",
+                maxLength: 6,
+                value: props.clearTotpCode,
+                onChange: props.onClearTotpCodeChange,
+                placeholder: "123456",
+                className: "mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] })
+        ] }),
+        props.clearError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-sm text-brand-dark", children: props.clearError })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
@@ -274,8 +339,9 @@ function ClearConfirmDialog(props) {
         {
           type: "button",
           onClick: props.onConfirmClear,
-          className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90",
-          children: "Clear decisions"
+          disabled: props.clearSubmitting,
+          className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-60",
+          children: props.clearSubmitting ? "Clearing..." : "Clear decisions"
         }
       )
     ] })
