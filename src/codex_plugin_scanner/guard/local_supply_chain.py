@@ -121,7 +121,6 @@ def build_local_supply_chain_posture(
     )
     health_status = _posture_health_status(
         status=status,
-        expires_at=expires_at,
         next_refresh_at=next_refresh_at,
         snapshot_now=snapshot_now,
     )
@@ -707,7 +706,6 @@ def _posture_detail(status: str) -> str:
 def _posture_health_status(
     *,
     status: str,
-    expires_at: datetime | None,
     next_refresh_at: str | None,
     snapshot_now: datetime,
 ) -> str:
@@ -715,13 +713,11 @@ def _posture_health_status(
         return "stale"
     if status in {"not_connected", "workspace_required", "sync_required", "degraded"}:
         return "degraded"
-    if expires_at is not None and expires_at <= snapshot_now:
-        return "stale"
     next_refresh_timestamp = _parse_timestamp(next_refresh_at)
     if (
         status == "synced"
         and next_refresh_timestamp is not None
-        and next_refresh_timestamp + timedelta(seconds=_STALE_REFRESH_GRACE_SECONDS) < snapshot_now
+        and next_refresh_timestamp + timedelta(seconds=_STALE_REFRESH_GRACE_SECONDS) <= snapshot_now
     ):
         return "stale"
     if status == "synced":
