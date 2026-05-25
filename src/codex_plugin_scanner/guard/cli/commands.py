@@ -173,6 +173,7 @@ from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
+from ..shims import install_package_shims, package_shim_status, uninstall_package_shims
 from ..store import GuardStore
 from .approval_commands import (
     add_approval_parser,
@@ -376,7 +377,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         parser_class=FriendlyArgumentParser,
         metavar=(
-            "{start,status,dashboard,init,apps,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,"
+            "{start,status,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
             "receipts,inventory,abom,approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,"
             "login,sync,device,bridge}"
         ),
@@ -480,6 +481,25 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     uninstall_parser.add_argument("--all", action="store_true")
     _add_guard_common_args(uninstall_parser)
     uninstall_parser.add_argument("--json", action="store_true")
+
+    package_shims_parser = guard_subparsers.add_parser(
+        "package-shims",
+        help="Install, inspect, or remove package-manager PATH shims routed through Guard protect",
+    )
+    package_shims_parser.add_argument(
+        "package_shims_command",
+        nargs="?",
+        choices=("install", "status", "uninstall"),
+        default="status",
+    )
+    package_shims_parser.add_argument(
+        "--manager",
+        action="append",
+        dest="package_shim_managers",
+        default=[],
+    )
+    _add_guard_common_args(package_shims_parser)
+    package_shims_parser.add_argument("--json", action="store_true")
 
     run_parser = guard_subparsers.add_parser("run", help="Evaluate local policy, then launch the harness")
     run_parser.add_argument("harness")
@@ -1809,6 +1829,23 @@ def run_guard_command(
             print(str(error), file=sys.stderr)
             return 2
         _emit("uninstall", payload, getattr(args, "json", False))
+        return 0
+
+    if args.guard_command == "package-shims":
+        requested_managers = tuple(
+            manager
+            for manager in getattr(args, "package_shim_managers", [])
+            if isinstance(manager, str) and manager.strip()
+        )
+        shim_command = getattr(args, "package_shims_command", "status")
+        if shim_command == "install":
+            payload = install_package_shims(context, managers=requested_managers or None)
+        elif shim_command == "uninstall":
+            payload = uninstall_package_shims(context, managers=requested_managers or None)
+        else:
+            payload = package_shim_status(context)
+        payload["generated_at"] = _now()
+        _emit("package-shims", payload, getattr(args, "json", False))
         return 0
 
     if args.guard_command == "run":
