@@ -297,6 +297,15 @@ const uxAlreadySent = buildCodexResumeUx(makeResume("already_sent"));
 assert(uxAlreadySent.showRetry === false, "C13: already_sent status has showRetry false");
 assert(uxAlreadySent.headline === uxSent.headline, "C13: already_sent and sent have same headline");
 
+const uxHeadlessSent = buildCodexResumeUx(
+  makeResume("sent", { reason: "headless_resume_started", strategy: "codex-headless-exec" })
+);
+assert(uxHeadlessSent.showRetry === false, "C13: headless sent status has showRetry false");
+assert(
+  uxHeadlessSent.headline.toLowerCase().includes("background"),
+  "C13: headless sent headline makes background resume explicit"
+);
+
 const uxFailed = buildCodexResumeUx(makeResume("failed", { last_error: "connection lost" }));
 assert(uxFailed.showRetry === true, "C13: failed status has showRetry true");
 assert(uxFailed.body === "connection lost", "C13: failed uses last_error for body");

@@ -150,16 +150,17 @@ def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
     latest_attempt = store.get_latest_request_resume(harness="codex")
     return {
         "codex_binary_found": binary_path is not None,
-        "app_server_support": None,
+        "app_server_support": socket_available,
         "app_server_support_reason": (
-            "Codex does not expose a stable public app-server capability probe; "
-            "same-thread continuation uses the local app-server socket when it is active."
+            "Same-chat continuation requires the Codex app-server remote-control socket. "
+            "When the socket is missing, HOL Guard cannot visibly continue the open Codex App chat."
         ),
         "app_server_socket_available": socket_available,
         "headless_resume_support": binary_path is not None,
         "headless_resume_support_reason": (
             "When the live app-server socket is gone, HOL Guard resumes saved Codex exec threads with "
-            "`codex exec resume` from the original workspace."
+            "`codex exec resume` from the original workspace. This is a background retry, not a visible "
+            "message in the open Codex App chat."
             if binary_path is not None
             else "`codex` was not found on PATH, so HOL Guard can only save the approval for manual retry."
         ),
@@ -282,10 +283,19 @@ def _normalize_dispatch_result(
     raw_supported = raw_result.get("supported")
     supported = raw_supported if isinstance(raw_supported, bool) else raw_status != "skipped"
     if raw_status == "sent":
+        message = (
+            "HOL Guard sent Codex a continuation message in the original chat."
+            if effective_strategy != "codex-headless-exec"
+            else (
+                "HOL Guard started a background `codex exec resume` retry for this saved thread. "
+                "The command can complete in Codex history, but this open Codex App chat will not visibly "
+                "continue unless the Codex app-server remote-control socket is enabled."
+            )
+        )
         return {
             "status": "sent",
             "reason": raw_reason,
-            "message": "HOL Guard sent Codex a continuation message in the original chat.",
+            "message": message,
             "last_error": None,
             "thread_id": raw_thread_id,
             "strategy": effective_strategy,
