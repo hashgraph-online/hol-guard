@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 
@@ -161,7 +162,12 @@ def test_guard_supply_chain_audit_alias_accepts_sbom_input(
                 "bomFormat": "CycloneDX",
                 "specVersion": "1.5",
                 "components": [
-                    {"type": "library", "name": "minimist", "version": "1.2.5", "purl": "pkg:npm/minimist@1.2.5"}
+                    {
+                        "type": "library",
+                        "name": "@scope/left-pad",
+                        "version": "1.2.5",
+                        "purl": "pkg:npm/%40scope/left-pad@1.2.5",
+                    }
                 ],
             }
         )
@@ -212,7 +218,7 @@ def test_guard_supply_chain_audit_alias_accepts_sbom_input(
     assert output["sbom_paths"] == ["sbom.json"]
     assert output["inventory"]["sbom_package_count"] == 1
     assert captured["request_payload"]["packages"] == [
-        {"direct": False, "ecosystem": "npm", "name": "minimist", "namespace": None, "version": "1.2.5"}
+        {"direct": False, "ecosystem": "npm", "name": "left-pad", "namespace": "@scope", "version": "1.2.5"}
     ]
 
 
@@ -460,3 +466,68 @@ def test_guard_supply_chain_audit_before_after_limits_inventory_to_changed_depen
     assert captured["request_payload"]["packages"] == [
         {"direct": True, "ecosystem": "npm", "name": "minimist", "namespace": None, "range": "^1.2.8"}
     ]
+
+
+def test_read_sbom_text_rejects_oversized_files(tmp_path: Path) -> None:
+    sbom_path = tmp_path / "oversized-sbom.json"
+    sbom_path.write_text("x" * ((10 * 1024 * 1024) + 1), encoding="utf-8")
+
+    assert local_supply_chain_module._read_sbom_text(sbom_path) is None
+
+
+def test_run_cloud_workspace_audit_falls_back_after_page_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeResponse(io.StringIO):
+        def __enter__(self) -> _FakeResponse:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            self.close()
+
+    monkeypatch.setattr(
+        local_supply_chain_module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: _FakeResponse(
+            json.dumps(
+                {
+                    "decision": "monitor",
+                    "packages": [],
+                    "reasons": [],
+                    "enforcement": "premium_cloud",
+                    "entitlementState": "premium",
+                    "cacheStatus": "miss",
+                    "processedCount": 1,
+                    "totalPackages": 1,
+                    "status": "completed",
+                    "workspaceId": WORKSPACE_ID,
+                    "nextCursor": "repeat",
+                }
+            )
+        ),
+    )
+
+    response, fallback_reason = local_supply_chain_module._run_cloud_workspace_audit(
+        request_payload={
+            "commandShape": {
+                "argCount": 3,
+                "flags": [],
+                "packageManager": "npm",
+                "redacted": True,
+                "verb": "audit",
+            },
+            "harness": "guard-cli",
+            "mode": "paged",
+            "pageSize": 1,
+            "packages": [{"direct": True, "ecosystem": "npm", "name": "minimist", "version": "1.2.5"}],
+            "policyVersion": "policy-hash-1",
+            "workspaceFingerprint": "workspace-fingerprint",
+        },
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        token="demo-token",
+        workspace_id=WORKSPACE_ID,
+    )
+
+    assert response is None
+    assert fallback_reason == {
+        "code": "cloud_page_limit",
+        "message": "Guard cloud evaluation exceeded the maximum page count, so Guard fell back locally.",
+    }
