@@ -7,7 +7,7 @@ import shlex
 import subprocess
 from collections.abc import Sequence
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .config import GuardConfig, resolve_risk_action
@@ -85,6 +85,8 @@ _ECOSYSTEM_BY_MANIFEST = {
     "composer.json": "packagist",
     "Gemfile": "rubygems",
 }
+_DEFAULT_BUNDLE_REFRESH_INTERVAL_SECONDS = 15 * 60
+_STALE_REFRESH_GRACE_SECONDS = 5 * 60
 
 
 def build_local_supply_chain_posture(
@@ -112,6 +114,17 @@ def build_local_supply_chain_posture(
         expires_at=expires_at,
         snapshot_now=snapshot_now,
     )
+    synced_at = _string_value(summary.get("synced_at"))
+    next_refresh_at = _resolve_next_refresh_at(
+        summary=summary,
+        synced_at=synced_at,
+    )
+    health_status = _posture_health_status(
+        status=status,
+        expires_at=expires_at,
+        next_refresh_at=next_refresh_at,
+        snapshot_now=snapshot_now,
+    )
     support = summary.get("ecosystem_support")
     supported_ecosystems = support if isinstance(support, list) and support else list(ecosystem_support_matrix())
     bundle_version = (
@@ -137,6 +150,7 @@ def build_local_supply_chain_posture(
     )
     return {
         "status": status,
+        "health_status": health_status,
         "detail": _posture_detail(status),
         "connection": {
             "logged_in": credentials is not None,
@@ -150,7 +164,8 @@ def build_local_supply_chain_posture(
             "policy_hash": _string_value(summary.get("policy_hash"))
             or _string_value(entitlement.get("policy_hash"))
             or _string_value(bundle_payload.get("policyHash")),
-            "synced_at": _string_value(summary.get("synced_at")),
+            "synced_at": synced_at,
+            "next_refresh_at": next_refresh_at,
             "expires_at": expires_at_text,
             "tier": tier,
             "workspace_id": _string_value(summary.get("workspace_id"))
@@ -687,6 +702,45 @@ def _posture_detail(status: str) -> str:
         "degraded": "Supply-chain protection is degraded. Refresh the signed bundle before trusting new installs.",
     }
     return details.get(status, "Supply-chain protection status is available.")
+
+
+def _posture_health_status(
+    *,
+    status: str,
+    expires_at: datetime | None,
+    next_refresh_at: str | None,
+    snapshot_now: datetime,
+) -> str:
+    if status == "expired":
+        return "stale"
+    if status in {"not_connected", "workspace_required", "sync_required", "degraded"}:
+        return "degraded"
+    if expires_at is not None and expires_at <= snapshot_now:
+        return "stale"
+    next_refresh_timestamp = _parse_timestamp(next_refresh_at)
+    if (
+        status == "synced"
+        and next_refresh_timestamp is not None
+        and next_refresh_timestamp + timedelta(seconds=_STALE_REFRESH_GRACE_SECONDS) < snapshot_now
+    ):
+        return "stale"
+    if status == "synced":
+        return "protected"
+    return "degraded"
+
+
+def _resolve_next_refresh_at(
+    *,
+    summary: dict[str, object],
+    synced_at: str | None,
+) -> str | None:
+    explicit_next_refresh = _parse_timestamp(_string_value(summary.get("next_refresh_at")))
+    if explicit_next_refresh is not None:
+        return explicit_next_refresh.isoformat()
+    synced_timestamp = _parse_timestamp(synced_at)
+    if synced_timestamp is None:
+        return None
+    return (synced_timestamp + timedelta(seconds=_DEFAULT_BUNDLE_REFRESH_INTERVAL_SECONDS)).isoformat()
 
 
 def _dict_payload(value: object) -> dict[str, object]:
