@@ -328,8 +328,9 @@ def _resume_codex_thread_with_cli(
         "--skip-git-repo-check",
     ]
     model = _first_string(metadata, _MODEL_KEYS)
-    if model is not None:
+    if model is not None and _is_safe_codex_model(model):
         command.extend(["--model", model])
+    command.append("--")
     command.extend([thread_id, prompt])
     env = os.environ.copy()
     if codex_home is not None:
@@ -608,7 +609,19 @@ def _is_safe_local_socket_path(socket_path: str) -> bool:
 
 
 def _is_safe_codex_thread_id(thread_id: str) -> bool:
-    return 0 < len(thread_id) <= 256 and all(31 < ord(char) < 127 for char in thread_id)
+    return (
+        0 < len(thread_id) <= 256
+        and not thread_id.startswith("-")
+        and all(char.isalnum() or char in "-_" for char in thread_id)
+    )
+
+
+def _is_safe_codex_model(model: str) -> bool:
+    return (
+        0 < len(model) <= 128
+        and not model.startswith("-")
+        and all(char.isalnum() or char in "-_.:" for char in model)
+    )
 
 
 def _first_string(payload: Mapping[str, object], keys: tuple[str, ...]) -> str | None:

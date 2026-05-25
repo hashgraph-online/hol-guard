@@ -524,6 +524,7 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     assert payload["codex_resume"]["strategy"] == "codex-headless-exec"
     assert "original chat" in payload["codex_resume"]["message"]
     assert launched[0][:5] == ["/usr/local/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
+    assert "--" in launched[0]
 
 
 def test_codex_approve_uses_default_app_server_when_hook_omits_socket(

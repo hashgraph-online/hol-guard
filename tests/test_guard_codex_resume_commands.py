@@ -330,6 +330,7 @@ def test_guard_approvals_resume_starts_headless_codex_when_app_server_unavailabl
     assert len(launched) == 1
     assert launched[0]["cwd"] == workspace
     assert launched[0]["command"][:5] == ["/usr/local/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
+    assert "--" in launched[0]["command"]
     assert "thread-1" in launched[0]["command"]
     assert launched[0]["env"]["CODEX_HOME"] == str(codex_home)
 
