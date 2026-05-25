@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
@@ -132,6 +133,7 @@ def _package(
     name: str,
     version: str,
     default_action: str,
+    confidence: int = 990,
     normalized_severity: str = "critical",
     exploit_level: str = "active",
     known_exploited: bool = True,
@@ -141,7 +143,7 @@ def _package(
     risk_score: int = 980,
 ) -> dict[str, object]:
     return {
-        "confidence": 990,
+        "confidence": confidence,
         "defaultAction": default_action,
         "ecosystem": ecosystem,
         "exploitLevel": exploit_level,
@@ -1011,6 +1013,146 @@ def test_evaluate_package_request_artifact_blocks_transitive_lockfile_match_with
     assert transitive_match["dependencyPath"] == "react/node_modules/minimist"
     assert transitive_match["direct"] is False
     assert any("react/node_modules/minimist" in reason["message"] for reason in result.reasons)
+
+
+def test_evaluate_package_request_artifact_warns_for_low_confidence_transitive_lockfile_match(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
+    )
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="debug",
+                version="4.3.4",
+                default_action="block",
+                confidence=650,
+                normalized_severity="high",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                recommended_fix_version="4.3.5",
+                risk_score=610,
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "package-lock.json").write_text(
+        json.dumps(
+            {
+                "packages": {
+                    "": {"name": "demo-app"},
+                    "node_modules/react": {"version": "18.0.0"},
+                    "node_modules/react/node_modules/debug": {"version": "4.3.4"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("react@18.0.0", lockfile_paths=("package-lock.json",)),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "warn"
+    transitive_match = next(package for package in result.packages if package["name"] == "debug")
+    assert transitive_match["decision"] == "warn"
+    assert transitive_match["dependencyPath"] == "react/node_modules/debug"
+    assert "react/node_modules/debug" in result.user_copy.harness_message
+
+
+def test_transitive_lockfile_resolution_uses_bounded_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "package-lock.json").write_text(
+        json.dumps({"packages": {"": {"name": "demo-app"}, "node_modules/react/node_modules/minimist": {"version": "1.2.8"}}}),
+        encoding="utf-8",
+    )
+    captured: dict[str, float] = {}
+
+    def fake_package_lock_entries(
+        lockfile_text: str, *, deadline: float | None = None
+    ) -> list[tuple[str, str, str, bool]]:
+        captured["deadline"] = deadline
+        assert "minimist" in lockfile_text
+        return [("react/node_modules/minimist", "minimist", "1.2.8", False)]
+
+    monkeypatch.setattr(evaluator_module.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(evaluator_module, "_package_lock_entries", fake_package_lock_entries)
+
+    evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("react@18.0.0", lockfile_paths=("package-lock.json",)),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert captured["deadline"] == pytest.approx(100.2)
+
+
+def test_transitive_lockfile_timeout_surfaces_warn_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "package-lock.json").write_text(
+        json.dumps({"packages": {"": {"name": "demo-app"}, "node_modules/react/node_modules/minimist": {"version": "1.2.8"}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "_package_lock_entries",
+        lambda _text, *, deadline=None: (_ for _ in ()).throw(_DeadlineExceededError("deadline_exceeded")),
+    )
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("react@18.0.0", lockfile_paths=("package-lock.json",)),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "warn"
+    assert any(reason["code"] == "transitive_lockfile_timeout" for reason in result.reasons)
+    assert "package-lock.json" in result.user_copy.harness_message
 
 
 def test_package_from_cloud_result_preserves_direct_and_dependency_path_schema() -> None:
