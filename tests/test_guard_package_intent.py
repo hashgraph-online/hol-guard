@@ -102,6 +102,37 @@ def test_parse_package_intent_exec_commands_are_classified_as_execute_requests()
         assert intent.targets[0].requested_specifier == requested_specifier
 
 
+def test_parse_package_intent_detects_package_command_after_control_operator() -> None:
+    commands = {
+        "true && npx attacker-package": ("npx", "attacker-package"),
+        "echo ok; npm install attacker-package": ("npm", "attacker-package"),
+        "false || pnpm dlx attacker-package": ("pnpm", "attacker-package"),
+        "echo ok | bunx attacker-package": ("bunx", "attacker-package"),
+        "echo ok & pip install attacker-package": ("pip", "attacker-package"),
+    }
+
+    for command, (manager, package_name) in commands.items():
+        intent = parse_package_intent(command)
+
+        assert intent is not None
+        assert intent.package_manager == manager
+        assert intent.targets[0].package_name == package_name
+
+    assert parse_package_intent("echo safe && grep foo src/file.ts") is None
+
+
+def test_parse_package_intent_combines_multiple_package_segments() -> None:
+    intent = parse_package_intent("npm install left-pad && npm install attacker-package@1.0.0")
+
+    assert intent is not None
+    assert intent.package_manager == "npm"
+    assert intent.intent_kind == "install"
+    assert [target.package_name for target in intent.targets] == ["left-pad", "attacker-package"]
+    assert [target.requested_specifier for target in intent.targets] == [None, "1.0.0"]
+    assert "left-pad" in intent.redacted_command
+    assert "attacker-package@1.0.0" in intent.redacted_command
+
+
 def test_parse_package_intent_npm_exec_prefers_explicit_package_when_command_differs() -> None:
     intent = parse_package_intent("npm exec --package cowsay hello")
 

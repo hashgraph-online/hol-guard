@@ -19,12 +19,12 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
-from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
     js_target,
 )
+from codex_plugin_scanner.guard.runtime.package_manifest_diff import _DeadlineExceededError
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
@@ -539,8 +539,11 @@ def test_evaluate_package_request_artifact_handles_upgrade_required_with_premium
     assert "upgrade" in result.user_copy.title.lower()
 
 
-def test_evaluate_package_request_artifact_falls_back_on_cloud_http_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404])
+def test_evaluate_package_request_artifact_fails_closed_on_untrusted_cloud_http_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
@@ -569,8 +572,8 @@ def test_evaluate_package_request_artifact_falls_back_on_cloud_http_error(
     def raise_http_error(*args: object, **kwargs: object) -> object:
         raise urllib.error.HTTPError(
             "https://hol.org/guard/supply-chain/evaluate",
-            401,
-            "unauthorized",
+            status_code,
+            "cloud evaluation failed",
             {},
             None,
         )
@@ -583,12 +586,14 @@ def test_evaluate_package_request_artifact_falls_back_on_cloud_http_error(
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "monitor"
-    assert result.policy_action == "allow"
-    assert result.enforcement in {"offline_cached", "local_fallback"}
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert result.enforcement == "premium_cloud"
+    expected_code = "cloud_auth_error" if status_code in {401, 403} else "cloud_validation_error"
+    assert any(reason["code"] == expected_code for reason in result.reasons)
 
 
-def test_evaluate_package_request_artifact_falls_back_on_invalid_cloud_response(
+def test_evaluate_package_request_artifact_fails_closed_on_invalid_cloud_response(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
@@ -626,9 +631,10 @@ def test_evaluate_package_request_artifact_falls_back_on_invalid_cloud_response(
         now="2026-05-19T00:00:00Z",
     )
 
-    assert result.decision == "monitor"
-    assert result.policy_action == "allow"
-    assert result.enforcement in {"offline_cached", "local_fallback"}
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert result.enforcement == "premium_cloud"
+    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
 
 
 def test_evaluate_package_request_artifact_ignores_malformed_cached_bundle(
@@ -1089,7 +1095,14 @@ def test_transitive_lockfile_resolution_uses_bounded_deadline(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     (workspace_dir / "package-lock.json").write_text(
-        json.dumps({"packages": {"": {"name": "demo-app"}, "node_modules/react/node_modules/minimist": {"version": "1.2.8"}}}),
+        json.dumps(
+            {
+                "packages": {
+                    "": {"name": "demo-app"},
+                    "node_modules/react/node_modules/minimist": {"version": "1.2.8"},
+                }
+            }
+        ),
         encoding="utf-8",
     )
     captured: dict[str, float] = {}
@@ -1134,7 +1147,14 @@ def test_transitive_lockfile_timeout_surfaces_warn_result(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     (workspace_dir / "package-lock.json").write_text(
-        json.dumps({"packages": {"": {"name": "demo-app"}, "node_modules/react/node_modules/minimist": {"version": "1.2.8"}}}),
+        json.dumps(
+            {
+                "packages": {
+                    "": {"name": "demo-app"},
+                    "node_modules/react/node_modules/minimist": {"version": "1.2.8"},
+                }
+            }
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr(

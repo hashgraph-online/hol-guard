@@ -977,6 +977,50 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "require-reapproval"
         assert "destructive shell command" in output["artifact_name"]
 
+    def test_codex_pre_tool_use_blocks_fd_follow_symlink_descendant_exec(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        ssh_dir = home_dir / ".ssh"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "id_rsa").write_text("private-key\n", encoding="utf-8")
+        src_dir = workspace_dir / "src"
+        src_dir.mkdir(parents=True)
+        (src_dir / "ssh-link").symlink_to(ssh_dir, target_is_directory=True)
+        command = "fd -L 'id_rsa' src -x sed -n '1,20p' {}"
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert output["approval_requests"]
+
     def test_codex_pre_tool_use_blocks_fd_search_path_sensitive_dir_exec(
         self,
         monkeypatch,

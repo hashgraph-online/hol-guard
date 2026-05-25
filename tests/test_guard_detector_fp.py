@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.runtime.false_positive_rules import (
     classify_package_metadata_access,
     classify_source_search_command,
     classify_version_file_access,
+    fd_args_follow_symlinks,
 )
 from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
 
@@ -47,6 +48,17 @@ class TestSourceSearchClassifier:
     def test_fd_find_config_files_is_source_search(self) -> None:
         result = classify_source_search_command("fd -e ts -e js --type f .")
         assert result.is_source_search is True
+
+    def test_fd_follow_symlink_search_is_not_source_search(self) -> None:
+        result = classify_source_search_command("fd -L 'id_rsa' src -x sed -n '1,20p' {}")
+
+        assert fd_args_follow_symlinks(["-L", "id_rsa", "src"]) is True
+        assert fd_args_follow_symlinks(["--follow", "id_rsa", "src"]) is True
+        assert fd_args_follow_symlinks(["-HI", "SKILL.md", "src"]) is False
+        assert fd_args_follow_symlinks(["-xL", "cat"]) is False
+        assert fd_args_follow_symlinks(["-XL", "cat"]) is False
+        assert fd_args_follow_symlinks(["-cL", "always"]) is False
+        assert result.is_source_search is False
 
     def test_find_source_dirs_is_source_search(self) -> None:
         result = classify_source_search_command("find src/ -name '*.py' -type f")

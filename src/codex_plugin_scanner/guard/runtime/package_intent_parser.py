@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import re
 import shlex
-from dataclasses import replace
+from collections.abc import Iterable
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..protect import _collect_package_specs
 from .mcp_protection import _command_name, _package_token
 from .package_intent_common import (
+    IntentKind,
     PackageIntent,
     PackageIntentTarget,
     composer_target,
@@ -26,16 +28,31 @@ from .package_intent_common import (
 )
 from .secret_file_requests import _SHELL_TOOL_NAMES, _candidate_command_texts, _normalize_tool_name
 
-_CONTROL_TOKENS = {"&&", "||", ";", "|", "|&"}
+_CONTROL_TOKENS = {"&&", "||", ";", "|", "|&", "&"}
 _ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 _PYTHON_EXECUTABLES = {"py", "python", "python3", "python3.11", "python3.12", "python3.13", "python3.14"}
+_PACKAGE_SOURCE_ENV_NAMES = frozenset(
+    {
+        "PIP_EXTRA_INDEX_URL",
+        "PIP_INDEX_URL",
+        "PIP_FIND_LINKS",
+        "UV_DEFAULT_INDEX",
+        "UV_EXTRA_INDEX_URL",
+        "UV_INDEX",
+        "UV_INDEX_URL",
+        "NPM_CONFIG_REGISTRY",
+        "YARN_NPM_REGISTRY_SERVER",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _CommandSegment:
+    tokens: tuple[str, ...]
+    redacted_tokens: tuple[str, ...]
 
 
 def parse_package_intent(command_text: str, *, workspace: Path | None = None) -> PackageIntent | None:
-    command_tokens = _normalized_command_tokens(command_text)
-    if not command_tokens:
-        return None
-    command_name = _command_name(command_tokens[0])
     handlers = {
         "npm": _parse_npm_intent,
         "npx": _parse_exec_intent,
@@ -69,13 +86,18 @@ def parse_package_intent(command_text: str, *, workspace: Path | None = None) ->
         "zypper": _parse_system_package_intent,
         "helm": _parse_helm_intent,
     }
-    handler = handlers.get(command_name)
-    if handler is None:
-        return None
-    intent = handler(command_tokens, workspace=workspace)
-    if intent is None:
-        return None
-    return replace(intent, redacted_command=_redacted_command_text(command_text))
+    intents: list[PackageIntent] = []
+    for segment in _normalized_command_segments(command_text):
+        if not segment.tokens:
+            continue
+        command_name = _command_name(segment.tokens[0])
+        handler = handlers.get(command_name)
+        if handler is None:
+            continue
+        intent = handler(segment.tokens, workspace=workspace)
+        if intent is not None:
+            intents.append(replace(intent, redacted_command=redacted_command(segment.redacted_tokens)))
+    return _combine_package_intents(tuple(intents))
 
 
 def extract_package_intent_request(
@@ -575,41 +597,79 @@ def _exec_package_spec(tokens: tuple[str, ...]) -> str | None:
 
 
 def _normalized_command_tokens(command_text: str) -> tuple[str, ...]:
+    segments = _normalized_command_segments(command_text)
+    return segments[0].tokens if segments else ()
+
+
+def _normalized_command_segments(command_text: str) -> tuple[_CommandSegment, ...]:
     try:
-        tokens = shlex.split(command_text, posix=True)
+        tokens = _split_shell_tokens(command_text)
     except ValueError:
         return ()
+    segments: list[_CommandSegment] = []
+    for raw_segment in _raw_command_segments(tokens):
+        normalized_tokens = _normalize_segment(raw_segment)
+        if not normalized_tokens:
+            continue
+        redacted_tokens = _redacted_segment(raw_segment)
+        segments.append(_CommandSegment(tuple(normalized_tokens), tuple(redacted_tokens)))
+    return tuple(segments)
+
+
+def _raw_command_segments(tokens: list[str]) -> tuple[list[str], ...]:
+    segments: list[list[str]] = []
     segment: list[str] = []
     for token in tokens:
         if token in _CONTROL_TOKENS:
-            break
+            if segment:
+                segments.append(segment)
+            segment = []
+            continue
         segment.append(token)
-    segment = _strip_wrapper_tokens(segment)
+    if segment:
+        segments.append(segment)
+    return tuple(segments)
+
+
+def _normalize_segment(raw_segment: list[str]) -> list[str]:
+    segment = _strip_wrapper_tokens(list(raw_segment))
     if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
         segment = [segment[2], *segment[3:]]
-    return tuple(segment)
+    return segment
 
 
 def _redacted_command_text(command_text: str) -> str:
     try:
-        tokens = shlex.split(command_text, posix=True)
+        tokens = _split_shell_tokens(command_text)
     except ValueError:
         return ""
-    segment: list[str] = []
-    for token in tokens:
-        if token in _CONTROL_TOKENS:
-            break
-        segment.append(token)
-    segment = _strip_redaction_wrappers(segment)
-    if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
-        segment = [segment[2], *segment[3:]]
-    segment = _redact_local_source_tokens(segment)
+    raw_segments = _raw_command_segments(tokens)
+    if not raw_segments:
+        return ""
+    segment = _redacted_segment(raw_segments[0])
     return redacted_command(tuple(segment))
 
 
+def _redacted_segment(raw_segment: list[str]) -> list[str]:
+    segment = _strip_redaction_wrappers(list(raw_segment))
+    if len(segment) >= 3 and _command_name(segment[0]) in _PYTHON_EXECUTABLES and segment[1] == "-m":
+        segment = [segment[2], *segment[3:]]
+    return _redact_local_source_tokens(segment)
+
+
+def _split_shell_tokens(command_text: str) -> list[str]:
+    lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|")
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    return list(lexer)
+
+
 def _strip_redaction_wrappers(segment: list[str]) -> list[str]:
+    preserved_env: list[str] = []
     while segment:
         if _ENV_ASSIGNMENT_RE.match(segment[0]):
+            if _package_source_env_assignment(segment[0]):
+                preserved_env.append(segment[0])
             segment.pop(0)
             continue
         command_name = _command_name(segment[0])
@@ -617,13 +677,73 @@ def _strip_redaction_wrappers(segment: list[str]) -> list[str]:
             segment = _strip_sudo_prefix(segment[1:])
             continue
         if command_name == "env":
-            segment = _strip_env_prefix(segment[1:])
+            env_preserved, segment = _strip_env_prefix_for_redaction(segment[1:])
+            preserved_env.extend(env_preserved)
             continue
         if command_name in {"command", "time"}:
             segment = _strip_plain_wrapper_flags(segment[1:])
             continue
         break
-    return segment
+    return [*preserved_env, *segment]
+
+
+def _combine_package_intents(intents: tuple[PackageIntent, ...]) -> PackageIntent | None:
+    if not intents:
+        return None
+    if len(intents) == 1:
+        return intents[0]
+    return PackageIntent(
+        package_manager=_combined_package_manager(intents),
+        intent_kind=_combined_intent_kind(intents),
+        command_tokens=_unique_joined_tokens(intent.command_tokens for intent in intents),
+        redacted_command=" ; ".join(intent.redacted_command for intent in intents if intent.redacted_command),
+        targets=tuple(target for intent in intents for target in intent.targets),
+        manifest_paths=_unique_joined_strings(intent.manifest_paths for intent in intents),
+        lockfile_paths=_unique_joined_strings(intent.lockfile_paths for intent in intents),
+        flags=_unique_joined_strings(intent.flags for intent in intents),
+        notes=_unique_joined_strings((*[intent.notes for intent in intents], ("multiple-package-segments",))),
+    )
+
+
+def _combined_package_manager(intents: tuple[PackageIntent, ...]) -> str:
+    managers = {intent.package_manager for intent in intents}
+    if len(managers) == 1:
+        return intents[0].package_manager
+    return "multiple"
+
+
+def _combined_intent_kind(intents: tuple[PackageIntent, ...]) -> IntentKind:
+    kinds = {intent.intent_kind for intent in intents}
+    if len(kinds) == 1:
+        return intents[0].intent_kind
+    if "install" in kinds:
+        return "install"
+    if "execute" in kinds:
+        return "execute"
+    return "sync"
+
+
+def _unique_joined_tokens(groups: Iterable[Iterable[str]]) -> tuple[str, ...]:
+    tokens: list[str] = []
+    for group in groups:
+        if tokens:
+            tokens.append(";")
+        tokens.extend(str(token) for token in group)
+    return tuple(tokens)
+
+
+def _unique_joined_strings(groups: Iterable[Iterable[str]]) -> tuple[str, ...]:
+    values: list[str] = []
+    for group in groups:
+        for value in group:
+            if value not in values:
+                values.append(value)
+    return tuple(values)
+
+
+def _package_source_env_assignment(token: str) -> bool:
+    name, separator, value = token.partition("=")
+    return bool(separator and value and name.upper() in _PACKAGE_SOURCE_ENV_NAMES)
 
 
 def _strip_wrapper_tokens(segment: list[str]) -> list[str]:
@@ -695,6 +815,25 @@ def _strip_env_prefix(tokens: list[str]) -> list[str]:
             continue
         index += 1
     return tokens[index:]
+
+
+def _strip_env_prefix_for_redaction(tokens: list[str]) -> tuple[list[str], list[str]]:
+    preserved_env: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if _ENV_ASSIGNMENT_RE.match(token):
+            if _package_source_env_assignment(token):
+                preserved_env.append(token)
+            index += 1
+            continue
+        if not token.startswith("-"):
+            break
+        if token in {"-u", "-C", "-S"} and index + 1 < len(tokens):
+            index += 2
+            continue
+        index += 1
+    return preserved_env, tokens[index:]
 
 
 def _strip_plain_wrapper_flags(tokens: list[str]) -> list[str]:

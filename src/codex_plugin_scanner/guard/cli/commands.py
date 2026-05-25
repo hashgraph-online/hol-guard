@@ -141,6 +141,7 @@ from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
     fd_arg_requests_exec,
+    fd_args_follow_symlinks,
     fd_exec_token_is_plain_sed,
     fd_search_targets,
     split_fd_args_and_exec,
@@ -7721,6 +7722,8 @@ def _codex_search_targets_are_source_like(
 
 
 def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
+    if fd_args_follow_symlinks(args):
+        return False
     targets = _codex_fd_targets(args)
     if not targets:
         return False
@@ -7732,6 +7735,8 @@ def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
 
 
 def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
+    if fd_args_follow_symlinks(args):
+        return False
     parsed = split_fd_args_and_exec(args)
     if parsed is None:
         return not any(fd_arg_requests_exec(arg) for arg in args)
