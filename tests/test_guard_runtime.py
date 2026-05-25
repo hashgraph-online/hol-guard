@@ -12278,8 +12278,12 @@ def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
     assert "HOL Guard" in payload["reason"]
     assert "sensitive local file" in payload["reason"]
     assert "Codex does not expose native approval prompts for Read-tool file reads" in payload["reason"]
-    assert "stopReason" not in payload
-    assert "continue" not in payload
+    assert payload["stopReason"] == payload["reason"]
+    assert payload["continue"] is False
+    assert payload["hookSpecificOutput"] == {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": payload["reason"],
+    }
 
 
 def test_guard_hook_allows_codex_user_prompt_submit_negative_dotenv_guardrail(
