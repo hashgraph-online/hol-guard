@@ -749,7 +749,7 @@ def _heuristic_result(
         if package_result is None and source_url is not None and _is_git_source_url(source_url):
             package_result = _heuristic_package_result(
                 target=target,
-                decision="warn",
+                decision="ask",
                 code="git_dependency_source",
                 message="Git package source requires review before install.",
                 severity="high",
@@ -757,7 +757,7 @@ def _heuristic_result(
         if package_result is None and source_url is not None and _is_external_https_tarball_source(source_url):
             package_result = _heuristic_package_result(
                 target=target,
-                decision="warn",
+                decision="ask",
                 code="external_tarball_source",
                 message="External tarball source requires review before install.",
                 severity="medium",
@@ -1185,7 +1185,7 @@ def _local_source_dependency_result(target: dict[str, object]) -> dict[str, obje
         return None
     return _heuristic_package_result(
         target=target,
-        decision="warn",
+        decision="ask",
         code="local_path_dependency_source",
         message="Local path dependency requires review before install.",
         severity="medium",
@@ -1424,7 +1424,7 @@ def _local_python_build_result(target: dict[str, object], workspace_dir: Path | 
                 )
             return _heuristic_package_result(
                 target=target,
-                decision="warn",
+                decision="ask",
                 code="local_build_backend_risk",
                 message="Editable local Python installs can invoke pyproject build backend hooks from this workspace.",
                 severity="medium",
@@ -1635,7 +1635,7 @@ def _go_replace_result(
         if replacement.startswith(("file:", "./", "../", "/", "~", ".\\", "..\\")):
             return _heuristic_package_result(
                 target=target,
-                decision="warn",
+                decision="ask",
                 code="go_replace_local_source",
                 message="Go replace directive reroutes this module to a local path.",
                 severity="medium",
@@ -1643,7 +1643,7 @@ def _go_replace_result(
         if _exact_version(replacement) is None:
             return _heuristic_package_result(
                 target=target,
-                decision="warn",
+                decision="ask",
                 code="go_replace_mutable_source",
                 message="Go replace directive reroutes this module away from proxy-pinned version resolution.",
                 severity="medium",

@@ -32,6 +32,14 @@ _PACKAGE_SHIM_COMMANDS = {
     "yarn": "yarn",
 }
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
+_TRUSTED_CLI_LAUNCHER = (
+    "import os, runpy, sys; "
+    "trusted_root = sys.argv.pop(1); "
+    "module_name = sys.argv.pop(1); "
+    "cwd = os.getcwd(); "
+    "sys.path = [trusted_root, *[entry for entry in sys.path if entry not in ('', cwd, trusted_root)]]; "
+    "runpy.run_module(module_name, run_name='__main__')"
+)
 
 
 def install_guard_shim(
@@ -101,7 +109,9 @@ def remove_guard_shim(
 def _build_python_shim(harness: str, context: HarnessContext, workspace_args: list[str]) -> str:
     command_args = [
         sys.executable,
-        "-m",
+        "-c",
+        _TRUSTED_CLI_LAUNCHER,
+        str(_trusted_import_root()),
         "codex_plugin_scanner.cli",
         "guard",
         "run",
@@ -263,11 +273,14 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
     shim_dir = context.guard_home / "package-shims" / "bin"
     command_args = [
         sys.executable,
-        "-m",
+        "-c",
+        _TRUSTED_CLI_LAUNCHER,
+        str(_trusted_import_root()),
         "codex_plugin_scanner.cli",
         "guard",
         "protect",
         "--json",
+        "--dry-run",
         "--guard-home",
         str(context.guard_home),
         *_home_override_args(context),
@@ -285,7 +298,11 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             f"base_command = {command_args!r}",
             f"command_name = {command!r}",
             f"shim_dir = {str(shim_dir.resolve())!r}",
-            "guard_process = subprocess.run([*base_command, *sys.argv[1:]], capture_output=True, text=True)",
+            "guard_env = dict(os.environ)",
+            "guard_env.pop('PYTHONPATH', None)",
+            "guard_process = subprocess.run(",
+            "    [*base_command, *sys.argv[1:]], capture_output=True, text=True, env=guard_env",
+            ")",
             "if guard_process.stdout:",
             "    sys.stdout.write(guard_process.stdout)",
             "if guard_process.stderr:",
@@ -317,6 +334,10 @@ def _normalize_package_shim_managers(managers: tuple[str, ...] | None) -> tuple[
         if key in _PACKAGE_SHIM_COMMANDS and key not in normalized:
             normalized.append(key)
     return tuple(normalized)
+
+
+def _trusted_import_root() -> Path:
+    return Path(__file__).resolve().parents[2]
 
 
 def _package_shim_manifest_path(context: HarnessContext) -> Path:
