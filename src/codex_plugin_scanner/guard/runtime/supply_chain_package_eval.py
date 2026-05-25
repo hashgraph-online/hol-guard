@@ -56,6 +56,7 @@ _TIMEOUT_SECONDS = 1
 _RETRY_TIMEOUT_SECONDS = 1
 _CLOUD_DASHBOARD_URL = "https://hol.org/guard/inbox"
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
+_PYPI_REGISTRY_METADATA_BASE_URL = "https://pypi.org/pypi"
 
 
 @dataclass(frozen=True, slots=True)
@@ -2300,14 +2301,17 @@ def _resolved_target_version(
 
 def _registry_resolved_target_version(*, target: dict[str, object], requested_range: str) -> str | None:
     ecosystem = _optional_string(target.get("ecosystem")) or "npm"
-    if ecosystem != "npm":
-        return None
     if _optional_string(target.get("source_url")) is not None:
         return None
     package_name = _registry_package_name(target)
     if package_name is None:
         return None
-    return _npm_registry_resolved_version(package_name=package_name, requested_range=requested_range)
+    if ecosystem == "npm":
+        return _npm_registry_resolved_version(package_name=package_name, requested_range=requested_range)
+    if ecosystem == "pypi":
+        normalized_name = _normalize_package_name("pypi", package_name)
+        return _pypi_registry_resolved_version(package_name=normalized_name, requested_range=requested_range)
+    return None
 
 
 def _registry_package_name(target: dict[str, object]) -> str | None:
@@ -2342,6 +2346,97 @@ def _npm_registry_resolved_version(*, package_name: str, requested_range: str) -
     if not versions:
         return None
     return highest_js_version_for_selector(versions, requested_range)
+
+
+def _pypi_registry_resolved_version(*, package_name: str, requested_range: str) -> str | None:
+    metadata_url = f"{_PYPI_REGISTRY_METADATA_BASE_URL.rstrip('/')}/{urllib.parse.quote(package_name, safe='')}/json"
+    request = urllib.request.Request(
+        metadata_url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "hol-guard-local",
+        },
+    )
+    try:
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
+        )
+    except (OSError, RuntimeError, ValueError):
+        return None
+    releases_payload = payload.get("releases")
+    if not isinstance(releases_payload, dict):
+        return None
+    normalized_range = _normalized_pypi_requested_range(requested_range)
+    if normalized_range is None:
+        return None
+    try:
+        specifier = SpecifierSet(normalized_range)
+    except InvalidSpecifier:
+        return None
+    matching_versions: list[Version] = []
+    for release in releases_payload:
+        if not isinstance(release, str):
+            continue
+        try:
+            parsed_version = Version(release)
+        except InvalidVersion:
+            continue
+        if parsed_version in specifier:
+            matching_versions.append(parsed_version)
+    if not matching_versions:
+        return None
+    matching_versions.sort()
+    return str(matching_versions[-1])
+
+
+def _normalized_pypi_requested_range(requested_range: str) -> str | None:
+    normalized = requested_range.strip()
+    if not normalized:
+        return None
+    if normalized.startswith("~="):
+        return normalized
+    if normalized.startswith("^"):
+        return _pypi_caret_specifier(normalized[1:])
+    if normalized.startswith("~"):
+        return _pypi_tilde_specifier(normalized[1:])
+    return normalized
+
+
+def _pypi_caret_specifier(value: str) -> str | None:
+    base = _optional_string(value)
+    if base is None:
+        return None
+    try:
+        parsed_version = Version(base)
+    except InvalidVersion:
+        return None
+    release = parsed_version.release
+    major = release[0] if len(release) >= 1 else 0
+    minor = release[1] if len(release) >= 2 else 0
+    patch = release[2] if len(release) >= 3 else 0
+    if major > 0:
+        upper_bound = f"{major + 1}"
+    elif minor > 0:
+        upper_bound = f"0.{minor + 1}"
+    else:
+        upper_bound = f"0.0.{patch + 1}"
+    return f">={base},<{upper_bound}"
+
+
+def _pypi_tilde_specifier(value: str) -> str | None:
+    base = _optional_string(value)
+    if base is None:
+        return None
+    try:
+        parsed_version = Version(base)
+    except InvalidVersion:
+        return None
+    release = parsed_version.release
+    major = release[0] if len(release) >= 1 else 0
+    upper_bound = f"{major}.{release[1] + 1}" if len(release) >= 2 else f"{major + 1}"
+    return f">={base},<{upper_bound}"
 
 
 def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target: dict[str, object]) -> list[str]:
