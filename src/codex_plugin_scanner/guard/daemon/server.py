@@ -87,6 +87,7 @@ from ..runtime.runner import (
     sync_supply_chain_bundle,
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
+from ..shims import package_shim_status
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
@@ -104,7 +105,6 @@ from .manager import (
     repair_approval_center_locator,
     write_guard_daemon_state,
 )
-from ..shims import package_shim_status
 
 
 def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
