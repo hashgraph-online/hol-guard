@@ -43,6 +43,8 @@ _CODEX_HOME_KEYS = ("codex_home", "codexHome")
 _COMMAND_TEXT_KEYS = ("command_text", "commandText")
 _WORKSPACE_KEYS = ("workspace", "cwd", "working_directory", "workingDirectory")
 _MODEL_KEYS = ("codex_model", "codexModel", "model")
+_NESTED_COMMAND_TEXT_KEYS = ("command", "cmd", "shell_command", "shellCommand")
+_NESTED_TOOL_INPUT_KEYS = ("tool_input", "toolInput", "arguments", "args")
 
 
 class _WebSocketClosedError(TimeoutError):
@@ -103,6 +105,12 @@ def codex_resume_metadata_from_hook_payload(
     model = _first_string(payload, _MODEL_KEYS)
     if model is not None:
         metadata["codex_model"] = model
+    workspace = _first_string(payload, _WORKSPACE_KEYS)
+    if workspace is not None:
+        metadata["workspace"] = workspace
+    command_text = _first_command_text(payload)
+    if command_text is not None:
+        metadata["command_text"] = command_text
     return metadata
 
 
@@ -630,6 +638,19 @@ def _first_string(payload: Mapping[str, object], keys: tuple[str, ...]) -> str |
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    return None
+
+
+def _first_command_text(payload: Mapping[str, object]) -> str | None:
+    command_text = _first_string(payload, _COMMAND_TEXT_KEYS)
+    if command_text is not None:
+        return command_text
+    for key in _NESTED_TOOL_INPUT_KEYS:
+        value = payload.get(key)
+        if isinstance(value, Mapping):
+            command_text = _first_string(value, _NESTED_COMMAND_TEXT_KEYS)
+            if command_text is not None:
+                return command_text
     return None
 
 

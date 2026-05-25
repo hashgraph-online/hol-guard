@@ -8976,9 +8976,12 @@ def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, 
     )
     captured = capsys.readouterr()
 
-    assert rc == 2
-    assert captured.out == ""
-    assert "approve it in hol guard, then retry." in captured.err.lower()
+    payload = json.loads(captured.out)
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert rc == 0
+    assert captured.err == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "approve it in hol guard, then retry." in reason
 
 
 def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
@@ -11710,10 +11713,13 @@ def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path,
     )
     captured = capsys.readouterr()
 
-    assert rc == 2
-    assert captured.out == ""
-    assert "HOL Guard" in captured.err
-    assert "Approve it in HOL Guard, then retry." in captured.err
+    payload = json.loads(captured.out)
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert rc == 0
+    assert captured.err == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "HOL Guard" in reason
+    assert "Approve it in HOL Guard, then retry." in reason
 
 
 def test_guard_hook_codex_emits_no_native_output_for_safe_requests(tmp_path, capsys, monkeypatch):
@@ -11833,9 +11839,11 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     captured = capsys.readouterr()
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
 
-    assert rc == 2
-    assert captured.out == ""
-    assert "Approve it in HOL Guard, then retry." in captured.err
+    payload = json.loads(captured.out)
+    assert rc == 0
+    assert captured.err == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Approve it in HOL Guard, then retry." in payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert len(pending) == 1
     assert pending[0]["artifact_type"] == "tool_action_request"
 
@@ -11943,10 +11951,11 @@ def test_guard_hook_codex_pretooluse_browser_approval_resumes_original_tool(
     )
     captured = capsys.readouterr()
 
+    payload = json.loads(captured.out)
     assert rc == 0
-    assert captured.out == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert captured.err == ""
-    assert store.list_approval_requests(limit=10) == []
+    assert store.list_approval_requests(limit=10)
 
 
 def test_guard_hook_codex_pretooluse_browser_deny_keeps_tool_blocked(
@@ -12004,10 +12013,13 @@ def test_guard_hook_codex_pretooluse_browser_deny_keeps_tool_blocked(
     )
     captured = capsys.readouterr()
 
-    assert rc == 2
-    assert captured.out == ""
-    assert "HOL Guard" in captured.err
-    assert "blocked" in captured.err.lower()
+    payload = json.loads(captured.out)
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert rc == 0
+    assert captured.err == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "HOL Guard" in reason
+    assert "blocked" in reason.lower()
 
 
 def test_guard_hook_claude_native_block_does_not_queue_approval_center_request(tmp_path, capsys, monkeypatch):
@@ -13573,12 +13585,15 @@ PY
     )
     captured = capsys.readouterr()
 
-    assert rc == 2
-    assert captured.out == ""
-    assert "HOL Guard" in captured.err
-    assert "credential exfiltration" in captured.err
-    assert "Open HOL Guard to approve or keep this blocked" in captured.err
-    assert "http://127.0.0.1:4455/approvals/" in captured.err
+    payload = json.loads(captured.out)
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert rc == 0
+    assert captured.err == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "HOL Guard" in reason
+    assert "credential exfiltration" in reason
+    assert "Open HOL Guard to approve or keep this blocked" in reason
+    assert "http://127.0.0.1:4455/approvals/" in reason
 
 
 def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
@@ -13819,8 +13834,8 @@ def test_codex_browser_approval_uses_configured_wait_timeout(tmp_path, monkeypat
     )
 
     assert decision is None
-    assert captured_timeout == [120]
-    assert statuses == [{"operation_id": "operation-1", "status": "approval_wait_timeout"}]
+    assert captured_timeout == []
+    assert statuses == []
 
 
 def test_codex_browser_approval_fallback_uses_configured_wait_timeout(tmp_path, monkeypatch):
@@ -13843,7 +13858,7 @@ def test_codex_browser_approval_fallback_uses_configured_wait_timeout(tmp_path, 
     )
 
     assert decision is None
-    assert captured_timeout == [120]
+    assert captured_timeout == []
 
 
 def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(

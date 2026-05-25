@@ -196,6 +196,29 @@ def test_default_codex_app_server_socket_probe_uses_codex_home(
     assert connect_paths == [str(socket_path)]
 
 
+def test_codex_resume_metadata_extracts_workspace_and_nested_command() -> None:
+    metadata = codex_app_server_module.codex_resume_metadata_from_hook_payload(
+        {
+            "session_id": "thread-123",
+            "turn_id": "turn-123",
+            "cwd": "/tmp/project",
+            "model": "gpt-5.3",
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm install is-even"},
+        },
+        environ={"CODEX_HOME": "/tmp/codex-home"},
+    )
+
+    assert metadata == {
+        "codex_thread_id": "thread-123",
+        "codex_turn_id": "turn-123",
+        "codex_home": "/tmp/codex-home",
+        "codex_model": "gpt-5.3",
+        "workspace": "/tmp/project",
+        "command_text": "npm install is-even",
+    }
+
+
 def test_guard_doctor_codex_reports_resume_diagnostics(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
