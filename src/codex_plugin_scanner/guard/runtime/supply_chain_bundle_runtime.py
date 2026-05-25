@@ -129,7 +129,8 @@ def check_supply_chain_bundle_rollback(bundle: SupplyChainBundle, cached_bundle_
 
 
 def _computed_key_fingerprint(key: SupplyChainVerificationKey) -> str:
-    return hashlib.sha256(key.public_key_pem.strip().encode("utf-8")).hexdigest()
+    normalized_pem = key.public_key_pem.replace("\r\n", "\n").strip()
+    return hashlib.sha256(normalized_pem.encode("utf-8")).hexdigest()
 
 
 def _validate_key_fingerprints(response: SupplyChainBundleResponse) -> None:

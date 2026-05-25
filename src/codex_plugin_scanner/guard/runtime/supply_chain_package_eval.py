@@ -365,7 +365,7 @@ def _artifact_has_package_material(artifact: GuardArtifact, targets: tuple[dict[
 
 
 def _has_non_empty_string_item(value: object) -> bool:
-    if not isinstance(value, list):
+    if not isinstance(value, (list, tuple)):
         return False
     return any(isinstance(item, str) and item for item in value)
 
@@ -396,8 +396,8 @@ def _empty_package_material_result(
         exception_id=None,
         refresh_required=False,
         record_monitor_evidence=False,
-        bundle_version=bundle_meta["bundle_version"] if bundle_meta is not None else None,
-        policy_version=bundle_meta["policy_hash"] if bundle_meta is not None else "local:none",
+        bundle_version=bundle_meta.get("bundle_version") if bundle_meta is not None else None,
+        policy_version=bundle_meta.get("policy_hash", "local:none") if bundle_meta is not None else "local:none",
     )
     return _finalize_evaluation(
         draft,
@@ -741,8 +741,8 @@ def _cloud_fail_closed_evaluation(
         exception_id=None,
         refresh_required=False,
         record_monitor_evidence=False,
-        bundle_version=bundle_meta["bundle_version"] if bundle_meta is not None else None,
-        policy_version=bundle_meta["policy_hash"] if bundle_meta is not None else "local:none",
+        bundle_version=bundle_meta.get("bundle_version") if bundle_meta is not None else None,
+        policy_version=bundle_meta.get("policy_hash", "local:none") if bundle_meta is not None else "local:none",
     )
     return _finalize_evaluation(
         draft,

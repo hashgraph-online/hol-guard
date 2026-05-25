@@ -55,6 +55,9 @@ class TestSourceSearchClassifier:
         assert fd_args_follow_symlinks(["-L", "id_rsa", "src"]) is True
         assert fd_args_follow_symlinks(["--follow", "id_rsa", "src"]) is True
         assert fd_args_follow_symlinks(["-HI", "SKILL.md", "src"]) is False
+        assert fd_args_follow_symlinks(["-xL", "cat"]) is False
+        assert fd_args_follow_symlinks(["-XL", "cat"]) is False
+        assert fd_args_follow_symlinks(["-cL", "always"]) is False
         assert result.is_source_search is False
 
     def test_find_source_dirs_is_source_search(self) -> None:

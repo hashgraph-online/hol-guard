@@ -175,7 +175,7 @@ def fd_args_follow_symlinks(args: list[str]) -> bool:
             continue
         cluster = arg[1:]
         for flag in cluster:
-            if flag in {"d", "E", "e", "j", "o", "S", "t"}:
+            if flag in {"c", "d", "E", "e", "j", "o", "S", "t", "x", "X"}:
                 break
             if flag == "L":
                 return True

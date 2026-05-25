@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shlex
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -722,7 +723,7 @@ def _combined_intent_kind(intents: tuple[PackageIntent, ...]) -> IntentKind:
     return "sync"
 
 
-def _unique_joined_tokens(groups: object) -> tuple[str, ...]:
+def _unique_joined_tokens(groups: Iterable[Iterable[str]]) -> tuple[str, ...]:
     tokens: list[str] = []
     for group in groups:
         if tokens:
@@ -731,7 +732,7 @@ def _unique_joined_tokens(groups: object) -> tuple[str, ...]:
     return tuple(tokens)
 
 
-def _unique_joined_strings(groups: object) -> tuple[str, ...]:
+def _unique_joined_strings(groups: Iterable[Iterable[str]]) -> tuple[str, ...]:
     values: list[str] = []
     for group in groups:
         for value in group:
