@@ -125,6 +125,8 @@ def _sign_bundle_response(
     *,
     private_key_pem: bytes,
     previous_keys: list[dict[str, object]] | None = None,
+    signing_key_state: str = "active",
+    signing_key_valid_until: str | None = None,
 ) -> dict[str, object]:
     loaded_key = serialization.load_pem_private_key(private_key_pem, password=None)
     assert isinstance(loaded_key, RSAPrivateKey)
@@ -144,8 +146,8 @@ def _sign_bundle_response(
             "fingerprintSha256": _fingerprint(public_key_pem),
             "keyId": str(bundle["keyId"]),
             "publicKeyPem": public_key_pem.decode("utf-8").strip(),
-            "state": "active",
-            "validUntil": None,
+            "state": signing_key_state,
+            "validUntil": signing_key_valid_until,
         }
     ]
     if previous_keys:
@@ -228,6 +230,36 @@ def test_supply_chain_bundle_rejects_payload_hash_mismatch_and_rollback() -> Non
             rollback_payload,
             cached_bundle_version="1747616400000-newerhash",
             now=rollback_payload.bundle.generated_at_timestamp + 5,
+        )
+
+
+def test_supply_chain_bundle_rejects_revoked_or_expired_grace_signing_keys() -> None:
+    private_key, _public_key = _generate_key_pair()
+    grace_expired_payload = _sign_bundle_response(
+        _bundle_dict(),
+        private_key_pem=private_key,
+        signing_key_state="grace",
+        signing_key_valid_until="2026-05-18T00:00:00Z",
+    )
+    grace_expired_response = load_supply_chain_bundle_response(json.dumps(grace_expired_payload))
+
+    with pytest.raises(SupplyChainBundleKeyringError):
+        verify_supply_chain_bundle_response(
+            grace_expired_response,
+            now=datetime(2026, 5, 19, tzinfo=timezone.utc).timestamp(),
+        )
+
+    revoked_payload = _sign_bundle_response(
+        _bundle_dict(bundle_version="1747621200000-revoked"),
+        private_key_pem=private_key,
+        signing_key_state="revoked",
+    )
+    revoked_response = load_supply_chain_bundle_response(json.dumps(revoked_payload))
+
+    with pytest.raises(SupplyChainBundleKeyringError):
+        verify_supply_chain_bundle_response(
+            revoked_response,
+            now=revoked_response.bundle.generated_at_timestamp + 5,
         )
 
 

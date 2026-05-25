@@ -44,7 +44,12 @@ def _fingerprint(public_key_pem: bytes) -> str:
     return hashlib.sha256(public_key_pem.decode("utf-8").strip().encode("utf-8")).hexdigest()
 
 
-def _bundle_response(private_key_pem: bytes, public_key_pem: bytes) -> dict[str, object]:
+def _bundle_response(
+    private_key_pem: bytes,
+    public_key_pem: bytes,
+    *,
+    bundle_version: str = "1747612800000-deadbeef",
+) -> dict[str, object]:
     generated_at = datetime.now(timezone.utc) - timedelta(minutes=5)
     expires_at = generated_at + timedelta(hours=12)
     bundle = {
@@ -63,7 +68,7 @@ def _bundle_response(private_key_pem: bytes, public_key_pem: bytes) -> dict[str,
                 "title": "Prototype pollution in minimist",
             }
         ],
-        "bundleVersion": "1747612800000-deadbeef",
+        "bundleVersion": bundle_version,
         "expiresAt": _iso(expires_at),
         "feedSnapshotHash": "feed-snapshot-1",
         "generatedAt": _iso(generated_at),
@@ -179,6 +184,58 @@ def test_sync_supply_chain_bundle_fetches_and_caches_bundle(tmp_path: Path) -> N
     assert isinstance(keyring, dict)
     assert keyring["workspace_id"] == WORKSPACE_ID
     assert _BundleSyncHandler.captured_accept_encodings[0] == "identity"
+    assert store.list_approval_requests() == []
+
+
+def test_supply_chain_bundle_cache_persists_across_store_restart(tmp_path: Path) -> None:
+    private_key_pem, public_key_pem = _generate_key_pair()
+    response_payload = _bundle_response(private_key_pem, public_key_pem)
+    guard_home = tmp_path / "guard-home"
+    first_store = GuardStore(guard_home)
+    first_store.cache_supply_chain_bundle(WORKSPACE_ID, response_payload, "2026-05-19T00:00:00Z")
+
+    restarted_store = GuardStore(guard_home)
+    cached = restarted_store.get_cached_supply_chain_bundle(WORKSPACE_ID)
+
+    assert isinstance(cached, dict)
+    bundle = cached.get("bundle")
+    assert isinstance(bundle, dict)
+    assert bundle["bundleVersion"] == "1747612800000-deadbeef"
+
+
+def test_supply_chain_bundle_refresh_keeps_approval_queue_quiet(tmp_path: Path) -> None:
+    private_key_pem, public_key_pem = _generate_key_pair()
+    _BundleSyncHandler.captured_accept_encodings = []
+    _BundleSyncHandler.response_payload = _bundle_response(
+        private_key_pem,
+        public_key_pem,
+        bundle_version="1747616400000-refresh",
+    )
+    server = HTTPServer(("127.0.0.1", 0), _BundleSyncHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            "demo-token",
+            "2026-05-19T00:00:00Z",
+            workspace_id=WORKSPACE_ID,
+        )
+        store.cache_supply_chain_bundle(
+            WORKSPACE_ID,
+            _bundle_response(private_key_pem, public_key_pem),
+            "2026-05-19T00:00:00Z",
+        )
+
+        summary = sync_supply_chain_bundle(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert summary["bundle_version"] == "1747616400000-refresh"
+    assert store.get_cached_supply_chain_bundle(WORKSPACE_ID)["bundle"]["bundleVersion"] == "1747616400000-refresh"
+    assert store.list_approval_requests() == []
 
 
 def test_supply_chain_cache_and_eval_cache_clear_on_sync_token_rotation(tmp_path: Path) -> None:
