@@ -116,6 +116,9 @@ def defer_request_resume_to_live_hook(
         return None
     if str(operation.get("status")) != "waiting_on_approval":
         return None
+    metadata = operation.get("metadata")
+    if not isinstance(metadata, Mapping) or metadata.get("codex_hook_waits_for_browser_approval") is not True:
+        return None
     resume = get_request_resume_status(store, request_id=request_id, now=now)
     if resume is None:
         return None

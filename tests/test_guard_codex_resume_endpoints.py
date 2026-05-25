@@ -94,6 +94,8 @@ def _seed_codex_operation(
     workspace: str = "/workspace",
     codex_home: str | None = None,
     command_text: str | None = None,
+    hook_event_name: str | None = None,
+    waits_for_browser_approval: bool | None = None,
     status: str = "waiting_on_approval",
 ) -> None:
     session = store.upsert_guard_session(
@@ -119,6 +121,10 @@ def _seed_codex_operation(
         metadata["codex_home"] = codex_home
     if command_text is not None:
         metadata["command_text"] = command_text
+    if hook_event_name is not None:
+        metadata["hook_event_name"] = hook_event_name
+    if waits_for_browser_approval is not None:
+        metadata["codex_hook_waits_for_browser_approval"] = waits_for_browser_approval
     store.upsert_guard_operation(
         operation_id=f"operation-{request_id}",
         session_id=str(session["session_id"]),
@@ -208,6 +214,8 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
         request_id="req-live",
         socket_path=missing_socket,
         thread_id="live-session-1",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
         status="waiting_on_approval",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -229,6 +237,67 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
     assert "original Codex action continue" in payload["codex_resume"]["message"]
 
 
+def test_codex_approve_pretooluse_no_wait_starts_headless_resume(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launched: list[dict[str, object]] = []
+
+    class _FakeProcess:
+        pid = 1007
+
+    def _fake_popen(command, **kwargs):
+        launched.append({"command": command, **kwargs})
+        return _FakeProcess()
+
+    monkeypatch.setattr(
+        codex_app_server_module.shutil,
+        "which",
+        lambda command: "/usr/bin/codex" if command == "codex" else None,
+    )
+    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", _fake_popen)
+
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-pretool"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-pretool",
+        socket_path=None,
+        thread_id="pretool-session-1",
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+        command_text="npm install minimist@1.2.8",
+        hook_event_name="PreToolUse",
+        waits_for_browser_approval=False,
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-pretool/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["codex_resume"]["reason"] == "headless_resume_started"
+    assert payload["codex_resume"]["strategy"] == "codex-headless-exec"
+    assert len(launched) == 1
+    assert launched[0]["cwd"] == workspace
+    assert launched[0]["command"][:5] == ["/usr/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
+    assert "pretool-session-1" in launched[0]["command"]
+
+
 def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -243,6 +312,8 @@ def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
         request_id="req-live-retry",
         socket_path=missing_socket,
         thread_id="live-session-retry-1",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
         status="waiting_on_approval",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
