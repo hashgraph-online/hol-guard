@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -154,9 +156,90 @@ def _build_windows_script(posix_path: Path) -> str:
 
 
 def _home_override_args(context: HarnessContext) -> list[str]:
+    if not context.home_dir:
+        return []
     if context.home_dir.resolve() == Path.home().resolve():
         return []
     return ["--home", str(context.home_dir)]
+
+
+def build_shim_content_hash(content: bytes) -> str:
+    """Return hex SHA-256 of shim content bytes."""
+    return hashlib.sha256(content).hexdigest()
+
+
+def get_real_binary_info(
+    binary_path: str,
+    *,
+    redact_path_prefix: str | None = None,
+) -> dict[str, object]:
+    """Return hash, mtime, and redacted display path for the real binary at *binary_path*."""
+    p = Path(binary_path)
+    if not p.exists() or not p.is_file():
+        return {"found": False, "content_hash": None, "mtime": None, "path_display": None}
+    content = p.read_bytes()
+    content_hash = build_shim_content_hash(content)
+    mtime = p.stat().st_mtime
+    path_str = str(p)
+    if redact_path_prefix and path_str.startswith(redact_path_prefix):
+        path_display = "…" + path_str[len(redact_path_prefix):]
+    else:
+        path_display = path_str
+    return {
+        "found": True,
+        "content_hash": content_hash,
+        "mtime": mtime,
+        "path_display": path_display,
+    }
+
+
+def get_path_order_status(
+    context: HarnessContext,
+    *,
+    manager: str,
+    path_env: str | None = None,
+) -> dict[str, object]:
+    """Return PATH order status: whether shim precedes the real manager binary."""
+    command = _PACKAGE_SHIM_COMMANDS.get(manager)
+    if not command:
+        return {"shim_precedes_real": False, "real_binary_found": False, "path_broken": True, "shim_dir": None}
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    shim_path = shim_dir / command
+    path_dirs = (path_env or os.environ.get("PATH", "")).split(os.pathsep)
+    shim_dir_index: int | None = None
+    real_dir_index: int | None = None
+    for idx, dir_entry in enumerate(path_dirs):
+        d = Path(dir_entry)
+        if d == shim_dir and shim_dir_index is None:
+            shim_dir_index = idx
+        else:
+            candidate = d / command
+            if candidate.exists() and candidate.is_file() and candidate != shim_path and real_dir_index is None:
+                real_dir_index = idx
+    if shim_dir_index is None:
+        return {
+            "shim_precedes_real": False,
+            "real_binary_found": real_dir_index is not None,
+            "shim_in_path": False,
+            "path_broken": True,
+            "shim_dir": str(shim_dir),
+        }
+    if real_dir_index is None:
+        return {
+            "shim_precedes_real": True,
+            "real_binary_found": False,
+            "shim_in_path": True,
+            "path_broken": False,
+            "shim_dir": str(shim_dir),
+        }
+    precedes = shim_dir_index < real_dir_index
+    return {
+        "shim_precedes_real": precedes,
+        "real_binary_found": True,
+        "shim_in_path": True,
+        "path_broken": not precedes,
+        "shim_dir": str(shim_dir),
+    }
 
 
 def install_package_shims(
@@ -175,16 +258,21 @@ def install_package_shims(
         if isinstance(manager, str) and manager in _PACKAGE_SHIM_COMMANDS
     )
     tracked_managers = tuple(dict.fromkeys([*existing_managers, *normalized_managers]))
+    existing_hashes: dict[str, str] = existing_manifest.get("content_hashes", {})
     installed: list[str] = []
+    content_hashes: dict[str, str] = dict(existing_hashes)
     for manager in normalized_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
         posix_path = shim_dir / command
         windows_path = shim_dir / f"{command}.cmd"
-        posix_path.write_text(_build_package_manager_python_shim(context, command), encoding="utf-8")
+        content = _build_package_manager_python_shim(context, command)
+        posix_path.write_text(content, encoding="utf-8")
         posix_path.chmod(posix_path.stat().st_mode | 0o755)
         windows_path.write_text(_build_windows_script(posix_path), encoding="utf-8")
+        content_hashes[manager] = build_shim_content_hash(posix_path.read_bytes())
         installed.append(manager)
     manifest_payload = {
+        "content_hashes": content_hashes,
         "installed_managers": list(tracked_managers),
         "shim_dir": str(shim_dir),
     }
@@ -211,16 +299,39 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
         if isinstance(manager, str) and manager in _PACKAGE_SHIM_COMMANDS
     ]
     shim_dir = context.guard_home / "package-shims" / "bin"
-    active_managers = [
-        manager for manager in installed_managers if (shim_dir / _PACKAGE_SHIM_COMMANDS[manager]).exists()
-    ]
-    missing_managers = [manager for manager in installed_managers if manager not in active_managers]
+    stored_hashes: dict[str, str] = manifest.get("content_hashes", {})
+    active_managers: list[str] = []
+    missing_managers: list[str] = []
+    manager_details: list[dict[str, object]] = []
+    for manager in installed_managers:
+        command = _PACKAGE_SHIM_COMMANDS[manager]
+        shim_path = shim_dir / command
+        exists = shim_path.exists()
+        if exists:
+            active_managers.append(manager)
+            current_hash = build_shim_content_hash(shim_path.read_bytes())
+            stored_hash = stored_hashes.get(manager)
+            if stored_hash is None:
+                integrity = "unknown"
+            elif current_hash == stored_hash:
+                integrity = "ok"
+            else:
+                integrity = "tampered"
+        else:
+            missing_managers.append(manager)
+            integrity = "missing"
+        manager_details.append({
+            "integrity": integrity,
+            "manager": manager,
+            "shim_path": str(shim_path),
+        })
     return {
-        "installed_managers": installed_managers,
         "active_managers": active_managers,
+        "installed_managers": installed_managers,
+        "manager_details": manager_details,
+        "manifest_path": str(_package_shim_manifest_path(context)),
         "missing_managers": missing_managers,
         "shim_dir": str(shim_dir),
-        "manifest_path": str(_package_shim_manifest_path(context)),
     }
 
 
@@ -265,6 +376,30 @@ def uninstall_package_shims(
 
 def package_shim_supported_managers() -> tuple[str, ...]:
     return tuple(sorted(_PACKAGE_SHIM_COMMANDS.keys()))
+
+
+def repair_package_shims(context: HarnessContext) -> dict[str, object]:
+    """Detect missing or tampered shims and reinstall them. Returns repair summary."""
+    status = package_shim_status(context)
+    managers_to_repair: list[str] = []
+    for detail in status.get("manager_details", []):
+        if isinstance(detail, dict) and detail.get("integrity") in ("missing", "tampered"):
+            m = detail.get("manager")
+            if isinstance(m, str):
+                managers_to_repair.append(m)
+    if not managers_to_repair:
+        return {
+            "repaired": [],
+            "repaired_count": 0,
+            "already_ok": status.get("installed_managers", []),
+            "nothing_to_repair": True,
+        }
+    result = install_package_shims(context, managers=tuple(managers_to_repair))
+    return {
+        "repaired": managers_to_repair,
+        "repaired_count": len(managers_to_repair),
+        "install_result": result,
+    }
 
 
 def _build_package_manager_python_shim(context: HarnessContext, command: str) -> str:
