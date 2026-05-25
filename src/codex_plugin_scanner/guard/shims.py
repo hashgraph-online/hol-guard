@@ -37,7 +37,8 @@ _TRUSTED_CLI_LAUNCHER = (
     "trusted_root = sys.argv.pop(1); "
     "module_name = sys.argv.pop(1); "
     "cwd = os.getcwd(); "
-    "sys.path = [trusted_root, *[entry for entry in sys.path if entry not in ('', cwd, trusted_root)]]; "
+    "blocked_entries = ('', '.', os.curdir, cwd, trusted_root); "
+    "sys.path = [trusted_root, *[entry for entry in sys.path if entry not in blocked_entries]]; "
     "runpy.run_module(module_name, run_name='__main__')"
 )
 

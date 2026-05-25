@@ -211,6 +211,7 @@ def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, cap
     )
     env = dict(os.environ)
     env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [".", env.get("PYTHONPATH", "")]))
 
     result = subprocess.run(
         [str(shim_path), "install", "guard-github@git+https://example.com/guard.git"],
