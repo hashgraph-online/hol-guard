@@ -45,6 +45,34 @@ Repo-scoped gap:
 
 - Goose has no adapter, config surface, binary harness, or MCP proxy integration in this repository today, so there is no local Phase 14 package-install proof to run for Goose yet.
 
+## CI wrapper examples
+
+Use `hol-guard protect` in CI whenever a workflow installs dependencies directly:
+
+```yaml
+- name: Install dependencies through HOL Guard
+  run: hol-guard protect -- npm ci
+```
+
+Example `.github/workflows` sequence with the scanner action:
+
+```yaml
+jobs:
+  guard-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies through HOL Guard
+        run: hol-guard protect -- npm ci
+      - name: Run scanner action
+        uses: hashgraph-online/ai-plugin-scanner-action@v1
+        with:
+          plugin_dir: "."
+```
+
 ## Supply-chain ecosystem support labels
 
 Use `hol-guard cloud sync-intel` after a successful bundle refresh to inspect current package-manager coverage:
