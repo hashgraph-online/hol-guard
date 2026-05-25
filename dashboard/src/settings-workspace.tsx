@@ -10,6 +10,7 @@ import {
   HiMiniChevronDown,
   HiMiniChevronUp,
   HiMiniMagnifyingGlass,
+  HiMiniXMark,
 } from "react-icons/hi2";
 
 import {
@@ -39,6 +40,7 @@ import {
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch, securityLevelLabel } from "./apps/app-catalog";
+import { useFocusTrap } from "./use-focus-trap";
 export {
   buildTotpQrImageOptions,
   formatTotpEnrollmentExpiry,
@@ -367,6 +369,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [approvalGateStrictAllDecisions, setApprovalGateStrictAllDecisions] = useState(false);
   const [approvalGateCooldown, setApprovalGateCooldown] = useState(0);
   const [totpEnrollment, setTotpEnrollment] = useState<GuardApprovalGateTotpEnrollment | null>(null);
+  const [totpSetupOpen, setTotpSetupOpen] = useState(false);
   const [totpActionPending, setTotpActionPending] = useState<"enroll" | "verify" | "disable" | null>(null);
   const [totpActionError, setTotpActionError] = useState<string | null>(null);
   const [revokingCooldown, setRevokingCooldown] = useState(false);
@@ -546,6 +549,12 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setApprovalGateTotpDeviceLabel(event.target.value);
     setTotpActionError(null);
   }, []);
+  const handleOpenTotpSetup = useCallback(() => {
+    setTotpSetupOpen(true);
+  }, []);
+  const handleCloseTotpSetup = useCallback(() => {
+    setTotpSetupOpen(false);
+  }, []);
 
   const handleApprovalGateCooldownChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     const next = Number(event.target.value);
@@ -638,6 +647,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         onApprovalGateChange?.(gate);
       }
       setTotpEnrollment(payload.enrollment ?? null);
+      setTotpSetupOpen(payload.enrollment !== undefined && payload.enrollment !== null);
       setActionMessage("TOTP enrollment started. Verify with your authenticator code.");
       setActionMessageKind("success");
     } catch (error) {
@@ -673,6 +683,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       }
       setApprovalGateTotpCode("");
       setTotpEnrollment(null);
+      setTotpSetupOpen(false);
       setActionMessage("TOTP verified and enabled.");
       setActionMessageKind("success");
     } catch (error) {
@@ -708,6 +719,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       }
       setApprovalGateTotpCode("");
       setTotpEnrollment(null);
+      setTotpSetupOpen(false);
       setActionMessage("TOTP disabled.");
       setActionMessageKind("success");
     } catch (error) {
@@ -1038,6 +1050,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               strictAllDecisions={approvalGateStrictAllDecisions}
               cooldownSeconds={approvalGateCooldown}
               totpEnrollment={totpEnrollment}
+              totpSetupOpen={totpSetupOpen}
               totpActionPending={totpActionPending}
               totpActionError={totpActionError}
               revokingCooldown={revokingCooldown}
@@ -1049,6 +1062,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               onCurrentPasswordChange={handleApprovalGateCurrentPassword}
               onTotpCodeChange={handleApprovalGateTotpCode}
               onTotpDeviceLabelChange={handleApprovalGateTotpDeviceLabel}
+              onOpenTotpSetup={handleOpenTotpSetup}
+              onCloseTotpSetup={handleCloseTotpSetup}
               onStrictAllDecisionsChange={handleApprovalGateStrictAllDecisions}
               onCooldownChange={handleApprovalGateCooldownChange}
               onStartTotpEnrollment={handleStartTotpEnrollment}
@@ -1530,6 +1545,7 @@ type ApprovalGateCardProps = {
   strictAllDecisions: boolean;
   cooldownSeconds: number;
   totpEnrollment: GuardApprovalGateTotpEnrollment | null;
+  totpSetupOpen: boolean;
   totpActionPending: "enroll" | "verify" | "disable" | null;
   totpActionError: string | null;
   revokingCooldown: boolean;
@@ -1541,6 +1557,8 @@ type ApprovalGateCardProps = {
   onCurrentPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onOpenTotpSetup: () => void;
+  onCloseTotpSetup: () => void;
   onStrictAllDecisionsChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onCooldownChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   onStartTotpEnrollment: () => void;
@@ -1633,71 +1651,86 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
               </p>
             </div>
           )}
-          <div className="space-y-2 rounded-lg border border-slate-200 bg-white px-3 py-3">
+          <div className="overflow-hidden rounded-xl border border-brand-blue/15 bg-white">
             <div className="flex items-center justify-between gap-2">
-              <SectionLabel>TOTP authenticator</SectionLabel>
-              <Tag tone={totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
-                {totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Disabled"}
-              </Tag>
+              <div className="px-4 py-3">
+                <SectionLabel>Authenticator app</SectionLabel>
+                <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500">
+                  Add a six-digit code from Google Authenticator, 1Password, Authy, or iCloud Passwords for high-risk approvals.
+                </p>
+              </div>
+              <div className="px-4">
+                <Tag tone={totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
+                  {totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
+                </Tag>
+              </div>
             </div>
-            <p className="text-xs text-slate-500">
-              Add an authenticator code as a second factor for high-risk approvals and settings writes.
-            </p>
-            {!totpEnabled && (
-              <label className="block">
-                <span className="text-xs font-medium text-slate-500">Device label</span>
-                <input
-                  type="text"
-                  value={props.totpDeviceLabel}
-                  onChange={props.onTotpDeviceLabelChange}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-                />
-              </label>
-            )}
-            <label className="block">
-              <span className="text-xs font-medium text-slate-500">Authenticator code</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={props.totpCode}
-                onChange={props.onTotpCodeChange}
-                className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-              />
-            </label>
-            {totpPending && props.totpEnrollment !== null && <TotpEnrollmentQrPanel enrollment={props.totpEnrollment} />}
-            {props.totpActionError !== null && (
-              <p className="text-xs text-brand-purple">{props.totpActionError}</p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {!totpEnabled && (
-                <ActionButton
-                  onClick={props.onStartTotpEnrollment}
-                  disabled={props.totpActionPending !== null}
-                  variant="outline"
-                >
-                  {props.totpActionPending === "enroll" ? "Starting…" : "Start enrollment"}
-                </ActionButton>
+            <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
+              {!totpEnabled && !totpPending && (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-brand-dark">Scan a QR code to connect an authenticator app.</p>
+                  <ActionButton
+                    onClick={props.onStartTotpEnrollment}
+                    disabled={props.totpActionPending !== null}
+                    variant="outline"
+                  >
+                    {props.totpActionPending === "enroll" ? "Opening setup..." : "Set up authenticator"}
+                  </ActionButton>
+                </div>
               )}
               {totpPending && (
-                <ActionButton
-                  onClick={props.onVerifyTotpEnrollment}
-                  disabled={props.totpActionPending !== null}
-                  variant="outline"
-                >
-                  {props.totpActionPending === "verify" ? "Verifying…" : "Verify code"}
-                </ActionButton>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-brand-dark">
+                    Setup pending. Open the QR screen and enter the current code to finish.
+                  </p>
+                  <ActionButton
+                    onClick={props.totpEnrollment ? props.onOpenTotpSetup : props.onStartTotpEnrollment}
+                    disabled={props.totpActionPending !== null}
+                    variant="outline"
+                  >
+                    {props.totpEnrollment ? "Open setup" : "Restart setup"}
+                  </ActionButton>
+                </div>
               )}
               {totpEnabled && (
-                <ActionButton
-                  onClick={props.onDisableTotp}
-                  disabled={props.totpActionPending !== null}
-                  variant="outline"
-                >
-                  {props.totpActionPending === "disable" ? "Disabling…" : "Disable authenticator"}
-                </ActionButton>
+                <div className="space-y-3">
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-500">Authenticator code to disable</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={props.totpCode}
+                      onChange={props.onTotpCodeChange}
+                      className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                    />
+                  </label>
+                  <ActionButton
+                    onClick={props.onDisableTotp}
+                    disabled={props.totpActionPending !== null}
+                    variant="outline"
+                  >
+                    {props.totpActionPending === "disable" ? "Disabling..." : "Disable authenticator"}
+                  </ActionButton>
+                </div>
+              )}
+              {props.totpActionError !== null && (
+                <p className="mt-2 text-xs text-brand-purple">{props.totpActionError}</p>
               )}
             </div>
+            {props.totpSetupOpen && props.totpEnrollment !== null && (
+              <TotpSetupModal
+                enrollment={props.totpEnrollment}
+                deviceLabel={props.totpDeviceLabel}
+                totpCode={props.totpCode}
+                pending={props.totpActionPending}
+                error={props.totpActionError}
+                onDeviceLabelChange={props.onTotpDeviceLabelChange}
+                onTotpCodeChange={props.onTotpCodeChange}
+                onVerify={props.onVerifyTotpEnrollment}
+                onClose={props.onCloseTotpSetup}
+              />
+            )}
           </div>
 
           {cooldownActive && cooldownLabel !== null && (
@@ -1738,6 +1771,85 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function TotpSetupModal(props: {
+  enrollment: GuardApprovalGateTotpEnrollment;
+  deviceLabel: string;
+  totpCode: string;
+  pending: "enroll" | "verify" | "disable" | null;
+  error: string | null;
+  onDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onVerify: () => void;
+  onClose: () => void;
+}) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(true, modalRef);
+
+  return (
+    <div
+      className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/45 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Set up authenticator app"
+    >
+      <div ref={modalRef} className="w-full max-w-3xl overflow-hidden rounded-3xl border border-brand-blue/15 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div>
+            <SectionLabel>Authenticator setup</SectionLabel>
+            <h3 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">Scan this QR code</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Open your authenticator app, add account, scan code, then enter current six-digit code to finish.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={props.onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-dark"
+            aria-label="Close authenticator setup"
+          >
+            <HiMiniXMark className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <TotpEnrollmentQrPanel enrollment={props.enrollment} />
+          <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Device label</span>
+              <input
+                type="text"
+                value={props.deviceLabel}
+                onChange={props.onDeviceLabelChange}
+                className="mt-2 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Six-digit code</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={props.totpCode}
+                onChange={props.onTotpCodeChange}
+                placeholder="123456"
+                className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              />
+            </label>
+            {props.error !== null && (
+              <p className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
+                {props.error}
+              </p>
+            )}
+            <ActionButton onClick={props.onVerify} disabled={props.pending !== null}>
+              {props.pending === "verify" ? "Verifying..." : "Finish setup"}
+            </ActionButton>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
