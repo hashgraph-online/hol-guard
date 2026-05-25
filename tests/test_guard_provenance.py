@@ -1,11 +1,8 @@
 """SCRG146-158: provenance, attestation, SLSA, registry identity, dist integrity, source policy."""
+
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 
 class TestScrg146NpmProvenanceFetcher:
@@ -79,6 +76,18 @@ class TestScrg147NpmTrustedPublisher:
         result = extract_npm_trusted_publisher({})
         assert result["provider"] == "unknown"
         assert result["source_repository"] is None
+
+    def test_extract_trusted_publisher_rejects_substring_host_spoof(self) -> None:
+        from codex_plugin_scanner.guard.provenance import extract_npm_trusted_publisher
+
+        attestation = {
+            "predicate": {
+                "runInvocationUri": "https://attacker.example/path/github.com/owner/repo/actions",
+                "sourceRepositoryUri": "https://attacker.example/github.com/owner/repo",
+            }
+        }
+        result = extract_npm_trusted_publisher(attestation)
+        assert result["provider"] == "unknown"
 
 
 class TestScrg148PypiAttestationVerifier:
@@ -392,7 +401,7 @@ class TestScrg157ProvenanceCannotBypassHardRisk:
             block_reason_code="unknown_package",
             provenance_status="verified",
         )
-        assert isinstance(result, bool)
+        assert result is True
 
     def test_kev_blocked_despite_provenance(self) -> None:
         from codex_plugin_scanner.guard.provenance import provenance_overrides_hard_risk

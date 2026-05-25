@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -115,7 +115,7 @@ def extract_npm_trusted_publisher(attestation: dict[str, Any]) -> dict[str, Any]
         return {"provider": "unknown", "source_repository": None, "ref": None, "run_uri": None}
 
     provider = "unknown"
-    if (run_uri and "github.com" in run_uri) or (source_repo and "github.com" in source_repo):
+    if _is_github_host_url(run_uri) or _is_github_host_url(source_repo):
         provider = "github_actions"
 
     return {
@@ -317,7 +317,7 @@ def check_source_url_security(source_url: str | None) -> dict[str, Any]:
     return {"secure": True, "reason": None, "url": source_url}
 
 
-_SHA_RE = re.compile(r"^[0-9a-f]{40,}$", re.IGNORECASE)
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 _SEMVER_RE = re.compile(r"^v?\d+\.\d+")
 
 
@@ -325,7 +325,7 @@ def check_git_source_immutability(source_url: str) -> dict[str, Any]:
     """Determine whether a git source URL pins to an immutable commit SHA.
 
     Returns:
-    - ``immutable``: True only when the fragment is a full 40+ hex commit SHA
+    - ``immutable``: True only when the fragment is a full 40-char hex commit SHA
     - ``reason``: 'mutable_branch' | 'mutable_tag' | 'no_pin' | None
     - ``fragment``: the fragment portion of the URL
     """
@@ -375,4 +375,19 @@ def provenance_overrides_hard_risk(
     """
     if block_reason_code in _HARD_RISK_CODES:
         return False
-    return False
+    if decision == "block":
+        return False
+    return provenance_status in {"verified", "attested"}
+
+
+def _is_github_host_url(raw_url: str | None) -> bool:
+    if not raw_url:
+        return False
+    parsed = urllib.parse.urlparse(raw_url)
+    host = parsed.hostname
+    if host is None and raw_url.startswith("git@"):
+        host = raw_url.split("@", 1)[1].split(":", 1)[0]
+    if host is None:
+        return False
+    normalized = host.lower().rstrip(".")
+    return normalized == "github.com" or normalized.endswith(".github.com")
