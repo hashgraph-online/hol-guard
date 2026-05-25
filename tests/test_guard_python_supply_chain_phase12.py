@@ -378,7 +378,10 @@ source = { registry = "https://pypi.org/simple" }
         workspace_dir=workspace_dir,
     )
 
-    assert results == []
+    assert len(results) == 1
+    assert results[0]["ecosystem"] == "pypi"
+    assert results[0]["name"] == "requests"
+    assert results[0]["decision"] == "warn"
 
 
 def test_evaluate_package_request_artifact_uses_manager_specific_fix_commands_for_python_transitives(
