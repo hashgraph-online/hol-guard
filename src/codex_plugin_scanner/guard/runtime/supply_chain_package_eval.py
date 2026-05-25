@@ -259,6 +259,16 @@ def evaluate_package_request_artifact(
         _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
         store.add_event("supply_chain_bundle_refresh_requested", {"artifact_id": artifact.artifact_id}, now_value)
         return fallback
+    if not _artifact_has_package_material(artifact, targets):
+        no_material_result = _empty_package_material_result(
+            artifact=artifact,
+            workspace_id=workspace_id,
+            bundle_meta=bundle_meta,
+            package_intent_hash=package_intent_hash,
+            workspace_fingerprint=workspace_fingerprint,
+        )
+        _persist_evidence(store=store, artifact=artifact, evaluation=no_material_result, now=now_value)
+        return no_material_result
     cloud_result, cloud_fallback_reason = _evaluate_with_cloud(
         artifact=artifact,
         targets=targets,
@@ -344,6 +354,56 @@ def evaluate_package_request_artifact(
         result = _with_additional_reason(result, cloud_fallback_reason)
     _persist_evidence(store=store, artifact=artifact, evaluation=result, now=now_value)
     return result
+
+
+def _artifact_has_package_material(artifact: GuardArtifact, targets: tuple[dict[str, object], ...]) -> bool:
+    if targets:
+        return True
+    return _has_non_empty_string_item(artifact.metadata.get("manifest_paths")) or _has_non_empty_string_item(
+        artifact.metadata.get("lockfile_paths")
+    )
+
+
+def _has_non_empty_string_item(value: object) -> bool:
+    if not isinstance(value, list):
+        return False
+    return any(isinstance(item, str) and item for item in value)
+
+
+def _empty_package_material_result(
+    *,
+    artifact: GuardArtifact,
+    workspace_id: str | None,
+    bundle_meta: dict[str, str] | None,
+    package_intent_hash: str,
+    workspace_fingerprint: str | None,
+) -> PackageRequestEvaluation:
+    draft = _EvaluationDraft(
+        decision="monitor",
+        enforcement="free_local" if workspace_id is None else "local_fallback",
+        entitlement_state="free" if workspace_id is None else "premium",
+        cache_status="empty",
+        packages=(),
+        reasons=(
+            {
+                "code": "no_package_material",
+                "message": "Guard found no package targets, manifests, or lockfiles to evaluate for this request.",
+                "severity": "unknown",
+                "source": "guard-local",
+            },
+        ),
+        matched_rule_id=None,
+        exception_id=None,
+        refresh_required=False,
+        record_monitor_evidence=False,
+        bundle_version=bundle_meta["bundle_version"] if bundle_meta is not None else None,
+        policy_version=bundle_meta["policy_hash"] if bundle_meta is not None else "local:none",
+    )
+    return _finalize_evaluation(
+        draft,
+        package_intent_hash=package_intent_hash,
+        workspace_fingerprint=workspace_fingerprint,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -498,6 +558,16 @@ def _evaluate_with_cloud(
             retry_timeout_seconds=_RETRY_TIMEOUT_SECONDS,
         )
     except urllib.error.HTTPError as error:
+        fail_closed = _cloud_http_fail_closed_evaluation(
+            status_code=error.code,
+            artifact=artifact,
+            targets=targets,
+            workspace_dir=workspace_dir,
+            workspace_fingerprint=workspace_fingerprint,
+            bundle_meta=bundle_meta,
+        )
+        if fail_closed is not None:
+            return fail_closed, None
         return None, _cloud_fallback_reason(
             code="cloud_http_error",
             message=(f"Guard cloud evaluation returned HTTP {error.code}, so Guard fell back to local intelligence."),
@@ -507,20 +577,46 @@ def _evaluate_with_cloud(
             code="cloud_timeout",
             message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
         )
-    except ValueError:
-        return None, _cloud_fallback_reason(
-            code="cloud_invalid_response",
-            message="Guard cloud evaluation returned an invalid response, so Guard fell back locally.",
+    except (RuntimeError, ValueError):
+        return (
+            _cloud_fail_closed_evaluation(
+                code="cloud_validation_error",
+                message="Guard cloud evaluation returned an invalid response, so this package request needs review.",
+                artifact=artifact,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                workspace_fingerprint=workspace_fingerprint,
+                bundle_meta=bundle_meta,
+            ),
+            None,
         )
     if not isinstance(response_payload, dict):
-        return None, _cloud_fallback_reason(
-            code="cloud_invalid_response",
-            message="Guard cloud evaluation returned an invalid response, so Guard fell back locally.",
+        return (
+            _cloud_fail_closed_evaluation(
+                code="cloud_validation_error",
+                message="Guard cloud evaluation returned an invalid response, so this package request needs review.",
+                artifact=artifact,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                workspace_fingerprint=workspace_fingerprint,
+                bundle_meta=bundle_meta,
+            ),
+            None,
         )
     if not isinstance(response_payload.get("packages"), list):
-        return None, _cloud_fallback_reason(
-            code="cloud_invalid_response",
-            message="Guard cloud evaluation returned an invalid package payload, so Guard fell back locally.",
+        return (
+            _cloud_fail_closed_evaluation(
+                code="cloud_validation_error",
+                message=(
+                    "Guard cloud evaluation returned an invalid package payload, so this package request needs review."
+                ),
+                artifact=artifact,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                workspace_fingerprint=workspace_fingerprint,
+                bundle_meta=bundle_meta,
+            ),
+            None,
         )
     packages = tuple(
         _package_from_cloud_result(item) for item in response_payload["packages"] if isinstance(item, dict)
@@ -570,6 +666,89 @@ def _evaluate_with_cloud(
                 ),
             )
     return evaluation, None
+
+
+def _cloud_http_fail_closed_evaluation(
+    *,
+    status_code: int,
+    artifact: GuardArtifact,
+    targets: tuple[dict[str, object], ...],
+    workspace_dir: Path | None,
+    workspace_fingerprint: str | None,
+    bundle_meta: dict[str, str] | None,
+) -> PackageRequestEvaluation | None:
+    if status_code in {401, 403}:
+        return _cloud_fail_closed_evaluation(
+            code="cloud_auth_error",
+            message="Guard cloud evaluation was not authorized, so this package request needs review.",
+            artifact=artifact,
+            targets=targets,
+            workspace_dir=workspace_dir,
+            workspace_fingerprint=workspace_fingerprint,
+            bundle_meta=bundle_meta,
+        )
+    if status_code in {400, 404}:
+        return _cloud_fail_closed_evaluation(
+            code="cloud_validation_error",
+            message="Guard cloud evaluation could not validate this request, so it needs review.",
+            artifact=artifact,
+            targets=targets,
+            workspace_dir=workspace_dir,
+            workspace_fingerprint=workspace_fingerprint,
+            bundle_meta=bundle_meta,
+        )
+    return None
+
+
+def _cloud_fail_closed_evaluation(
+    *,
+    code: str,
+    message: str,
+    artifact: GuardArtifact,
+    targets: tuple[dict[str, object], ...],
+    workspace_dir: Path | None,
+    workspace_fingerprint: str | None,
+    bundle_meta: dict[str, str] | None,
+) -> PackageRequestEvaluation:
+    reason = _cloud_fallback_reason(code=code, message=message)
+    packages = tuple(
+        _heuristic_package_result(
+            target=target,
+            decision="ask",
+            code=code,
+            message=message,
+            severity="high",
+        )
+        for target in targets
+    )
+    if not packages:
+        packages = tuple(
+            {
+                **package,
+                "decision": "ask",
+                "reasons": (reason,),
+            }
+            for package in _fallback_monitor_packages(targets=targets, artifact=artifact, workspace_dir=workspace_dir)
+        )
+    draft = _EvaluationDraft(
+        decision="ask",
+        enforcement="premium_cloud",
+        entitlement_state="premium",
+        cache_status="cloud-error",
+        packages=packages,
+        reasons=(reason,),
+        matched_rule_id=None,
+        exception_id=None,
+        refresh_required=False,
+        record_monitor_evidence=False,
+        bundle_version=bundle_meta["bundle_version"] if bundle_meta is not None else None,
+        policy_version=bundle_meta["policy_hash"] if bundle_meta is not None else "local:none",
+    )
+    return _finalize_evaluation(
+        draft,
+        package_intent_hash=artifact.artifact_id.rsplit(":", 1)[-1],
+        workspace_fingerprint=workspace_fingerprint,
+    )
 
 
 def _evaluate_with_bundle(
@@ -2698,13 +2877,13 @@ def _lockfile_parse_warning_result(
             continue
         return _heuristic_package_result(
             target=target,
-            decision="monitor",
+            decision="ask",
             code="lockfile_parse_error",
             message=(
-                "Guard could not parse the existing lockfile and fell back to monitor-only "
-                "coverage. Repair the lockfile, then retry."
+                "Guard could not parse the existing lockfile, so this range-based package request needs review. "
+                "Repair the lockfile, then retry."
             ),
-            severity="low",
+            severity="high",
         )
     return None
 

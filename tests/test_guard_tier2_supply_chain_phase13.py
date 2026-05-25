@@ -337,9 +337,11 @@ def test_evaluate_package_request_artifact_uses_monitor_only_fallback_for_unsupp
     assert result.packages[0]["reasons"][0]["code"] == "unsupported_ecosystem_monitor_only"
 
 
-def test_evaluate_package_request_artifact_surfaces_malformed_tier2_lockfiles_without_crashing(
+def test_evaluate_package_request_artifact_fails_closed_when_tier2_range_lockfile_parse_error_hides_cached_advisory(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     write_text(
@@ -355,14 +357,32 @@ clap = "4.5"
         + "\n",
     )
     write_text(workspace_dir / "Cargo.lock", "version = [\n")
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        bundle_response_fixture(
+            packages=[
+                package_fixture(
+                    ecosystem="cargo",
+                    name="clap",
+                    version="4.5.7",
+                    default_action="block",
+                    recommended_fix_version="4.5.8",
+                )
+            ]
+        ),
+        "2026-05-19T00:00:00Z",
+    )
 
     artifact = artifact_from_command_fixture("cargo add clap@^4.5", workspace=workspace_dir)
     result = evaluate_package_request_artifact(
         artifact=artifact,
-        store=GuardStore(tmp_path / "home"),
+        store=store,
         workspace_dir=workspace_dir,
     )
 
-    assert result.decision == "monitor"
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
     assert any(reason["code"] == "lockfile_parse_error" for reason in result.reasons)
     assert result.packages[0]["supportLevel"] == "beta"

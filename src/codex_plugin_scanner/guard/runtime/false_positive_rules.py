@@ -159,6 +159,29 @@ def fd_arg_requests_exec(arg: str) -> bool:
     return False
 
 
+def fd_args_follow_symlinks(args: list[str]) -> bool:
+    after_options = False
+    for arg in args:
+        if after_options:
+            continue
+        if arg == "--":
+            after_options = True
+            continue
+        if arg == "--follow":
+            return True
+        if arg.startswith("--"):
+            continue
+        if not arg.startswith("-") or arg == "-":
+            continue
+        cluster = arg[1:]
+        for flag in cluster:
+            if flag in {"d", "E", "e", "j", "o", "S", "t"}:
+                break
+            if flag == "L":
+                return True
+    return False
+
+
 def split_fd_args_and_exec(args: list[str]) -> tuple[list[str], list[str]] | None:
     for index, arg in enumerate(args):
         if arg == "-X" or arg.startswith("-X") or arg == "--exec-batch" or arg.startswith(("--exec=", "--exec-batch=")):
@@ -447,6 +470,12 @@ def classify_source_search_command(command: str) -> SourceSearchClassification:
         return SourceSearchClassification(
             is_source_search=False,
             reason="find with mutating action flag",
+            tool=tool,
+        )
+    if tool == "fd" and fd_args_follow_symlinks(parts[1:]):
+        return SourceSearchClassification(
+            is_source_search=False,
+            reason="fd follows symlinks",
             tool=tool,
         )
 
