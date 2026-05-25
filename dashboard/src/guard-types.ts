@@ -275,6 +275,22 @@ export type GuardProofStatus = GuardConnectProof & {
   request_id: string | null;
 };
 
+export type PackageManagerProtection = {
+  path_status: "in_path" | "missing_from_path";
+  path_contains_shim_dir: boolean;
+  shim_dir: string;
+  supported_managers: string[];
+  installed_managers: string[];
+  active_managers: string[];
+  missing_shims: string[];
+  protected_managers: string[];
+  unprotected_managers: string[];
+};
+
+export type SupplyChainSnapshot = {
+  package_manager_protection: PackageManagerProtection;
+};
+
 export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
@@ -304,6 +320,7 @@ export type GuardRuntimeSnapshot = {
   managed_installs?: GuardManagedInstall[];
   inventory?: GuardInventoryItem[];
   security_level?: "balanced" | "strict" | "custom";
+  supply_chain?: SupplyChainSnapshot;
 };
 
 export type GuardReceipt = {

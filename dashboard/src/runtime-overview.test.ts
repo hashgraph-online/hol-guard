@@ -1,5 +1,5 @@
-import { resolveCloudIntelCopy, resolveCloudSyncHealthCopy, resolveProtectionLevelCopy, resolveApprovalCenterHealth, resolveProofStatusCopy } from "./runtime-overview";
-import type { GuardCloudSyncHealth, GuardProofStatus, GuardRuntimeSnapshot } from "./guard-types";
+import { resolveCloudIntelCopy, resolveCloudSyncHealthCopy, resolveProtectionLevelCopy, resolveApprovalCenterHealth, resolveProofStatusCopy, resolvePackageManagerProtectionCopy } from "./runtime-overview";
+import type { GuardCloudSyncHealth, GuardProofStatus, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -178,3 +178,53 @@ assert(
   unavailableCopy.detail.toLowerCase().includes("cloud") || unavailableCopy.detail.toLowerCase().includes("connect"),
   `P7: sync_unavailable detail should mention cloud or connect (upgrade path) — got: "${unavailableCopy.detail}"`
 );
+
+const baseProtection: PackageManagerProtection = {
+  path_status: "in_path",
+  path_contains_shim_dir: true,
+  shim_dir: "/home/user/.hol/shims",
+  supported_managers: ["npm", "pip", "cargo"],
+  installed_managers: ["npm", "pip"],
+  active_managers: ["npm", "pip"],
+  missing_shims: [],
+  protected_managers: ["npm", "pip"],
+  unprotected_managers: [],
+};
+
+const inPathCopy = resolvePackageManagerProtectionCopy(baseProtection);
+assert(inPathCopy.pathTone === "green", "SC1: in_path tone should be green");
+assert(inPathCopy.pathLabel.toLowerCase().includes("in path") || inPathCopy.pathLabel.toLowerCase().includes("in path"), "SC1: in_path label should indicate shim is in PATH");
+assert(inPathCopy.pathDetail.includes(baseProtection.shim_dir), "SC1: in_path detail should include the shim directory");
+assert(inPathCopy.protectedList.length === 2, "SC1: protected list should reflect protected_managers");
+assert(inPathCopy.protectedList.includes("npm"), "SC1: npm should appear in protected list");
+assert(inPathCopy.protectedList.includes("pip"), "SC1: pip should appear in protected list");
+assert(inPathCopy.unprotectedList.length === 0, "SC1: unprotected list should be empty when all managers are protected");
+
+const missingFromPathProtection: PackageManagerProtection = {
+  ...baseProtection,
+  path_status: "missing_from_path",
+  path_contains_shim_dir: false,
+  protected_managers: ["npm"],
+  unprotected_managers: ["pip", "cargo"],
+};
+
+const missingFromPathCopy = resolvePackageManagerProtectionCopy(missingFromPathProtection);
+assert(missingFromPathCopy.pathTone === "attention", "SC2: missing_from_path tone should be attention");
+assert(
+  missingFromPathCopy.pathLabel.toLowerCase().includes("missing") || missingFromPathCopy.pathLabel.toLowerCase().includes("not"),
+  `SC2: missing_from_path label should signal a warning — got: "${missingFromPathCopy.pathLabel}"`
+);
+assert(
+  missingFromPathCopy.pathDetail.toLowerCase().includes("bypass") || missingFromPathCopy.pathDetail.toLowerCase().includes("not on path") || missingFromPathCopy.pathDetail.toLowerCase().includes("missing"),
+  `SC2: missing_from_path detail should describe the bypass risk — got: "${missingFromPathCopy.pathDetail}"`
+);
+assert(missingFromPathCopy.unprotectedList.includes("pip"), "SC2: pip should appear in unprotected list");
+assert(missingFromPathCopy.unprotectedList.includes("cargo"), "SC2: cargo should appear in unprotected list");
+assert(missingFromPathCopy.protectedList.includes("npm"), "SC2: npm should still appear in protected list");
+assert(missingFromPathCopy.protectedList.length === 1, "SC2: protected list should contain only npm");
+
+const absentCopy = resolvePackageManagerProtectionCopy(undefined);
+assert(absentCopy.pathTone === "slate", "SC3: absent supply-chain data should use slate tone (no crash)");
+assert(absentCopy.pathLabel.length > 0, "SC3: absent supply-chain data should still produce a non-empty label");
+assert(absentCopy.protectedList.length === 0, "SC3: absent supply-chain data should return empty protected list");
+assert(absentCopy.unprotectedList.length === 0, "SC3: absent supply-chain data should return empty unprotected list");

@@ -107,3 +107,17 @@ def test_static_docs_cover_local_supply_chain_firewall_commands() -> None:
     assert "hol-guard supply-chain scan" in docs_text
     assert "hol-guard supply-chain explain" in docs_text
     assert "hol-guard protect" in docs_text
+
+
+def test_static_docs_cover_ci_wrapper_examples() -> None:
+    docs_text = "\n".join(
+        [
+            _read_repo_file("README.md"),
+            _read_repo_file("docs/guard/get-started.md"),
+            _read_repo_file("docs/guard/testing-matrix.md"),
+        ]
+    ).lower()
+
+    assert "hol-guard protect -- npm ci" in docs_text
+    assert "install dependencies through hol guard" in docs_text
+    assert ".github/workflows" in docs_text
