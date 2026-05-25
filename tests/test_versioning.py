@@ -14,7 +14,8 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
 
 
 def test_pyproject_version_matches_package_version():
-    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+    pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
     assert pyproject["project"]["version"] == package_version
 
 
