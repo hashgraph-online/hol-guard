@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -195,6 +196,46 @@ def test_evaluate_package_request_artifact_allows_recommended_safe_python_versio
 
     assert result.decision == "allow"
     assert result.policy_action == "allow"
+
+
+def test_resolved_target_version_uses_fake_pypi_registry_metadata_for_ranges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_urlopen_json_with_timeout_retry(
+        *, request: urllib.request.Request, timeout_seconds: int, retry_timeout_seconds: int
+    ) -> dict[str, object]:
+        captured["url"] = request.full_url
+        assert timeout_seconds == 1
+        assert retry_timeout_seconds == 1
+        return {
+            "releases": {
+                "2.30.9": [{}],
+                "2.31.0": [{}],
+                "2.31.4": [{}],
+                "2.32.0": [{}],
+            }
+        }
+
+    monkeypatch.setattr(
+        supply_chain_package_eval_module, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry
+    )
+    resolved = supply_chain_package_eval_module._resolved_target_version(
+        target={
+            "ecosystem": "pypi",
+            "name": "requests",
+            "normalized_name": "requests",
+            "namespace": None,
+            "range": ">=2.31,<2.32",
+            "version": None,
+            "source_url": None,
+        },
+        lockfile_versions={},
+    )
+
+    assert captured["url"].endswith("/requests/json")
+    assert resolved == "2.31.4"
 
 
 def test_evaluate_package_request_artifact_scopes_offline_decisions_to_python_ecosystem(
