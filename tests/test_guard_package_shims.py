@@ -43,6 +43,11 @@ def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+_PRIVATE_KEY_PEM, _PUBLIC_KEY_PEM = _generate_key_pair()
+_LOADED_PRIVATE_KEY = serialization.load_pem_private_key(_PRIVATE_KEY_PEM, password=None)
+assert isinstance(_LOADED_PRIVATE_KEY, RSAPrivateKey)
+
+
 def _bundle_response(
     *,
     action: str,
@@ -102,12 +107,9 @@ def _bundle_response(
         "tier": "premium",
         "workspaceId": WORKSPACE_ID,
     }
-    private_key_pem, public_key_pem = _generate_key_pair()
-    loaded_key = serialization.load_pem_private_key(private_key_pem, password=None)
-    assert isinstance(loaded_key, RSAPrivateKey)
     canonical_payload = json.dumps(bundle, sort_keys=True, separators=(",", ":")).encode("utf-8")
     payload_hash = hashlib.sha256(canonical_payload).hexdigest()
-    signature = loaded_key.sign(
+    signature = _LOADED_PRIVATE_KEY.sign(
         canonical_payload,
         padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
         hashes.SHA256(),
@@ -119,9 +121,9 @@ def _bundle_response(
         "signatureAlgorithm": "rsa-pss-sha256",
         "verificationKeys": [
             {
-                "fingerprintSha256": _fingerprint(public_key_pem),
+                "fingerprintSha256": _fingerprint(_PUBLIC_KEY_PEM),
                 "keyId": "guard-bundle-key-2026-05",
-                "publicKeyPem": public_key_pem.decode("utf-8").strip(),
+                "publicKeyPem": _PUBLIC_KEY_PEM.decode("utf-8").strip(),
                 "state": "active",
                 "validUntil": None,
             }
@@ -344,7 +346,7 @@ def test_guard_package_shims_install_does_not_mutate_path_environment(
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    original_path = "/tmp/guard-a:/tmp/guard-b"
+    original_path = os.pathsep.join(["guard-a", "guard-b"])
     monkeypatch.setenv("PATH", original_path)
 
     rc = main(
@@ -431,7 +433,7 @@ def test_guard_package_shims_block_before_manager_execution(
     )
 
     env = dict(os.environ)
-    env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+    env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
     result = subprocess.run(
         [str(shim_path), *shim_args],
         cwd=workspace_dir,
@@ -443,4 +445,3 @@ def test_guard_package_shims_block_before_manager_execution(
 
     assert result.returncode != 0
     assert marker_path.exists() is False
-
