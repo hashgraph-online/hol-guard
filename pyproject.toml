@@ -10,7 +10,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
-    { name = "Hashgraph Online", email = "dev@hol.org" },
+    { name = "HOL", email = "support@hol.org" },
 ]
 keywords = ["plugin", "scanner", "security", "mcp", "cli", "codex", "claude", "gemini", "opencode", "ecosystem"]
 classifiers = [
