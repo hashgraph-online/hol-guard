@@ -1045,22 +1045,25 @@ def _sync_supply_chain_bundle_incremental(
                 except SupplyChainBundleError:
                     response = None
         if response is None:
-            partition_request = urllib.request.Request(
-                _supply_chain_partition_bundle_url(
-                    bundle_url,
-                    ecosystem=ecosystem,
-                    partition=partition,
-                ),
-                method="GET",
-                headers=headers,
-            )
-            partition_payload = _fetch_supply_chain_bundle_payload(partition_request)
-            response = load_supply_chain_bundle_response(partition_payload)
-            verify_supply_chain_bundle_response(
-                response,
-                trusted_keys=trusted_keys or None,
-                cached_bundle_version=cached_bundle_version,
-            )
+            try:
+                partition_request = urllib.request.Request(
+                    _supply_chain_partition_bundle_url(
+                        bundle_url,
+                        ecosystem=ecosystem,
+                        partition=partition,
+                    ),
+                    method="GET",
+                    headers=headers,
+                )
+                partition_payload = _fetch_supply_chain_bundle_payload(partition_request)
+                response = load_supply_chain_bundle_response(partition_payload)
+                verify_supply_chain_bundle_response(
+                    response,
+                    trusted_keys=trusted_keys or None,
+                    cached_bundle_version=cached_bundle_version,
+                )
+            except (RuntimeError, SupplyChainBundleError):
+                return None
             refreshed_partitions += 1
         next_partition_cache[cache_key] = {
             "payload_hash": payload_hash,
@@ -1120,12 +1123,22 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
         and partition_sync.get("refreshed_partitions") == 0
         and isinstance(cached_bundle, dict)
     ):
-        response = load_supply_chain_bundle_response(cached_bundle)
+        try:
+            response = load_supply_chain_bundle_response(cached_bundle)
+        except SupplyChainBundleError:
+            request = urllib.request.Request(bundle_url, method="GET", headers=headers)
+            payload = _fetch_supply_chain_bundle_payload(request)
+            response = load_supply_chain_bundle_response(payload)
+            verify_supply_chain_bundle_response(
+                response,
+                trusted_keys=trusted_keys or None,
+                cached_bundle_version=cached_bundle_version,
+            )
     else:
         request = urllib.request.Request(bundle_url, method="GET", headers=headers)
         payload = _fetch_supply_chain_bundle_payload(request)
-        response = load_supply_chain_bundle_response(payload)
         try:
+            response = load_supply_chain_bundle_response(payload)
             verify_supply_chain_bundle_response(
                 response,
                 trusted_keys=trusted_keys or None,
@@ -1133,56 +1146,53 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
             )
         except SupplyChainBundleError as error:
             raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
-    try:
-        synced_at = _now()
-        store.cache_supply_chain_bundle(workspace_id, response.to_dict(), synced_at)
-        store.set_sync_payload(
-            "supply_chain_bundle_keyring",
-            {
-                "workspace_id": workspace_id,
-                "keys": [item.to_dict() for item in response.verification_keys],
-            },
-            synced_at,
-        )
-        store.set_sync_payload(
-            "supply_chain_bundle_entitlement",
-            {
-                "bundle_version": response.bundle.bundle_version,
-                "key_id": response.bundle.key_id,
-                "policy_hash": response.bundle.policy_hash,
-                "tier": response.bundle.tier,
-                "workspace_id": workspace_id,
-            },
-            synced_at,
-        )
-        if partition_sync is not None:
-            store.set_sync_payload(
-                "supply_chain_bundle_partition_cache",
-                partition_sync["cache_payload"],  # type: ignore[arg-type]
-                synced_at,
-            )
-        summary = {
-            "advisory_count": len(response.bundle.advisories),
+    synced_at = _now()
+    store.cache_supply_chain_bundle(workspace_id, response.to_dict(), synced_at)
+    store.set_sync_payload(
+        "supply_chain_bundle_keyring",
+        {
+            "workspace_id": workspace_id,
+            "keys": [item.to_dict() for item in response.verification_keys],
+        },
+        synced_at,
+    )
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
             "bundle_version": response.bundle.bundle_version,
-            "ecosystem_support": list(ecosystem_support_matrix()),
-            "feed_snapshot_hash": response.bundle.feed_snapshot_hash,
-            "package_count": len(response.bundle.packages),
+            "key_id": response.bundle.key_id,
             "policy_hash": response.bundle.policy_hash,
-            "status": "synced",
-            "synced_at": synced_at,
             "tier": response.bundle.tier,
             "workspace_id": workspace_id,
+        },
+        synced_at,
+    )
+    if partition_sync is not None:
+        store.set_sync_payload(
+            "supply_chain_bundle_partition_cache",
+            partition_sync["cache_payload"],  # type: ignore[arg-type]
+            synced_at,
+        )
+    summary = {
+        "advisory_count": len(response.bundle.advisories),
+        "bundle_version": response.bundle.bundle_version,
+        "ecosystem_support": list(ecosystem_support_matrix()),
+        "feed_snapshot_hash": response.bundle.feed_snapshot_hash,
+        "package_count": len(response.bundle.packages),
+        "policy_hash": response.bundle.policy_hash,
+        "status": "synced",
+        "synced_at": synced_at,
+        "tier": response.bundle.tier,
+        "workspace_id": workspace_id,
+    }
+    if partition_sync is not None:
+        summary["partition_sync"] = {
+            "enabled": True,
+            "refreshed": partition_sync["refreshed_partitions"],  # type: ignore[index]
+            "total": partition_sync["total_partitions"],  # type: ignore[index]
         }
-        if partition_sync is not None:
-            summary["partition_sync"] = {
-                "enabled": True,
-                "refreshed": partition_sync["refreshed_partitions"],  # type: ignore[index]
-                "total": partition_sync["total_partitions"],  # type: ignore[index]
-            }
-        store.set_sync_payload("supply_chain_bundle_summary", summary, synced_at)
-        return summary
-    except SupplyChainBundleError as error:
-        raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
+    store.set_sync_payload("supply_chain_bundle_summary", summary, synced_at)
+    return summary
 
 
 def sync_guard_events(store: GuardStore) -> dict[str, object]:
