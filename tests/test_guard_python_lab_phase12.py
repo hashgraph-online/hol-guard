@@ -172,7 +172,7 @@ def test_python_simple_index_lab_blocks_vulnerable_version_and_serves_safe_wheel
             workspace_dir=workspace_dir,
         )
 
-        assert vcs_result.decision == "warn"
+        assert vcs_result.decision == "ask"
         assert vcs_result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
 
         download_dir = tmp_path / "downloads"
