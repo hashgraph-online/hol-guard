@@ -1520,6 +1520,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const [settingUpNotifications, setSettingUpNotifications] = reactExports.useState(false);
   const [notificationSetup, setNotificationSetup] = reactExports.useState(null);
   const [actionMessage, setActionMessage] = reactExports.useState(null);
+  const [actionMessageKind, setActionMessageKind] = reactExports.useState("success");
   const [perfSnapshot, setPerfSnapshot] = reactExports.useState(null);
   const [pendingMode, setPendingMode] = reactExports.useState(null);
   const [showAdvanced, setShowAdvanced] = reactExports.useState(false);
@@ -1755,6 +1756,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       }
       setRevokePassword("");
       setActionMessage("Cooldown revoked successfully.");
+      setActionMessageKind("success");
     } catch (error) {
       setRevokeError(error instanceof Error ? error.message : "Unable to revoke cooldown.");
     } finally {
@@ -1786,6 +1788,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       }
       setTotpEnrollment(payload.enrollment ?? null);
       setActionMessage("TOTP enrollment started. Verify with your authenticator code.");
+      setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to start TOTP enrollment.");
     } finally {
@@ -1819,6 +1822,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       setApprovalGateTotpCode("");
       setTotpEnrollment(null);
       setActionMessage("TOTP verified and enabled.");
+      setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to verify TOTP.");
     } finally {
@@ -1852,6 +1856,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       setApprovalGateTotpCode("");
       setTotpEnrollment(null);
       setActionMessage("TOTP disabled.");
+      setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to disable TOTP.");
     } finally {
@@ -1921,10 +1926,12 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         approval_totp_code: approvalGateTotpCode || void 0
       });
       setActionMessage("Saved approvals cleared. Guard will ask again for future matching actions.");
+      setActionMessageKind("success");
       setApprovalGateCurrentPassword("");
       setApprovalGateTotpCode("");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear approvals.");
+      setActionMessageKind("error");
     } finally {
       setClearingApprovals(false);
     }
@@ -1939,10 +1946,12 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         approvalTotpCode: approvalGateTotpCode
       }));
       setActionMessage(`Review queue cleared. Removed ${result.cleared} pending ${result.cleared === 1 ? "item" : "items"}.`);
+      setActionMessageKind("success");
       setApprovalGateCurrentPassword("");
       setApprovalGateTotpCode("");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear review queue.");
+      setActionMessageKind("error");
     } finally {
       setClearingReviewQueue(false);
     }
@@ -1954,8 +1963,10 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     try {
       await clearEvidence();
       setActionMessage("Evidence log cleared.");
+      setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to clear evidence.");
+      setActionMessageKind("error");
     } finally {
       setClearingEvidence(false);
     }
@@ -1972,8 +1983,10 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       anchor.click();
       URL.revokeObjectURL(url);
       setActionMessage("Diagnostics exported.");
+      setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to export diagnostics.");
+      setActionMessageKind("error");
     } finally {
       setExporting(false);
     }
@@ -1985,8 +1998,10 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     try {
       await repairApprovalCenter();
       setActionMessage("Approval center repaired. Restart Guard to reconnect.");
+      setActionMessageKind("success");
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
+      setActionMessageKind("error");
     } finally {
       setRepairing(false);
     }
@@ -1999,15 +2014,19 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       setNotificationSetup(result);
       if (!result.supported) {
         setActionMessage("Desktop notification setup is not available on this OS.");
+        setActionMessageKind("error");
       } else if (result.settings_opened) {
         setActionMessage("Notification settings opened. Enable terminal-notifier alerts, banners, and sounds.");
+        setActionMessageKind("success");
       } else {
         setActionMessage(
           "Notification setup ran, but macOS did not open Settings. Open System Settings > Notifications and choose terminal-notifier."
         );
+        setActionMessageKind("success");
       }
     } catch (error) {
       setActionMessage(error instanceof Error ? error.message : "Unable to set up notifications.");
+      setActionMessageKind("error");
     } finally {
       setSettingUpNotifications(false);
     }
@@ -2320,7 +2339,14 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   ] })
                 ] })
               ] }),
-              actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-sm font-medium text-brand-dark", role: "status", children: actionMessage }) : null
+              actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "div",
+                {
+                  className: `rounded-xl border px-4 py-3 text-sm font-medium ${actionMessageKind === "error" ? "border-brand-attention/20 bg-brand-attention/[0.04] text-brand-dark" : "border-brand-blue/15 bg-brand-blue/[0.04] text-brand-dark"}`,
+                  role: actionMessageKind === "error" ? "alert" : "status",
+                  children: actionMessage
+                }
+              ) : null
             ] })
           }
         )

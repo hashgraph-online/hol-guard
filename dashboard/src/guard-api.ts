@@ -973,8 +973,13 @@ export async function clearReviewQueue(input: {
     body: JSON.stringify({
       status: input.status ?? "pending",
       harness: input.harness,
-      approval_password: input.approval_password,
-      approval_totp_code: input.approval_totp_code
+      approval_gate:
+        input.approval_password || input.approval_totp_code
+          ? {
+              password: input.approval_password,
+              totp_code: input.approval_totp_code
+            }
+          : undefined
     })
   });
 }
@@ -1235,7 +1240,10 @@ export async function clearEvidence(): Promise<void> {
   if (isGuardDemoMode()) {
     return;
   }
-  await readJson<{ deleted: number }>("/v1/evidence", { method: "DELETE" });
+  await readJson<{ deleted: number }>("/v1/evidence", {
+    method: "DELETE",
+    headers: guardAuthHeaders()
+  });
 }
 
 export async function exportDiagnostics(): Promise<Blob> {

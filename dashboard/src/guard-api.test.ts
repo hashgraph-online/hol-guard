@@ -573,8 +573,9 @@ const clearQueueBody = JSON.parse(String(clearQueueCalls[0].init?.body)) as Reco
 assert(clearQueueCalls[0].url === "http://127.0.0.1:4781/v1/requests/clear", "L079b: clearReviewQueue posts to clear route");
 assert(headerValue(clearQueueCalls[0].init, "X-Guard-Token") === "token-clear-queue", "L079b: clearReviewQueue sends Guard token");
 assert(clearQueueBody["status"] === "pending", "L079b: clearReviewQueue clears pending reviews");
-assert(clearQueueBody["approval_password"] === "local-password", "L079b: clearReviewQueue sends approval password");
-assert(clearQueueBody["approval_totp_code"] === "123456", "L079b: clearReviewQueue sends authenticator code");
+const clearQueueGate = clearQueueBody["approval_gate"] as Record<string, unknown>;
+assert(clearQueueGate["password"] === "local-password", "L079b: clearReviewQueue sends approval password");
+assert(clearQueueGate["totp_code"] === "123456", "L079b: clearReviewQueue sends authenticator code");
 assert(clearQueueResult.cleared === 2, "L079b: clearReviewQueue returns cleared count");
 
 installGuardWindow("?guard-token=token-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");

@@ -1633,7 +1633,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         try:
             require_high_risk(
                 self.server.store.guard_home,  # type: ignore[attr-defined]
-                purpose="policy_clear",
+                purpose="queue_clear",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
             )
             cleared = self.server.store.clear_approval_requests(  # type: ignore[attr-defined]

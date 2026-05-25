@@ -13400,8 +13400,10 @@ async function clearReviewQueue(input) {
     body: JSON.stringify({
       status: input.status ?? "pending",
       harness: input.harness,
-      approval_password: input.approval_password,
-      approval_totp_code: input.approval_totp_code
+      approval_gate: input.approval_password || input.approval_totp_code ? {
+        password: input.approval_password,
+        totp_code: input.approval_totp_code
+      } : void 0
     })
   });
 }
@@ -13600,7 +13602,10 @@ async function clearEvidence() {
   if (isGuardDemoMode()) {
     return;
   }
-  await readJson("/v1/evidence", { method: "DELETE" });
+  await readJson("/v1/evidence", {
+    method: "DELETE",
+    headers: guardAuthHeaders()
+  });
 }
 async function exportDiagnostics() {
   if (isGuardDemoMode()) {
@@ -19745,7 +19750,7 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
 }
 function ApprovalPasswordPrompt(props) {
   const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
-  const codePreview = props.approvalTotpCode.padEnd(6, " ").slice(0, 6).split("");
+  const codePreview = (props.approvalTotpCode ?? "").padEnd(6, " ").slice(0, 6).split("");
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 overflow-hidden rounded-2xl border border-brand-blue/20 bg-white shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 border-b border-brand-blue/10 bg-brand-blue/[0.04] p-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5", "aria-hidden": "true" }) }),

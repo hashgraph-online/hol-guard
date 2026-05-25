@@ -1354,7 +1354,7 @@ function ApprovalPasswordPrompt(props: ApprovalPasswordPromptProps) {
     props.gate.cooldown_seconds > 0 &&
     !props.gate.cooldown_active &&
     props.gate.totp_enabled !== true;
-  const codePreview = props.approvalTotpCode.padEnd(6, " ").slice(0, 6).split("");
+  const codePreview = (props.approvalTotpCode ?? "").padEnd(6, " ").slice(0, 6).split("");
 
   return (
     <div className="mt-5 overflow-hidden rounded-2xl border border-brand-blue/20 bg-white shadow-sm">
