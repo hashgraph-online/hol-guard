@@ -2325,7 +2325,7 @@ def _npm_registry_resolved_version(*, package_name: str, requested_range: str) -
     request = urllib.request.Request(
         metadata_url,
         headers={
-            "Accept": "application/json",
+            "Accept": "application/vnd.npm.install-v1+json",
             "User-Agent": "hol-guard-local",
         },
     )
