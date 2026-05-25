@@ -4635,7 +4635,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "Approve it in HOL Guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"]
 
-    def test_guard_codex_hook_exits_with_block_status_in_actual_codex_runtime(self, tmp_path, monkeypatch, capsys):
+    def test_guard_codex_hook_emits_json_denial_in_actual_codex_runtime(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         payload_path = workspace_dir / "hook-event.json"
@@ -4659,10 +4659,14 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         )
         captured = capsys.readouterr()
 
-        assert rc == 2
-        assert captured.out == ""
-        assert "destructive shell command" in captured.err
-        assert "Approve it in HOL Guard, then retry." in captured.err
+        output = json.loads(captured.out)
+
+        assert rc == 0
+        assert captured.err == ""
+        assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "destructive shell command" in output["hookSpecificOutput"]["permissionDecisionReason"]
+        assert "Approve it in HOL Guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"]
 
     def test_guard_codex_pretooluse_returns_without_browser_wait(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"

@@ -3547,13 +3547,10 @@ def _should_emit_native_hook_json_response(
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    return (
-        args.harness == "codex"
-        and event_name == "PreToolUse"
-        and policy_action in {"block", "sandbox-required", "require-reapproval"}
-        and not getattr(args, "json", False)
-        and _is_codex_native_runtime()
-    )
+    _ = (args, event_name, policy_action)
+    # Codex v0.133 logs non-zero PreToolUse hooks as failed but still executes
+    # the tool. Blocking must be communicated through the JSON hook response.
+    return False
 
 
 def _is_codex_native_runtime() -> bool:
@@ -3579,6 +3576,11 @@ def _codex_browser_approval_decision(
     if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
         return None
     if event_name == "PreToolUse" and not _is_codex_native_runtime():
+        return None
+    if event_name == "PreToolUse":
+        response_payload["review_hint"] = (
+            "Approval is pending in HOL Guard. Approve it in the browser, then continue this Codex thread."
+        )
         return None
     approval_requests = response_payload.get("approval_requests")
     if not isinstance(approval_requests, list):
