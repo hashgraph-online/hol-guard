@@ -1,6 +1,7 @@
-import { useCallback } from "react";
-import { HiMiniCheck, HiMiniXMark } from "react-icons/hi2";
-import type { GuardApprovalRequest } from "./guard-types";
+import { useCallback, useEffect, useRef, type ChangeEvent } from "react";
+import { HiMiniCheck, HiMiniXMark, HiMiniKey } from "react-icons/hi2";
+import type { GuardApprovalRequest, GuardApprovalGatePublicConfig } from "./guard-types";
+import { approvalGateCooldownLabel } from "./approval-gate-utils";
 
 type WhyThisPausedProps = {
   item: GuardApprovalRequest;
@@ -90,6 +91,136 @@ export function KeyboardHints() {
       </span>
       <span className="text-slate-400">·</span>
       <span>Keyboard shortcuts available after reviewing above</span>
+    </div>
+  );
+}
+
+type ApprovalPasswordModalProps = {
+  gate: GuardApprovalGatePublicConfig;
+  approvalPassword: string;
+  approvalTotpCode: string;
+  useCooldown: boolean;
+  onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onUseCooldownChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+  submitLabel: string;
+};
+
+export function ApprovalPasswordModal(props: ApprovalPasswordModalProps) {
+  const passwordRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      passwordRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const showCooldownOption =
+    props.gate.cooldown_seconds > 0 &&
+    !props.gate.cooldown_active &&
+    props.gate.totp_enabled !== true;
+
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target === e.currentTarget) props.onCancel();
+    },
+    [props.onCancel]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        props.onSubmit();
+      }
+    },
+    [props.onSubmit]
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
+      onClick={handleBackdropClick}
+      onKeyDown={handleKeyDown}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="approval-password-modal-title"
+    >
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10">
+            <HiMiniKey className="h-5 w-5 text-brand-blue" aria-hidden="true" />
+          </span>
+          <div>
+            <h2
+              id="approval-password-modal-title"
+              className="text-lg font-semibold tracking-tight text-brand-dark"
+            >
+              Approval password required
+            </h2>
+            <p className="text-sm text-brand-dark/70">
+              Guard needs a fresh proof before it can save this decision.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          <label className="block">
+            <span className="text-sm font-semibold text-brand-dark">Approval password</span>
+            <input
+              ref={passwordRef}
+              type="password"
+              autoComplete="current-password"
+              value={props.approvalPassword}
+              onChange={props.onApprovalPasswordChange}
+              className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            />
+          </label>
+          {props.gate.totp_enabled === true && (
+            <label className="block">
+              <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={props.approvalTotpCode}
+                onChange={props.onApprovalTotpCodeChange}
+                className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              />
+            </label>
+          )}
+          {showCooldownOption && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-brand-dark">
+              <input
+                type="checkbox"
+                checked={props.useCooldown}
+                onChange={props.onUseCooldownChange}
+                className="h-4 w-4 accent-brand-blue"
+              />
+              Skip password for next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (use cooldown)
+            </label>
+          )}
+        </div>
+
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={props.onCancel}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
+          >
+            Go back
+          </button>
+          <button
+            type="button"
+            onClick={props.onSubmit}
+            className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90"
+          >
+            {props.submitLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
