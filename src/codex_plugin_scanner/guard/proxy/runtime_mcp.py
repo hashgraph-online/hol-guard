@@ -33,6 +33,22 @@ from ..runtime.supply_chain_package_eval import evaluate_package_request_artifac
 from ..store import GuardStore
 from .stdio import _blocked_tool_response, _redact_json
 
+_PACKAGE_POLICY_ACTION_RANK = {
+    "allow": 0,
+    "warn": 1,
+    "review": 2,
+    "require-reapproval": 2,
+    "block": 3,
+}
+
+
+def _most_restrictive_package_policy_action(stored_action: str | None, current_action: str) -> str:
+    if stored_action is None:
+        return current_action
+    stored_rank = _PACKAGE_POLICY_ACTION_RANK.get(stored_action, -1)
+    current_rank = _PACKAGE_POLICY_ACTION_RANK.get(current_action, -1)
+    return stored_action if stored_rank >= current_rank else current_action
+
 
 class RuntimeMcpGuardProxy:
     """Guard-managed MCP proxy for harnesses that talk stdio MCP to local servers."""
@@ -487,8 +503,9 @@ class RuntimeMcpGuardProxy:
             store=self.store,
             workspace_dir=self.context.workspace_dir,
         )
-        policy_action = (
-            stored_policy_action if isinstance(stored_policy_action, str) else package_evaluation.policy_action
+        policy_action = _most_restrictive_package_policy_action(
+            stored_policy_action if isinstance(stored_policy_action, str) else None,
+            package_evaluation.policy_action,
         )
         queue_policy_action = "require-reapproval" if policy_action == "review" else policy_action
         if queue_policy_action in {"allow", "warn"}:

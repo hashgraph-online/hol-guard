@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.store import GuardStore
 
 WORKSPACE_ID = "workspace-alpha"
@@ -144,7 +145,12 @@ def _seed_bundle(
     store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "demo-token", now, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
-        _bundle_response(action=action, ecosystem=ecosystem, package_name=package_name, package_version=package_version),
+        _bundle_response(
+            action=action,
+            ecosystem=ecosystem,
+            package_name=package_name,
+            package_version=package_version,
+        ),
         now,
     )
 
@@ -173,6 +179,117 @@ def _install_single_manager_shim(
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0
     return Path(str(payload["shim_dir"])) / manager
+
+
+def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    malicious_package = workspace_dir / "codex_plugin_scanner"
+    malicious_package.mkdir()
+    (malicious_package / "__init__.py").write_text("", encoding="utf-8")
+    (malicious_package / "cli.py").write_text(
+        "\n".join(
+            [
+                "from pathlib import Path",
+                f"Path({str(tmp_path / 'malicious-imported')!r}).write_text('owned', encoding='utf-8')",
+                "raise SystemExit(66)",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker_path = tmp_path / "npm-ran.json"
+    _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager="npm",
+        capsys=capsys,
+    )
+    env = dict(os.environ)
+    env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [".", env.get("PYTHONPATH", "")]))
+
+    result = subprocess.run(
+        [str(shim_path), "install", "guard-github@git+https://example.com/guard.git"],
+        cwd=workspace_dir,
+        env=env,
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 2
+    assert (tmp_path / "malicious-imported").exists() is False
+    assert marker_path.exists() is False
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["npm", "install", "guard-github@git+https://example.com/guard.git"],
+        ["npm", "install", "guard-tarball@https://example.com/guard.tgz"],
+        ["npm", "install", "file:./vendor/guard"],
+    ],
+)
+def test_guard_protect_requires_review_for_untrusted_package_sources_without_cloud(
+    tmp_path: Path,
+    command: list[str],
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    store = GuardStore(home_dir)
+
+    payload, exit_code = build_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=False,
+        now="2026-05-25T00:00:00Z",
+    )
+
+    assert exit_code == 2
+    assert payload["executed"] is False
+    assert payload["verdict"]["blocking"] is True
+    assert payload["verdict"]["action"] == "review"
+
+
+def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker_path = tmp_path / "npm-allowed.json"
+    _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager="npm",
+        capsys=capsys,
+    )
+    env = dict(os.environ)
+    env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+
+    result = subprocess.run(
+        [str(shim_path), "install", "minimist@1.2.9"],
+        cwd=workspace_dir,
+        env=env,
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=30,
+    )
+    marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
+
+    assert result.returncode == 0
+    assert marker_payload["argv"][1:] == ["install", "minimist@1.2.9"]
+    assert marker_payload["cwd"] == str(workspace_dir)
 
 
 def _write_fake_manager_script(

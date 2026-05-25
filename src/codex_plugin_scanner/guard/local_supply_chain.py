@@ -311,12 +311,6 @@ def build_package_protect_payload(
 ) -> tuple[dict[str, object], int] | None:
     from .runtime.package_intent_parser import parse_package_intent
 
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        return None
-    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
-    if not isinstance(cached_bundle, dict):
-        return None
     intent = parse_package_intent(shlex.join(command), workspace=workspace_dir)
     if intent is None:
         return None

@@ -87,7 +87,7 @@ def test_evaluate_package_request_artifact_ignores_cross_ecosystem_bundle_matche
         "pip install https://example.com/packages/private-demo-1.0.0.tar.gz",
     ],
 )
-def test_evaluate_package_request_artifact_warns_on_python_vcs_and_direct_url_sources(
+def test_evaluate_package_request_artifact_requires_review_for_python_vcs_and_direct_url_sources(
     tmp_path: Path,
     command: str,
 ) -> None:
@@ -99,7 +99,7 @@ def test_evaluate_package_request_artifact_warns_on_python_vcs_and_direct_url_so
     artifact = artifact_from_command_fixture(command, workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] in {"git_dependency_source", "external_tarball_source"}
 
 
@@ -116,11 +116,11 @@ def test_evaluate_package_request_artifact_prefers_editable_vcs_urls_over_local_
         'pip install -e "private-demo @ git+https://example.com/org/private-demo.git"', workspace=workspace_dir
     )
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
 
 
-def test_evaluate_package_request_artifact_warns_on_editable_local_python_builds(tmp_path: Path) -> None:
+def test_evaluate_package_request_artifact_requires_review_for_editable_local_python_builds(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -138,7 +138,7 @@ build-backend = "setuptools.build_meta"
     artifact = artifact_from_command_fixture("pip install -e .", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
 
 
@@ -191,7 +191,7 @@ build-backend = "setuptools.build_meta"
     artifact = artifact_from_command_fixture("pip install -e ~/local-demo", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
 
 
@@ -217,7 +217,7 @@ build-backend = "setuptools.build_meta"
     artifact = artifact_from_command_fixture("pip install path/to/local-demo", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
 
 
@@ -241,11 +241,11 @@ build-backend = "setuptools.build_meta"
     artifact = artifact_from_command_fixture("pip install .[pdf]", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
 
 
-def test_evaluate_package_request_artifact_keeps_benign_pyproject_urls_as_warn_only(tmp_path: Path) -> None:
+def test_evaluate_package_request_artifact_requires_review_for_benign_pyproject_url_editable(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -271,7 +271,7 @@ Repository = "https://example.com/demo.git"
     artifact = artifact_from_command_fixture("pip install -e .", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
 
-    assert result.decision == "warn"
+    assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "local_build_backend_risk"
 
 
