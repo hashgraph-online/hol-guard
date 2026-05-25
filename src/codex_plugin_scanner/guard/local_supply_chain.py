@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shlex
+import shutil
 import subprocess
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .adapters.base import HarnessContext
 from .config import GuardConfig, resolve_risk_action
 from .receipts import build_receipt
 from .redaction import redact_text
@@ -27,6 +30,7 @@ from .runtime.package_intent_common import (
 from .runtime.package_manifest_diff import parse_manifest_dependencies
 from .runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from .runtime.supply_chain_support import ecosystem_support_matrix
+from .shims import package_shim_status, package_shim_supported_managers
 from .store import GuardStore
 
 _LOCAL_SUPPLY_CHAIN_HARNESS = "guard-cli"
@@ -186,6 +190,7 @@ def build_local_supply_chain_posture(
             "managed_updated_at": managed_updated_at,
         },
         "supported_ecosystems": supported_ecosystems,
+        "package_manager_protection": _build_package_manager_protection(store),
     }
 
 
@@ -490,6 +495,53 @@ def _coerce_command_error_output(error: subprocess.TimeoutExpired | OSError) -> 
     if message:
         parts.append(message)
     return "\n".join(part for part in parts if part)
+
+
+def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
+    context = HarnessContext(
+        home_dir=store.guard_home,
+        workspace_dir=None,
+        guard_home=store.guard_home,
+    )
+    status = package_shim_status(context)
+    shim_dir = Path(str(status.get("shim_dir") or store.guard_home / "package-shims" / "bin"))
+    installed_managers = sorted({str(item) for item in status.get("installed_managers", []) if isinstance(item, str)})
+    active_managers = sorted({str(item) for item in status.get("active_managers", []) if isinstance(item, str)})
+    missing_shims = sorted({str(item) for item in status.get("missing_managers", []) if isinstance(item, str)})
+    supported_managers = list(package_shim_supported_managers())
+    path_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+    path_contains_shim_dir = any(_paths_match(entry, shim_dir) for entry in path_entries)
+    protected_managers: list[str] = []
+    unprotected_managers: list[str] = []
+    for manager in supported_managers:
+        shim_target = shim_dir / manager
+        resolved = shutil.which(manager)
+        if resolved is not None and _paths_match(resolved, shim_target):
+            protected_managers.append(manager)
+        else:
+            unprotected_managers.append(manager)
+    return {
+        "path_status": "in_path" if path_contains_shim_dir else "missing_from_path",
+        "path_contains_shim_dir": path_contains_shim_dir,
+        "shim_dir": str(shim_dir),
+        "supported_managers": supported_managers,
+        "installed_managers": installed_managers,
+        "active_managers": active_managers,
+        "missing_shims": missing_shims,
+        "protected_managers": protected_managers,
+        "unprotected_managers": unprotected_managers,
+    }
+
+
+def _paths_match(left: str | Path, right: str | Path) -> bool:
+    try:
+        left_path = Path(str(left)).expanduser().resolve()
+        right_path = Path(str(right)).expanduser().resolve()
+        return left_path == right_path
+    except (OSError, RuntimeError):
+        left_path = Path(str(left)).expanduser()
+        right_path = Path(str(right)).expanduser()
+        return os.path.normcase(os.path.abspath(left_path)) == os.path.normcase(os.path.abspath(right_path))
 
 
 def _workspace_scan_intent(workspace_dir: Path) -> PackageIntent | None:
