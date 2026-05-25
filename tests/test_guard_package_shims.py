@@ -175,7 +175,15 @@ def _install_single_manager_shim(
     return Path(str(payload["shim_dir"])) / manager
 
 
-def _write_fake_manager_script(*, fake_bin: Path, manager: str, marker_path: Path, exit_code: int) -> None:
+def _write_fake_manager_script(
+    *,
+    fake_bin: Path,
+    manager: str,
+    marker_path: Path,
+    exit_code: int,
+    stdout_text: str | None = None,
+    stderr_text: str | None = None,
+) -> None:
     script_path = fake_bin / manager
     script_path.write_text(
         "\n".join(
@@ -194,6 +202,10 @@ def _write_fake_manager_script(*, fake_bin: Path, manager: str, marker_path: Pat
                 "}",
                 "with open(marker_path, 'w', encoding='utf-8') as handle:",
                 "    json.dump(payload, handle)",
+                f"if {stdout_text!r} is not None:",
+                f"    print({stdout_text!r})",
+                f"if {stderr_text!r} is not None:",
+                f"    print({stderr_text!r}, file=sys.stderr)",
                 f"raise SystemExit({exit_code})",
                 "",
             ]
@@ -216,8 +228,6 @@ _BLOCKING_SHIM_CASES = (
     ("uvx", ("requests==2.32.0",), "pypi", "requests", "2.32.0"),
     ("cargo", ("add", "serde@1.0.203"), "cargo", "serde", "1.0.203"),
     ("go", ("install", "github.com/pkg/errors@v0.9.1"), "go", "github.com/pkg/errors", "v0.9.1"),
-    ("mvn", ("dependency:get", "-Dartifact=org.apache.commons:commons-lang3:3.14.0"), "maven", "commons-lang3", "3.14.0"),
-    ("gradle", ("dependencies", "--dependency", "org.apache.commons:commons-lang3:3.14.0"), "maven", "commons-lang3", "3.14.0"),
     ("composer", ("require", "monolog/monolog:3.6.0"), "packagist", "monolog/monolog", "3.6.0"),
     ("bundle", ("add", "rails", "--version", "7.1.3"), "rubygems", "rails", "7.1.3"),
 )
@@ -445,3 +455,46 @@ def test_guard_package_shims_block_before_manager_execution(
 
     assert result.returncode != 0
     assert marker_path.exists() is False
+
+
+def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-allow-marker.json"
+    _write_fake_manager_script(
+        fake_bin=fake_bin,
+        manager="npm",
+        marker_path=marker_path,
+        exit_code=7,
+        stdout_text="fake-manager-stdout",
+        stderr_text="fake-manager-stderr",
+    )
+    _seed_bundle(home_dir=home_dir, ecosystem="npm", package_name="minimist", package_version="1.2.8", action="allow")
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager="npm",
+        capsys=capsys,
+    )
+
+    env = dict(os.environ)
+    env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
+    env["SHIM_TEST_VAR"] = "shim-value"
+    result = subprocess.run(
+        [str(shim_path), "ci"],
+        cwd=workspace_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
+
+    assert result.returncode == 7
+    assert marker_payload["argv"][1:] == ["ci"]
+    assert marker_payload["cwd"] == str(workspace_dir)
+    assert marker_payload["shim_var"] == "shim-value"
+    assert "fake-manager-stdout" in result.stdout

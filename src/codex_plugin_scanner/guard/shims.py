@@ -256,27 +256,49 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
     workspace_args: list[str] = []
     if context.workspace_dir is not None:
         workspace_args = ["--workspace", str(context.workspace_dir)]
+    shim_dir = context.guard_home / "package-shims" / "bin"
     command_args = [
         sys.executable,
         "-m",
         "codex_plugin_scanner.cli",
         "guard",
         "protect",
+        "--json",
         "--guard-home",
         str(context.guard_home),
         *_home_override_args(context),
         *workspace_args,
-        "--",
         command,
     ]
     return "\n".join(
         (
             f"#!{sys.executable}",
             "from __future__ import annotations",
+            "import os",
+            "import shutil",
             "import subprocess",
             "import sys",
             f"base_command = {command_args!r}",
-            "raise SystemExit(subprocess.call([*base_command, *sys.argv[1:]]))",
+            f"command_name = {command!r}",
+            f"shim_dir = {str(shim_dir.resolve())!r}",
+            "guard_process = subprocess.run([*base_command, *sys.argv[1:]], capture_output=True, text=True)",
+            "if guard_process.stdout:",
+            "    sys.stdout.write(guard_process.stdout)",
+            "if guard_process.stderr:",
+            "    sys.stderr.write(guard_process.stderr)",
+            "if guard_process.returncode != 0:",
+            "    raise SystemExit(guard_process.returncode)",
+            "path_entries = [entry for entry in os.environ.get('PATH', '').split(os.pathsep) if entry]",
+            "shim_dir_abs = os.path.abspath(shim_dir)",
+            "filtered_entries = [entry for entry in path_entries if os.path.abspath(entry) != shim_dir_abs]",
+            "filtered_path = os.pathsep.join(filtered_entries)",
+            "resolved_command = shutil.which(command_name, path=filtered_path)",
+            "if resolved_command is None:",
+            "    sys.stderr.write(f'Unable to locate real {command_name} binary on PATH\\n')",
+            "    raise SystemExit(127)",
+            "manager_env = dict(os.environ)",
+            "manager_env['PATH'] = filtered_path",
+            "raise SystemExit(subprocess.call([resolved_command, *sys.argv[1:]], env=manager_env))",
             "",
         )
     )
