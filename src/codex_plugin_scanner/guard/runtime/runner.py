@@ -35,10 +35,8 @@ from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, reg
 from .prompt_injection import detect_prompt_injection_requests
 from .supply_chain_bundle import (
     SupplyChainBundleError,
-    SupplyChainBundleResponse,
     load_supply_chain_bundle_response,
     load_supply_chain_verification_keys,
-    payload_hash_for_supply_chain_bundle,
     verify_supply_chain_bundle_response,
 )
 from .supply_chain_support import ecosystem_support_matrix
@@ -997,51 +995,6 @@ def _supply_chain_partition_bundle_url(bundle_url: str, *, ecosystem: str, parti
     )
 
 
-def _merged_supply_chain_bundle_response(
-    *,
-    index_payload: dict[str, object],
-    partition_responses: list[SupplyChainBundleResponse],
-) -> SupplyChainBundleResponse:
-    template_response = max(
-        partition_responses,
-        key=lambda response: response.bundle.version_timestamp,
-    )
-    template_bundle = template_response.bundle.to_dict()
-    package_payloads: list[dict[str, object]] = []
-    advisory_payloads: dict[str, dict[str, object]] = {}
-    for partition_response in partition_responses:
-        package_payloads.extend(item.to_dict() for item in partition_response.bundle.packages)
-        for advisory in partition_response.bundle.advisories:
-            advisory_payloads.setdefault(advisory.advisory_id, advisory.to_dict())
-    merged_bundle = {
-        **template_bundle,
-        "advisories": list(advisory_payloads.values()),
-        "bundleVersion": str(index_payload.get("bundleVersion", template_bundle["bundleVersion"])),
-        "expiresAt": str(index_payload.get("expiresAt", template_bundle["expiresAt"])),
-        "feedSnapshotHash": str(index_payload.get("feedSnapshotHash", template_bundle["feedSnapshotHash"])),
-        "generatedAt": str(index_payload.get("generatedAt", template_bundle["generatedAt"])),
-        "packages": package_payloads,
-        "policyHash": str(index_payload.get("policyHash", template_bundle["policyHash"])),
-        "sourceHashes": (
-            index_payload.get("sourceHashes")
-            if isinstance(index_payload.get("sourceHashes"), list)
-            else template_bundle["sourceHashes"]
-        ),
-        "tier": str(index_payload.get("tier", template_bundle["tier"])),
-        "workspaceId": str(index_payload.get("workspaceId", template_bundle["workspaceId"])),
-    }
-    merged_payload_hash = payload_hash_for_supply_chain_bundle(merged_bundle)
-    return load_supply_chain_bundle_response(
-        {
-            "bundle": merged_bundle,
-            "payloadHash": merged_payload_hash,
-            "signature": template_response.signature,
-            "signatureAlgorithm": template_response.signature_algorithm,
-            "verificationKeys": [item.to_dict() for item in template_response.verification_keys],
-        }
-    )
-
-
 def _sync_supply_chain_bundle_incremental(
     *,
     bundle_url: str,
@@ -1071,7 +1024,6 @@ def _sync_supply_chain_bundle_incremental(
         raw_cached_partitions = cached_partition_payload.get("partitions")
         if isinstance(raw_cached_partitions, dict):
             cached_partitions = raw_cached_partitions
-    partition_responses: list[SupplyChainBundleResponse] = []
     next_partition_cache: dict[str, object] = {}
     refreshed_partitions = 0
     for descriptor in raw_partitions:
@@ -1084,7 +1036,7 @@ def _sync_supply_chain_bundle_incremental(
             continue
         cache_key = f"{ecosystem}:{partition}"
         cached_partition = cached_partitions.get(cache_key)
-        response: SupplyChainBundleResponse | None = None
+        response = None
         if isinstance(cached_partition, dict) and cached_partition.get("payload_hash") == payload_hash:
             raw_cached_response = cached_partition.get("response")
             if isinstance(raw_cached_response, dict):
@@ -1110,25 +1062,23 @@ def _sync_supply_chain_bundle_incremental(
                 cached_bundle_version=cached_bundle_version,
             )
             refreshed_partitions += 1
-        partition_responses.append(response)
         next_partition_cache[cache_key] = {
             "payload_hash": payload_hash,
             "response": response.to_dict(),
         }
-    if not partition_responses:
+    if not next_partition_cache:
         return None
-    merged_response = _merged_supply_chain_bundle_response(
-        index_payload=index_payload,
-        partition_responses=partition_responses,
-    )
+    bundle_version = index_payload.get("bundleVersion")
+    resolved_bundle_version = bundle_version if isinstance(bundle_version, str) and bundle_version else None
+    if resolved_bundle_version is None:
+        resolved_bundle_version = cached_bundle_version or ""
     return {
         "cache_payload": {
-            "bundle_version": merged_response.bundle.bundle_version,
+            "bundle_version": resolved_bundle_version,
             "partitions": next_partition_cache,
             "workspace_id": workspace_id,
         },
         "refreshed_partitions": refreshed_partitions,
-        "response": merged_response,
         "total_partitions": len(next_partition_cache),
     }
 
@@ -1154,16 +1104,23 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
             if isinstance(existing_version, str) and existing_version:
                 cached_bundle_version = existing_version
     trusted_keys = load_supply_chain_verification_keys(store.get_sync_payload("supply_chain_bundle_keyring"))
-    partition_sync: dict[str, object] | None = _sync_supply_chain_bundle_incremental(
-        bundle_url=bundle_url,
-        cached_bundle_version=cached_bundle_version,
-        headers=headers,
-        store=store,
-        trusted_keys=trusted_keys,
-        workspace_id=workspace_id,
-    )
-    if partition_sync is not None:
-        response = partition_sync["response"]  # type: ignore[assignment]
+    try:
+        partition_sync: dict[str, object] | None = _sync_supply_chain_bundle_incremental(
+            bundle_url=bundle_url,
+            cached_bundle_version=cached_bundle_version,
+            headers=headers,
+            store=store,
+            trusted_keys=trusted_keys,
+            workspace_id=workspace_id,
+        )
+    except (RuntimeError, SupplyChainBundleError):
+        partition_sync = None
+    if (
+        partition_sync is not None
+        and partition_sync.get("refreshed_partitions") == 0
+        and isinstance(cached_bundle, dict)
+    ):
+        response = load_supply_chain_bundle_response(cached_bundle)
     else:
         request = urllib.request.Request(bundle_url, method="GET", headers=headers)
         payload = _fetch_supply_chain_bundle_payload(request)

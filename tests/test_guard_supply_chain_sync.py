@@ -391,7 +391,11 @@ def test_sync_supply_chain_bundle_refresh_downloads_only_changed_partitions(tmp_
     )
     _BundleSyncHandler.captured_accept_encodings = []
     _BundleSyncHandler.captured_paths = []
-    _BundleSyncHandler.response_payload = {}
+    _BundleSyncHandler.response_payload = _bundle_response(
+        private_key_pem,
+        public_key_pem,
+        bundle_version="1747616400000-refresh",
+    )
     _BundleSyncHandler.partition_payloads = {
         ("pypi", 1): changed_partition,
     }
@@ -460,11 +464,113 @@ def test_sync_supply_chain_bundle_refresh_downloads_only_changed_partitions(tmp_
     assert "/api/guard/supply-chain/bundle/index" in requested_paths
     assert "ecosystem=pypi&partition=1" in requested_paths
     assert "ecosystem=npm&partition=1" not in requested_paths
-    assert not any(
+    assert any(
         path.startswith("/api/guard/supply-chain/bundle?") and "ecosystem=" not in path
         for path in _BundleSyncHandler.captured_paths
     )
     assert summary["status"] == "synced"
+    assert summary["partition_sync"] == {"enabled": True, "refreshed": 1, "total": 2}
+
+
+def test_sync_supply_chain_bundle_reuses_cached_partitions_without_full_refresh(tmp_path: Path) -> None:
+    private_key_pem, public_key_pem = _generate_key_pair()
+    npm_partition = _partition_bundle_response(
+        private_key_pem,
+        public_key_pem,
+        advisory_id="GHSA-npm",
+        bundle_version="1747616400000-refresh",
+        ecosystem="npm",
+        package_name="minimist",
+        partition=1,
+        partition_count=1,
+    )
+    pypi_partition = _partition_bundle_response(
+        private_key_pem,
+        public_key_pem,
+        advisory_id="GHSA-pypi",
+        bundle_version="1747616400000-refresh",
+        ecosystem="pypi",
+        package_name="requests",
+        partition=1,
+        partition_count=1,
+    )
+    _BundleSyncHandler.captured_accept_encodings = []
+    _BundleSyncHandler.captured_paths = []
+    _BundleSyncHandler.response_payload = {}
+    _BundleSyncHandler.partition_payloads = {}
+    _BundleSyncHandler.index_payload = {
+        "bundleVersion": "1747616400000-refresh",
+        "emergencyDenyCount": 0,
+        "expiresAt": npm_partition["bundle"]["expiresAt"],
+        "feedSnapshotHash": "feed-snapshot-2",
+        "generatedAt": npm_partition["bundle"]["generatedAt"],
+        "partitions": [
+            {
+                "advisoryCount": 1,
+                "ecosystem": "npm",
+                "packageCount": 1,
+                "partition": 1,
+                "partitionCount": 1,
+                "payloadHash": npm_partition["payloadHash"],
+            },
+            {
+                "advisoryCount": 1,
+                "ecosystem": "pypi",
+                "packageCount": 1,
+                "partition": 1,
+                "partitionCount": 1,
+                "payloadHash": pypi_partition["payloadHash"],
+            },
+        ],
+        "policyHash": "policy-hash-2",
+        "sourceHashes": [{"payloadHash": "ghsa-feed-hash", "sourceKey": "ghsa", "staleStatus": "fresh"}],
+        "tier": "premium",
+        "workspaceId": WORKSPACE_ID,
+    }
+    server = HTTPServer(("127.0.0.1", 0), _BundleSyncHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            "demo-token",
+            "2026-05-19T00:00:00Z",
+            workspace_id=WORKSPACE_ID,
+        )
+        store.cache_supply_chain_bundle(WORKSPACE_ID, npm_partition, "2026-05-19T00:00:00Z")
+        store.set_sync_payload(
+            "supply_chain_bundle_partition_cache",
+            {
+                "bundle_version": "1747616400000-refresh",
+                "partitions": {
+                    "npm:1": {
+                        "payload_hash": npm_partition["payloadHash"],
+                        "response": npm_partition,
+                    },
+                    "pypi:1": {
+                        "payload_hash": pypi_partition["payloadHash"],
+                        "response": pypi_partition,
+                    },
+                },
+                "workspace_id": WORKSPACE_ID,
+            },
+            "2026-05-19T00:00:00Z",
+        )
+
+        summary = sync_supply_chain_bundle(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    requested_paths = "".join(_BundleSyncHandler.captured_paths)
+    assert "/api/guard/supply-chain/bundle/index" in requested_paths
+    assert "ecosystem=" not in requested_paths
+    assert not any(
+        path.startswith("/api/guard/supply-chain/bundle?") and "ecosystem=" not in path
+        for path in _BundleSyncHandler.captured_paths
+    )
+    assert summary["partition_sync"] == {"enabled": True, "refreshed": 0, "total": 2}
 
 
 def test_supply_chain_cache_and_eval_cache_clear_on_sync_token_rotation(tmp_path: Path) -> None:
