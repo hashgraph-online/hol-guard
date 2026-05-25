@@ -3598,10 +3598,6 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     return False
 
 
-def _is_codex_native_runtime() -> bool:
-    return bool(os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip())
-
-
 def _codex_browser_approval_decision(
     *,
     args: argparse.Namespace,
@@ -3613,8 +3609,6 @@ def _codex_browser_approval_decision(
     daemon_client: object | None = None,
 ) -> str | None:
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
-        return None
-    if event_name == "PreToolUse" and not _is_codex_native_runtime():
         return None
     if event_name == "PreToolUse":
         return None
