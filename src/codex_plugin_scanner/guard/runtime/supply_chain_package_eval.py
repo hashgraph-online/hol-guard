@@ -2340,7 +2340,7 @@ def _npm_registry_resolved_version(*, package_name: str, requested_range: str) -
     versions_payload = payload.get("versions")
     if not isinstance(versions_payload, dict):
         return None
-    versions = [version for version in versions_payload.keys() if isinstance(version, str)]
+    versions = [version for version in versions_payload if isinstance(version, str)]
     if not versions:
         return None
     return highest_js_version_for_selector(versions, requested_range)
