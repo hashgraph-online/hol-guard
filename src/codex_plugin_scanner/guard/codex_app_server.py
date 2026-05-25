@@ -6,8 +6,10 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import socket
 import struct
+import subprocess
 import tempfile
 import threading
 import time
@@ -39,6 +41,8 @@ _TURN_ID_KEYS = ("codex_turn_id", "turn_id", "turnId")
 _SOCKET_KEYS = ("codex_app_server_socket", "app_server_socket", "appServerSocket")
 _CODEX_HOME_KEYS = ("codex_home", "codexHome")
 _COMMAND_TEXT_KEYS = ("command_text", "commandText")
+_WORKSPACE_KEYS = ("workspace", "cwd", "working_directory", "workingDirectory")
+_MODEL_KEYS = ("codex_model", "codexModel", "model")
 
 
 class _WebSocketClosedError(TimeoutError):
@@ -96,6 +100,9 @@ def codex_resume_metadata_from_hook_payload(
     codex_home = _first_string(payload, _CODEX_HOME_KEYS) or _first_string_from_env(env, ("CODEX_HOME",))
     if codex_home is not None:
         metadata["codex_home"] = codex_home
+    model = _first_string(payload, _MODEL_KEYS)
+    if model is not None:
+        metadata["codex_model"] = model
     return metadata
 
 
@@ -127,14 +134,14 @@ def resume_codex_thread_for_request(
             "reason": "unsafe_socket_path",
             "thread_id": thread_id,
         }
-    if not Path(socket_path).expanduser().exists():
-        return {
-            "status": "skipped",
-            "reason": "socket_not_available",
-            "thread_id": thread_id,
-        }
     command_text = _first_string(metadata, _COMMAND_TEXT_KEYS)
     prompt = build_codex_continuation_prompt(action, request_id=request_id, command_text=command_text)
+    if not Path(socket_path).expanduser().exists():
+        return _resume_codex_thread_with_cli(
+            metadata=metadata,
+            thread_id=thread_id,
+            prompt=prompt,
+        )
     request_payloads = [
         {
             "jsonrpc": "2.0",
@@ -259,6 +266,101 @@ def _send_codex_resume_worker(
         result["error"] = error
     finally:
         ready.set()
+
+
+def _resume_codex_thread_with_cli(
+    *,
+    metadata: Mapping[str, object],
+    thread_id: str,
+    prompt: str,
+) -> dict[str, object]:
+    """Resume a saved Codex exec thread when the live app-server socket is gone."""
+
+    if not _is_safe_codex_thread_id(thread_id):
+        return {
+            "status": "skipped",
+            "reason": "unsafe_thread_id",
+            "thread_id": thread_id,
+            "strategy": "codex-headless-exec",
+            "supported": False,
+        }
+    workspace = _first_string(metadata, _WORKSPACE_KEYS)
+    if workspace is None:
+        return {
+            "status": "skipped",
+            "reason": "workspace_not_available",
+            "thread_id": thread_id,
+            "strategy": "codex-headless-exec",
+            "supported": False,
+        }
+    workspace_path = Path(workspace).expanduser()
+    if not workspace_path.is_dir():
+        return {
+            "status": "skipped",
+            "reason": "workspace_not_available",
+            "thread_id": thread_id,
+            "strategy": "codex-headless-exec",
+            "supported": False,
+        }
+    codex_home = _first_string(metadata, _CODEX_HOME_KEYS)
+    if codex_home is not None and not Path(codex_home).expanduser().is_dir():
+        return {
+            "status": "skipped",
+            "reason": "codex_home_not_available",
+            "thread_id": thread_id,
+            "strategy": "codex-headless-exec",
+            "supported": False,
+        }
+    codex_binary = shutil.which("codex")
+    if codex_binary is None:
+        return {
+            "status": "skipped",
+            "reason": "codex_binary_not_found",
+            "thread_id": thread_id,
+            "strategy": "codex-headless-exec",
+            "supported": False,
+        }
+    command = [
+        codex_binary,
+        "exec",
+        "resume",
+        "--json",
+        "--skip-git-repo-check",
+    ]
+    model = _first_string(metadata, _MODEL_KEYS)
+    if model is not None:
+        command.extend(["--model", model])
+    command.extend([thread_id, prompt])
+    env = os.environ.copy()
+    if codex_home is not None:
+        env["CODEX_HOME"] = str(Path(codex_home).expanduser())
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=workspace_path,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as error:
+        return {
+            "status": "failed",
+            "reason": "headless_resume_launch_failed",
+            "last_error": str(error),
+            "thread_id": thread_id,
+            "strategy": "codex-headless-exec",
+            "supported": True,
+        }
+    return {
+        "status": "sent",
+        "reason": "headless_resume_started",
+        "thread_id": thread_id,
+        "strategy": "codex-headless-exec",
+        "supported": True,
+        "pid": process.pid,
+    }
 
 
 def _find_codex_operation_for_request(store: _OperationStore, request_id: str) -> dict[str, object] | None:
@@ -503,6 +605,10 @@ def _is_safe_local_socket_path(socket_path: str) -> bool:
         or resolved.is_relative_to(var_tmp)
         or resolved.is_relative_to(system_tmp)
     )
+
+
+def _is_safe_codex_thread_id(thread_id: str) -> bool:
+    return 0 < len(thread_id) <= 256 and all(31 < ord(char) < 127 for char in thread_id)
 
 
 def _first_string(payload: Mapping[str, object], keys: tuple[str, ...]) -> str | None:

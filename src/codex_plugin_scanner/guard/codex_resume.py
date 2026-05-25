@@ -153,6 +153,13 @@ def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
             "same-thread continuation uses the local app-server socket when it is active."
         ),
         "app_server_socket_available": socket_available,
+        "headless_resume_support": binary_path is not None,
+        "headless_resume_support_reason": (
+            "When the live app-server socket is gone, HOL Guard resumes saved Codex exec threads with "
+            "`codex exec resume` from the original workspace."
+            if binary_path is not None
+            else "`codex` was not found on PATH, so HOL Guard can only save the approval for manual retry."
+        ),
         "latest_attempt": latest_attempt,
     }
 

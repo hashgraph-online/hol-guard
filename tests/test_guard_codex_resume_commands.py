@@ -63,6 +63,7 @@ def _seed_codex_operation(
     metadata: dict[str, object] = {
         "codex_thread_id": thread_id,
         "codex_turn_id": "turn-1",
+        "workspace": workspace,
     }
     if socket_path is not None:
         metadata["codex_app_server_socket"] = str(socket_path)
@@ -211,6 +212,10 @@ def test_guard_doctor_codex_reports_resume_diagnostics(
     assert output["codex_resume"]["app_server_support"] is None
     assert "stable public app-server capability probe" in output["codex_resume"]["app_server_support_reason"]
     assert output["codex_resume"]["app_server_socket_available"] in {True, False}
+    assert output["codex_resume"]["headless_resume_support"] in {True, False}
+    assert "codex exec resume" in output["codex_resume"]["headless_resume_support_reason"] or (
+        "codex` was not found" in output["codex_resume"]["headless_resume_support_reason"]
+    )
     assert output["codex_resume"]["latest_attempt"] is None
 
 
@@ -232,11 +237,12 @@ def test_guard_doctor_codex_reports_app_server_support_from_codex_binary(
     assert output["codex_resume"]["app_server_support"] is None
     assert "stable public app-server capability probe" in output["codex_resume"]["app_server_support_reason"]
     assert output["codex_resume"]["app_server_socket_available"] in {True, False}
+    assert output["codex_resume"]["headless_resume_support"] is True
+    assert "codex exec resume" in output["codex_resume"]["headless_resume_support_reason"]
     assert "remote_control_support" not in output["codex_resume"]
-    assert "headless_resume_support" not in output["codex_resume"]
 
 
-def test_guard_approvals_resume_reports_missing_same_thread_channel(
+def test_guard_approvals_resume_rejects_unsafe_headless_thread_id(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -265,19 +271,38 @@ def test_guard_approvals_resume_reports_missing_same_thread_channel(
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["status"] == "failed"
-    assert output["reason"] == "socket_not_available"
-    assert output["strategy"] == "codex-app-server-thread"
-    assert "original chat" in output["message"]
+    assert output["status"] == "skipped"
+    assert output["reason"] == "unsafe_thread_id"
+    assert output["strategy"] == "codex-headless-exec"
+    assert "retry the same request" in output["message"]
 
 
-def test_guard_approvals_resume_does_not_start_headless_codex_when_app_server_unavailable(
+def test_guard_approvals_resume_starts_headless_codex_when_app_server_unavailable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    launched: list[dict[str, object]] = []
+
+    class _FakeProcess:
+        pid = 4455
+
+    def _fake_popen(command, **kwargs):
+        launched.append({"command": command, **kwargs})
+        return _FakeProcess()
+
+    monkeypatch.setattr(
+        codex_app_server_module.shutil,
+        "which",
+        lambda command: "/usr/local/bin/codex" if command == "codex" else None,
+    )
+    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", _fake_popen)
+
     home_dir = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
     workspace.mkdir()
+    codex_home.mkdir()
     store = GuardStore(home_dir)
     store.add_approval_request(_request("req-cli-exec"), "2026-05-19T10:00:00+00:00")
     _seed_codex_operation(
@@ -285,7 +310,7 @@ def test_guard_approvals_resume_does_not_start_headless_codex_when_app_server_un
         request_id="req-cli-exec",
         socket_path=None,
         workspace=str(workspace),
-        codex_home="/tmp/codex-home",
+        codex_home=str(codex_home),
     )
     store.resolve_approval_request(
         "req-cli-exec",
@@ -299,7 +324,47 @@ def test_guard_approvals_resume_does_not_start_headless_codex_when_app_server_un
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["status"] == "failed"
-    assert output["reason"] == "socket_not_available"
-    assert output["strategy"] == "codex-app-server-thread"
-    assert "retry the same request" in output["message"]
+    assert output["status"] == "sent"
+    assert output["reason"] == "headless_resume_started"
+    assert output["strategy"] == "codex-headless-exec"
+    assert len(launched) == 1
+    assert launched[0]["cwd"] == workspace
+    assert launched[0]["command"][:5] == ["/usr/local/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
+    assert "thread-1" in launched[0]["command"]
+    assert launched[0]["env"]["CODEX_HOME"] == str(codex_home)
+
+
+def test_guard_approvals_resume_reports_missing_codex_home_without_spawning(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", lambda *_args, **_kwargs: pytest.fail("no spawn"))
+
+    home_dir = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-no-home"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-no-home",
+        socket_path=None,
+        workspace=str(workspace),
+        codex_home=str(tmp_path / "missing-codex-home"),
+    )
+    store.resolve_approval_request(
+        "req-cli-no-home",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-no-home", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "skipped"
+    assert output["reason"] == "codex_home_not_available"
+    assert output["strategy"] == "codex-headless-exec"
