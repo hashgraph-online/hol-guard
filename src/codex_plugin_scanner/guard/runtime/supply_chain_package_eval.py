@@ -48,6 +48,7 @@ from .supply_chain_bundle_models import (
     SupplyChainBundlePolicyRule,
     SupplyChainBundleResponse,
 )
+from .supply_chain_bundle_runtime import _is_high_confidence_block
 from .supply_chain_support import ecosystem_support_metadata
 
 _DECISION_RANK = {"allow": 0, "monitor": 1, "warn": 2, "ask": 3, "block": 4}
@@ -55,6 +56,8 @@ _SEVERITY_RANK = {"unknown": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 _TIMEOUT_SECONDS = 1
 _RETRY_TIMEOUT_SECONDS = 1
 _CLOUD_DASHBOARD_URL = "https://hol.org/guard/inbox"
+_LOCKFILE_PARSE_BUDGET_SECONDS = 0.2
+_TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD = 900
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
 _PYPI_REGISTRY_METADATA_BASE_URL = "https://pypi.org/pypi"
 
@@ -175,6 +178,7 @@ def evaluate_package_request_artifact(
     now: str | None = None,
 ) -> PackageRequestEvaluation:
     now_value = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now_timestamp = _parse_evaluation_timestamp(now_value)
     targets = _targets_from_artifact(artifact)
     package_intent_hash = artifact.artifact_id.rsplit(":", 1)[-1]
     workspace_id = store.get_cloud_workspace_id()
@@ -221,6 +225,7 @@ def evaluate_package_request_artifact(
             bundle_response=bundle_response,
             workspace_dir=workspace_dir,
             workspace_id=workspace_id,
+            now_timestamp=now_timestamp,
         )
         if bundle_response is not None
         else None
@@ -572,6 +577,7 @@ def _evaluate_with_bundle(
     bundle_response,
     workspace_dir: Path | None,
     workspace_id: str | None,
+    now_timestamp: float | None,
 ) -> _EvaluationDraft | None:
     bundle_meta = _bundle_meta(bundle_response.to_dict())
     refresh_required = False
@@ -617,6 +623,7 @@ def _evaluate_with_bundle(
             package_name=str(target["normalized_name"]),
             package_version=resolved_version,
             ecosystem=_optional_string(target.get("ecosystem")) or "npm",
+            now=now_timestamp,
         )
         if package_match is None:
             safe_allow = _recommended_fix_allow_package_result(
@@ -652,6 +659,7 @@ def _evaluate_with_bundle(
             bundle_response=bundle_response,
             artifact=artifact,
             workspace_dir=workspace_dir,
+            now_timestamp=now_timestamp,
         )
         if (
             _optional_string(package.get("namespace")),
@@ -973,7 +981,11 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
 
 
 def _transitive_lockfile_results(
-    *, bundle_response: SupplyChainBundleResponse, artifact: GuardArtifact, workspace_dir: Path | None
+    *,
+    bundle_response: SupplyChainBundleResponse,
+    artifact: GuardArtifact,
+    workspace_dir: Path | None,
+    now_timestamp: float | None = None,
 ) -> list[dict[str, object]]:
     if workspace_dir is None:
         return []
@@ -1003,6 +1015,7 @@ def _transitive_lockfile_results(
         except (OSError, UnicodeDecodeError):
             continue
         dependency_entries: list[tuple[str, str, str, bool]] = []
+        parse_deadline = time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS
         if lockfile_path.name == "package-lock.json":
             dependency_entries = [
                 (
@@ -1011,13 +1024,15 @@ def _transitive_lockfile_results(
                     version,
                     dependency_path in direct_target_names,
                 )
-                for dependency_path, package_name, version, _direct in _package_lock_entries(lockfile_text)
+                for dependency_path, package_name, version, _direct in _package_lock_entries(
+                    lockfile_text, deadline=parse_deadline
+                )
             ]
         else:
             dependency_map = _safe_dependency_map_for_path(
                 str(lockfile_path.name),
                 lockfile_text,
-                deadline=time.monotonic() + 0.2,
+                deadline=parse_deadline,
             )
             for dependency_path, version in dependency_map.items():
                 normalized_dependency_path = dependency_path.strip("/")
@@ -1042,9 +1057,8 @@ def _transitive_lockfile_results(
                 package_name=package_name,
                 package_version=version,
                 ecosystem=lockfile_ecosystem,
+                now=now_timestamp,
             )
-            if _normalize_bundle_action(offline.action) not in {"ask", "block", "warn"}:
-                continue
             package_match = _bundle_package(
                 bundle_response,
                 package_name=package_name,
@@ -1053,9 +1067,12 @@ def _transitive_lockfile_results(
             )
             if package_match is None:
                 continue
+            decision = _transitive_lockfile_decision(package=package_match, offline_action=offline.action)
+            if decision not in {"ask", "block", "warn"}:
+                continue
             results.append(
                 {
-                    "decision": _normalize_bundle_action(offline.action),
+                    "decision": decision,
                     "ecosystem": package_match.ecosystem,
                     "name": package_match.name,
                     "namespace": package_match.namespace,
@@ -1069,9 +1086,18 @@ def _transitive_lockfile_results(
                     "redactedCommand": _optional_string(artifact.metadata.get("redacted_command")),
                     "reasons": (
                         {
-                            "code": "transitive_lockfile_match",
+                            "code": (
+                                "transitive_low_confidence_match"
+                                if decision == "warn" and _normalize_bundle_action(offline.action) == "block"
+                                else "transitive_lockfile_match"
+                            ),
                             "message": (
-                                f"Existing lockfile already includes vulnerable dependency path {dependency_path}."
+                                (
+                                    "Existing lockfile includes transitive dependency path "
+                                    f"{dependency_path} with lower-confidence risk signals."
+                                )
+                                if decision == "warn" and _normalize_bundle_action(offline.action) == "block"
+                                else f"Existing lockfile already includes vulnerable dependency path {dependency_path}."
                             ),
                             "severity": package_match.normalized_severity,
                             "source": "lockfile",
@@ -1080,6 +1106,24 @@ def _transitive_lockfile_results(
                 }
             )
     return results
+
+
+def _transitive_lockfile_decision(*, package: SupplyChainBundlePackage, offline_action: str) -> str:
+    decision = _normalize_bundle_action(offline_action)
+    if decision != "block":
+        return decision
+    if _is_high_confidence_block(package):
+        return "block"
+    if package.confidence >= _TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD:
+        return "block"
+    return "warn"
+
+
+def _parse_evaluation_timestamp(now_value: str) -> float | None:
+    try:
+        return datetime.fromisoformat(now_value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
 
 
 def _lockfile_ecosystem(lockfile_name: str) -> str | None:
@@ -1871,7 +1915,7 @@ def _package_lock_target_versions(
     text: str,
     targets: tuple[dict[str, object], ...],
 ) -> dict[tuple[str, str | None], str]:
-    entries = _package_lock_entries(text)
+    entries = _package_lock_entries(text, deadline=time.monotonic() + _LOCKFILE_PARSE_BUDGET_SECONDS)
     versions: dict[tuple[str, str | None], str] = {}
     for target in targets:
         target_key = _lockfile_target_key(target)
@@ -1886,12 +1930,14 @@ def _package_lock_target_versions(
     return versions
 
 
-def _package_lock_entries(text: str) -> list[tuple[str, str, str, bool]]:
+def _package_lock_entries(text: str, *, deadline: float | None = None) -> list[tuple[str, str, str, bool]]:
     payload = json.loads(text or "{}")
     entries: list[tuple[str, str, str, bool]] = []
     packages = payload.get("packages")
     if isinstance(packages, dict):
         for package_path, value in packages.items():
+            if deadline is not None and time.monotonic() > deadline:
+                break
             if not isinstance(package_path, str) or not package_path.startswith("node_modules/"):
                 continue
             version = value.get("version") if isinstance(value, dict) else None
@@ -1910,7 +1956,7 @@ def _package_lock_entries(text: str) -> list[tuple[str, str, str, bool]]:
         return entries
     legacy_dependencies = payload.get("dependencies")
     if isinstance(legacy_dependencies, dict):
-        _walk_package_lock_entries(legacy_dependencies, entries, prefix=None)
+        _walk_package_lock_entries(legacy_dependencies, entries, prefix=None, deadline=deadline)
     return entries
 
 
@@ -1919,8 +1965,11 @@ def _walk_package_lock_entries(
     entries: list[tuple[str, str, str, bool]],
     *,
     prefix: str | None,
+    deadline: float | None,
 ) -> None:
     for package_name, value in payload.items():
+        if deadline is not None and time.monotonic() > deadline:
+            return
         if not isinstance(package_name, str) or not isinstance(value, dict):
             continue
         version = value.get("version")
@@ -1936,7 +1985,7 @@ def _walk_package_lock_entries(
             )
         nested_dependencies = value.get("dependencies")
         if isinstance(nested_dependencies, dict):
-            _walk_package_lock_entries(nested_dependencies, entries, prefix=dependency_path)
+            _walk_package_lock_entries(nested_dependencies, entries, prefix=dependency_path, deadline=deadline)
 
 
 def _package_lock_candidate_names(target: dict[str, object]) -> tuple[str, ...]:
