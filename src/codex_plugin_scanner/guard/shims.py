@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -156,6 +157,13 @@ def install_package_shims(
     shim_dir = shim_root / "bin"
     shim_dir.mkdir(parents=True, exist_ok=True)
     normalized_managers = _normalize_package_shim_managers(managers)
+    existing_manifest = _load_package_shim_manifest(context)
+    existing_managers = tuple(
+        manager
+        for manager in existing_manifest.get("installed_managers", [])
+        if isinstance(manager, str) and manager in _PACKAGE_SHIM_COMMANDS
+    )
+    tracked_managers = tuple(dict.fromkeys([*existing_managers, *normalized_managers]))
     installed: list[str] = []
     for manager in normalized_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
@@ -166,18 +174,21 @@ def install_package_shims(
         windows_path.write_text(_build_windows_script(posix_path), encoding="utf-8")
         installed.append(manager)
     manifest_payload = {
-        "installed_managers": installed,
+        "installed_managers": list(tracked_managers),
         "shim_dir": str(shim_dir),
     }
     _package_shim_manifest_path(context).write_text(json.dumps(manifest_payload, sort_keys=True), encoding="utf-8")
+    program_name = _command_program_name()
     return {
-        "installed_managers": installed,
-        "installed_count": len(installed),
+        "installed_managers": list(tracked_managers),
+        "installed_count": len(tracked_managers),
+        "installed_now": installed,
+        "installed_now_count": len(installed),
         "shim_dir": str(shim_dir),
         "manifest_path": str(_package_shim_manifest_path(context)),
-        "path_export_hint": f'export PATH="{shim_dir}:$PATH"',
-        "status_command": "hol-guard package-shims status --json",
-        "uninstall_command": "hol-guard package-shims uninstall --json",
+        "path_export_hint": _path_export_hint(shim_dir),
+        "status_command": f"{program_name} package-shims status --json",
+        "uninstall_command": f"{program_name} package-shims uninstall --json",
     }
 
 
@@ -290,9 +301,22 @@ def _load_package_shim_manifest(context: HarnessContext) -> dict[str, object]:
         return {}
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _command_program_name() -> str:
+    if not sys.argv:
+        return "hol-guard"
+    candidate = Path(sys.argv[0]).name.strip()
+    return candidate or "hol-guard"
+
+
+def _path_export_hint(shim_dir: Path) -> str:
+    if os.name == "nt":
+        return f"set PATH={shim_dir};%PATH%"
+    return f'export PATH="{shim_dir}:$PATH"'
 
 
 __all__ = [

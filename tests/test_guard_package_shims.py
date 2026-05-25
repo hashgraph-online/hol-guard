@@ -35,6 +35,7 @@ def test_guard_package_shims_install_status_uninstall_roundtrip(tmp_path: Path, 
     assert install_rc == 0
     assert install_payload["installed_count"] == 2
     assert install_payload["installed_managers"] == ["npm", "pip"]
+    assert install_payload["installed_now"] == ["npm", "pip"]
     shim_dir = Path(str(install_payload["shim_dir"]))
     manifest_path = Path(str(install_payload["manifest_path"]))
     assert (shim_dir / "npm").exists()
@@ -78,6 +79,49 @@ def test_guard_package_shims_install_status_uninstall_roundtrip(tmp_path: Path, 
     assert sorted(uninstall_payload["removed_managers"]) == ["npm", "pip"]
     assert uninstall_payload["remaining_managers"] == []
     assert manifest_path.exists() is False
+
+
+def test_guard_package_shims_install_merges_manifest_entries(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    first_rc = main(
+        [
+            "guard",
+            "package-shims",
+            "install",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--manager",
+            "npm",
+            "--json",
+        ]
+    )
+    first_payload = json.loads(capsys.readouterr().out)
+    second_rc = main(
+        [
+            "guard",
+            "package-shims",
+            "install",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--manager",
+            "pip",
+            "--json",
+        ]
+    )
+    second_payload = json.loads(capsys.readouterr().out)
+
+    assert first_rc == 0
+    assert second_rc == 0
+    assert first_payload["installed_managers"] == ["npm"]
+    assert second_payload["installed_managers"] == ["npm", "pip"]
+    assert second_payload["installed_now"] == ["pip"]
 
 
 def test_guard_package_shims_install_does_not_mutate_path_environment(
