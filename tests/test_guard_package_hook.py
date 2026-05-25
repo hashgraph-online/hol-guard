@@ -236,8 +236,11 @@ def test_guard_hook_blocks_package_request_before_execution_and_queues_cloud_syn
     )
     captured = capsys.readouterr()
 
-    assert rc == 2
-    assert "blocked" in captured.err.lower()
+    payload = json.loads(captured.out)
+    assert rc == 0
+    assert captured.err == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "blocked" in payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
     evidence = store.list_evidence()
     assert evidence
     assert evidence[0]["category"] == "supply-chain"

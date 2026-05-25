@@ -140,9 +140,12 @@ def test_gr098_codex_strict_daemon_failure_points_to_daemon_recovery(
         },
     )
 
-    stderr = capsys.readouterr().err
+    captured = capsys.readouterr()
+    payload = _json_line(output)
+    reason = str(payload["hookSpecificOutput"]["permissionDecisionReason"])
 
-    assert exit_code == 2
-    assert output == ""
-    assert "Restart HOL Guard" in stderr
-    assert "Approve it in HOL Guard" not in stderr
+    assert exit_code == 0
+    assert captured.err == ""
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Restart HOL Guard" in reason
+    assert "Approve it in HOL Guard" not in reason
