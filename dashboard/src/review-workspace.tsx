@@ -85,7 +85,8 @@ import {
   type SemanticGroupId,
 } from "./queue-state";
 import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
-import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
+import { requiresApprovalPasswordPrompt } from "./approval-gate-utils";
+import { ApprovalPasswordModal } from "./approval-center-review-cards";
 
 export type ReviewViewModel = {
   item: GuardApprovalRequest;
@@ -766,6 +767,7 @@ function ReviewDecisionCard(props: {
   const [approvalPassword, setApprovalPassword] = useState("");
   const [approvalTotpCode, setApprovalTotpCode] = useState("");
   const [useCooldown, setUseCooldown] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
   const availableScopeChoices = useMemo(
@@ -785,6 +787,15 @@ function ReviewDecisionCard(props: {
     [item]
   );
 
+  const gateRequiresPassword = useMemo(() => {
+    const gate = props.approvalGate;
+    return (
+      gate?.enabled === true &&
+      gate?.configured === true &&
+      requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope)
+    );
+  }, [props.approvalGate, scope]);
+
   useEffect(() => {
     if (item) {
       setScope(normalizeDecisionScope(item, item.recommended_scope));
@@ -795,6 +806,7 @@ function ReviewDecisionCard(props: {
       setApprovalPassword("");
       setApprovalTotpCode("");
       setUseCooldown(false);
+      setPendingAction(null);
     }
   }, [item?.request_id]);
 
@@ -806,7 +818,7 @@ function ReviewDecisionCard(props: {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (submitting !== null) return;
+      if (submitting !== null || pendingAction !== null) return;
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -826,7 +838,7 @@ function ReviewDecisionCard(props: {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, scope, item?.request_id, availableScopeChoices]);
+  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices]);
 
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
@@ -856,6 +868,7 @@ function ReviewDecisionCard(props: {
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
+        setPendingAction(null);
         timerRef.current = setTimeout(() => setResolved(null), 2000);
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
@@ -869,16 +882,36 @@ function ReviewDecisionCard(props: {
   const handleRequestResolve = useCallback(
     (action: "allow" | "block") => {
       setLastAction(action);
+      if (gateRequiresPassword) {
+        setPendingAction(action);
+        setErrorMessage(null);
+        return;
+      }
       void handleResolve(action);
     },
-    [handleResolve]
+    [handleResolve, gateRequiresPassword]
   );
+
   const handleAllow = useCallback(() => {
     handleRequestResolve("allow");
   }, [handleRequestResolve]);
   const handleBlock = useCallback(() => {
     handleRequestResolve("block");
   }, [handleRequestResolve]);
+
+  const handleModalSubmit = useCallback(() => {
+    if (pendingAction !== null) {
+      void handleResolve(pendingAction);
+    }
+  }, [pendingAction, handleResolve]);
+
+  const handleModalCancel = useCallback(() => {
+    setPendingAction(null);
+    setApprovalPassword("");
+    setApprovalTotpCode("");
+    setUseCooldown(false);
+  }, []);
+
   const handleToggleConsequences = useCallback(() => {
     setShowConsequences((visible) => !visible);
   }, []);
@@ -1067,30 +1100,12 @@ function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {props.approvalGate?.enabled === true &&
-          props.approvalGate?.configured === true &&
-          requiresApprovalPasswordPrompt(
-            props.approvalGate.cooldown_active,
-            props.approvalGate.strict_all_decisions,
-            scope
-          ) && (
-          <ApprovalPasswordPrompt
-            gate={props.approvalGate}
-            approvalPassword={approvalPassword}
-            approvalTotpCode={approvalTotpCode}
-            useCooldown={useCooldown}
-            onApprovalPasswordChange={handleApprovalPasswordChange}
-            onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
-            onUseCooldownChange={handleUseCooldownChange}
-          />
-        )}
-
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <ActionButton
             ref={allowButtonRef}
             variant="success"
             onClick={handleAllow}
-            disabled={submitting !== null}
+            disabled={submitting !== null || pendingAction !== null}
           >
             {submitting === "allow" ? (
               <span className="flex items-center gap-2">
@@ -1107,7 +1122,7 @@ function ReviewDecisionCard(props: {
           <ActionButton
             variant="outline"
             onClick={handleBlock}
-            disabled={submitting !== null}
+            disabled={submitting !== null || pendingAction !== null}
           >
             {submitting === "block" ? (
               <span className="flex items-center gap-2">
@@ -1178,6 +1193,21 @@ function ReviewDecisionCard(props: {
             </div>
           )}
         </div>
+      )}
+
+      {pendingAction !== null && props.approvalGate !== null && (
+        <ApprovalPasswordModal
+          gate={props.approvalGate}
+          approvalPassword={approvalPassword}
+          approvalTotpCode={approvalTotpCode}
+          useCooldown={useCooldown}
+          onApprovalPasswordChange={handleApprovalPasswordChange}
+          onApprovalTotpCodeChange={handleApprovalTotpCodeChange}
+          onUseCooldownChange={handleUseCooldownChange}
+          onSubmit={handleModalSubmit}
+          onCancel={handleModalCancel}
+          submitLabel={pendingAction === "allow" ? allowButtonLabel(scope) : "Keep blocked"}
+        />
       )}
     </div>
   );
@@ -1335,90 +1365,6 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
           </ul>
         </div>
       </div>
-    </div>
-  );
-}
-
-type ApprovalPasswordPromptProps = {
-  gate: GuardApprovalGatePublicConfig;
-  approvalPassword: string;
-  approvalTotpCode: string;
-  useCooldown: boolean;
-  onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onUseCooldownChange: (event: ChangeEvent<HTMLInputElement>) => void;
-};
-
-function ApprovalPasswordPrompt(props: ApprovalPasswordPromptProps) {
-  const showCooldownOption =
-    props.gate.cooldown_seconds > 0 &&
-    !props.gate.cooldown_active &&
-    props.gate.totp_enabled !== true;
-  const codePreview = (props.approvalTotpCode ?? "").padEnd(6, " ").slice(0, 6).split("");
-
-  return (
-    <div className="mt-5 overflow-hidden rounded-2xl border border-brand-blue/20 bg-white shadow-sm">
-      <div className="flex items-start gap-3 border-b border-brand-blue/10 bg-brand-blue/[0.04] p-4">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-blue/10 text-brand-blue">
-          <HiMiniKey className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-brand-dark">
-            {props.gate.totp_enabled === true ? "Authenticator check required" : "Approval password required"}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            Guard needs a fresh proof before it can save this decision.
-          </p>
-        </div>
-      </div>
-      <div className="grid gap-4 p-4 md:grid-cols-[1fr_220px]">
-        <label className="block">
-          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={props.approvalPassword}
-            onChange={props.onApprovalPasswordChange}
-            className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          />
-        </label>
-        {props.gate.totp_enabled === true && (
-          <div>
-            <div className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
-            </div>
-            <div className="mt-2 grid grid-cols-6 gap-1.5" aria-hidden="true">
-              {codePreview.map((digit, index) => (
-                <span key={`${index}-${digit}`} className="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg font-semibold text-brand-dark">
-                  {digit.trim() ? digit : "•"}
-                </span>
-              ))}
-            </div>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={6}
-              value={props.approvalTotpCode}
-              onChange={props.onApprovalTotpCodeChange}
-              placeholder="123456"
-              className="mt-2 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              aria-label="Enter authenticator code"
-            />
-          </div>
-        )}
-      </div>
-      {showCooldownOption && (
-        <label className="mx-4 mb-4 flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-brand-dark">
-          <input
-            type="checkbox"
-            checked={props.useCooldown}
-            onChange={props.onUseCooldownChange}
-            className="h-4 w-4 accent-brand-blue"
-          />
-          Skip password for next {approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase()} (use cooldown)
-        </label>
-      )}
     </div>
   );
 }
