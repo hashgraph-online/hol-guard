@@ -30,6 +30,20 @@ pipx install hol-guard
 hol-guard init
 ```
 
+To update an existing pipx install from PyPI:
+
+```bash
+pipx upgrade hol-guard
+```
+
+To force a specific release, use Python package specifier syntax:
+
+```bash
+pipx install --force 'hol-guard==2.0.323'
+```
+
+Do not use `hol-guard@2.0.323`; pipx treats that as a separate app name, not a package version.
+
 `hol-guard init` is the first-run guided setup. It shows a progressive plan first, then gates each side effect: approve dashboard, Guard completes it, then approve app protection, Guard completes it, then approve Cloud connect and notifications. Nothing opens or changes until you approve that checkpoint. Use `hol-guard init --yes` only for automation when you already trust the plan.
 
 Manual and follow-up commands:
