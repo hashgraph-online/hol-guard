@@ -200,7 +200,11 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
         if isinstance(manager, str) and manager in _PACKAGE_SHIM_COMMANDS
     ]
     shim_dir = context.guard_home / "package-shims" / "bin"
-    active_managers = [manager for manager in installed_managers if (shim_dir / _PACKAGE_SHIM_COMMANDS[manager]).exists()]
+    active_managers = [
+        manager
+        for manager in installed_managers
+        if (shim_dir / _PACKAGE_SHIM_COMMANDS[manager]).exists()
+    ]
     missing_managers = [manager for manager in installed_managers if manager not in active_managers]
     return {
         "installed_managers": installed_managers,
@@ -321,8 +325,8 @@ def _path_export_hint(shim_dir: Path) -> str:
 
 __all__ = [
     "install_guard_shim",
-    "remove_guard_shim",
     "install_package_shims",
     "package_shim_status",
+    "remove_guard_shim",
     "uninstall_package_shims",
 ]
