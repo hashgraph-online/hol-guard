@@ -12,7 +12,7 @@ _SEVERITY_VALUES = frozenset({"unknown", "low", "medium", "high", "critical"})
 _EXPLOIT_LEVEL_VALUES = frozenset({"none", "elevated", "active"})
 _MALWARE_STATE_VALUES = frozenset({"none", "suspected", "known"})
 _STALE_STATUS_VALUES = frozenset({"fresh", "stale", "unknown"})
-_VERIFICATION_KEY_STATE_VALUES = frozenset({"active", "grace"})
+_VERIFICATION_KEY_STATE_VALUES = frozenset({"active", "grace", "revoked"})
 
 
 class SupplyChainBundleError(Exception):
