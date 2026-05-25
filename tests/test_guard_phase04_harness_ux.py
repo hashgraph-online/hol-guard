@@ -131,6 +131,10 @@ def _answer_claude_guard_question(tmp_path: Path, *, session_id: str, answer: st
 
 
 def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+
     exit_code, output = _run_hook(
         tmp_path,
         harness="codex",
@@ -145,8 +149,14 @@ def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_pat
 
     assert exit_code == 0
     assert payload["decision"] == "block"
+    assert payload["continue"] is False
     assert "HOL Guard stopped this Codex prompt" in str(payload["reason"])
     assert "/approvals/" in str(payload["reason"])
+    assert payload["stopReason"] == payload["reason"]
+    assert payload["hookSpecificOutput"] == {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": payload["reason"],
+    }
 
 
 def test_gr077_codex_shell_exfil_canary_gets_native_denial(tmp_path: Path) -> None:
