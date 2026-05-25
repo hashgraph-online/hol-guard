@@ -429,6 +429,37 @@ def test_supply_chain_posture_panel_shows_unknown_cloud_advisories_consistently(
     assert "unknown" in output
 
 
+def test_supply_chain_posture_panel_snapshot_shows_health_state_and_next_refresh() -> None:
+    panel = render._build_supply_chain_posture_panel(
+        {
+            "status": "synced",
+            "health_status": "stale",
+            "detail": "Signed supply-chain bundle is ready for local install protection.",
+            "bundle": {
+                "bundle_version": "1747612800000-deadbeef",
+                "next_refresh_at": "2026-05-19T12:15:00+00:00",
+                "tier": "premium",
+                "workspace_id": "workspace-alpha",
+            },
+            "policy": {
+                "security_level": "balanced",
+                "cloud_advisory_action": "warn",
+            },
+        }
+    )
+    console = Console(record=True, width=120)
+
+    console.print(panel)
+
+    output = _normalize_render_output(console.export_text())
+    assert "Supply-chain firewall" in output
+    assert "Status" in output
+    assert "Protection" in output
+    assert "stale" in output
+    assert "Next refresh" in output
+    assert "2026-05-19T12:15:00+00:00" in output
+
+
 def test_guard_status_render_rewrites_internal_next_action_labels(capsys) -> None:
     emit_guard_payload(
         "status",

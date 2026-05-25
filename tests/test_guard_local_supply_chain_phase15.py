@@ -18,6 +18,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.cli import commands as commands_module
+from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -272,6 +273,39 @@ def test_guard_doctor_includes_supply_chain_posture(tmp_path: Path, capsys) -> N
     assert output["supply_chain"]["status"] == "synced"
     assert output["supply_chain"]["bundle"]["workspace_id"] == WORKSPACE_ID
     assert output["supply_chain"]["policy"]["security_level"] == "balanced"
+
+
+def test_supply_chain_posture_reports_protected_degraded_stale_and_next_refresh(tmp_path: Path) -> None:
+    home_dir = tmp_path / "guard-home"
+    store = GuardStore(home_dir)
+    _seed_supply_chain_bundle(
+        store,
+        packages=[_package(name="minimist", version="1.2.5", default_action="block")],
+        now="2026-05-19T12:00:00+00:00",
+    )
+    config = load_guard_config(home_dir)
+
+    protected_posture = local_supply_chain_module.build_local_supply_chain_posture(
+        store,
+        config,
+        now="2026-05-19T12:04:00+00:00",
+    )
+    stale_posture = local_supply_chain_module.build_local_supply_chain_posture(
+        store,
+        config,
+        now="2026-05-19T12:25:01+00:00",
+    )
+    degraded_store = GuardStore(tmp_path / "guard-home-degraded")
+    degraded_posture = local_supply_chain_module.build_local_supply_chain_posture(
+        degraded_store,
+        load_guard_config(degraded_store.guard_home),
+        now="2026-05-19T12:04:00+00:00",
+    )
+
+    assert protected_posture["health_status"] == "protected"
+    assert protected_posture["bundle"]["next_refresh_at"] == "2026-05-19T12:15:00+00:00"
+    assert stale_posture["health_status"] == "stale"
+    assert degraded_posture["health_status"] == "degraded"
 
 
 def test_guard_supply_chain_scan_uses_manifest_and_lockfile_context(tmp_path: Path, capsys) -> None:
