@@ -171,10 +171,18 @@ def resume_codex_thread_for_request(
                 },
             },
         },
-        {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        {"jsonrpc": "2.0", "method": "initialized", "params": {}},
         {
             "jsonrpc": "2.0",
             "id": 2,
+            "method": "thread/resume",
+            "params": {
+                "threadId": thread_id,
+            },
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
             "method": "turn/start",
             "params": {
                 "threadId": thread_id,
@@ -193,7 +201,7 @@ def resume_codex_thread_for_request(
         kwargs={
             "socket_path": socket_path,
             "payloads": request_payloads,
-            "response_id": 2,
+            "response_id": 3,
             "thread_id": thread_id,
             "timeout_seconds": timeout_seconds,
             "completion_timeout_seconds": _DEFAULT_COMPLETION_TIMEOUT_SECONDS,

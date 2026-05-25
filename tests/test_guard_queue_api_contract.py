@@ -191,7 +191,9 @@ def _start_fake_codex_app_server(socket_path: Path, received: list[dict[str, obj
                             },
                         )
                     if message.get("id") == 2:
-                        _send_websocket_text(connection, {"id": 2, "result": {"turnId": "turn-next"}})
+                        _send_websocket_text(connection, {"id": 2, "result": {"threadId": "thread-1"}})
+                    if message.get("id") == 3:
+                        _send_websocket_text(connection, {"id": 3, "result": {"turnId": "turn-next"}})
                         time.sleep(0.05)
                         _send_websocket_text(
                             connection,
@@ -493,6 +495,12 @@ def test_codex_resolution_sends_continue_prompt_to_original_thread(tmp_path: Pat
         codex_server.join(timeout=2)
         socket_path.unlink(missing_ok=True)
 
+    assert [message["method"] for message in received_messages[-4:]] == [
+        "initialize",
+        "initialized",
+        "thread/resume",
+        "turn/start",
+    ]
     turn_start = received_messages[-1]
     assert payload["codex_resume"]["status"] == "sent"
     assert payload["resolution_summary"] == (
