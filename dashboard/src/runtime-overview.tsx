@@ -1,6 +1,6 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
-import type { GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 
 const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw"] as const;
 
@@ -258,6 +258,84 @@ export function DeviceProofCard(props: DeviceProofCardProps) {
 
 
 
+export type PackageManagerProtectionCopy = {
+  pathLabel: string;
+  pathDetail: string;
+  pathTone: "green" | "attention" | "slate";
+  protectedList: string[];
+  unprotectedList: string[];
+};
+
+export function resolvePackageManagerProtectionCopy(
+  protection: PackageManagerProtection | undefined,
+): PackageManagerProtectionCopy {
+  if (protection === undefined) {
+    return {
+      pathLabel: "Status unknown",
+      pathDetail: "Supply-chain protection data is not available for this session.",
+      pathTone: "slate",
+      protectedList: [],
+      unprotectedList: [],
+    };
+  }
+  const pathInPath = protection.path_status === "in_path";
+  return {
+    pathLabel: pathInPath ? "Guard shim directory is in PATH" : "Guard shim directory missing from PATH",
+    pathDetail: pathInPath
+      ? `Package manager commands are intercepted via ${protection.shim_dir}.`
+      : `The shim directory (${protection.shim_dir}) is not on PATH. Install bypass is possible for package managers that are not otherwise protected.`,
+    pathTone: pathInPath ? "green" : "attention",
+    protectedList: protection.protected_managers,
+    unprotectedList: protection.unprotected_managers,
+  };
+}
+
+function PackageManagerProtectionCard(props: { snapshot: GuardRuntimeSnapshot }) {
+  const protection = props.snapshot.supply_chain?.package_manager_protection;
+  const copy = resolvePackageManagerProtectionCopy(protection);
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Package manager protection
+        </p>
+        <Tag tone={copy.pathTone}>{copy.pathLabel}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.pathDetail}</p>
+      {copy.protectedList.length > 0 || copy.unprotectedList.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {copy.protectedList.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-slate-500">Protected:</span>
+              {copy.protectedList.map((mgr) => (
+                <span
+                  key={mgr}
+                  className="inline-flex items-center rounded-full border border-brand-green/25 bg-brand-green-bg/50 px-2.5 py-0.5 text-xs font-medium text-brand-green-text"
+                >
+                  {mgr}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {copy.unprotectedList.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-slate-500">Unprotected:</span>
+              {copy.unprotectedList.map((mgr) => (
+                <span
+                  key={mgr}
+                  className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+                >
+                  {mgr}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function RuntimeOverview(props: RuntimeOverviewProps) {
   const { snapshot, inventory } = props;
   const securityLevel = snapshot.security_level;
@@ -312,10 +390,11 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
           ]}
         />
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
           <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
           <ApprovalCenterHealthCard snapshot={snapshot} />
           <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
+          <PackageManagerProtectionCard snapshot={snapshot} />
         </div>
 
         <div className="rounded-xl border border-border bg-white px-5 py-4">
