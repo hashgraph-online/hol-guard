@@ -1479,6 +1479,10 @@
     }
   }
 
+  .border-amber-200 {
+    border-color: var(--color-amber-200);
+  }
+
   .border-amber-200\/40 {
     border-color: #fee68566;
   }
@@ -4469,6 +4473,10 @@
 
     .xl\:grid-cols-1 {
       grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+
+    .xl\:grid-cols-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .xl\:grid-cols-\[300px_minmax\(0\,1fr\)\] {
