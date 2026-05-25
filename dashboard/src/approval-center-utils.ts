@@ -628,6 +628,15 @@ export function buildCodexResumeUx(resume: GuardCodexResumeResult): CodexResumeU
     };
   }
   if (resume.status === "sent" || resume.status === "already_sent") {
+    if (resume.strategy === "codex-headless-exec" || resume.reason === "headless_resume_started") {
+      return {
+        headline: "Codex resumed in background.",
+        body:
+          resume.message ??
+          "HOL Guard started a background Codex resume. This open Codex App chat may not visibly continue until Codex remote control is enabled.",
+        showRetry: false
+      };
+    }
     return {
       headline: "Codex chat notified.",
       body: resume.message ?? "HOL Guard sent Codex a continuation message in the original chat.",

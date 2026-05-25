@@ -284,7 +284,9 @@ def _start_fake_codex_app_server(
                             },
                         )
                     if message.get("id") == 2:
-                        _send_websocket_text(connection, {"id": 2, "result": {"turnId": "turn-smoke"}})
+                        _send_websocket_text(connection, {"id": 2, "result": {"threadId": thread_id}})
+                    if message.get("id") == 3:
+                        _send_websocket_text(connection, {"id": 3, "result": {"turnId": "turn-smoke"}})
                         time.sleep(0.05)
                         _send_websocket_text(
                             connection,

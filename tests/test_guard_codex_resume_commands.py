@@ -232,8 +232,8 @@ def test_guard_doctor_codex_reports_resume_diagnostics(
 
     assert rc == 0
     assert output["codex_resume"]["codex_binary_found"] in {True, False}
-    assert output["codex_resume"]["app_server_support"] is None
-    assert "stable public app-server capability probe" in output["codex_resume"]["app_server_support_reason"]
+    assert output["codex_resume"]["app_server_support"] in {True, False}
+    assert "remote-control socket" in output["codex_resume"]["app_server_support_reason"]
     assert output["codex_resume"]["app_server_socket_available"] in {True, False}
     assert output["codex_resume"]["headless_resume_support"] in {True, False}
     assert "codex exec resume" in output["codex_resume"]["headless_resume_support_reason"] or (
@@ -257,8 +257,8 @@ def test_guard_doctor_codex_reports_app_server_support_from_codex_binary(
 
     assert rc == 0
     assert output["codex_resume"]["codex_binary_found"] is True
-    assert output["codex_resume"]["app_server_support"] is None
-    assert "stable public app-server capability probe" in output["codex_resume"]["app_server_support_reason"]
+    assert output["codex_resume"]["app_server_support"] in {True, False}
+    assert "remote-control socket" in output["codex_resume"]["app_server_support_reason"]
     assert output["codex_resume"]["app_server_socket_available"] in {True, False}
     assert output["codex_resume"]["headless_resume_support"] is True
     assert "codex exec resume" in output["codex_resume"]["headless_resume_support_reason"]
@@ -350,6 +350,8 @@ def test_guard_approvals_resume_starts_headless_codex_when_app_server_unavailabl
     assert output["status"] == "sent"
     assert output["reason"] == "headless_resume_started"
     assert output["strategy"] == "codex-headless-exec"
+    assert "background" in output["message"]
+    assert "open Codex App chat" in output["message"]
     assert len(launched) == 1
     assert launched[0]["cwd"] == workspace
     assert launched[0]["command"][:5] == ["/usr/local/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
