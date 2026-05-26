@@ -22,6 +22,7 @@ except ModuleNotFoundError:
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
+from ..config import load_guard_config, resolve_risk_action
 from ..models import GuardArtifact
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
@@ -575,6 +576,7 @@ def _evaluate_with_cloud(
         headers=_guard_sync_headers(sync_credentials["token"]),
         method="POST",
     )
+    fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
     try:
         response_payload = _urlopen_json_with_timeout_retry(
             request=request,
@@ -589,6 +591,7 @@ def _evaluate_with_cloud(
             workspace_dir=workspace_dir,
             workspace_fingerprint=workspace_fingerprint,
             bundle_meta=bundle_meta,
+            fail_closed_decision=fail_closed_decision,
         )
         if fail_closed is not None:
             return fail_closed, None
@@ -597,6 +600,20 @@ def _evaluate_with_cloud(
             message=(f"Guard cloud evaluation returned HTTP {error.code}, so Guard fell back to local intelligence."),
         )
     except OSError:
+        if fail_closed_decision == "block":
+            return (
+                _cloud_fail_closed_evaluation(
+                    code="cloud_validation_error",
+                    message="Guard cloud evaluation timed out, so strict mode blocked this package request.",
+                    artifact=artifact,
+                    targets=targets,
+                    workspace_dir=workspace_dir,
+                    workspace_fingerprint=workspace_fingerprint,
+                    bundle_meta=bundle_meta,
+                    fail_closed_decision=fail_closed_decision,
+                ),
+                None,
+            )
         return None, _cloud_fallback_reason(
             code="cloud_timeout",
             message="Guard cloud evaluation timed out, so Guard fell back to local intelligence.",
@@ -611,6 +628,7 @@ def _evaluate_with_cloud(
                 workspace_dir=workspace_dir,
                 workspace_fingerprint=workspace_fingerprint,
                 bundle_meta=bundle_meta,
+                fail_closed_decision=fail_closed_decision,
             ),
             None,
         )
@@ -624,6 +642,7 @@ def _evaluate_with_cloud(
                 workspace_dir=workspace_dir,
                 workspace_fingerprint=workspace_fingerprint,
                 bundle_meta=bundle_meta,
+                fail_closed_decision=fail_closed_decision,
             ),
             None,
         )
@@ -639,6 +658,7 @@ def _evaluate_with_cloud(
                 workspace_dir=workspace_dir,
                 workspace_fingerprint=workspace_fingerprint,
                 bundle_meta=bundle_meta,
+                fail_closed_decision=fail_closed_decision,
             ),
             None,
         )
@@ -700,6 +720,7 @@ def _cloud_http_fail_closed_evaluation(
     workspace_dir: Path | None,
     workspace_fingerprint: str | None,
     bundle_meta: dict[str, str] | None,
+    fail_closed_decision: str,
 ) -> PackageRequestEvaluation | None:
     if status_code in {401, 403}:
         return _cloud_fail_closed_evaluation(
@@ -710,6 +731,7 @@ def _cloud_http_fail_closed_evaluation(
             workspace_dir=workspace_dir,
             workspace_fingerprint=workspace_fingerprint,
             bundle_meta=bundle_meta,
+            fail_closed_decision=fail_closed_decision,
         )
     if status_code in {400, 404}:
         return _cloud_fail_closed_evaluation(
@@ -720,6 +742,7 @@ def _cloud_http_fail_closed_evaluation(
             workspace_dir=workspace_dir,
             workspace_fingerprint=workspace_fingerprint,
             bundle_meta=bundle_meta,
+            fail_closed_decision=fail_closed_decision,
         )
     return None
 
@@ -733,15 +756,18 @@ def _cloud_fail_closed_evaluation(
     workspace_dir: Path | None,
     workspace_fingerprint: str | None,
     bundle_meta: dict[str, str] | None,
+    fail_closed_decision: str,
 ) -> PackageRequestEvaluation:
     reason = _cloud_fallback_reason(code=code, message=message)
+    decision = "block" if fail_closed_decision == "block" else "ask"
+    severity = "critical" if decision == "block" else "high"
     packages = tuple(
         _heuristic_package_result(
             target=target,
-            decision="ask",
+            decision=decision,
             code=code,
             message=message,
-            severity="high",
+            severity=severity,
         )
         for target in targets
     )
@@ -749,13 +775,13 @@ def _cloud_fail_closed_evaluation(
         packages = tuple(
             {
                 **package,
-                "decision": "ask",
+                "decision": decision,
                 "reasons": (reason,),
             }
             for package in _fallback_monitor_packages(targets=targets, artifact=artifact, workspace_dir=workspace_dir)
         )
     draft = _EvaluationDraft(
-        decision="ask",
+        decision=decision,
         enforcement="premium_cloud",
         entitlement_state="premium",
         cache_status="cloud-error",
@@ -773,6 +799,16 @@ def _cloud_fail_closed_evaluation(
         package_intent_hash=artifact.artifact_id.rsplit(":", 1)[-1],
         workspace_fingerprint=workspace_fingerprint,
     )
+
+
+def _cloud_fail_closed_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
+    config = load_guard_config(store.guard_home, workspace=workspace_dir)
+    cloud_action = resolve_risk_action(config, "cloud_advisory", harness=None)
+    if config.security_level in {"strict", "paranoid"}:
+        return "block"
+    if cloud_action == "block":
+        return "block"
+    return "ask"
 
 
 def _evaluate_with_bundle(
