@@ -2194,21 +2194,16 @@ def _package_json_install_script_risk(payload: bytes) -> dict[str, str] | None:
         value = scripts.get(key)
         if isinstance(value, str) and value.strip():
             normalized = value.lower()
-            touches_credentials = any(
-                token in normalized
-                for token in (".npmrc", "npm_token", "node_auth_token", "_authtoken", ".pypirc", "pypi_token")
+            touches_credentials = bool(
+                re.search(
+                    r"\b(?:npm_token|node_auth_token|_authtoken|pypi_token)\b|\.npmrc|\.pypirc",
+                    normalized,
+                )
             )
-            exfiltrates = any(
-                token in normalized
-                for token in (
-                    "https.request",
-                    "http.request",
-                    "fetch(",
-                    "axios",
-                    "curl ",
-                    "wget ",
-                    "requests.",
-                    "urllib",
+            exfiltrates = bool(
+                re.search(
+                    r"\b(?:curl|wget|axios|urllib)\b|\bhttps?\.request\b|\bfetch\s*\(|\brequests\.",
+                    normalized,
                 )
             )
             if touches_credentials and exfiltrates:
