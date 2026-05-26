@@ -1,4 +1,4 @@
-import { r as reactExports, Z as fetchApprovalPage, _ as fetchPolicy, j as jsxRuntimeExports, $ as HiMiniArrowLeft, o as HiMiniChevronRight, h as harnessDisplayName, G as GuardHero, P as ProofStrip, a0 as HiMiniHome, n as HiMiniBolt, a1 as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, b as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, a2 as detectCategory, a3 as CATEGORIES, B as Badge, E as EmptyState, a4 as policyIdentityKey, k as HiMiniCloud, a5 as HiMiniChartBar, a6 as runHarnessAction, a7 as GuardHarnessActionError, a8 as HiMiniRocketLaunch, a as HiMiniShieldCheck, a9 as HiMiniArrowPath, H as HiMiniCheckCircle, aa as HiMiniTrash, ab as clearLabelForScope, g as HiMiniChevronDown, ac as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, $ as fetchApprovalPage, a0 as fetchPolicy, j as jsxRuntimeExports, a1 as HiMiniArrowLeft, s as HiMiniChevronRight, h as harnessDisplayName, G as GuardHero, P as ProofStrip, a2 as HiMiniHome, q as HiMiniBolt, a3 as HiMiniAdjustmentsHorizontal, A as ActionButton, S as SectionLabel, f as formatRelativeTime, a as HiMiniExclamationTriangle, T as Tag, a4 as detectCategory, a5 as CATEGORIES, B as Badge, E as EmptyState, a6 as policyIdentityKey, o as HiMiniCloud, a7 as HiMiniChartBar, d as HiMiniCheckCircle, e as HiMiniXCircle, a8 as runHarnessAction, a9 as GuardHarnessActionError, aa as HiMiniRocketLaunch, H as HiMiniShieldCheck, ab as HiMiniArrowPath, ac as HiMiniTrash, ad as clearLabelForScope, n as HiMiniChevronDown, ae as formatHarnessCommand } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 const tabOrder = ["overview", "activity", "settings"];
 const TAB_DEFINITIONS = [
@@ -273,6 +273,7 @@ function AppDetailWorkspace(props) {
                 harnessReceipts,
                 harnessInventory,
                 pendingItems,
+                protection: runtime.supply_chain?.package_manager_protection,
                 onOpenRequest: props.onOpenRequest,
                 onManagedInstallChanged: props.onManagedInstallChanged
               }
@@ -456,7 +457,38 @@ function AppOverviewTab(props) {
           },
           item.artifact_id
         )) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AppFirewallStatusCard, { protection: props.protection })
+    ] })
+  ] });
+}
+function AppFirewallStatusCard({ protection }) {
+  const protectedManagers = protection?.protected_managers ?? [];
+  const unprotectedManagers = protection?.unprotected_managers ?? [];
+  const total = protectedManagers.length + unprotectedManagers.length;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2 mb-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package firewall" }),
+      total === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "No data" }) : unprotectedManagers.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "All covered" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
+        unprotectedManagers.length,
+        " unprotected"
       ] })
+    ] }),
+    total === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Package manager coverage data is not available. Run Guard to collect supply chain metrics." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", children: [
+      protectedManagers.map((mgr) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2 py-1 border-b border-slate-100 last:border-b-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-mono text-brand-dark", children: mgr }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full border border-brand-green/25 bg-brand-green/[0.06] px-2.5 py-0.5 text-xs font-medium text-brand-green-text", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3 w-3", "aria-hidden": "true" }),
+          "Shim active"
+        ] })
+      ] }, mgr)),
+      unprotectedManagers.map((mgr) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2 py-1 border-b border-slate-100 last:border-b-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-mono text-brand-dark", children: mgr }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50/60 px-2.5 py-0.5 text-xs font-medium text-amber-700", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-3 w-3", "aria-hidden": "true" }),
+          "No shim"
+        ] })
+      ] }, mgr))
     ] })
   ] });
 }
