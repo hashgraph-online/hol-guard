@@ -390,7 +390,7 @@ def _failed_resume_message(action: str) -> str:
 def _blocked_resume_message() -> str:
     return (
         "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. "
-        "Ask for a safe alternative instead."
+        "Do not retry that action in Codex. Ask for a safe alternative instead."
     )
 
 
