@@ -36,13 +36,28 @@ To update an existing pipx install from PyPI:
 pipx upgrade hol-guard
 ```
 
+If you installed Guard with pipx, verify the active user command before testing local flows:
+
+```bash
+command -v hol-guard
+hol-guard --version
+```
+
+For a local wheel build, install into the pipx-managed `hol-guard` environment. Do not test with `PYTHONPATH=src`; that bypasses the same package path users run.
+
+```bash
+python3 -m build --wheel
+~/.local/pipx/venvs/hol-guard/bin/python -m pip install --force-reinstall dist/hol_guard-<version>-py3-none-any.whl
+hol-guard --version
+```
+
 To force a specific release, use Python package specifier syntax:
 
 ```bash
-pipx install --force 'hol-guard==2.0.323'
+pipx install --force 'hol-guard==2.0.342'
 ```
 
-Do not use `hol-guard@2.0.323`; pipx treats that as a separate app name, not a package version.
+Do not use `hol-guard@2.0.342`; pipx treats that as a separate app name, not a package version.
 
 `hol-guard init` is the first-run guided setup. It shows a progressive plan first, then gates each side effect: approve dashboard, Guard completes it, then approve app protection, Guard completes it, then approve Cloud connect and notifications. Nothing opens or changes until you approve that checkpoint. Use `hol-guard init --yes` only for automation when you already trust the plan.
 

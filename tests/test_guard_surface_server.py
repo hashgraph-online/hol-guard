@@ -30,7 +30,18 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            for route in ("/", "/home", "/inbox", "/fleet", "/evidence", "/settings"):
+            for route in (
+                "/",
+                "/home",
+                "/inbox",
+                "/fleet",
+                "/evidence",
+                "/supply-chain",
+                "/audit",
+                "/policy",
+                "/feed-health",
+                "/settings",
+            ):
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{daemon.port}{route}",
                     timeout=5,

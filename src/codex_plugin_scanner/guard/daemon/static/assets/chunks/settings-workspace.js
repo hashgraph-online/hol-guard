@@ -2554,79 +2554,92 @@ function ApprovalGateCard(props) {
   const totpPending = props.gateConfig?.totp_pending === true;
   const failClosed = props.gateConfig?.fail_closed === true;
   const cooldownLabel = cooldownExpiresAt ? new Date(cooldownExpiresAt).toLocaleTimeString() : null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-slate-50/40 p-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      SettingToggle,
-      {
-        id: "settings-approval-gate",
-        label: "Require password for approvals",
-        checked: props.enabled,
-        onChange: props.onToggle
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 px-1 text-xs text-slate-500", children: "By default, password proof protects allow decisions and broad trust changes. Enable strict mode below to require proof for block decisions too." }),
-    props.enabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-3", children: [
-      showCurrentPassword && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Current password" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "password",
-            autoComplete: "current-password",
-            value: props.currentPassword,
-            onChange: props.onCurrentPasswordChange,
-            className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-          }
-        )
-      ] }),
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 rounded-xl border border-slate-100 bg-slate-50/40 p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-start justify-between gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         SettingToggle,
         {
-          id: "settings-approval-gate-strict",
-          label: "Require password for block decisions too",
-          checked: props.strictAllDecisions,
-          onChange: props.onStrictAllDecisionsChange
+          id: "settings-approval-gate",
+          label: "Require password for approvals",
+          checked: props.enabled,
+          onChange: props.onToggle
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "New password" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "password",
-            autoComplete: "new-password",
-            value: props.newPassword,
-            onChange: props.onNewPasswordChange,
-            className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-          }
-        )
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Password proof protects allow decisions and broad trust changes. Enable strict mode to also require proof for block decisions." })
+    ] }) }),
+    failClosed && props.enabled && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", children: "Guard is in fail-closed mode. Fix approval gate state before making trust or policy changes." }) }),
+    props.enabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Gate credentials" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: wasConfigured ? "Enter current password to verify changes. Leave new password empty to keep the existing one." : "Choose a password to protect approval decisions." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [
+          showCurrentPassword && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Current password" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "password",
+                autoComplete: "current-password",
+                value: props.currentPassword,
+                onChange: props.onCurrentPasswordChange,
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "New password" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "password",
+                autoComplete: "new-password",
+                value: props.newPassword,
+                onChange: props.onNewPasswordChange,
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Confirm new password" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "password",
+                autoComplete: "new-password",
+                value: props.confirmPassword,
+                onChange: props.onConfirmPasswordChange,
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] })
+        ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Confirm password" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "password",
-            autoComplete: "new-password",
-            value: props.confirmPassword,
-            onChange: props.onConfirmPasswordChange,
-            className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-          }
-        )
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Gate rules" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            SettingToggle,
+            {
+              id: "settings-approval-gate-strict",
+              label: "Require password for block decisions too",
+              checked: props.strictAllDecisions,
+              onChange: props.onStrictAllDecisionsChange
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Cooldown after approval" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "select",
+              {
+                value: String(props.cooldownSeconds),
+                onChange: props.onCooldownChange,
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+                children: cooldownOptions.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
+              }
+            )
+          ] })
+        ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Cooldown after approval" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "select",
-          {
-            value: String(props.cooldownSeconds),
-            onChange: props.onCooldownChange,
-            className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20",
-            children: cooldownOptions.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
-          }
-        )
-      ] }),
-      failClosed && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", children: "Guard is in fail-closed mode. Fix approval gate state before making trust or policy changes." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl border border-brand-blue/15 bg-white", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-3", children: [
@@ -2702,12 +2715,13 @@ function ApprovalGateCard(props) {
           }
         )
       ] }),
-      cooldownActive && cooldownLabel !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-brand-dark", children: [
+      cooldownActive && cooldownLabel !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Active cooldown" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-brand-dark", children: [
           "Cooldown active until ",
           cooldownLabel
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 space-y-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Password to revoke" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2717,7 +2731,7 @@ function ApprovalGateCard(props) {
                 autoComplete: "current-password",
                 value: props.revokePassword,
                 onChange: props.onRevokePasswordChange,
-                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
           ] }),
@@ -2731,7 +2745,7 @@ function ApprovalGateCard(props) {
                 pattern: "[0-9]*",
                 value: props.totpCode,
                 onChange: props.onTotpCodeChange,
-                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               }
             )
           ] }),
