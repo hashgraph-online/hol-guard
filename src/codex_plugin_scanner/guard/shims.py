@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -300,12 +301,15 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
     shim_dir = context.guard_home / "package-shims" / "bin"
     stored_hashes: dict[str, str] = manifest.get("content_hashes", {})
     active_managers: list[str] = []
+    protected_managers: list[str] = []
     missing_managers: list[str] = []
+    bypasses: list[dict[str, str]] = []
     manager_details: list[dict[str, object]] = []
     for manager in installed_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
         shim_path = shim_dir / command
         exists = shim_path.exists()
+        path_status = get_path_order_status(context, manager=manager)
         if exists:
             active_managers.append(manager)
             current_hash = build_shim_content_hash(shim_path.read_bytes())
@@ -323,16 +327,46 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
             {
                 "integrity": integrity,
                 "manager": manager,
+                "path_active": bool(path_status.get("shim_precedes_real")),
+                "path_status": path_status,
                 "shim_path": str(shim_path),
             }
         )
+        if exists and bool(path_status.get("shim_precedes_real")):
+            protected_managers.append(manager)
+        elif exists:
+            bypasses.append(
+                {
+                    "manager": manager,
+                    "reason": "path_inactive",
+                }
+            )
     return {
         "active_managers": active_managers,
         "installed_managers": installed_managers,
+        "protected_managers": protected_managers,
+        "path_active": bool(installed_managers) and len(protected_managers) == len(installed_managers),
+        "bypasses": bypasses,
         "manager_details": manager_details,
         "manifest_path": str(_package_shim_manifest_path(context)),
         "missing_managers": missing_managers,
         "shim_dir": str(shim_dir),
+    }
+
+
+def package_shim_cloud_coverage(
+    context: HarnessContext,
+    *,
+    generated_at: str | None = None,
+) -> dict[str, object]:
+    status = package_shim_status(context)
+    return {
+        "generatedAt": generated_at or datetime.now(timezone.utc).isoformat(),
+        "configuredManagers": list(status["installed_managers"]),
+        "protectedManagers": list(status["protected_managers"]),
+        "missingManagers": list(status["missing_managers"]),
+        "pathActive": bool(status["path_active"]),
+        "bypasses": list(status["bypasses"]),
     }
 
 
@@ -508,6 +542,7 @@ def _path_export_hint(shim_dir: Path) -> str:
 __all__ = [
     "install_guard_shim",
     "install_package_shims",
+    "package_shim_cloud_coverage",
     "package_shim_status",
     "package_shim_supported_managers",
     "remove_guard_shim",
