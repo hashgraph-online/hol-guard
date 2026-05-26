@@ -468,6 +468,82 @@ def test_guard_supply_chain_audit_before_after_limits_inventory_to_changed_depen
     ]
 
 
+def test_guard_supply_chain_audit_handles_large_workspace_and_prioritizes_findings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    dependencies = {f"pkg-{index}": "^1.0.0" for index in range(10_050)}
+    _write_text(
+        workspace_dir / "package.json",
+        json.dumps({"name": "large-workspace", "dependencies": dependencies}, sort_keys=True) + "\n",
+    )
+    store = GuardStore(home_dir)
+    _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
+    captured: dict[str, object] = {}
+
+    def _fake_cloud_audit(**kwargs: object) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+        captured.update(kwargs)
+        return (
+            {
+                "decision": "warn",
+                "packages": [
+                    {
+                        "name": "critical-lib",
+                        "ecosystem": "npm",
+                        "namespace": None,
+                        "decision": "block",
+                        "reasons": [{"code": "known_malware", "message": "known malware", "severity": "critical"}],
+                        "status": "known",
+                    },
+                    {
+                        "name": "medium-lib",
+                        "ecosystem": "npm",
+                        "namespace": None,
+                        "decision": "warn",
+                        "reasons": [{"code": "outdated", "message": "outdated dependency", "severity": "medium"}],
+                        "status": "known",
+                    },
+                ],
+                "reasons": [{"code": "known_malware", "message": "known malware", "severity": "critical"}],
+                "enforcement": "premium_cloud",
+                "entitlementState": "premium",
+                "cacheStatus": "miss",
+                "processedCount": 10_050,
+                "totalPackages": 10_050,
+                "status": "completed",
+                "workspaceId": WORKSPACE_ID,
+            },
+            None,
+        )
+
+    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+
+    rc = main(
+        [
+            "guard",
+            "supply-chain",
+            "audit",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    request_packages = captured["request_payload"]["packages"]
+
+    assert rc == 0
+    assert output["mode"] == "audit"
+    assert output["source"] == "cloud"
+    assert output["inventory"]["total_packages"] == 10_050
+    assert isinstance(request_packages, list)
+    assert len(request_packages) == 10_050
+    assert output["evaluation"]["packages"][0]["name"] == "critical-lib"
+
+
 def test_read_sbom_text_rejects_oversized_files(tmp_path: Path) -> None:
     sbom_path = tmp_path / "oversized-sbom.json"
     sbom_path.write_text("x" * ((10 * 1024 * 1024) + 1), encoding="utf-8")
