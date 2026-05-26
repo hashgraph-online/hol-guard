@@ -15,7 +15,7 @@ try:  # pragma: no cover - Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
-from ..codex_config import read_toml_payload, write_toml_payload
+from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -275,6 +275,35 @@ def _remove_managed_hook_events(hooks: dict[str, object]) -> tuple[dict[str, obj
     return updated_hooks, changed
 
 
+def _append_unique_hook_groups(existing_groups: object, incoming_groups: object) -> list[object]:
+    merged = list(existing_groups) if isinstance(existing_groups, list) else []
+    if not isinstance(incoming_groups, list):
+        return merged
+    for group in incoming_groups:
+        if group not in merged:
+            merged.append(group)
+    return merged
+
+
+def _migrate_hooks_json_into_config(config_payload: dict[str, object], hooks_payload: dict[str, object]) -> bool:
+    json_hooks = hooks_payload.get("hooks")
+    if not isinstance(json_hooks, dict):
+        return False
+    config_hooks = config_payload.get("hooks")
+    if not isinstance(config_hooks, dict):
+        config_hooks = {}
+    cleaned_json_hooks, _ = _remove_managed_hook_events(json_hooks)
+    changed = False
+    for event_name, groups in cleaned_json_hooks.items():
+        merged_groups = _append_unique_hook_groups(config_hooks.get(event_name), groups)
+        if merged_groups != config_hooks.get(event_name):
+            changed = True
+        config_hooks[event_name] = merged_groups
+    if config_hooks:
+        config_payload["hooks"] = config_hooks
+    return changed or bool(json_hooks)
+
+
 def _remove_managed_shell_guard_block(text: str) -> str:
     pattern = re.compile(
         rf"\n?{re.escape(_SHELL_GUARD_BEGIN)}.*?{re.escape(_SHELL_GUARD_END)}\n?",
@@ -450,6 +479,15 @@ class CodexHarnessAdapter(HarnessAdapter):
             paths.append(context.workspace_dir / ".codex" / "hooks.json")
         return tuple(paths)
 
+    @staticmethod
+    def _config_hook_pairs(context: HarnessContext) -> tuple[tuple[Path, Path], ...]:
+        pairs = [(context.home_dir / ".codex" / "config.toml", context.home_dir / ".codex" / "hooks.json")]
+        if context.workspace_dir is not None:
+            pairs.append(
+                (context.workspace_dir / ".codex" / "config.toml", context.workspace_dir / ".codex" / "hooks.json")
+            )
+        return tuple(pairs)
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         config_paths = [context.home_dir / ".codex" / "config.toml"]
         if context.workspace_dir is not None:
@@ -547,11 +585,15 @@ class CodexHarnessAdapter(HarnessAdapter):
         target_config_path = self._target_config_path(context)
         hook_payloads = self._load_hook_payloads(context)
         original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
+        payload = read_toml_payload(target_config_path)
+        target_hooks_migrated = _migrate_hooks_json_into_config(
+            payload, hook_payloads.get(self._hooks_path(context), {})
+        )
         backup_path = self._backup_path(context)
         if not backup_path.exists():
             backup_path.parent.mkdir(parents=True, exist_ok=True)
-            backup_path.write_text(original_text or "", encoding="utf-8")
-        payload = read_toml_payload(target_config_path)
+            backup_text = dump_toml(payload) if target_hooks_migrated else original_text or ""
+            backup_path.write_text(backup_text, encoding="utf-8")
         mcp_servers = payload.get("mcp_servers")
         if not isinstance(mcp_servers, dict):
             mcp_servers = {}
@@ -575,7 +617,12 @@ class CodexHarnessAdapter(HarnessAdapter):
             mcp_servers[server.name] = self._proxy_server_entry(context, server)
         payload["mcp_servers"] = mcp_servers
         write_toml_payload(target_config_path, payload)
-        hooks_path = self._install_hooks(context, payloads=hook_payloads)
+        self._migrate_alternate_hook_configs(
+            context,
+            payloads=hook_payloads,
+            skip_config_path=target_config_path,
+        )
+        hooks_path = self._remove_json_hook_files(context, payloads=hook_payloads)
         shell_guard_paths = self._install_shell_guards(context)
         shim_manifest = install_guard_shim(self.harness, context)
         return {
@@ -686,6 +733,36 @@ class CodexHarnessAdapter(HarnessAdapter):
             hooks_path: _strict_json_object(hooks_path, label="Codex hooks file")
             for hooks_path in self._all_hook_paths(context)
         }
+
+    def _migrate_alternate_hook_configs(
+        self,
+        context: HarnessContext,
+        *,
+        payloads: dict[Path, dict[str, object]],
+        skip_config_path: Path,
+    ) -> None:
+        for config_path, hooks_path in self._config_hook_pairs(context):
+            if config_path == skip_config_path:
+                continue
+            hooks_payload = payloads.get(hooks_path, {})
+            if not hooks_payload:
+                continue
+            config_payload = read_toml_payload(config_path)
+            _migrate_hooks_json_into_config(config_payload, hooks_payload)
+            if config_payload:
+                write_toml_payload(config_path, config_payload)
+
+    def _remove_json_hook_files(
+        self,
+        context: HarnessContext,
+        *,
+        payloads: dict[Path, dict[str, object]],
+    ) -> Path:
+        target_hooks_path = self._hooks_path(context)
+        for hooks_path in self._all_hook_paths(context):
+            if hooks_path in payloads and hooks_path.is_file():
+                hooks_path.unlink()
+        return target_hooks_path
 
     def _install_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
