@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, b as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, f as formatRelativeTime } from "../guard-dashboard.js";
 function resolveProtectionLevelCopy(level) {
   if (level === "gentle") {
     return "Monitors quietly, asks only for high-risk actions";
@@ -73,8 +73,28 @@ function DeviceProofCard(props) {
     timeValue !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: formatRelativeTime(timeValue) }) : null
   ] });
 }
+function resolvePackageManagerProtectionCopy(protection) {
+  if (protection === void 0) {
+    return {
+      pathLabel: "Status unknown",
+      pathDetail: "Supply-chain protection data is not available for this session.",
+      pathTone: "slate",
+      protectedList: [],
+      unprotectedList: []
+    };
+  }
+  const pathInPath = protection.path_status === "in_path";
+  return {
+    pathLabel: pathInPath ? "Guard shim directory is in PATH" : "Guard shim directory missing from PATH",
+    pathDetail: pathInPath ? `Package manager commands are intercepted via ${protection.shim_dir}.` : `The shim directory (${protection.shim_dir}) is not on PATH. Install bypass is possible for package managers that are not otherwise protected.`,
+    pathTone: pathInPath ? "green" : "attention",
+    protectedList: protection.protected_managers,
+    unprotectedList: protection.unprotected_managers
+  };
+}
 export {
   DeviceProofCard as D,
   resolveProtectionLevelCopy as a,
+  resolvePackageManagerProtectionCopy as b,
   resolveCloudIntelCopy as r
 };

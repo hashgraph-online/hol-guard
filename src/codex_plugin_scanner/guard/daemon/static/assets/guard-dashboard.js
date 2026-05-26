@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/runtime-overview.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/runtime-overview.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js","assets/chunks/supply-chain-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -13810,6 +13810,9 @@ function HiMiniSquares2X2(props) {
 function HiMiniSparkles(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" }, "child": [] }] })(props);
 }
+function HiMiniSignal(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M16.364 3.636a.75.75 0 0 0-1.06 1.06 7.5 7.5 0 0 1 0 10.607.75.75 0 0 0 1.06 1.061 9 9 0 0 0 0-12.728ZM4.697 4.697a.75.75 0 0 0-1.061-1.061 9 9 0 0 0 0 12.728.75.75 0 1 0 1.06-1.06 7.5 7.5 0 0 1 0-10.607Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M12.475 6.464a.75.75 0 0 1 1.06 0 5 5 0 0 1 0 7.072.75.75 0 0 1-1.06-1.061 3.5 3.5 0 0 0 0-4.95.75.75 0 0 1 0-1.06ZM7.525 6.464a.75.75 0 0 1 0 1.061 3.5 3.5 0 0 0 0 4.95.75.75 0 0 1-1.06 1.06 5 5 0 0 1 0-7.07.75.75 0 0 1 1.06 0ZM11 10a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" }, "child": [] }] })(props);
+}
 function HiMiniShieldCheck(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Zm4.196 5.954a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -13839,6 +13842,9 @@ function HiMiniLockClosed(props) {
 }
 function HiMiniListBullet(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniLink(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" }, "child": [] }] })(props);
 }
 function HiMiniKey(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13936,6 +13942,9 @@ function HiMiniChartBar(props) {
 function HiMiniCalendarDays(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M5.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H6a.75.75 0 0 1-.75-.75V12ZM6 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H6ZM7.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H8a.75.75 0 0 1-.75-.75V12ZM8 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H8ZM9.25 10a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H10a.75.75 0 0 1-.75-.75V10ZM10 11.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V12a.75.75 0 0 0-.75-.75H10ZM9.25 14a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H10a.75.75 0 0 1-.75-.75V14ZM12 9.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V10a.75.75 0 0 0-.75-.75H12ZM11.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H12a.75.75 0 0 1-.75-.75V12ZM12 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H12ZM13.25 10a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H14a.75.75 0 0 1-.75-.75V10ZM14 11.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V12a.75.75 0 0 0-.75-.75H14Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniBugAnt(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.56 1.14a.75.75 0 0 1 .177 1.045 3.989 3.989 0 0 0-.464.86c.185.17.382.329.59.473A3.993 3.993 0 0 1 10 2c1.272 0 2.405.594 3.137 1.518.208-.144.405-.302.59-.473a3.989 3.989 0 0 0-.464-.86.75.75 0 0 1 1.222-.869c.369.519.65 1.105.822 1.736a.75.75 0 0 1-.174.707 7.03 7.03 0 0 1-1.299 1.098A4 4 0 0 1 14 6c0 .52-.301.963-.723 1.187a6.961 6.961 0 0 1-1.158.486c.13.208.231.436.296.679 1.413-.174 2.779-.5 4.081-.96a19.655 19.655 0 0 0-.09-2.319.75.75 0 1 1 1.493-.146 21.239 21.239 0 0 1 .08 3.028.75.75 0 0 1-.482.667 20.873 20.873 0 0 1-5.153 1.249 2.521 2.521 0 0 1-.107.247 20.945 20.945 0 0 1 5.252 1.257.75.75 0 0 1 .482.74 20.945 20.945 0 0 1-.908 5.107.75.75 0 0 1-1.433-.444c.415-1.34.69-2.743.806-4.191-.495-.173-1-.327-1.512-.46.05.284.076.575.076.873 0 1.814-.517 3.312-1.426 4.37A4.639 4.639 0 0 1 10 19a4.639 4.639 0 0 1-3.574-1.63C5.516 16.311 5 14.813 5 13c0-.298.026-.59.076-.873-.513.133-1.017.287-1.512.46.116 1.448.39 2.85.806 4.191a.75.75 0 1 1-1.433.444 20.94 20.94 0 0 1-.908-5.107.75.75 0 0 1 .482-.74 20.838 20.838 0 0 1 5.252-1.257 2.493 2.493 0 0 1-.107-.247 20.874 20.874 0 0 1-5.153-1.249.75.75 0 0 1-.482-.667 21.342 21.342 0 0 1 .08-3.028.75.75 0 1 1 1.493.146 19.745 19.745 0 0 0-.09 2.319c1.302.46 2.668.786 4.08.96.066-.243.166-.471.297-.679a6.962 6.962 0 0 1-1.158-.486A1.348 1.348 0 0 1 6 6a4 4 0 0 1 .166-1.143 7.032 7.032 0 0 1-1.3-1.098.75.75 0 0 1-.173-.707 5.48 5.48 0 0 1 .822-1.736.75.75 0 0 1 1.046-.177Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniBolt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M11.983 1.907a.75.75 0 0 0-1.292-.657l-8.5 9.5A.75.75 0 0 0 2.75 12h6.572l-1.305 6.093a.75.75 0 0 0 1.292.657l8.5-9.5A.75.75 0 0 0 17.25 8h-6.572l1.305-6.093Z" }, "child": [] }] })(props);
 }
@@ -13944,6 +13953,9 @@ function HiMiniBellAlert(props) {
 }
 function HiMiniArrowTopRightOnSquare(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowRight(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniArrowPath(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -14512,6 +14524,10 @@ const sidebarLinks = [
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
+  { href: "/supply-chain", label: "Supply Chain", view: "supply-chain", icon: HiMiniLink },
+  { href: "/audit", label: "Audit", view: "audit", icon: HiMiniBugAnt },
+  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniMagnifyingGlass },
+  { href: "/feed-health", label: "Feed Health", view: "feed-health", icon: HiMiniCog6Tooth },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
 ];
 function ShellSidebar(props) {
@@ -16308,6 +16324,52 @@ function DetailRow({ label, value, mono }) {
     )
   ] });
 }
+function NextSafeCommandHint({ receipt }) {
+  const category = detectCategory(receipt);
+  let hint = null;
+  if (category === "supply-chain") {
+    hint = `Review the package source and version, then approve it from the review queue if it is safe.`;
+  } else if (category === "tool-call" || category === "mcp") {
+    hint = "Review the tool call in Evidence, then approve it in the review queue if it is safe.";
+  } else if (category === "file-write" || category === "destructive") {
+    hint = "Check if the file operation is expected, then allow it from the review queue.";
+  } else if (category === "secret" || category === "network") {
+    hint = "Inspect the access pattern, then update your policy rules if this should be allowed.";
+  }
+  if (!hint) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue mb-1", children: "Next safe step" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-dark/80", children: hint })
+  ] });
+}
+function EvidenceTimeline({ receipt }) {
+  const events = [
+    {
+      label: "Action received",
+      time: receipt.timestamp,
+      icon: "start"
+    },
+    {
+      label: receipt.policy_decision === "allow" ? "Approved" : "Stopped",
+      time: receipt.timestamp,
+      icon: receipt.policy_decision === "allow" ? "allow" : "block"
+    }
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2", children: "Timeline" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "relative border-l border-slate-200 ml-2", "aria-label": "Evidence timeline", children: events.map((event, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "mb-2 ml-4 last:mb-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "span",
+        {
+          className: `absolute -left-1.5 flex h-3 w-3 items-center justify-center rounded-full border ${event.icon === "allow" ? "border-brand-green bg-brand-green/20" : event.icon === "block" ? "border-brand-attention bg-brand-attention/20" : "border-slate-300 bg-slate-100"}`,
+          "aria-hidden": "true"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-brand-dark", children: event.label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("time", { className: "text-[11px] text-slate-400", children: formatRelativeTime(event.time) })
+    ] }, i)) })
+  ] });
+}
 function EvidenceActionDetail({
   receipt,
   onClose
@@ -16384,6 +16446,12 @@ function EvidenceActionDetail({
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark leading-relaxed", children: description }),
           receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 italic leading-relaxed", children: receipt.capabilities_summary }),
+          receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1", children: "Provenance" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: receipt.provenance_summary })
+          ] }),
+          receipt.policy_decision === "block" && /* @__PURE__ */ jsxRuntimeExports.jsx(NextSafeCommandHint, { receipt }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTimeline, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalSection, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
@@ -18744,6 +18812,149 @@ function requiresApprovalPasswordPrompt(cooldownActive, strictAllDecisions, sele
   }
   return strictAllDecisions;
 }
+function WhyThisPaused(props) {
+  const signals = props.item.decision_v2_json?.signals ?? [];
+  const plainReasons = signals.filter((s) => s.plain_reason.trim().length > 0).map((s) => s.plain_reason);
+  const reasons = plainReasons.length > 0 ? plainReasons : props.item.why_now ? [props.item.why_now] : [];
+  if (reasons.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground", children: "Why this was paused" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-1", children: reasons.map((reason) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-2 text-sm text-brand-dark/80", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-purple/60" }),
+      reason
+    ] }, reason)) })
+  ] });
+}
+function ApproveConsequence(props) {
+  const text = props.isCodex === true ? "If you approve: Codex will continue the blocked action automatically." : props.retryInstruction !== null ? `If you approve: ${props.retryInstruction}` : "If you approve: HOL Guard will let this action run and remember your choice within the selected scope.";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: text })
+  ] });
+}
+function BlockConsequence(props) {
+  const text = props.isCodex === true ? "If you block: Codex will stop here. Return to your terminal to continue with a different approach." : "If you block: HOL Guard will stop this action and you can allow it again any time from the Review Queue.";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-purple", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: text })
+  ] });
+}
+function ApprovalPasswordModal(props) {
+  const passwordRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    const timer = setTimeout(() => {
+      passwordRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, []);
+  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
+  const handleBackdropClick = reactExports.useCallback(
+    (e) => {
+      if (e.target === e.currentTarget) props.onCancel();
+    },
+    [props.onCancel]
+  );
+  const handleKeyDown = reactExports.useCallback(
+    (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        props.onSubmit();
+      }
+    },
+    [props.onSubmit]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm",
+      onClick: handleBackdropClick,
+      onKeyDown: handleKeyDown,
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "approval-password-modal-title",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "h2",
+              {
+                id: "approval-password-modal-title",
+                className: "text-lg font-semibold tracking-tight text-brand-dark",
+                children: "Approval password required"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: "Guard needs a fresh proof before it can save this decision." })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Approval password" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                ref: passwordRef,
+                type: "password",
+                autoComplete: "current-password",
+                value: props.approvalPassword,
+                onChange: props.onApprovalPasswordChange,
+                className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          props.gate.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "Authenticator code" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "text",
+                inputMode: "numeric",
+                pattern: "[0-9]*",
+                value: props.approvalTotpCode,
+                onChange: props.onApprovalTotpCodeChange,
+                className: "mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              }
+            )
+          ] }),
+          showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-sm text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: props.useCooldown,
+                onChange: props.onUseCooldownChange,
+                className: "h-4 w-4 accent-brand-blue"
+              }
+            ),
+            "Skip password for next ",
+            approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
+            " (use cooldown)"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onCancel,
+              className: "rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
+              children: "Go back"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onSubmit,
+              className: "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90",
+              children: props.submitLabel
+            }
+          )
+        ] })
+      ] })
+    }
+  );
+}
 const scopeChoices = [
   {
     value: "artifact",
@@ -19321,6 +19532,7 @@ function ReviewDecisionCard(props) {
   const [approvalPassword, setApprovalPassword] = reactExports.useState("");
   const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
   const [useCooldown, setUseCooldown] = reactExports.useState(false);
+  const [pendingAction, setPendingAction] = reactExports.useState(null);
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
   const availableScopeChoices = reactExports.useMemo(
@@ -19339,6 +19551,10 @@ function ReviewDecisionCard(props) {
     () => item ? advancedScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value === "global"),
     [item]
   );
+  const gateRequiresPassword = reactExports.useMemo(() => {
+    const gate = props.approvalGate;
+    return gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
+  }, [props.approvalGate, scope]);
   reactExports.useEffect(() => {
     if (item) {
       setScope(normalizeDecisionScope(item, item.recommended_scope));
@@ -19349,6 +19565,7 @@ function ReviewDecisionCard(props) {
       setApprovalPassword("");
       setApprovalTotpCode("");
       setUseCooldown(false);
+      setPendingAction(null);
     }
   }, [item?.request_id]);
   reactExports.useEffect(() => {
@@ -19358,7 +19575,7 @@ function ReviewDecisionCard(props) {
   }, []);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
-      if (submitting !== null) return;
+      if (submitting !== null || pendingAction !== null) return;
       const target = event.target;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
       if (event.key === "a" || event.key === "A") {
@@ -19377,7 +19594,7 @@ function ReviewDecisionCard(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, scope, item?.request_id, availableScopeChoices]);
+  }, [submitting, pendingAction, scope, item?.request_id, availableScopeChoices]);
   const handleResolve = reactExports.useCallback(
     async (action) => {
       if (!item) return;
@@ -19401,6 +19618,7 @@ function ReviewDecisionCard(props) {
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
+        setPendingAction(null);
         timerRef.current = setTimeout(() => setResolved(null), 2e3);
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
@@ -19413,9 +19631,14 @@ function ReviewDecisionCard(props) {
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
       setLastAction(action);
+      if (gateRequiresPassword) {
+        setPendingAction(action);
+        setErrorMessage(null);
+        return;
+      }
       void handleResolve(action);
     },
-    [handleResolve]
+    [handleResolve, gateRequiresPassword]
   );
   const handleAllow = reactExports.useCallback(() => {
     handleRequestResolve("allow");
@@ -19423,6 +19646,17 @@ function ReviewDecisionCard(props) {
   const handleBlock = reactExports.useCallback(() => {
     handleRequestResolve("block");
   }, [handleRequestResolve]);
+  const handleModalSubmit = reactExports.useCallback(() => {
+    if (pendingAction !== null) {
+      void handleResolve(pendingAction);
+    }
+  }, [pendingAction, handleResolve]);
+  const handleModalCancel = reactExports.useCallback(() => {
+    setPendingAction(null);
+    setApprovalPassword("");
+    setApprovalTotpCode("");
+    setUseCooldown(false);
+  }, []);
   const handleToggleConsequences = reactExports.useCallback(() => {
     setShowConsequences((visible) => !visible);
   }, []);
@@ -19567,22 +19801,6 @@ function ReviewDecisionCard(props) {
           )
         ] })
       ] }) }),
-      props.approvalGate?.enabled === true && props.approvalGate?.configured === true && requiresApprovalPasswordPrompt(
-        props.approvalGate.cooldown_active,
-        props.approvalGate.strict_all_decisions,
-        scope
-      ) && /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ApprovalPasswordPrompt,
-        {
-          gate: props.approvalGate,
-          approvalPassword,
-          approvalTotpCode,
-          useCooldown,
-          onApprovalPasswordChange: handleApprovalPasswordChange,
-          onApprovalTotpCodeChange: handleApprovalTotpCodeChange,
-          onUseCooldownChange: handleUseCooldownChange
-        }
-      ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActionButton,
@@ -19590,7 +19808,7 @@ function ReviewDecisionCard(props) {
             ref: allowButtonRef,
             variant: "success",
             onClick: handleAllow,
-            disabled: submitting !== null,
+            disabled: submitting !== null || pendingAction !== null,
             children: submitting === "allow" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
               "Approving..."
@@ -19605,7 +19823,7 @@ function ReviewDecisionCard(props) {
           {
             variant: "outline",
             onClick: handleBlock,
-            disabled: submitting !== null,
+            disabled: submitting !== null || pendingAction !== null,
             children: submitting === "block" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
               "Blocking..."
@@ -19657,7 +19875,22 @@ function ReviewDecisionCard(props) {
           field
         ] }, field)) })
       ] })
-    ] })
+    ] }),
+    pendingAction !== null && props.approvalGate !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalPasswordModal,
+      {
+        gate: props.approvalGate,
+        approvalPassword,
+        approvalTotpCode,
+        useCooldown,
+        onApprovalPasswordChange: handleApprovalPasswordChange,
+        onApprovalTotpCodeChange: handleApprovalTotpCodeChange,
+        onUseCooldownChange: handleUseCooldownChange,
+        onSubmit: handleModalSubmit,
+        onCancel: handleModalCancel,
+        submitLabel: pendingAction === "allow" ? allowButtonLabel(scope) : "Keep blocked"
+      }
+    )
   ] });
 }
 function ScopeChoiceButton(props) {
@@ -19752,66 +19985,6 @@ function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRetryResu
           item
         ] }, item)) })
       ] })
-    ] })
-  ] });
-}
-function ApprovalPasswordPrompt(props) {
-  const showCooldownOption = props.gate.cooldown_seconds > 0 && !props.gate.cooldown_active && props.gate.totp_enabled !== true;
-  const codePreview = (props.approvalTotpCode ?? "").padEnd(6, " ").slice(0, 6).split("");
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 overflow-hidden rounded-2xl border border-brand-blue/20 bg-white shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 border-b border-brand-blue/10 bg-brand-blue/[0.04] p-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-5 w-5", "aria-hidden": "true" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.gate.totp_enabled === true ? "Authenticator check required" : "Approval password required" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: "Guard needs a fresh proof before it can save this decision." })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 p-4 md:grid-cols-[1fr_220px]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "password",
-            autoComplete: "current-password",
-            value: props.approvalPassword,
-            onChange: props.onApprovalPasswordChange,
-            className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          }
-        )
-      ] }),
-      props.gate.totp_enabled === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "block", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Authenticator code" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid grid-cols-6 gap-1.5", "aria-hidden": "true", children: codePreview.map((digit, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-lg font-semibold text-brand-dark", children: digit.trim() ? digit : "•" }, `${index}-${digit}`)) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "text",
-            inputMode: "numeric",
-            pattern: "[0-9]*",
-            maxLength: 6,
-            value: props.approvalTotpCode,
-            onChange: props.onApprovalTotpCodeChange,
-            placeholder: "123456",
-            className: "mt-2 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-            "aria-label": "Enter authenticator code"
-          }
-        )
-      ] })
-    ] }),
-    showCooldownOption && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mx-4 mb-4 flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-brand-dark", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "checkbox",
-          checked: props.useCooldown,
-          onChange: props.onUseCooldownChange,
-          className: "h-4 w-4 accent-brand-blue"
-        }
-      ),
-      "Skip password for next ",
-      approvalGateCooldownLabel(props.gate.cooldown_seconds).toLowerCase(),
-      " (use cooldown)"
     ] })
   ] });
 }
@@ -19959,33 +20132,6 @@ function QueueChipFilter(props) {
     ))
   ] });
 }
-function WhyThisPaused(props) {
-  const signals = props.item.decision_v2_json?.signals ?? [];
-  const plainReasons = signals.filter((s) => s.plain_reason.trim().length > 0).map((s) => s.plain_reason);
-  const reasons = plainReasons.length > 0 ? plainReasons : props.item.why_now ? [props.item.why_now] : [];
-  if (reasons.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-1", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground", children: "Why this was paused" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-1", children: reasons.map((reason) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-start gap-2 text-sm text-brand-dark/80", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-purple/60" }),
-      reason
-    ] }, reason)) })
-  ] });
-}
-function ApproveConsequence(props) {
-  const text = props.isCodex === true ? "If you approve: Codex will continue the blocked action automatically." : props.retryInstruction !== null ? `If you approve: ${props.retryInstruction}` : "If you approve: HOL Guard will let this action run and remember your choice within the selected scope.";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green", "aria-hidden": "true" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: text })
-  ] });
-}
-function BlockConsequence(props) {
-  const text = props.isCodex === true ? "If you block: Codex will stop here. Return to your terminal to continue with a different approach." : "If you block: HOL Guard will stop this action and you can allow it again any time from the Review Queue.";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-purple", "aria-hidden": "true" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-muted-foreground", children: text })
-  ] });
-}
 const scopeOptions = [
   {
     value: "artifact",
@@ -20051,7 +20197,7 @@ function ApprovalCenterLayout(props) {
         onBulkBlock: props.onBulkBlock
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "supply-chain" ? props.supplyChainContent ?? null : props.view === "audit" ? props.auditContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "feed-health" ? props.feedHealthContent ?? null : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewWorkspace,
       {
         requests: props.requests.kind === "ready" ? props.requests.items : [],
@@ -20230,7 +20376,8 @@ function QueueWorkspace(props) {
         {
           detail: props.detail,
           onGoHome: props.onGoHome,
-          onResolve: props.onResolve
+          onResolve: props.onResolve,
+          approvalGate: props.approvalGate ?? null
         }
       ) })
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -20251,7 +20398,8 @@ function QueueWorkspace(props) {
         {
           detail: props.detail,
           onGoHome: props.onGoHome,
-          onResolve: props.onResolve
+          onResolve: props.onResolve,
+          approvalGate: props.approvalGate ?? null
         }
       )
     ] })
@@ -20809,8 +20957,16 @@ function DecisionWorkspace(props) {
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
   const [resolvedBanner, setResolvedBanner] = reactExports.useState(null);
   const [resolvedState, setResolvedState] = reactExports.useState("idle");
+  const [approvalPassword, setApprovalPassword] = reactExports.useState("");
+  const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
+  const [useCooldown, setUseCooldown] = reactExports.useState(false);
+  const [pendingAction, setPendingAction] = reactExports.useState(null);
   const bannerTimerRef = reactExports.useRef(null);
   const prevRequestIdRef = reactExports.useRef(null);
+  const gateRequiresPassword = reactExports.useMemo(() => {
+    const gate = props.approvalGate;
+    return gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
+  }, [props.approvalGate, scope]);
   reactExports.useEffect(() => {
     if (props.detail.kind === "ready") {
       const isNewItem = props.detail.item.request_id !== prevRequestIdRef.current;
@@ -20818,6 +20974,10 @@ function DecisionWorkspace(props) {
       if (isNewItem) {
         setResolvedBanner(null);
         setResolvedState("loaded");
+        setApprovalPassword("");
+        setApprovalTotpCode("");
+        setUseCooldown(false);
+        setPendingAction(null);
         if (bannerTimerRef.current !== null) {
           clearTimeout(bannerTimerRef.current);
           bannerTimerRef.current = null;
@@ -20842,14 +21002,25 @@ function DecisionWorkspace(props) {
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve(buildDecisionPayload({
-          item: readyItem,
-          action,
-          scope,
-          reason
-        }));
+        const gate = props.approvalGate;
+        const includeGateFields = gate?.enabled === true && gate?.configured === true && requiresApprovalPasswordPrompt(gate.cooldown_active, gate.strict_all_decisions, scope);
+        await props.onResolve({
+          ...buildDecisionPayload({
+            item: readyItem,
+            action,
+            scope,
+            reason
+          }),
+          ...includeGateFields ? { approval_password: approvalPassword } : {},
+          ...includeGateFields && gate?.totp_enabled === true ? { approval_totp_code: approvalTotpCode } : {},
+          ...includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}
+        });
         setResolvedState("decided");
         setResolvedBanner(action);
+        setApprovalPassword("");
+        setApprovalTotpCode("");
+        setUseCooldown(false);
+        setPendingAction(null);
         bannerTimerRef.current = setTimeout(() => {
           setResolvedBanner(null);
         }, 1500);
@@ -20858,20 +21029,45 @@ function DecisionWorkspace(props) {
         setSubmitting(null);
       }
     },
-    [props.onResolve, readyItem, reason, scope]
+    [props.onResolve, props.approvalGate, readyItem, reason, scope, approvalPassword, approvalTotpCode, useCooldown]
   );
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
+      if (gateRequiresPassword) {
+        setPendingAction(action);
+        setErrorMessage(null);
+        return;
+      }
       void handleResolve(action);
     },
-    [handleResolve]
+    [handleResolve, gateRequiresPassword]
   );
   const handleAllowDirect = reactExports.useCallback(() => handleRequestResolve("allow"), [handleRequestResolve]);
   const handleBlockDirect = reactExports.useCallback(() => handleRequestResolve("block"), [handleRequestResolve]);
+  const handleModalSubmit = reactExports.useCallback(() => {
+    if (pendingAction !== null) {
+      void handleResolve(pendingAction);
+    }
+  }, [pendingAction, handleResolve]);
+  const handleModalCancel = reactExports.useCallback(() => {
+    setPendingAction(null);
+    setApprovalPassword("");
+    setApprovalTotpCode("");
+    setUseCooldown(false);
+  }, []);
+  const handleApprovalPasswordChange = reactExports.useCallback((event) => {
+    setApprovalPassword(event.target.value);
+  }, []);
+  const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
+    setApprovalTotpCode(event.target.value);
+  }, []);
+  const handleUseCooldownChange = reactExports.useCallback((event) => {
+    setUseCooldown(event.target.checked);
+  }, []);
   reactExports.useEffect(() => {
     if (props.detail.kind !== "ready") return;
     const onKeyDown = (event) => {
-      if (submitting !== null) return;
+      if (submitting !== null || pendingAction !== null) return;
       const target = event.target;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable) return;
       if (event.key === "a" || event.key === "A") handleRequestResolve("allow");
@@ -20879,7 +21075,7 @@ function DecisionWorkspace(props) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.detail.kind, submitting, handleRequestResolve]);
+  }, [props.detail.kind, submitting, pendingAction, handleRequestResolve]);
   if (props.detail.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       resolvedState === "decided" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -20982,7 +21178,22 @@ function DecisionWorkspace(props) {
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSectionFull, { item }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(WhatChanged, { item, diff, receipt, policy })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(WhatChanged, { item, diff, receipt, policy }),
+    pendingAction !== null && props.approvalGate != null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalPasswordModal,
+      {
+        gate: props.approvalGate,
+        approvalPassword,
+        approvalTotpCode,
+        useCooldown,
+        onApprovalPasswordChange: handleApprovalPasswordChange,
+        onApprovalTotpCodeChange: handleApprovalTotpCodeChange,
+        onUseCooldownChange: handleUseCooldownChange,
+        onSubmit: handleModalSubmit,
+        onCancel: handleModalCancel,
+        submitLabel: pendingAction === "allow" ? allowLabel : "Keep blocked"
+      }
+    )
   ] });
 }
 function InlineScannerSection(props) {
@@ -21619,6 +21830,10 @@ const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chu
 const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,2,4,1]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([6,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([7,1]) : void 0).then((m) => ({ default: m.HelpModal })));
+const SupplyChainWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/supply-chain-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace })));
+const AuditWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/audit-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AuditWorkspace })));
+const PolicyWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/policy-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspace })));
+const FeedHealthWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/feed-health-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.FeedHealthWorkspace })));
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
@@ -21670,6 +21885,18 @@ function resolveView(pathname) {
   }
   if (pathname === "/evidence") {
     return "evidence";
+  }
+  if (pathname === "/supply-chain") {
+    return "supply-chain";
+  }
+  if (pathname === "/audit") {
+    return "audit";
+  }
+  if (pathname === "/policy") {
+    return "policy";
+  }
+  if (pathname === "/feed-health") {
+    return "feed-health";
   }
   if (pathname === "/inbox" || pathname === "/requests" || pathname === "/approvals" || pathname.startsWith("/requests/") || pathname.startsWith("/approvals/")) {
     return "inbox";
@@ -21856,6 +22083,10 @@ function App() {
   const handleOpenFleet = reactExports.useCallback(() => navigate("/fleet"), []);
   const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
   const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
+  const handleOpenSupplyChain = reactExports.useCallback(() => navigate("/supply-chain"), []);
+  reactExports.useCallback(() => navigate("/audit"), []);
+  reactExports.useCallback(() => navigate("/policy"), []);
+  reactExports.useCallback(() => navigate("/feed-health"), []);
   const handleOpenHelp = reactExports.useCallback(() => setHelpOpen(true), []);
   const handleCloseHelp = reactExports.useCallback(() => setHelpOpen(false), []);
   const handleGoHome = reactExports.useCallback(() => navigate("/"), []);
@@ -22095,7 +22326,7 @@ function App() {
         children: "Skip to content"
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : "App detail" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : view === "supply-chain" ? "Supply Chain" : view === "audit" ? "Audit" : view === "policy" ? "Policy" : view === "feed-health" ? "Feed Health" : "App detail" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalCenterLayout,
       {
@@ -22120,6 +22351,7 @@ function App() {
             onOpenFleet: handleOpenFleet,
             onOpenEvidence: handleOpenEvidence,
             onOpenSettings: handleOpenSettings,
+            onOpenSupplyChain: handleOpenSupplyChain,
             onClearPolicies: handleClearPolicies,
             onOpenAppDetail: handleOpenAppDetail,
             clearConfirm,
@@ -22151,7 +22383,37 @@ function App() {
           }
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
-        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) })
+        settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) }),
+        supplyChainContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SupplyChainWorkspace,
+          {
+            snapshot: runtime.snapshot,
+            onGoHome: handleGoHome
+          }
+        ) }) : null,
+        auditContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          AuditWorkspace,
+          {
+            snapshot: runtime.snapshot,
+            receipts: receipts.kind === "ready" ? receipts.items : []
+          }
+        ) }) : null,
+        policyContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          PolicyWorkspace,
+          {
+            policies: policies.kind === "ready" ? policies.items : [],
+            snapshot: runtime.snapshot,
+            onClearPolicy: handleClearPolicy,
+            onOpenSettings: handleOpenSettings
+          }
+        ) }) : null,
+        feedHealthContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          FeedHealthWorkspace,
+          {
+            snapshot: runtime.snapshot,
+            onOpenSettings: handleOpenSettings
+          }
+        ) }) : null
       }
     ),
     helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) })
@@ -22165,72 +22427,76 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniArrowLeft as $,
+  fetchApprovalPage as $,
   ActionButton as A,
   Badge as B,
-  fetchRuntimeSnapshot as C,
-  revokeApprovalGateCooldown as D,
+  getDefaultExportFromCjs as C,
+  fetchSettings as D,
   EmptyState as E,
-  enrollApprovalGateTotp as F,
+  fetchRuntimeSnapshot as F,
   GuardHero as G,
-  HiMiniCheckCircle as H,
-  verifyApprovalGateTotp as I,
-  disableApprovalGateTotp as J,
-  updateSettings as K,
-  clearPolicy as L,
-  clearReviewQueue as M,
-  clearEvidence as N,
-  exportDiagnostics as O,
+  HiMiniShieldCheck as H,
+  revokeApprovalGateCooldown as I,
+  enrollApprovalGateTotp as J,
+  verifyApprovalGateTotp as K,
+  disableApprovalGateTotp as L,
+  updateSettings as M,
+  clearPolicy as N,
+  clearReviewQueue as O,
   ProofStrip as P,
-  repairApprovalCenter as Q,
-  setupDesktopNotifications as R,
+  clearEvidence as Q,
+  exportDiagnostics as R,
   SectionLabel as S,
   Tag as T,
-  HiMiniMagnifyingGlass as U,
-  HiMiniLockClosed as V,
-  HiMiniCog6Tooth as W,
-  HiMiniBellAlert as X,
-  approvalGateCooldownLabel as Y,
-  fetchApprovalPage as Z,
-  fetchPolicy as _,
-  HiMiniShieldCheck as a,
-  HiMiniHome as a0,
-  HiMiniAdjustmentsHorizontal as a1,
-  detectCategory as a2,
-  CATEGORIES as a3,
-  policyIdentityKey as a4,
-  HiMiniChartBar as a5,
-  runHarnessAction as a6,
-  GuardHarnessActionError as a7,
-  HiMiniRocketLaunch as a8,
-  HiMiniArrowPath as a9,
-  HiMiniTrash as aa,
-  clearLabelForScope as ab,
-  formatHarnessCommand as ac,
-  HiMiniCommandLine as ad,
-  formatRelativeTime as b,
-  HiMiniSparkles as c,
-  HiMiniXMark as d,
-  HiMiniChevronUp as e,
-  formatNumber as f,
-  HiMiniChevronDown as g,
+  repairApprovalCenter as U,
+  setupDesktopNotifications as V,
+  HiMiniMagnifyingGlass as W,
+  HiMiniLockClosed as X,
+  HiMiniCog6Tooth as Y,
+  HiMiniBellAlert as Z,
+  approvalGateCooldownLabel as _,
+  HiMiniExclamationTriangle as a,
+  fetchPolicy as a0,
+  HiMiniArrowLeft as a1,
+  HiMiniHome as a2,
+  HiMiniAdjustmentsHorizontal as a3,
+  detectCategory as a4,
+  CATEGORIES as a5,
+  policyIdentityKey as a6,
+  HiMiniChartBar as a7,
+  runHarnessAction as a8,
+  GuardHarnessActionError as a9,
+  HiMiniRocketLaunch as aa,
+  HiMiniArrowPath as ab,
+  HiMiniTrash as ac,
+  clearLabelForScope as ad,
+  formatHarnessCommand as ae,
+  HiMiniCommandLine as af,
+  HiMiniSignal as ag,
+  HiMiniClock as ah,
+  HiMiniInformationCircle as b,
+  HiMiniArrowRight as c,
+  HiMiniCheckCircle as d,
+  HiMiniXCircle as e,
+  formatRelativeTime as f,
+  formatNumber as g,
   harnessDisplayName as h,
   isDisplayableHarness as i,
   jsxRuntimeExports as j,
-  HiMiniCloud as k,
-  HiMiniQuestionMarkCircle as l,
-  HiMiniExclamationTriangle as m,
-  HiMiniBolt as n,
-  HiMiniChevronRight as o,
-  HiMiniMinusCircle as p,
-  HiMiniEye as q,
+  HiMiniSparkles as k,
+  HiMiniXMark as l,
+  HiMiniChevronUp as m,
+  HiMiniChevronDown as n,
+  HiMiniCloud as o,
+  HiMiniQuestionMarkCircle as p,
+  HiMiniBolt as q,
   reactExports as r,
-  HiMiniWrenchScrewdriver as s,
-  HiMiniXCircle as t,
-  HiMiniExclamationCircle as u,
-  HiMiniClipboardDocumentCheck as v,
-  HiMiniClipboard as w,
-  requireReact as x,
-  getDefaultExportFromCjs as y,
-  fetchSettings as z
+  HiMiniChevronRight as s,
+  HiMiniMinusCircle as t,
+  HiMiniEye as u,
+  HiMiniWrenchScrewdriver as v,
+  HiMiniExclamationCircle as w,
+  HiMiniClipboardDocumentCheck as x,
+  HiMiniClipboard as y,
+  requireReact as z
 };

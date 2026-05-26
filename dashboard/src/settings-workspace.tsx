@@ -1035,7 +1035,14 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 <legend className="sr-only">Feature toggles</legend>
                 <SettingToggle id="settings-telemetry" label="Telemetry" checked={draft.telemetry} onChange={handleBooleanChange("telemetry")} />
                 <SettingToggle id="settings-cloud-sync" label="Cloud sync" checked={draft.sync} onChange={handleBooleanChange("sync")} />
-                <SettingToggle id="settings-billing" label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
+                <div>
+                  <SettingToggle id="settings-billing" label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
+                  {perfSnapshot !== null && perfSnapshot.cloud_state === "local_only" && draft.billing && (
+                    <p className="mt-1 ml-11 text-xs text-slate-500">
+                      Billing features require a cloud connection. Connect this machine to access paid features and blocked-install analytics.
+                    </p>
+                  )}
+                </div>
               </fieldset>
             </div>
 
