@@ -1,13 +1,7 @@
 """SCRG264-270: shim status, PATH verification, tamper detection, repair, daemon coverage."""
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import stat
-import sys
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
