@@ -183,6 +183,41 @@ def _install_single_manager_shim(
     return Path(str(payload["shim_dir"])) / manager
 
 
+def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_version: str) -> None:
+    (workspace_dir / "package.json").write_text(
+        json.dumps(
+            {
+                "dependencies": {
+                    package_name: package_version,
+                },
+                "lockfileVersion": 3,
+                "name": "ci-fixture",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (workspace_dir / "package-lock.json").write_text(
+        json.dumps(
+            {
+                "lockfileVersion": 3,
+                "name": "ci-fixture",
+                "packages": {
+                    "": {
+                        "dependencies": {
+                            package_name: package_version,
+                        },
+                        "name": "ci-fixture",
+                    },
+                    f"node_modules/{package_name}": {
+                        "version": package_version,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -677,3 +712,63 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: 
     assert marker_payload["cwd"] == str(workspace_dir)
     assert marker_payload["shim_var"] == "shim-value"
     assert "fake-manager-stdout" in result.stdout
+
+
+def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_npm_ci_workspace(workspace_dir, package_name="minimist", package_version="1.2.8")
+    _seed_bundle(home_dir=home_dir, ecosystem="npm", package_name="minimist", package_version="1.2.8", action="block")
+    store = GuardStore(home_dir)
+
+    payload, exit_code = build_protect_payload(
+        command=["npm", "ci"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-05-19T00:00:00Z",
+        unsafe_raw_output=False,
+    )
+
+    assert exit_code == 2
+    assert payload["executed"] is False
+    assert payload["supply_chain_evaluation"]["decision"] == "block"
+    assert any(
+        package["name"] == "minimist"
+        for package in payload["supply_chain_evaluation"]["packages"]
+    )
+
+
+def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile(
+    tmp_path: Path, capsys
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_npm_ci_workspace(workspace_dir, package_name="minimist", package_version="1.2.8")
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-ci-marker.json"
+    _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    _seed_bundle(home_dir=home_dir, ecosystem="npm", package_name="minimist", package_version="1.2.8", action="block")
+    shim_path = _install_single_manager_shim(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        manager="npm",
+        capsys=capsys,
+    )
+
+    env = dict(os.environ)
+    env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
+    result = subprocess.run(
+        [str(shim_path), "ci"],
+        cwd=workspace_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert marker_path.exists() is False
