@@ -304,6 +304,21 @@ def _migrate_hooks_json_into_config(config_payload: dict[str, object], hooks_pay
     return changed
 
 
+def _hooks_payload_has_unmanaged_entries(hooks_payload: dict[str, object]) -> bool:
+    hooks = hooks_payload.get("hooks")
+    if not isinstance(hooks, dict):
+        return False
+    cleaned_hooks, _ = _remove_managed_hook_events(hooks)
+    return any(isinstance(groups, list) and bool(groups) for groups in cleaned_hooks.values())
+
+
+def _payload_has_hooks_feature_enabled(config_payload: dict[str, object]) -> bool:
+    features = config_payload.get("features")
+    if not isinstance(features, dict):
+        return False
+    return features.get("hooks") is True or features.get("codex_hooks") is True
+
+
 def _remove_managed_shell_guard_block(text: str) -> str:
     pattern = re.compile(
         rf"\n?{re.escape(_SHELL_GUARD_BEGIN)}.*?{re.escape(_SHELL_GUARD_END)}\n?",
@@ -586,9 +601,16 @@ class CodexHarnessAdapter(HarnessAdapter):
         hook_payloads = self._load_hook_payloads(context)
         original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
         payload = read_toml_payload(target_config_path)
-        target_hooks_migrated = _migrate_hooks_json_into_config(
-            payload, hook_payloads.get(self._hooks_path(context), {})
-        )
+        target_hooks_path = self._hooks_path(context)
+        target_hook_payload = hook_payloads.get(target_hooks_path, {})
+        if not _payload_has_hooks_feature_enabled(payload) and _hooks_payload_has_unmanaged_entries(
+            target_hook_payload
+        ):
+            raise RuntimeError(
+                "Guard refused to enable existing Codex hook entries without explicit approval. "
+                f"Review or remove unmanaged hooks in {target_hooks_path} before running install."
+            )
+        target_hooks_migrated = _migrate_hooks_json_into_config(payload, target_hook_payload)
         backup_path = self._backup_path(context)
         if not backup_path.exists():
             backup_path.parent.mkdir(parents=True, exist_ok=True)
