@@ -328,6 +328,42 @@
       "writes_state": true
     },
     {
+      "route": "/supply-chain",
+      "persona": [
+        "solo",
+        "security_lead"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/audit",
+      "persona": [
+        "solo",
+        "security_lead"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/policy",
+      "persona": [
+        "solo",
+        "team_manager"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/feed-health",
+      "persona": [
+        "solo",
+        "team_manager"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
       "route": "/settings",
       "persona": [
         "solo"
