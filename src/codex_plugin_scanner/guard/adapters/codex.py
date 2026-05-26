@@ -340,11 +340,7 @@ if set -q CODEX_MANAGED_BY_BUN; or set -q CODEX_MANAGED_PACKAGE_ROOT
     set -l normalized_cmd (string replace -a '"' '' -- "$cmd")
     set normalized_cmd (string replace -a "'" "" -- "$normalized_cmd")
     switch "$normalized_cmd"
-      case "*.npmrc*" "*.pypirc*" "*.netrc*" "*id_rsa*" "*id_ed25519*"
-        echo "HOL Guard blocked Codex before it could read a secret-looking local file." >&2
-        echo "Blocked command: $cmd" >&2
-        exit 126
-      case "*npm_token*" "*NPM_TOKEN*" "*_authToken*" "*.env*"
+      case "*.npmrc*" "*.pypirc*" "*.netrc*" "*id_rsa*" "*id_ed25519*" "*token*" "*TOKEN*" "*authToken*" "*.env*"
         echo "HOL Guard blocked Codex before it could read a secret-looking local file." >&2
         echo "Blocked command: $cmd" >&2
         exit 126
@@ -752,11 +748,18 @@ class CodexHarnessAdapter(HarnessAdapter):
             "fi",
             _SHELL_GUARD_END,
         ]
-        for bash_startup_path in (
-            context.home_dir / ".bashrc",
+        bash_login_files = [
             context.home_dir / ".bash_profile",
+            context.home_dir / ".bash_login",
             context.home_dir / ".profile",
-        ):
+        ]
+        bash_startup_paths = [path for path in bash_login_files if path.is_file()]
+        bashrc_path = context.home_dir / ".bashrc"
+        if bashrc_path.is_file():
+            bash_startup_paths.append(bashrc_path)
+        if not bash_startup_paths:
+            bash_startup_paths = [context.home_dir / ".bash_profile", bashrc_path]
+        for bash_startup_path in bash_startup_paths:
             CodexHarnessAdapter._install_shell_guard_block(bash_startup_path, bash_block)
         fish_conf_path = context.home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish"
         fish_conf_path.parent.mkdir(parents=True, exist_ok=True)
@@ -805,6 +808,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             context.home_dir / ".zshenv",
             context.home_dir / ".bashrc",
             context.home_dir / ".bash_profile",
+            context.home_dir / ".bash_login",
             context.home_dir / ".profile",
             context.home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish",
         ):

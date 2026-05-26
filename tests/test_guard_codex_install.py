@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -125,7 +126,8 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "TRAPDEBUG" in shell_guard_text
     assert "BASH_ENV" in (home_dir / ".bash_profile").read_text(encoding="utf-8")
     assert "BASH_ENV" in (home_dir / ".bashrc").read_text(encoding="utf-8")
-    assert "BASH_ENV" in (home_dir / ".profile").read_text(encoding="utf-8")
+    assert (home_dir / ".bash_login").exists() is False
+    assert (home_dir / ".profile").exists() is False
     assert "extdebug" in bash_guard_text
     assert "fish_preexec" in fish_guard_text
     assert "codex-fish-guard.fish" in fish_conf_text
@@ -171,6 +173,33 @@ def test_guard_install_codex_replaces_existing_zshenv_guard_block(tmp_path, caps
     assert zshenv_text.count("HOL Guard Codex shell guard") == 2
 
 
+def test_guard_install_codex_does_not_shadow_existing_bash_profile_precedence(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    _write_text(home_dir / ".profile", "export KEEP_PROFILE=1\n")
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert (home_dir / ".bash_profile").exists() is False
+    assert (home_dir / ".bash_login").exists() is False
+    assert "export KEEP_PROFILE=1" in (home_dir / ".profile").read_text(encoding="utf-8")
+    assert "BASH_ENV" in (home_dir / ".profile").read_text(encoding="utf-8")
+
+
 def test_guard_uninstall_codex_removes_shell_guard_blocks(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -178,6 +207,7 @@ def test_guard_uninstall_codex_removes_shell_guard_blocks(tmp_path, capsys):
     _write_text(home_dir / ".zshenv", "export KEEP_ME=1\n")
     _write_text(home_dir / ".bashrc", "export KEEP_BASHRC=1\n")
     _write_text(home_dir / ".bash_profile", "export KEEP_BASH_PROFILE=1\n")
+    _write_text(home_dir / ".bash_login", "export KEEP_BASH_LOGIN=1\n")
     _write_text(home_dir / ".profile", "export KEEP_PROFILE=1\n")
 
     install_rc = main(
@@ -219,6 +249,7 @@ def test_guard_uninstall_codex_removes_shell_guard_blocks(tmp_path, capsys):
     assert (home_dir / ".zshenv").read_text(encoding="utf-8") == "export KEEP_ME=1\n"
     assert (home_dir / ".bashrc").read_text(encoding="utf-8") == "export KEEP_BASHRC=1\n"
     assert (home_dir / ".bash_profile").read_text(encoding="utf-8") == "export KEEP_BASH_PROFILE=1\n"
+    assert (home_dir / ".bash_login").read_text(encoding="utf-8") == "export KEEP_BASH_LOGIN=1\n"
     assert (home_dir / ".profile").read_text(encoding="utf-8") == "export KEEP_PROFILE=1\n"
     assert (home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish").exists() is False
 
@@ -261,6 +292,7 @@ def test_guard_uninstall_codex_deletes_managed_only_shell_startup_files(tmp_path
     assert (home_dir / ".zshenv").exists() is False
     assert (home_dir / ".bashrc").exists() is False
     assert (home_dir / ".bash_profile").exists() is False
+    assert (home_dir / ".bash_login").exists() is False
     assert (home_dir / ".profile").exists() is False
     assert (home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish").exists() is False
 
@@ -288,10 +320,12 @@ def test_guard_codex_shell_guards_block_zsh_and_bash_secret_reads(tmp_path, caps
 
     assert rc == 0
     shell_commands = []
-    if Path("/bin/zsh").is_file():
-        shell_commands.append(("/bin/zsh", ["/bin/zsh", "-lc", "cat ~/.np''mrc"]))
-    if Path("/bin/bash").is_file():
-        shell_commands.append(("/bin/bash", ["/bin/bash", "-lc", "cat ~/.np''mrc"]))
+    zsh_path = shutil.which("zsh")
+    if zsh_path:
+        shell_commands.append((zsh_path, [zsh_path, "-lc", "cat ~/.np''mrc"]))
+    bash_path = shutil.which("bash")
+    if bash_path:
+        shell_commands.append((bash_path, [bash_path, "-lc", "cat ~/.np''mrc"]))
     if not shell_commands:
         return
 
