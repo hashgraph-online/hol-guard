@@ -125,6 +125,69 @@ function DetailRow({ label, value, mono }: DetailRowProps) {
   );
 }
 
+function NextSafeCommandHint({ receipt }: { receipt: GuardReceipt }) {
+  const category = detectCategory(receipt);
+  let hint: string | null = null;
+  if (category === "supply-chain") {
+    hint = `Review the package source and version, then approve it from the review queue if it is safe.`;
+  } else if (category === "tool-call" || category === "mcp") {
+    hint = "Review the tool call in Evidence, then approve it in the review queue if it is safe.";
+  } else if (category === "file-write" || category === "destructive") {
+    hint = "Check if the file operation is expected, then allow it from the review queue.";
+  } else if (category === "secret" || category === "network") {
+    hint = "Inspect the access pattern, then update your policy rules if this should be allowed.";
+  }
+  if (!hint) return null;
+  return (
+    <div className="rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue mb-1">
+        Next safe step
+      </p>
+      <p className="text-xs text-brand-dark/80">{hint}</p>
+    </div>
+  );
+}
+
+function EvidenceTimeline({ receipt }: { receipt: GuardReceipt }) {
+  const events = [
+    {
+      label: "Action received",
+      time: receipt.timestamp,
+      icon: "start",
+    },
+    {
+      label: receipt.policy_decision === "allow" ? "Approved" : "Stopped",
+      time: receipt.timestamp,
+      icon: receipt.policy_decision === "allow" ? "allow" : "block",
+    },
+  ];
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
+        Timeline
+      </p>
+      <ol className="relative border-l border-slate-200 ml-2" aria-label="Evidence timeline">
+        {events.map((event, i) => (
+          <li key={i} className="mb-2 ml-4 last:mb-0">
+            <span
+              className={`absolute -left-1.5 flex h-3 w-3 items-center justify-center rounded-full border ${
+                event.icon === "allow"
+                  ? "border-brand-green bg-brand-green/20"
+                  : event.icon === "block"
+                  ? "border-brand-attention bg-brand-attention/20"
+                  : "border-slate-300 bg-slate-100"
+              }`}
+              aria-hidden="true"
+            />
+            <p className="text-xs font-medium text-brand-dark">{event.label}</p>
+            <time className="text-[11px] text-slate-400">{formatRelativeTime(event.time)}</time>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export function EvidenceActionDetail({
   receipt,
   onClose,
@@ -213,6 +276,21 @@ export function EvidenceActionDetail({
             {receipt.capabilities_summary}
           </p>
         )}
+
+        {receipt.provenance_summary && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1">
+              Provenance
+            </p>
+            <p className="text-xs text-slate-700">{receipt.provenance_summary}</p>
+          </div>
+        )}
+
+        {receipt.policy_decision === "block" && (
+          <NextSafeCommandHint receipt={receipt} />
+        )}
+
+        <EvidenceTimeline receipt={receipt} />
 
         <TechnicalSection receipt={receipt} />
 
