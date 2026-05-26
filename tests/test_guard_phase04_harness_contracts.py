@@ -5,6 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redef]
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
@@ -28,6 +33,13 @@ def _context(tmp_path: Path) -> HarnessContext:
         workspace_dir=workspace_dir,
         guard_home=tmp_path / "guard-home",
     )
+
+
+def _read_codex_hooks(config_path: Path) -> dict[str, object]:
+    with config_path.open("rb") as handle:
+        hooks = tomllib.load(handle).get("hooks")
+    assert isinstance(hooks, dict)
+    return hooks
 
 
 def test_gr091_cursor_adapter_detects_workspace_mcp_smoke(tmp_path: Path) -> None:
@@ -126,10 +138,10 @@ def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> 
     opencode_manifest = OpenCodeHarnessAdapter().install(context)
     CopilotHarnessAdapter().install(context)
 
-    codex_hooks = json.loads(Path(str(codex_manifest["managed_hooks_path"])).read_text(encoding="utf-8"))["hooks"]
-    claude_hooks = json.loads(
-        (context.workspace_dir / ".claude" / "settings.local.json").read_text(encoding="utf-8")
-    )["hooks"]
+    codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_config_path"])))
+    claude_hooks = json.loads((context.workspace_dir / ".claude" / "settings.local.json").read_text(encoding="utf-8"))[
+        "hooks"
+    ]
     opencode_runtime = json.loads(Path(str(opencode_manifest["runtime_config_path"])).read_text(encoding="utf-8"))
     copilot_hooks = json.loads((context.workspace_dir / ".github" / "hooks" / "hol-guard-copilot.json").read_text())
 
@@ -137,9 +149,7 @@ def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> 
     assert claude_hooks["PreToolUse"][0]["hooks"][0]["type"] == "command"
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in claude_hooks["PreToolUse"][0]["hooks"][0]["command"]
     assert opencode_runtime["permission"]
-    assert {"preToolUse", "postToolUse", "permissionRequest", "userPromptSubmitted"}.issubset(
-        copilot_hooks["hooks"]
-    )
+    assert {"preToolUse", "postToolUse", "permissionRequest", "userPromptSubmitted"}.issubset(copilot_hooks["hooks"])
 
 
 def test_gr099_managed_hooks_use_lightweight_cli_entrypoints(tmp_path: Path) -> None:
@@ -149,10 +159,10 @@ def test_gr099_managed_hooks_use_lightweight_cli_entrypoints(tmp_path: Path) -> 
     ClaudeCodeHarnessAdapter().install(context)
     CopilotHarnessAdapter().install(context)
 
-    codex_hooks = json.loads(Path(str(codex_manifest["managed_hooks_path"])).read_text(encoding="utf-8"))["hooks"]
-    claude_hooks = json.loads(
-        (context.workspace_dir / ".claude" / "settings.local.json").read_text(encoding="utf-8")
-    )["hooks"]
+    codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_config_path"])))
+    claude_hooks = json.loads((context.workspace_dir / ".claude" / "settings.local.json").read_text(encoding="utf-8"))[
+        "hooks"
+    ]
     copilot_hooks = json.loads(
         (context.workspace_dir / ".github" / "hooks" / "hol-guard-copilot.json").read_text(encoding="utf-8")
     )["hooks"]
