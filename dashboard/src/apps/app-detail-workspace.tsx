@@ -18,6 +18,7 @@ import {
   HiMiniRocketLaunch,
   HiMiniArrowPath,
   HiMiniTrash,
+  HiMiniXCircle,
 } from "react-icons/hi2";
 import {
   ActionButton,
@@ -49,6 +50,7 @@ import type {
   GuardHarnessAction,
   GuardHarnessActionResult,
   GuardHarnessSetupStep,
+  PackageManagerProtection,
 } from "../guard-types";
 
 type TabKey = "overview" | "activity" | "settings";
@@ -400,6 +402,7 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 harnessReceipts={harnessReceipts}
                 harnessInventory={harnessInventory}
                 pendingItems={pendingItems}
+                protection={runtime.supply_chain?.package_manager_protection}
                 onOpenRequest={props.onOpenRequest}
                 onManagedInstallChanged={props.onManagedInstallChanged}
               />
@@ -474,6 +477,7 @@ function AppOverviewTab(props: {
   harnessReceipts: GuardReceipt[];
   harnessInventory: GuardInventoryItem[];
   pendingItems: GuardApprovalRequest[];
+  protection: PackageManagerProtection | undefined;
   onOpenRequest: (requestId: string) => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
@@ -644,7 +648,56 @@ function AppOverviewTab(props: {
             </div>
           </div>
         )}
+
+        <AppFirewallStatusCard protection={props.protection} />
       </section>
+    </div>
+  );
+}
+
+function AppFirewallStatusCard({ protection }: { protection: PackageManagerProtection | undefined }) {
+  const protectedManagers = protection?.protected_managers ?? [];
+  const unprotectedManagers = protection?.unprotected_managers ?? [];
+  const total = protectedManagers.length + unprotectedManagers.length;
+
+  return (
+    <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <SectionLabel>Package firewall</SectionLabel>
+        {total === 0 ? (
+          <Tag tone="slate">No data</Tag>
+        ) : unprotectedManagers.length === 0 ? (
+          <Tag tone="green">All covered</Tag>
+        ) : (
+          <Tag tone="attention">{unprotectedManagers.length} unprotected</Tag>
+        )}
+      </div>
+      {total === 0 ? (
+        <p className="text-sm text-slate-500">
+          Package manager coverage data is not available. Run Guard to collect supply chain metrics.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {protectedManagers.map((mgr) => (
+            <div key={mgr} className="flex items-center justify-between gap-2 py-1 border-b border-slate-100 last:border-b-0">
+              <span className="text-sm font-mono text-brand-dark">{mgr}</span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-brand-green/25 bg-brand-green/[0.06] px-2.5 py-0.5 text-xs font-medium text-brand-green-text">
+                <HiMiniCheckCircle className="h-3 w-3" aria-hidden="true" />
+                Shim active
+              </span>
+            </div>
+          ))}
+          {unprotectedManagers.map((mgr) => (
+            <div key={mgr} className="flex items-center justify-between gap-2 py-1 border-b border-slate-100 last:border-b-0">
+              <span className="text-sm font-mono text-brand-dark">{mgr}</span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50/60 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                <HiMiniXCircle className="h-3 w-3" aria-hidden="true" />
+                No shim
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
