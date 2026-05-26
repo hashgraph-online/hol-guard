@@ -24,6 +24,7 @@ import {
 import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarness } from "./approval-center-utils";
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, resolveCloudIntelCopy } from "./runtime-overview";
+import { HomeProtectionModule } from "./home-protection-module";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -128,6 +129,7 @@ export function HomeWorkspace(props: {
   onOpenFleet: () => void;
   onOpenEvidence: () => void;
   onOpenSettings: () => void;
+  onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
   onOpenAppDetail: (harness: string) => void;
   clearConfirm: { harness?: string; all?: boolean } | null;
@@ -337,6 +339,13 @@ export function HomeWorkspace(props: {
         </section>
 
         <section className="space-y-6">
+          <HomeProtectionModule
+            snapshot={snapshot}
+            managedInstalls={managedInstalls}
+            onOpenFleet={props.onOpenFleet}
+            onOpenSupplyChain={props.onOpenSupplyChain}
+          />
+
           <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
 
           <CloudStatusCard
