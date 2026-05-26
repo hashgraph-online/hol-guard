@@ -54,6 +54,8 @@ _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
     _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
     _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
 }
+_ZSHENV_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
+_ZSHENV_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 
 
 def _json_object(path: Path) -> dict[str, object]:
@@ -273,13 +275,45 @@ def _remove_managed_hook_events(hooks: dict[str, object]) -> tuple[dict[str, obj
     return updated_hooks, changed
 
 
+def _remove_managed_zshenv_block(text: str) -> str:
+    pattern = re.compile(
+        rf"\n?{re.escape(_ZSHENV_GUARD_BEGIN)}.*?{re.escape(_ZSHENV_GUARD_END)}\n?",
+        re.DOTALL,
+    )
+    return pattern.sub("\n", text).strip("\n")
+
+
+def _codex_zshenv_guard_script() -> str:
+    return """# Managed by HOL Guard. Loaded by zsh only for Codex-owned shell commands.
+if [[ -n "${CODEX_MANAGED_BY_BUN:-}" || -n "${CODEX_MANAGED_PACKAGE_ROOT:-}" ]]; then
+  function TRAPDEBUG() {
+    emulate -L zsh
+    local cmd="${ZSH_DEBUG_CMD:-}"
+    [[ -z "$cmd" ]] && return 0
+    [[ "$cmd" == "TRAPDEBUG () {"* ]] && return 0
+    [[ "$cmd" == *"codex-zshenv-guard.zsh"* ]] && return 0
+    case "$cmd" in
+      *".npmrc"*|*".pypirc"*|*".netrc"*|*"id_rsa"*|*"id_ed25519"*|*"npm_token"*|*"NPM_TOKEN"*|*"_authToken"*|*".env"* )
+        print -u2 "HOL Guard blocked Codex before it could read a secret-looking local file."
+        print -u2 "Blocked command: ${cmd}"
+        return 1
+        ;;
+    esac
+    return 0
+  }
+fi
+"""
+
+
 def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     config_path = CodexHarnessAdapter._target_config_path(context)
     hooks_path = CodexHarnessAdapter._hooks_path(context)
     config_payload = _read_toml(config_path)
     features = config_payload.get("features") if isinstance(config_payload, dict) else None
+    toml_hooks = config_payload.get("hooks") if isinstance(config_payload, dict) else None
     hooks_payload = _json_object(hooks_path)
-    hooks = hooks_payload.get("hooks") if isinstance(hooks_payload, dict) else None
+    json_hooks = hooks_payload.get("hooks") if isinstance(hooks_payload, dict) else None
+    hooks = toml_hooks if isinstance(toml_hooks, dict) else json_hooks
     pre_tool_groups = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
     permission_groups = hooks.get("PermissionRequest") if isinstance(hooks, dict) else None
     prompt_groups = hooks.get("UserPromptSubmit") if isinstance(hooks, dict) else None
@@ -300,13 +334,21 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
         pre_tool_hook_installed and permission_hook_installed and prompt_hook_installed and post_tool_hook_installed
     )
     features_is_table = isinstance(features, dict)
-    hooks_feature_enabled = features_is_table and features.get("hooks") is True
+    hooks_feature_enabled = not features_is_table or features.get("hooks") is not False
     legacy_codex_hooks_enabled = features_is_table and features.get("codex_hooks") is True
     return {
         "config_path": str(config_path),
         "config_present": config_path.is_file(),
         "hooks_path": str(hooks_path),
         "hooks_present": hooks_path.is_file(),
+        "toml_hooks_present": isinstance(toml_hooks, dict) and any(
+            bool(toml_hooks.get(event_name))
+            for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
+        ),
+        "json_hooks_present": isinstance(json_hooks, dict) and any(
+            bool(json_hooks.get(event_name))
+            for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
+        ),
         "hooks_enabled": hooks_feature_enabled,
         "codex_hooks_enabled": hooks_feature_enabled,
         "legacy_codex_hooks_enabled": legacy_codex_hooks_enabled,
@@ -472,6 +514,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         features.pop("codex_hooks", None)
         features["hooks"] = True
         payload["features"] = features
+        self._install_config_hooks(payload, context)
         existing_workspace_server_names = {
             name for name, value in mcp_servers.items() if isinstance(name, str) and isinstance(value, dict)
         }
@@ -486,6 +529,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         payload["mcp_servers"] = mcp_servers
         write_toml_payload(target_config_path, payload)
         hooks_path = self._install_hooks(context, payloads=hook_payloads)
+        shell_guard_path = self._install_shell_guard(context)
         shim_manifest = install_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -495,6 +539,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             "mode": "codex-mcp-proxy",
             "managed_config_path": str(target_config_path),
             "managed_hooks_path": str(hooks_path),
+            "managed_shell_guard_path": str(shell_guard_path),
             "backup_path": str(backup_path),
             "managed_servers": [server.name for server in managed_servers],
             "skipped_servers": list(skipped_servers),
@@ -595,7 +640,6 @@ class CodexHarnessAdapter(HarnessAdapter):
 
     def _install_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
-        managed_groups = _managed_hook_groups(context)
         hook_payloads = payloads or self._load_hook_payloads(context)
         for hooks_path in self._all_hook_paths(context):
             original_payload = deepcopy(hook_payloads.get(hooks_path, {}))
@@ -604,19 +648,48 @@ class CodexHarnessAdapter(HarnessAdapter):
             if not isinstance(hooks, dict):
                 hooks = {}
             cleaned_hooks, managed_removed = _remove_managed_hook_events(hooks)
-            if hooks_path == target_hooks_path:
-                for event_name, managed_group in managed_groups.items():
-                    cleaned_hooks[event_name] = _merge_hook_groups(cleaned_hooks.get(event_name), managed_group)
-                payload["hooks"] = cleaned_hooks
-            elif not managed_removed:
+            if not managed_removed:
                 payload = deepcopy(original_payload)
+            elif cleaned_hooks:
+                payload["hooks"] = cleaned_hooks
             else:
-                if cleaned_hooks:
-                    payload["hooks"] = cleaned_hooks
-                else:
-                    payload.pop("hooks", None)
+                payload.pop("hooks", None)
             self._write_hooks_payload(hooks_path, payload, original_payload=original_payload)
         return target_hooks_path
+
+    @staticmethod
+    def _install_config_hooks(payload: dict[str, object], context: HarnessContext) -> None:
+        hooks = payload.get("hooks")
+        if not isinstance(hooks, dict):
+            hooks = {}
+        cleaned_hooks, _ = _remove_managed_hook_events(hooks)
+        for event_name, managed_group in _managed_hook_groups(context).items():
+            cleaned_hooks[event_name] = _merge_hook_groups(cleaned_hooks.get(event_name), managed_group)
+        payload["hooks"] = cleaned_hooks
+
+    @staticmethod
+    def _install_shell_guard(context: HarnessContext) -> Path:
+        guard_path = context.guard_home / "managed" / "codex" / "codex-zshenv-guard.zsh"
+        guard_path.parent.mkdir(parents=True, exist_ok=True)
+        guard_path.write_text(_codex_zshenv_guard_script(), encoding="utf-8")
+
+        zshenv_path = context.home_dir / ".zshenv"
+        original = zshenv_path.read_text(encoding="utf-8") if zshenv_path.is_file() else ""
+        source_block = "\n".join(
+            [
+                _ZSHENV_GUARD_BEGIN,
+                f'if [ -r "{guard_path}" ]; then',
+                f'  source "{guard_path}"',
+                "fi",
+                _ZSHENV_GUARD_END,
+            ]
+        )
+        cleaned = _remove_managed_zshenv_block(original).rstrip()
+        updated = f"{cleaned}\n\n{source_block}\n" if cleaned else f"{source_block}\n"
+        if updated != original:
+            zshenv_path.parent.mkdir(parents=True, exist_ok=True)
+            zshenv_path.write_text(updated, encoding="utf-8")
+        return guard_path
 
     def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
