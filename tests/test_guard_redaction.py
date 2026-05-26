@@ -86,6 +86,19 @@ class TestRedactText:
         assert "postgres://user:pw@host/db" not in result.text
         assert "connection-env" in result.classifiers
 
+    @pytest.mark.parametrize(
+        ("line", "secret_fragment"),
+        [
+            ("//registry.npmjs.org/:_authToken=npm_ultra_secret_token_123", "npm_ultra_secret_token_123"),
+            ("index-url = https://__token__:pypi-very-secret@pypi.example/simple", "pypi-very-secret"),
+            ("PIP_EXTRA_INDEX_URL=https://user:super-secret@repo.example/simple", "super-secret"),
+        ],
+    )
+    def test_package_registry_token_redaction_fuzz(self, line: str, secret_fragment: str) -> None:
+        result = redact_text(line)
+        assert secret_fragment not in result.text
+        assert result.count >= 1
+
     def test_clean_text_returns_zero_count(self) -> None:
         result = redact_text("Running build step: pnpm install")
         assert result.count == 0
