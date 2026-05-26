@@ -454,12 +454,12 @@ def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, caps
     assert (workspace_dir / ".codex" / "hooks.json").exists() is False
 
 
-def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entries(tmp_path, capsys):
+def test_guard_install_codex_refuses_unmanaged_existing_hook_entries(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
-    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    _write_text(
-        workspace_dir / ".codex" / "hooks.json",
+    original_config = 'approval_policy = "never"\n'
+    _write_text(workspace_dir / ".codex" / "config.toml", original_config)
+    original_hooks = (
         json.dumps(
             {
                 "hooks": {
@@ -479,10 +479,65 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
             },
             indent=2,
         )
+        + "\n"
+    )
+    _write_text(
+        workspace_dir / ".codex" / "hooks.json",
+        original_hooks,
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 1
+    assert "Guard refused to enable existing Codex hook entries without explicit approval" in captured.err
+    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_config
+    assert (workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8") == original_hooks
+
+
+def test_guard_install_codex_allows_unmanaged_hooks_when_hooks_already_enabled(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+approval_policy = "never"
+
+[features]
+hooks = true
+""".strip()
+        + "\n",
+    )
+    _write_text(
+        workspace_dir / ".codex" / "hooks.json",
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
         + "\n",
     )
 
-    install_rc = main(
+    rc = main(
         [
             "guard",
             "install",
@@ -497,43 +552,11 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
     json.loads(capsys.readouterr().out)
     config_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
 
-    uninstall_rc = main(
-        [
-            "guard",
-            "uninstall",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--json",
-        ]
-    )
-    json.loads(capsys.readouterr().out)
-    restored_config = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
-
-    assert install_rc == 0
-    assert uninstall_rc == 0
+    assert rc == 0
     assert (workspace_dir / ".codex" / "hooks.json").exists() is False
     assert len(config_payload["hooks"]["PreToolUse"]) == 2
     assert config_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "python3 custom-pre.py"
-    managed_group = config_payload["hooks"]["PreToolUse"][1]
-    assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
-    assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
-    assert "hook" in managed_group["hooks"][0]["command"]
-    assert "codex" in managed_group["hooks"][0]["command"]
-    assert restored_config["hooks"]["PreToolUse"] == [
-        {
-            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
-            "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
-        }
-    ]
-    assert restored_config["hooks"]["SessionStart"] == [
-        {
-            "matcher": "startup|resume",
-            "hooks": [{"type": "command", "command": "python3 custom-start.py"}],
-        }
-    ]
+    assert config_payload["hooks"]["PreToolUse"][1]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
 
 
 def test_guard_install_codex_migrates_global_and_workspace_hooks_to_toml(tmp_path, capsys):
@@ -541,6 +564,20 @@ def test_guard_install_codex_migrates_global_and_workspace_hooks_to_toml(tmp_pat
     workspace_dir = tmp_path / "workspace"
     _write_text(home_dir / ".codex" / "config.toml", 'model = "gpt-5.3-codex"\n')
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    context = HarnessContext(home_dir=home_dir, guard_home=home_dir / ".hol-guard", workspace_dir=workspace_dir)
+    legacy_group = {
+        "matcher": "Bash",
+        "hooks": [
+            {
+                "type": "command",
+                "command": (
+                    f"python -m codex_plugin_scanner.cli guard hook --guard-home {context.guard_home} --harness codex"
+                ),
+                "timeoutSec": 30,
+                "statusMessage": "HOL Guard checking Bash command",
+            }
+        ],
+    }
     _write_text(
         home_dir / ".codex" / "hooks.json",
         json.dumps(
@@ -558,19 +595,7 @@ def test_guard_install_codex_migrates_global_and_workspace_hooks_to_toml(tmp_pat
     )
     _write_text(
         workspace_dir / ".codex" / "hooks.json",
-        json.dumps(
-            {
-                "hooks": {
-                    "PreToolUse": [
-                        {
-                            "matcher": "Bash",
-                            "hooks": [{"type": "command", "command": "python3 workspace-pre.py"}],
-                        }
-                    ]
-                }
-            }
-        )
-        + "\n",
+        json.dumps({"hooks": {"PreToolUse": [legacy_group]}}) + "\n",
     )
 
     rc = main(
@@ -594,8 +619,9 @@ def test_guard_install_codex_migrates_global_and_workspace_hooks_to_toml(tmp_pat
     assert (workspace_dir / ".codex" / "hooks.json").exists() is False
     assert home_config["model"] == "gpt-5.3-codex"
     assert home_config["hooks"]["SessionStart"][0]["hooks"][0]["command"] == "python3 global-start.py"
-    assert workspace_config["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "python3 workspace-pre.py"
-    assert "codex_plugin_scanner.cli" in workspace_config["hooks"]["PreToolUse"][1]["hooks"][0]["command"]
+    assert len(workspace_config["hooks"]["PreToolUse"]) == 1
+    assert workspace_config["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert "codex_plugin_scanner.cli" in workspace_config["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
 
 
 def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, capsys):
