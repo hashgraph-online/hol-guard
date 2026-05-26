@@ -27,6 +27,7 @@ from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..redaction import redact_sensitive_text
+from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
@@ -2125,6 +2126,11 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
     updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
     capabilities = [str(item) for item in session.get("capabilities", []) if isinstance(item, str)]
+    package_manager_coverage = _cloud_package_manager_coverage(
+        store,
+        workspace=workspace,
+        generated_at=updated_at,
+    )
     return {
         "sessionId": session_id,
         "harness": _optional_string(session.get("harness")) or "hol-guard",
@@ -2134,6 +2140,9 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         "clientTitle": _optional_string(session.get("client_title") or session.get("clientTitle"))
         or f"HOL Guard on {device_name}",
         "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
+        "deviceId": device_id,
+        "deviceName": device_name,
+        "packageManagerCoverage": package_manager_coverage,
         "workspace": workspace,
         "capabilities": capabilities,
         "operations": [],
@@ -2145,6 +2154,46 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
 def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
     encoded_receipt = json.dumps(receipt, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(encoded_receipt.encode("utf-8")).hexdigest()
+
+
+def _cloud_package_manager_coverage(
+    store: GuardStore,
+    *,
+    workspace: str,
+    generated_at: str,
+) -> dict[str, object]:
+    coverage = package_shim_cloud_coverage(
+        HarnessContext(
+            home_dir=Path.home(),
+            workspace_dir=Path(workspace),
+            guard_home=store.guard_home,
+        ),
+        generated_at=generated_at,
+    )
+    summary = store.get_sync_payload("supply_chain_bundle_summary")
+    synced_at = None
+    next_refresh_at = None
+    if isinstance(summary, dict):
+        synced_at = _optional_string(summary.get("synced_at") or summary.get("syncedAt"))
+        next_refresh_at = _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
+    reference_timestamp = _parse_iso_timestamp(generated_at) or datetime.now(timezone.utc)
+    stale_status = "unknown"
+    if synced_at is not None:
+        stale_status = "fresh"
+    next_refresh_timestamp = _parse_iso_timestamp(next_refresh_at) if next_refresh_at is not None else None
+    if next_refresh_timestamp is None and synced_at is not None:
+        next_refresh_timestamp = _parse_iso_timestamp(synced_at)
+        if next_refresh_timestamp is not None:
+            next_refresh_timestamp += timedelta(minutes=15)
+            next_refresh_at = next_refresh_timestamp.isoformat()
+    if next_refresh_timestamp is not None and next_refresh_timestamp <= reference_timestamp:
+        stale_status = "stale"
+    coverage["staleIntel"] = {
+        "status": stale_status,
+        "lastSyncedAt": synced_at,
+        "nextRefreshAt": next_refresh_at,
+    }
+    return coverage
 
 
 def _cloud_sync_artifact_type(artifact_id: str) -> str:

@@ -16,7 +16,9 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.protect import build_protect_payload
+from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 
 WORKSPACE_ID = "workspace-alpha"
@@ -523,6 +525,66 @@ def test_guard_package_shim_wrapper_routes_commands_through_guard_protect(tmp_pa
     assert "guard" in shim_source
     assert "protect" in shim_source
     assert "'npm'" in shim_source
+
+
+def test_guard_package_shim_status_reports_protected_managers_when_shims_win_on_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+    )
+
+    install_payload = install_package_shims(context, managers=("npm", "pip"))
+    shim_dir = Path(str(install_payload["shim_dir"]))
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{original_path}")
+
+    status_payload = package_shim_status(context)
+
+    assert status_payload["protected_managers"] == ["npm", "pip"]
+    assert status_payload["path_active"] is True
+    assert status_payload["bypasses"] == []
+
+
+def test_guard_package_shim_status_reports_bypasses_when_system_binary_beats_shim(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=home_dir,
+    )
+
+    install_payload = install_package_shims(context, managers=("npm",))
+    shim_dir = Path(str(install_payload["shim_dir"]))
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    fake_npm = fake_bin / "npm"
+    fake_npm.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_npm.chmod(0o755)
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{shim_dir}{os.pathsep}{original_path}")
+
+    status_payload = package_shim_status(context)
+
+    assert status_payload["protected_managers"] == []
+    assert status_payload["path_active"] is False
+    assert status_payload["bypasses"] == [
+        {
+            "manager": "npm",
+            "reason": "path_inactive",
+        }
+    ]
 
 
 @pytest.mark.parametrize(
