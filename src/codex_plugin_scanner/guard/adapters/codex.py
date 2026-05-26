@@ -301,7 +301,7 @@ def _migrate_hooks_json_into_config(config_payload: dict[str, object], hooks_pay
         config_hooks[event_name] = merged_groups
     if config_hooks:
         config_payload["hooks"] = config_hooks
-    return changed or bool(json_hooks)
+    return changed
 
 
 def _remove_managed_shell_guard_block(text: str) -> str:
@@ -748,8 +748,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             if not hooks_payload:
                 continue
             config_payload = read_toml_payload(config_path)
-            _migrate_hooks_json_into_config(config_payload, hooks_payload)
-            if config_payload:
+            if _migrate_hooks_json_into_config(config_payload, hooks_payload) and config_payload:
                 write_toml_payload(config_path, config_payload)
 
     def _remove_json_hook_files(
