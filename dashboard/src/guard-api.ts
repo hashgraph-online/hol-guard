@@ -22,6 +22,7 @@ import type {
   GuardHarnessActionResult,
   GuardNotificationSetupResult,
   GuardPolicyDecision,
+  PackageManagerProtection,
   CodexResumeStatus,
   GuardCodexResumeResult,
   GuardQueueResolutionCopy,
@@ -29,6 +30,7 @@ import type {
   GuardQueueSummary,
   GuardReceipt,
   GuardRuntimeSnapshot,
+  SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
   GuardSettings,
@@ -65,9 +67,10 @@ type ApprovalRequestListPayload = {
   status?: unknown;
 };
 
-type RuntimeSnapshotPayload = Omit<GuardRuntimeSnapshot, "items"> & {
+type RuntimeSnapshotPayload = Omit<GuardRuntimeSnapshot, "items" | "supply_chain"> & {
   items?: RawGuardApprovalRequest[] | null;
   queue_summary?: unknown;
+  supply_chain?: unknown;
 };
 
 type QueueResolutionPayload = Omit<
@@ -299,6 +302,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item): item is string => typeof item === "string");
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  return isStringArray(value) ? value : [];
+}
+
 function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
@@ -525,6 +532,47 @@ function normalizeQueueSummary(raw: unknown, pendingCount: number): GuardQueueSu
   };
 }
 
+function normalizePackageManagerProtection(raw: unknown): PackageManagerProtection | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+  const pathStatus = raw["path_status"] === "in_path" ? "in_path" : "missing_from_path";
+  const shimDir = typeof raw["shim_dir"] === "string" ? raw["shim_dir"] : "";
+  return {
+    path_status: pathStatus,
+    path_contains_shim_dir: raw["path_contains_shim_dir"] === true,
+    shim_dir: shimDir,
+    supported_managers: normalizeStringArray(raw["supported_managers"]),
+    installed_managers: normalizeStringArray(raw["installed_managers"]),
+    active_managers: normalizeStringArray(raw["active_managers"]),
+    missing_shims: normalizeStringArray(raw["missing_shims"]),
+    protected_managers: normalizeStringArray(raw["protected_managers"]),
+    unprotected_managers: normalizeStringArray(raw["unprotected_managers"]),
+  };
+}
+
+function normalizeSupplyChainSnapshot(raw: unknown): SupplyChainSnapshot | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+  const packageManagerProtection = normalizePackageManagerProtection(raw["package_manager_protection"]);
+  if (!packageManagerProtection) {
+    return undefined;
+  }
+  return {
+    package_manager_protection: packageManagerProtection,
+  };
+}
+
+export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): GuardRuntimeSnapshot {
+  return {
+    ...snapshot,
+    items: normalizeApprovalRequests(snapshot.items),
+    queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
+    supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
+  };
+}
+
 function normalizeQueueCopy(raw: unknown): GuardQueueResolutionCopy | null {
   if (!isRecord(raw)) {
     return null;
@@ -641,11 +689,7 @@ export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
     return buildDemoRuntimeSnapshot();
   }
   const snapshot = await readJson<RuntimeSnapshotPayload>("/v1/runtime");
-  return {
-    ...snapshot,
-    items: normalizeApprovalRequests(snapshot.items),
-    queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count)
-  };
+  return normalizeRuntimeSnapshot(snapshot);
 }
 
 export async function fetchQueueSummary(input: { activeRequestId?: string } = {}): Promise<GuardQueueSummary> {
