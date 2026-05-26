@@ -54,8 +54,8 @@ _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
     _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
     _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
 }
-_ZSHENV_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
-_ZSHENV_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
+_SHELL_GUARD_BEGIN = "# >>> HOL Guard Codex shell guard >>>"
+_SHELL_GUARD_END = "# <<< HOL Guard Codex shell guard <<<"
 
 
 def _json_object(path: Path) -> dict[str, object]:
@@ -275,9 +275,9 @@ def _remove_managed_hook_events(hooks: dict[str, object]) -> tuple[dict[str, obj
     return updated_hooks, changed
 
 
-def _remove_managed_zshenv_block(text: str) -> str:
+def _remove_managed_shell_guard_block(text: str) -> str:
     pattern = re.compile(
-        rf"\n?{re.escape(_ZSHENV_GUARD_BEGIN)}.*?{re.escape(_ZSHENV_GUARD_END)}\n?",
+        rf"\n?{re.escape(_SHELL_GUARD_BEGIN)}.*?{re.escape(_SHELL_GUARD_END)}\n?",
         re.DOTALL,
     )
     return pattern.sub("\n", text).strip("\n")
@@ -304,6 +304,49 @@ if [[ -n "${CODEX_MANAGED_BY_BUN:-}" || -n "${CODEX_MANAGED_PACKAGE_ROOT:-}" ]];
     return 0
   }
 fi
+"""
+
+
+def _codex_bashenv_guard_script() -> str:
+    return """# Managed by HOL Guard. Loaded by bash only for Codex-owned shell commands.
+if [[ -n "${CODEX_MANAGED_BY_BUN:-}" || -n "${CODEX_MANAGED_PACKAGE_ROOT:-}" ]]; then
+  shopt -s extdebug 2>/dev/null || true
+  __hol_guard_codex_bash_debug_trap() {
+    local cmd="${BASH_COMMAND:-}"
+    [[ -z "$cmd" ]] && return 0
+    [[ "$cmd" == "__hol_guard_codex_bash_debug_trap"* ]] && return 0
+    [[ "$cmd" == *"codex-bashenv-guard.bash"* ]] && return 0
+    local normalized_cmd="${cmd//\\\"/}"
+    normalized_cmd="${normalized_cmd//\\'/}"
+    case "$normalized_cmd" in
+      *".npmrc"*|*".pypirc"*|*".netrc"*|*"id_rsa"*|*"id_ed25519"*|*"npm_token"*|*"NPM_TOKEN"*|*"_authToken"*|*".env"* )
+        printf '%s\\n' "HOL Guard blocked Codex before it could read a secret-looking local file." >&2
+        printf '%s\\n' "Blocked command: ${cmd}" >&2
+        exit 126
+        ;;
+    esac
+    return 0
+  }
+  trap '__hol_guard_codex_bash_debug_trap' DEBUG
+fi
+"""
+
+
+def _codex_fish_guard_script() -> str:
+    return """# Managed by HOL Guard. Loaded by fish only for Codex-owned shell commands.
+if set -q CODEX_MANAGED_BY_BUN; or set -q CODEX_MANAGED_PACKAGE_ROOT
+  function __hol_guard_codex_fish_preexec --on-event fish_preexec
+    set -l cmd "$argv"
+    set -l normalized_cmd (string replace -a '"' '' -- "$cmd")
+    set normalized_cmd (string replace -a "'" "" -- "$normalized_cmd")
+    switch "$normalized_cmd"
+      case "*.npmrc*" "*.pypirc*" "*.netrc*" "*id_rsa*" "*id_ed25519*" "*token*" "*TOKEN*" "*authToken*" "*.env*"
+        echo "HOL Guard blocked Codex before it could read a secret-looking local file." >&2
+        echo "Blocked command: $cmd" >&2
+        exit 126
+    end
+  end
+end
 """
 
 
@@ -533,7 +576,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         payload["mcp_servers"] = mcp_servers
         write_toml_payload(target_config_path, payload)
         hooks_path = self._install_hooks(context, payloads=hook_payloads)
-        shell_guard_path = self._install_shell_guard(context)
+        shell_guard_paths = self._install_shell_guards(context)
         shim_manifest = install_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -543,7 +586,8 @@ class CodexHarnessAdapter(HarnessAdapter):
             "mode": "codex-mcp-proxy",
             "managed_config_path": str(target_config_path),
             "managed_hooks_path": str(hooks_path),
-            "managed_shell_guard_path": str(shell_guard_path),
+            "managed_shell_guard_path": str(shell_guard_paths["zsh"]),
+            "managed_shell_guard_paths": {shell: str(path) for shell, path in shell_guard_paths.items()},
             "backup_path": str(backup_path),
             "managed_servers": [server.name for server in managed_servers],
             "skipped_servers": list(skipped_servers),
@@ -673,44 +717,113 @@ class CodexHarnessAdapter(HarnessAdapter):
         payload["hooks"] = cleaned_hooks
 
     @staticmethod
-    def _install_shell_guard(context: HarnessContext) -> Path:
-        guard_path = context.guard_home / "managed" / "codex" / "codex-zshenv-guard.zsh"
-        guard_path.parent.mkdir(parents=True, exist_ok=True)
-        guard_path.write_text(_codex_zshenv_guard_script(), encoding="utf-8")
+    def _install_shell_guards(context: HarnessContext) -> dict[str, Path]:
+        guard_root = context.guard_home / "managed" / "codex"
+        guard_root.mkdir(parents=True, exist_ok=True)
+        zsh_guard_path = guard_root / "codex-zshenv-guard.zsh"
+        bash_guard_path = guard_root / "codex-bashenv-guard.bash"
+        fish_guard_path = guard_root / "codex-fish-guard.fish"
 
-        zshenv_path = context.home_dir / ".zshenv"
-        original = zshenv_path.read_text(encoding="utf-8") if zshenv_path.is_file() else ""
-        source_block = "\n".join(
+        zsh_guard_path.write_text(_codex_zshenv_guard_script(), encoding="utf-8")
+        bash_guard_path.write_text(_codex_bashenv_guard_script(), encoding="utf-8")
+        fish_guard_path.write_text(_codex_fish_guard_script(), encoding="utf-8")
+
+        CodexHarnessAdapter._install_shell_guard_block(
+            context.home_dir / ".zshenv",
             [
-                _ZSHENV_GUARD_BEGIN,
-                f'if [ -r "{guard_path}" ]; then',
-                f'  source "{guard_path}"',
+                _SHELL_GUARD_BEGIN,
+                f'if [ -r "{zsh_guard_path}" ]; then',
+                f'  source "{zsh_guard_path}"',
                 "fi",
-                _ZSHENV_GUARD_END,
-            ]
+                _SHELL_GUARD_END,
+            ],
         )
-        cleaned = _remove_managed_zshenv_block(original).rstrip()
+        bash_block = [
+            _SHELL_GUARD_BEGIN,
+            f'if [ -r "{bash_guard_path}" ]; then',
+            f'  export BASH_ENV="{bash_guard_path}"',
+            '  if [ -n "${BASH_VERSION:-}" ]; then',
+            f'    . "{bash_guard_path}"',
+            "  fi",
+            "fi",
+            _SHELL_GUARD_END,
+        ]
+        bash_login_files = [
+            context.home_dir / ".bash_profile",
+            context.home_dir / ".bash_login",
+            context.home_dir / ".profile",
+        ]
+        bash_startup_paths = [path for path in bash_login_files if path.is_file()]
+        bashrc_path = context.home_dir / ".bashrc"
+        if bashrc_path.is_file():
+            bash_startup_paths.append(bashrc_path)
+        if not bash_startup_paths:
+            bash_startup_paths = [context.home_dir / ".bash_profile", bashrc_path]
+        for bash_startup_path in bash_startup_paths:
+            CodexHarnessAdapter._install_shell_guard_block(bash_startup_path, bash_block)
+        fish_conf_path = context.home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish"
+        fish_conf_path.parent.mkdir(parents=True, exist_ok=True)
+        fish_conf_path.write_text(
+            "\n".join(
+                [
+                    _SHELL_GUARD_BEGIN,
+                    f'if test -r "{fish_guard_path}"',
+                    f'  source "{fish_guard_path}"',
+                    "end",
+                    _SHELL_GUARD_END,
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return {
+            "zsh": zsh_guard_path,
+            "bash": bash_guard_path,
+            "fish": fish_guard_path,
+            "fish_conf": fish_conf_path,
+        }
+
+    @staticmethod
+    def _install_shell_guard_block(path: Path, block_lines: list[str]) -> None:
+        original = path.read_text(encoding="utf-8") if path.is_file() else ""
+        source_block = "\n".join(block_lines)
+        cleaned = _remove_managed_shell_guard_block(original).rstrip()
         updated = f"{cleaned}\n\n{source_block}\n" if cleaned else f"{source_block}\n"
         if updated != original:
-            zshenv_path.parent.mkdir(parents=True, exist_ok=True)
-            zshenv_path.write_text(updated, encoding="utf-8")
-        return guard_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(updated, encoding="utf-8")
 
     @staticmethod
     def _uninstall_shell_guard(context: HarnessContext) -> None:
-        guard_path = context.guard_home / "managed" / "codex" / "codex-zshenv-guard.zsh"
-        if guard_path.is_file():
-            guard_path.unlink()
+        guard_root = context.guard_home / "managed" / "codex"
+        for guard_path in (
+            guard_root / "codex-zshenv-guard.zsh",
+            guard_root / "codex-bashenv-guard.bash",
+            guard_root / "codex-fish-guard.fish",
+        ):
+            if guard_path.is_file():
+                guard_path.unlink()
 
-        zshenv_path = context.home_dir / ".zshenv"
-        if not zshenv_path.is_file():
+        for startup_path in (
+            context.home_dir / ".zshenv",
+            context.home_dir / ".bashrc",
+            context.home_dir / ".bash_profile",
+            context.home_dir / ".bash_login",
+            context.home_dir / ".profile",
+            context.home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish",
+        ):
+            CodexHarnessAdapter._remove_shell_guard_block(startup_path)
+
+    @staticmethod
+    def _remove_shell_guard_block(path: Path) -> None:
+        if not path.is_file():
             return
-        original = zshenv_path.read_text(encoding="utf-8")
-        cleaned = _remove_managed_zshenv_block(original).rstrip()
+        original = path.read_text(encoding="utf-8")
+        cleaned = _remove_managed_shell_guard_block(original).rstrip()
         if cleaned:
-            zshenv_path.write_text(f"{cleaned}\n", encoding="utf-8")
+            path.write_text(f"{cleaned}\n", encoding="utf-8")
         else:
-            zshenv_path.unlink()
+            path.unlink()
 
     def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
