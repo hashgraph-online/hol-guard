@@ -1143,14 +1143,17 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
                 cached_bundle_version=cached_bundle_version,
             )
         except SupplyChainBundleError:
-            request = urllib.request.Request(bundle_url, method="GET", headers=headers)
-            payload = _fetch_supply_chain_bundle_payload(request)
-            response = load_supply_chain_bundle_response(payload)
-            verify_supply_chain_bundle_response(
-                response,
-                trusted_keys=trusted_keys or None,
-                cached_bundle_version=cached_bundle_version,
-            )
+            try:
+                request = urllib.request.Request(bundle_url, method="GET", headers=headers)
+                payload = _fetch_supply_chain_bundle_payload(request)
+                response = load_supply_chain_bundle_response(payload)
+                verify_supply_chain_bundle_response(
+                    response,
+                    trusted_keys=trusted_keys or None,
+                    cached_bundle_version=cached_bundle_version,
+                )
+            except (RuntimeError, SupplyChainBundleError) as error:
+                raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
     else:
         request = urllib.request.Request(bundle_url, method="GET", headers=headers)
         payload = _fetch_supply_chain_bundle_payload(request)

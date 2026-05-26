@@ -12,10 +12,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
+from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime.runner import sync_supply_chain_bundle
 from codex_plugin_scanner.guard.runtime.supply_chain_bundle import canonical_supply_chain_bundle_payload
 from codex_plugin_scanner.guard.store import GuardStore
@@ -774,6 +776,87 @@ def test_sync_supply_chain_bundle_refetches_full_bundle_for_tampered_cached_sign
         path.startswith("/api/guard/supply-chain/bundle?") and "ecosystem=" not in path
         for path in _BundleSyncHandler.captured_paths
     )
+
+
+def test_sync_supply_chain_bundle_wraps_runtime_error_when_cached_bundle_refetch_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    private_key_pem, public_key_pem = _generate_key_pair()
+    npm_partition = _partition_bundle_response(
+        private_key_pem,
+        public_key_pem,
+        advisory_id="GHSA-npm",
+        bundle_version="1747616400000-refresh",
+        ecosystem="npm",
+        package_name="minimist",
+        partition=1,
+        partition_count=1,
+    )
+    index_payload = {
+        "bundleVersion": "1747616400000-refresh",
+        "emergencyDenyCount": 0,
+        "expiresAt": npm_partition["bundle"]["expiresAt"],
+        "feedSnapshotHash": "feed-snapshot-2",
+        "generatedAt": npm_partition["bundle"]["generatedAt"],
+        "partitions": [
+            {
+                "advisoryCount": 1,
+                "ecosystem": "npm",
+                "packageCount": 1,
+                "partition": 1,
+                "partitionCount": 1,
+                "payloadHash": npm_partition["payloadHash"],
+            }
+        ],
+        "policyHash": "policy-hash-2",
+        "sourceHashes": [{"payloadHash": "ghsa-feed-hash", "sourceKey": "ghsa", "staleStatus": "fresh"}],
+        "tier": "premium",
+        "workspaceId": WORKSPACE_ID,
+    }
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    store.cache_supply_chain_bundle(
+        WORKSPACE_ID,
+        _tamper_signature(
+            _bundle_response(
+                private_key_pem,
+                public_key_pem,
+                bundle_version="1747616400000-refresh",
+            )
+        ),
+        "2026-05-19T00:00:00Z",
+    )
+    store.set_sync_payload(
+        "supply_chain_bundle_partition_cache",
+        {
+            "bundle_version": "1747616400000-refresh",
+            "partitions": {
+                "npm:1": {
+                    "payload_hash": npm_partition["payloadHash"],
+                    "response": npm_partition,
+                }
+            },
+            "workspace_id": WORKSPACE_ID,
+        },
+        "2026-05-19T00:00:00Z",
+    )
+
+    def fake_fetch(request: object) -> dict[str, object]:
+        request_url = getattr(request, "full_url", "")
+        if isinstance(request_url, str) and request_url.endswith("/index?workspaceId=workspace-alpha"):
+            return index_payload
+        raise RuntimeError("simulated network failure")
+
+    monkeypatch.setattr(guard_runner, "_fetch_supply_chain_bundle_payload", fake_fetch)
+
+    with pytest.raises(RuntimeError, match="Guard supply-chain bundle sync failed: simulated network failure"):
+        sync_supply_chain_bundle(store)
 
 
 def test_supply_chain_cache_and_eval_cache_clear_on_sync_token_rotation(tmp_path: Path) -> None:
