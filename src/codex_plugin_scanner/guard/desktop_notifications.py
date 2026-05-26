@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import ntpath
 import os
 import platform
 import shutil
@@ -21,7 +22,7 @@ MACOS_NOTIFICATION_SETTINGS_URL = (
 )
 MACOS_OSASCRIPT_PATH = "/usr/bin/osascript"
 MACOS_OPEN_PATH = "/usr/bin/open"
-WINDOWS_POWERSHELL_PATH = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+_DEFAULT_WINDOWS_SYSTEM_ROOT = r"C:\Windows"
 _TRUSTED_MACOS_TERMINAL_NOTIFIER_PATHS = frozenset(
     {
         "/opt/homebrew/bin/terminal-notifier",
@@ -381,6 +382,22 @@ def _trusted_macos_terminal_notifier_path(which: Callable[[str], str | None]) ->
     if notifier_path in _TRUSTED_MACOS_TERMINAL_NOTIFIER_PATHS:
         return notifier_path
     return None
+
+
+def _windows_powershell_path(system_root: str | None = None) -> str:
+    root = _trusted_windows_system_root(system_root)
+    return ntpath.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+
+
+def _trusted_windows_system_root(system_root: str | None = None) -> str:
+    candidate = ntpath.normpath(system_root or os.environ.get("SYSTEMROOT", _DEFAULT_WINDOWS_SYSTEM_ROOT))
+    drive, tail = ntpath.splitdrive(candidate)
+    if drive and tail.lower() == r"\windows":
+        return candidate
+    return _DEFAULT_WINDOWS_SYSTEM_ROOT
+
+
+WINDOWS_POWERSHELL_PATH = _windows_powershell_path()
 
 
 def _windows_toast_script(notification: DesktopApprovalNotification) -> str:

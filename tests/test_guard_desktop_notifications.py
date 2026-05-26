@@ -11,7 +11,9 @@ from codex_plugin_scanner.guard.desktop_notifications import (
     _NOTIFICATION_SETUP_PATHS_IN_FLIGHT,
     _NOTIFIED_APPROVAL_IDS,
     _NOTIFIED_APPROVAL_IDS_LOCK,
+    WINDOWS_POWERSHELL_PATH,
     DesktopApprovalNotification,
+    _windows_powershell_path,
     ensure_desktop_notification_setup,
     ensure_desktop_notification_setup_async,
     notify_pending_approval_once,
@@ -113,7 +115,7 @@ def test_windows_notification_uses_powershell_toast() -> None:
 
     assert sent is True
     assert calls[0][:4] == [
-        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+        WINDOWS_POWERSHELL_PATH,
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
@@ -123,6 +125,16 @@ def test_windows_notification_uses_powershell_toast() -> None:
     assert "$OpenAction.SetAttribute('arguments', $Url)" in calls[0][-1]
     assert "CreateToastNotifier()" in calls[0][-1]
     assert "http://127.0.0.1:5474/approvals/req-native" in calls[0][-1]
+
+
+def test_windows_powershell_path_uses_valid_system_root() -> None:
+    assert _windows_powershell_path(r"D:\Windows") == (r"D:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+
+
+def test_windows_powershell_path_rejects_untrusted_system_root() -> None:
+    assert _windows_powershell_path(r"C:\Users\alice\Windows") == (
+        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    )
 
 
 def test_unsupported_platform_is_noop() -> None:
