@@ -5076,8 +5076,10 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
                 "secrets. The approval flow came from HOL Guard, not from Claude alone. HOL Guard will ask you to "
                 "choose Allow once, Allow during this session, or Keep blocked before Claude retries this action."
             )
+        harness_label = {"claude-code": "Claude", "codex": "Codex"}.get(harness, "the harness")
         return (
-            f"HOL Guard blocked Claude's attempt to use {tool_name} for {path_class} to protect your local secrets. "
+            f"HOL Guard blocked {harness_label}'s attempt to use {tool_name} for {path_class} to protect your "
+            "local secrets. "
             "This request cannot continue in the current approval flow."
         )
     risk_summary = response_payload.get("risk_summary")

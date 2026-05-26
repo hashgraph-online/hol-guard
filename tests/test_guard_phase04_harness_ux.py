@@ -183,6 +183,30 @@ def test_gr077_codex_shell_exfil_canary_gets_native_denial(tmp_path: Path) -> No
     assert "network" in str(hook_output["permissionDecisionReason"]).lower()
 
 
+def test_gr077b_codex_read_secret_file_gets_native_denial(tmp_path: Path) -> None:
+    exit_code, output = _run_hook(
+        tmp_path,
+        harness="codex",
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "~/.npmrc"},
+        },
+    )
+
+    payload = _json_line(output)
+    hook_output = payload["hookSpecificOutput"]
+
+    assert exit_code == 0
+    assert isinstance(hook_output, dict)
+    assert hook_output["hookEventName"] == "PreToolUse"
+    assert hook_output["permissionDecision"] == "deny"
+    assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
+    assert "Codex" in str(hook_output["permissionDecisionReason"])
+    assert "Claude" not in str(hook_output["permissionDecisionReason"])
+    assert "secret" in str(hook_output["permissionDecisionReason"]).lower()
+
+
 def test_gr078_codex_safe_read_allows_without_native_denial(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
