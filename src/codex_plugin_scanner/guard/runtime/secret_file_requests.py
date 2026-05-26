@@ -76,7 +76,7 @@ _SHELL_CONTROL_PREFIX_TOKENS = frozenset(
     {"!", "(", "{", "case", "do", "elif", "else", "for", "if", "select", "then", "until", "while"}
 )
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
-_DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "run"})
+_DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "push", "run"})
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILDX_BUILD_SUBCOMMANDS = frozenset({"b", "build"})
 _DOCKER_BUILD_SECRET_FLAGS = frozenset({"--allow", "--secret", "--ssh"})
