@@ -92,10 +92,7 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
     assert hooks_payload["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
-    assert (
-        hooks_payload["PermissionRequest"][0]["matcher"]
-        == codex_adapter._CODEX_GUARD_PERMISSION_MATCHER
-    )
+    assert hooks_payload["PermissionRequest"][0]["matcher"] == codex_adapter._CODEX_GUARD_PERMISSION_MATCHER
     assert "UserPromptSubmit" in hooks_payload
     assert "matcher" not in hooks_payload["UserPromptSubmit"][0]
     prompt_handler = hooks_payload["UserPromptSubmit"][0]["hooks"][0]
@@ -114,9 +111,7 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "hook" in permission_handler["command"]
     assert "codex" in permission_handler["command"]
     zshenv_text = (home_dir / ".zshenv").read_text(encoding="utf-8")
-    shell_guard_text = (home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh").read_text(
-        encoding="utf-8"
-    )
+    shell_guard_text = (home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh").read_text(encoding="utf-8")
     assert "HOL Guard Codex shell guard" in zshenv_text
     assert "TRAPDEBUG" in shell_guard_text
     assert ".npmrc" in shell_guard_text
@@ -161,6 +156,85 @@ def test_guard_install_codex_replaces_existing_zshenv_guard_block(tmp_path, caps
     assert zshenv_text.count("HOL Guard Codex shell guard") == 2
 
 
+def test_guard_uninstall_codex_removes_zshenv_guard_block(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / ".zshenv", "export KEEP_ME=1\n")
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    guard_path = home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh"
+
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    assert install_rc == 0
+    assert uninstall_rc == 0
+    assert guard_path.exists() is False
+    assert (home_dir / ".zshenv").read_text(encoding="utf-8") == "export KEEP_ME=1\n"
+
+
+def test_guard_uninstall_codex_deletes_managed_only_zshenv(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    assert install_rc == 0
+    assert uninstall_rc == 0
+    assert (home_dir / ".zshenv").exists() is False
+
+
 def test_guard_apps_connect_codex_defaults_to_project_scope_when_local_codex_config_exists(
     tmp_path,
     monkeypatch,
@@ -189,9 +263,7 @@ def test_guard_apps_connect_codex_defaults_to_project_scope_when_local_codex_con
     assert rc == 0
     assert output["managed_install"]["active"] is True
     assert output["managed_install"]["workspace"] == str(workspace_dir)
-    assert output["managed_install"]["manifest"]["managed_config_path"] == str(
-        workspace_dir / ".codex" / "config.toml"
-    )
+    assert output["managed_install"]["manifest"]["managed_config_path"] == str(workspace_dir / ".codex" / "config.toml")
 
 
 def test_guard_apps_connect_codex_stays_global_without_local_codex_config(
@@ -231,9 +303,7 @@ args = ["-m", "http.server", "9000"]
     assert rc == 0
     assert output["managed_install"]["active"] is True
     assert output["managed_install"]["workspace"] is None
-    assert output["managed_install"]["manifest"]["managed_config_path"] == str(
-        home_dir / ".codex" / "config.toml"
-    )
+    assert output["managed_install"]["manifest"]["managed_config_path"] == str(home_dir / ".codex" / "config.toml")
 
 
 def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, capsys):
@@ -287,7 +357,7 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
                 "hooks": {
                     "PreToolUse": [
                         {
-                "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
+                            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
                             "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
                         }
                     ],
@@ -369,8 +439,7 @@ def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, ca
             {
                 "type": "command",
                 "command": (
-                    "python -m codex_plugin_scanner.cli guard hook "
-                    f"--guard-home {context.guard_home} --harness codex"
+                    f"python -m codex_plugin_scanner.cli guard hook --guard-home {context.guard_home} --harness codex"
                 ),
                 "timeoutSec": 30,
                 "statusMessage": "HOL Guard checking Bash command",
@@ -412,18 +481,15 @@ def test_guard_install_codex_migrates_stale_python_c_managed_hooks(tmp_path, cap
     workspace_dir = tmp_path / "workspace"
     stale_worktree = tmp_path / "deleted-worktree"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    stale_command = (
-        f"{sys.executable} -c "
-        + shlex.quote(
-            "import sys;"
-            f"sys.path[:0]=[{str(stale_worktree / 'src')!r}];"
-            "from codex_plugin_scanner.cli import main;"
-            "raise SystemExit(main(["
-            '"guard", "hook", "--guard-home", '
-            f"{str(home_dir / '.hol-guard')!r}, "
-            '"--harness", "codex"'
-            "]))"
-        )
+    stale_command = f"{sys.executable} -c " + shlex.quote(
+        "import sys;"
+        f"sys.path[:0]=[{str(stale_worktree / 'src')!r}];"
+        "from codex_plugin_scanner.cli import main;"
+        "raise SystemExit(main(["
+        '"guard", "hook", "--guard-home", '
+        f"{str(home_dir / '.hol-guard')!r}, "
+        '"--harness", "codex"'
+        "]))"
     )
     _write_text(
         workspace_dir / ".codex" / "hooks.json",

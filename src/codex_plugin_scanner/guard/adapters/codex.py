@@ -292,7 +292,9 @@ if [[ -n "${CODEX_MANAGED_BY_BUN:-}" || -n "${CODEX_MANAGED_PACKAGE_ROOT:-}" ]];
     [[ -z "$cmd" ]] && return 0
     [[ "$cmd" == "TRAPDEBUG () {"* ]] && return 0
     [[ "$cmd" == *"codex-zshenv-guard.zsh"* ]] && return 0
-    case "$cmd" in
+    local normalized_cmd="${cmd//\\\"/}"
+    normalized_cmd="${normalized_cmd//\\'/}"
+    case "$normalized_cmd" in
       *".npmrc"*|*".pypirc"*|*".netrc"*|*"id_rsa"*|*"id_ed25519"*|*"npm_token"*|*"NPM_TOKEN"*|*"_authToken"*|*".env"* )
         print -u2 "HOL Guard blocked Codex before it could read a secret-looking local file."
         print -u2 "Blocked command: ${cmd}"
@@ -341,11 +343,13 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
         "config_present": config_path.is_file(),
         "hooks_path": str(hooks_path),
         "hooks_present": hooks_path.is_file(),
-        "toml_hooks_present": isinstance(toml_hooks, dict) and any(
+        "toml_hooks_present": isinstance(toml_hooks, dict)
+        and any(
             bool(toml_hooks.get(event_name))
             for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
         ),
-        "json_hooks_present": isinstance(json_hooks, dict) and any(
+        "json_hooks_present": isinstance(json_hooks, dict)
+        and any(
             bool(json_hooks.get(event_name))
             for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
         ),
@@ -558,6 +562,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                 target_config_path.unlink()
             backup_path.unlink()
         hooks_path = self._remove_hooks(context)
+        self._uninstall_shell_guard(context)
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -690,6 +695,22 @@ class CodexHarnessAdapter(HarnessAdapter):
             zshenv_path.parent.mkdir(parents=True, exist_ok=True)
             zshenv_path.write_text(updated, encoding="utf-8")
         return guard_path
+
+    @staticmethod
+    def _uninstall_shell_guard(context: HarnessContext) -> None:
+        guard_path = context.guard_home / "managed" / "codex" / "codex-zshenv-guard.zsh"
+        if guard_path.is_file():
+            guard_path.unlink()
+
+        zshenv_path = context.home_dir / ".zshenv"
+        if not zshenv_path.is_file():
+            return
+        original = zshenv_path.read_text(encoding="utf-8")
+        cleaned = _remove_managed_zshenv_block(original).rstrip()
+        if cleaned:
+            zshenv_path.write_text(f"{cleaned}\n", encoding="utf-8")
+        else:
+            zshenv_path.unlink()
 
     def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
