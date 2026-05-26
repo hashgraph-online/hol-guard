@@ -57,7 +57,7 @@ To force a specific release, use Python package specifier syntax:
 pipx install --force 'hol-guard==2.0.345'
 ```
 
-Do not use `hol-guard@2.0.345`; pipx treats that as a separate app name, not a package version.
+Do not use `hol-guard@<version>`; pipx treats that as a separate app name, not a package version.
 
 `hol-guard init` is the first-run guided setup. It shows a progressive plan first, then gates each side effect: approve dashboard, Guard completes it, then approve app protection, Guard completes it, then approve Cloud connect and notifications. Nothing opens or changes until you approve that checkpoint. Use `hol-guard init --yes` only for automation when you already trust the plan.
 
