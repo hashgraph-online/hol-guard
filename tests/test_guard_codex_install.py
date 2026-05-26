@@ -435,7 +435,7 @@ def test_guard_install_codex_migrates_legacy_wrapper_script_hook(tmp_path, capsy
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    wrapper_command = str(home_dir / ".codex" / "hooks" / "hol-guard-codex-hook.sh")
+    wrapper_command = shlex.join([str(home_dir / ".codex" / "hooks" / "hol-guard-codex-hook.sh"), "--legacy"])
     managed_events = {
         "PreToolUse": {
             "matcher": "Bash",
