@@ -1332,3 +1332,65 @@ export async function retryResume(requestId: string): Promise<GuardCodexResumeRe
   const payload = (await response.json()) as unknown;
   return normalizeCodexResume(payload);
 }
+
+export type StatusPageData = {
+  snapshot: GuardRuntimeSnapshot;
+};
+
+export async function loadStatusPage(): Promise<StatusPageData> {
+  const snapshot = await fetchRuntimeSnapshot();
+  return { snapshot };
+}
+
+export type SupplyChainPageData = {
+  snapshot: GuardRuntimeSnapshot;
+};
+
+export async function loadSupplyChainPage(): Promise<SupplyChainPageData> {
+  const snapshot = await fetchRuntimeSnapshot();
+  return { snapshot };
+}
+
+export type AuditPageData = {
+  snapshot: GuardRuntimeSnapshot;
+  receipts: GuardReceipt[];
+};
+
+export async function loadAuditPage(): Promise<AuditPageData> {
+  const [snapshot, receipts] = await Promise.all([
+    fetchRuntimeSnapshot(),
+    fetchReceipts(),
+  ]);
+  return { snapshot, receipts };
+}
+
+export type EvidencePageData = {
+  receipts: GuardReceipt[];
+};
+
+export async function loadEvidencePage(): Promise<EvidencePageData> {
+  const receipts = await fetchReceipts();
+  return { receipts };
+}
+
+export type PolicyPageData = {
+  snapshot: GuardRuntimeSnapshot;
+  policies: GuardPolicyDecision[];
+};
+
+export async function loadPolicyPage(): Promise<PolicyPageData> {
+  const [snapshot, policies] = await Promise.all([
+    fetchRuntimeSnapshot(),
+    fetchPolicies(),
+  ]);
+  return { snapshot, policies };
+}
+
+export type FeedPageData = {
+  snapshot: GuardRuntimeSnapshot;
+};
+
+export async function loadFeedPage(): Promise<FeedPageData> {
+  const snapshot = await fetchRuntimeSnapshot();
+  return { snapshot };
+}
