@@ -6109,10 +6109,7 @@ def _pytest_addopts_text_has_unsafe_marker(addopts_text: str) -> bool:
         token = raw_token.strip("[],")
         if token in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS:
             return True
-        if any(
-            marker != "-p" and token.startswith(f"{marker}=")
-            for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS
-        ):
+        if any(marker != "-p" and token.startswith(f"{marker}=") for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
             return True
         if token.startswith("-p") and not token.startswith("--"):
             return True
