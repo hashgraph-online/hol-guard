@@ -2124,14 +2124,14 @@ def _scan_tarball_archive_bytes(archive_bytes: bytes) -> dict[str, str] | None:
         with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*") as archive:
             member_count = 0
             for member in archive:
-                member_count += 1
-                if member_count > _TARBALL_SCAN_MAX_FILES:
+                if member_count >= _TARBALL_SCAN_MAX_FILES:
                     return {
                         "decision": "block",
                         "code": "tarball_file_count_limit",
                         "message": "External tarball exceeded Guard file-count limits.",
                         "severity": "high",
                     }
+                member_count += 1
                 if _tarball_member_is_unsafe(member):
                     return {
                         "decision": "block",
