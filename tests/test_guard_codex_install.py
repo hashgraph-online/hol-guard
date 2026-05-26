@@ -17,6 +17,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.codex_config import dump_toml
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -839,16 +840,85 @@ def test_guard_install_codex_workspace_cleans_stale_global_managed_hook(tmp_path
     json.loads(capsys.readouterr().out)
 
     home_hooks_path = home_dir / ".codex" / "hooks.json"
+    home_config = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
     workspace_config = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
     workspace_hooks = workspace_config["hooks"]
 
     assert global_install_rc == 0
     assert workspace_install_rc == 0
     assert home_hooks_path.exists() is False
+    assert "UserPromptSubmit" not in home_config.get("hooks", {})
+    assert "PermissionRequest" not in home_config.get("hooks", {})
+    assert "PostToolUse" not in home_config.get("hooks", {})
+    assert "PreToolUse" not in home_config.get("hooks", {})
     assert len(workspace_hooks["PreToolUse"]) == 1
     managed_group = workspace_hooks["PreToolUse"][0]
     assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
+
+
+def test_guard_install_codex_workspace_preserves_global_user_hooks_while_removing_managed_hooks(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(home_dir / ".codex" / "config.toml", 'model = "gpt-5.3-codex"\n')
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+
+    global_install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    home_config = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    home_config["hooks"]["SessionStart"] = [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 user-session-start.py",
+                    "statusMessage": "User session start",
+                }
+            ]
+        }
+    ]
+    _write_text(home_dir / ".codex" / "config.toml", dump_toml(home_config))
+
+    workspace_install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    final_home_config = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+
+    assert global_install_rc == 0
+    assert workspace_install_rc == 0
+    assert final_home_config["model"] == "gpt-5.3-codex"
+    assert final_home_config["hooks"] == {
+        "SessionStart": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "python3 user-session-start.py",
+                        "statusMessage": "User session start",
+                    }
+                ]
+            }
+        ]
+    }
 
 
 def test_guard_uninstall_codex_preserves_user_hooks_in_managed_bash_group(tmp_path, capsys):
