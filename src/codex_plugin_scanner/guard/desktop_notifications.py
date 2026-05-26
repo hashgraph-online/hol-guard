@@ -19,6 +19,15 @@ MACOS_TERMINAL_NOTIFIER_BUNDLE_ID = "fr.julienxx.oss.terminal-notifier"
 MACOS_NOTIFICATION_SETTINGS_URL = (
     f"x-apple.systempreferences:com.apple.Notifications-Settings.extension?id={MACOS_TERMINAL_NOTIFIER_BUNDLE_ID}"
 )
+MACOS_OSASCRIPT_PATH = "/usr/bin/osascript"
+MACOS_OPEN_PATH = "/usr/bin/open"
+WINDOWS_POWERSHELL_PATH = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+_TRUSTED_MACOS_TERMINAL_NOTIFIER_PATHS = frozenset(
+    {
+        "/opt/homebrew/bin/terminal-notifier",
+        "/usr/local/bin/terminal-notifier",
+    }
+)
 _NOTIFICATION_SETUP_STATE_FILE = "desktop-notifications.json"
 
 
@@ -220,7 +229,7 @@ def ensure_desktop_notification_setup(
         )
     state_path = guard_home / _NOTIFICATION_SETUP_STATE_FILE
     already_prompted = state_path.exists()
-    terminal_notifier = which("terminal-notifier")
+    terminal_notifier = _trusted_macos_terminal_notifier_path(which)
     if already_prompted and not force:
         return DesktopNotificationSetupResult(
             platform=system,
@@ -295,7 +304,7 @@ def _send_macos_notification(
     run: Callable[..., subprocess.CompletedProcess[object]],
     which: Callable[[str], str | None],
 ) -> bool:
-    terminal_notifier = which("terminal-notifier")
+    terminal_notifier = _trusted_macos_terminal_notifier_path(which)
     if terminal_notifier:
         return _run_notification_command(
             run,
@@ -321,7 +330,7 @@ def _send_macos_notification(
     return _run_notification_command(
         run,
         [
-            "osascript",
+            MACOS_OSASCRIPT_PATH,
             "-e",
             (
                 f'display notification "{_escape_osascript(_macos_fallback_message(notification))}" '
@@ -343,7 +352,7 @@ def _send_windows_notification(
     return _run_notification_command(
         run,
         [
-            "powershell",
+            WINDOWS_POWERSHELL_PATH,
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",
@@ -361,10 +370,17 @@ def _open_macos_notification_settings(
 ) -> bool:
     return _run_notification_command(
         run,
-        ["open", MACOS_NOTIFICATION_SETTINGS_URL],
+        [MACOS_OPEN_PATH, MACOS_NOTIFICATION_SETTINGS_URL],
         check=False,
         timeout=3,
     )
+
+
+def _trusted_macos_terminal_notifier_path(which: Callable[[str], str | None]) -> str | None:
+    notifier_path = which("terminal-notifier")
+    if notifier_path in _TRUSTED_MACOS_TERMINAL_NOTIFIER_PATHS:
+        return notifier_path
+    return None
 
 
 def _windows_toast_script(notification: DesktopApprovalNotification) -> str:

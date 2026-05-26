@@ -72,11 +72,30 @@ def test_macos_notification_falls_back_to_osascript() -> None:
     )
 
     assert sent is True
-    assert calls[0][0] == "osascript"
+    assert calls[0][0] == "/usr/bin/osascript"
     assert "display notification" in calls[0][2]
     assert "HOL Guard needs approval" in calls[0][2]
     assert 'sound name "default"' in calls[0][2]
     assert "http://127.0.0.1:5474/approvals/req-native" in calls[0][2]
+
+
+def test_macos_notification_rejects_untrusted_terminal_notifier_path() -> None:
+    calls: list[list[str]] = []
+
+    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[object]:
+        calls.append(command)
+        return _Completed()  # type: ignore[return-value]
+
+    sent = send_desktop_approval_notification(
+        _notification(),
+        system_name="Darwin",
+        run=run,
+        which=lambda name: "/tmp/evil/terminal-notifier" if name == "terminal-notifier" else None,
+    )
+
+    assert sent is True
+    assert calls[0][0] == "/usr/bin/osascript"
+    assert "/tmp/evil/terminal-notifier" not in calls[0]
 
 
 def test_windows_notification_uses_powershell_toast() -> None:
@@ -93,7 +112,12 @@ def test_windows_notification_uses_powershell_toast() -> None:
     )
 
     assert sent is True
-    assert calls[0][:4] == ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass"]
+    assert calls[0][:4] == [
+        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+    ]
     assert "ToastNotificationManager" in calls[0][-1]
     assert "$OpenAction.SetAttribute('activationType', 'protocol')" in calls[0][-1]
     assert "$OpenAction.SetAttribute('arguments', $Url)" in calls[0][-1]
@@ -133,7 +157,7 @@ def test_notification_command_nonzero_exit_is_failure() -> None:
     )
 
     assert sent is False
-    assert calls[0][0] == "osascript"
+    assert calls[0][0] == "/usr/bin/osascript"
 
 
 def test_notification_command_launch_failure_is_best_effort() -> None:
@@ -265,7 +289,7 @@ def test_macos_setup_sends_preview_opens_settings_and_records_state(tmp_path) ->
     assert result.notifier_path == "/usr/local/bin/terminal-notifier"
     assert calls[0][0] == "/usr/local/bin/terminal-notifier"
     assert calls[1] == [
-        "open",
+        "/usr/bin/open",
         "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=fr.julienxx.oss.terminal-notifier",
     ]
     assert (tmp_path / "guard-home" / "desktop-notifications.json").exists()
