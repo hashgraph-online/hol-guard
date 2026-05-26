@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { resolve, extname } from "node:path";
+import { resolve, extname, sep } from "node:path";
 import { existsSync } from "node:fs";
 
 const PORT = parseInt(process.argv[2] || "4175", 10);
@@ -23,7 +23,11 @@ const MIME = {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost`);
-  let filePath = resolve(STATIC_DIR, "." + url.pathname);
+  const candidatePath = resolve(STATIC_DIR, "." + url.pathname);
+  const staticDirPrefix = `${STATIC_DIR}${sep}`;
+  const isPathInsideStaticDir =
+    candidatePath === STATIC_DIR || candidatePath.startsWith(staticDirPrefix);
+  let filePath = isPathInsideStaticDir ? candidatePath : resolve(STATIC_DIR, "index.html");
 
   if (!existsSync(filePath) || filePath === STATIC_DIR) {
     filePath = resolve(STATIC_DIR, "index.html");
