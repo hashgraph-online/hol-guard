@@ -130,6 +130,7 @@ _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = (
     "--debug",
     "--junitxml",
     "--junit-xml",
+    "--log-file",
     "-p",
 )
 _PYTEST_UNSAFE_ENV_KEYS = frozenset({"PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE"})
@@ -6086,14 +6087,31 @@ def _pytest_config_text_has_unsafe_addopts(config_text: str) -> bool:
             continue
         if re.match(r"^log_file\s*=", line):
             return True
-        if "addopts" in line:
+        addopts_match = re.match(r"^addopts\s*=(.*)$", line)
+        if addopts_match is not None:
             in_addopts = True
-            if any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
+            if _pytest_addopts_text_has_unsafe_marker(addopts_match.group(1)):
                 return True
             continue
         if in_addopts and (line.startswith("[") or re.match(r"^[a-z0-9_.-]+\s*=", line)):
             in_addopts = False
-        if in_addopts and any(marker in line for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
+        if in_addopts and _pytest_addopts_text_has_unsafe_marker(line):
+            return True
+    return False
+
+
+def _pytest_addopts_text_has_unsafe_marker(addopts_text: str) -> bool:
+    try:
+        tokens = shlex.split(addopts_text, comments=True, posix=True)
+    except ValueError:
+        tokens = addopts_text.split()
+    for raw_token in tokens:
+        token = raw_token.strip("[],")
+        if token in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS:
+            return True
+        if any(marker != "-p" and token.startswith(f"{marker}=") for marker in _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS):
+            return True
+        if token.startswith("-p") and not token.startswith("--"):
             return True
     return False
 
