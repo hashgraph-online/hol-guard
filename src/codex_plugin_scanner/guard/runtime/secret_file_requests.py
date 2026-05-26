@@ -325,8 +325,9 @@ _NODE_LOCAL_FILE_ACCESS_PATTERN = re.compile(
 _NODE_SENSITIVE_RUNTIME_PATTERN = re.compile(
     r"\b(?:process|globalThis)\b|"
     r"\bprocess\s*(?:\.\s*env|\[\s*['\"]env['\"]\s*\])|"
-    r"\bglobal\s*(?:\.\s*process|\[\s*['\"]process['\"]\s*\]|\[\s*['\"]pro['\"]\s*\+\s*['\"]cess['\"]\s*\])"
-    r"\s*(?:\.\s*env|\[\s*['\"]env['\"]\s*\]|\[\s*['\"]en['\"]\s*\+\s*['\"]v['\"]\s*\])|"
+    r"\bglobal\s*(?:\.\s*process|\[\s*['\"`](?:process|p['\"`]\s*\+\s*['\"`]rocess|pr['\"`]\s*\+\s*['\"`]ocess|"
+    r"pro['\"`]\s*\+\s*['\"`]cess|proc['\"`]\s*\+\s*['\"`]ess|proce['\"`]\s*\+\s*['\"`]ss|proces['\"`]\s*\+\s*['\"`]s)"
+    r"['\"`]\s*\])\s*(?:\.\s*env|\[\s*['\"`](?:env|e['\"`]\s*\+\s*['\"`]nv|en['\"`]\s*\+\s*['\"`]v)['\"`]\s*\])|"
     r"\b(?:import|require|createRequire)\b|"
     r"\brequire\s*\(\s*['\"](?:node:)?(?:child_process|fs|fs/promises)['\"]\s*\)|"
     r"\bimport\s*\(\s*['\"](?:node:)?(?:child_process|fs|fs/promises)['\"]\s*\)|"
