@@ -71,9 +71,11 @@ def _get_default_detector_registry() -> DetectorRegistry:
 _PAIN_SIGNAL_EVENTS = frozenset(
     {
         "changed_artifact_caught",
-        "exception_expiring",
         "install_time_block",
-        "premium_advisory",
+        "install_time_review",
+        "install_time_warn",
+        "supply_chain_bundle_refresh_requested",
+        "approval_gate/remote_policy_sync_blocked",
     }
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
@@ -926,6 +928,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         now=now,
     )
     pain_signals_uploaded = sync_pain_signals(store)
+    value_metrics = _build_value_metrics(store)
+    weekly_digest = _build_weekly_firewall_digest(metrics=value_metrics, now=now)
     summary = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
@@ -936,6 +940,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "receipts": len(receipts),
         "inventory": 0,
         "inventory_tracked": len(inventory),
+        "value_metrics": value_metrics,
+        "weekly_digest": weekly_digest,
     }
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
@@ -1420,6 +1426,7 @@ def sync_pain_signals(store: GuardStore) -> int:
     last_event_id = _last_uploaded_event_id(cursor_payload)
     uploaded_count = 0
     current_event_id = last_event_id
+    warn_occurrences: dict[tuple[str, str], int] = {}
     while True:
         candidates = store.list_events_after(
             current_event_id,
@@ -1429,7 +1436,17 @@ def sync_pain_signals(store: GuardStore) -> int:
         if not candidates:
             break
         last_processed_event_id = int(candidates[-1]["event_id"])
-        signal_items = [payload for item in candidates if (payload := _pain_signal_item(item)) is not None]
+        signal_items: list[dict[str, object]] = []
+        for item in candidates:
+            event_name = _optional_string(item.get("event_name"))
+            payload = item.get("payload")
+            if event_name == "install_time_warn" and isinstance(payload, dict):
+                warn_key = _warning_occurrence_key(payload)
+                if warn_key is not None:
+                    warn_occurrences[warn_key] = warn_occurrences.get(warn_key, 0) + 1
+            pain_signal = _pain_signal_item(item, warn_occurrences=warn_occurrences)
+            if pain_signal is not None:
+                signal_items.append(pain_signal)
         if signal_items:
             request = urllib.request.Request(
                 _pain_signal_sync_url(normalized_sync_url),
@@ -1702,15 +1719,24 @@ def _last_uploaded_event_id(payload: dict[str, object] | list[object] | None) ->
     return event_id if isinstance(event_id, int) and event_id > 0 else 0
 
 
-def _pain_signal_item(event: dict[str, object]) -> dict[str, object] | None:
+def _pain_signal_item(
+    event: dict[str, object],
+    *,
+    warn_occurrences: dict[tuple[str, str], int] | None = None,
+) -> dict[str, object] | None:
     event_name = _optional_string(event.get("event_name"))
     payload = event.get("payload")
     occurred_at = _optional_string(event.get("occurred_at"))
     if event_name is None or not isinstance(payload, dict) or occurred_at is None:
         return None
-    artifact_id = _optional_string(payload.get("artifact_id"))
-    artifact_name = _optional_string(payload.get("artifact_name"))
+    artifact_id, artifact_name = _pain_signal_artifact_identity(event_name, payload)
     if artifact_id is None or artifact_name is None:
+        return None
+    if not _should_emit_pain_signal(
+        event_name=event_name,
+        payload=payload,
+        warn_occurrences=warn_occurrences,
+    ):
         return None
     harness = _optional_string(payload.get("harness")) or _optional_string(payload.get("executor")) or "unknown"
     artifact_type = _artifact_type_for_signal(payload, artifact_id)
@@ -1756,6 +1782,121 @@ def _pain_signal_summary(event_name: str, payload: dict[str, object]) -> str:
     if event_name == "exception_expiring" and expires_at is not None:
         return f"Guard exception expires at {expires_at}."
     return f"Guard recorded {event_name.replace('_', ' ')} for this artifact."
+
+
+def _build_value_metrics(store: GuardStore) -> dict[str, dict[str, object]]:
+    events = store.list_events(limit=5000)
+    installs_stopped = 0
+    scripts_prevented = 0
+    tokens_protected = 0
+    for event in events:
+        event_name = _optional_string(event.get("event_name")) or ""
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if event_name in {"install_time_block", "install_time_review"}:
+            installs_stopped += 1
+            install_kind = (_optional_string(payload.get("install_kind")) or "").lower()
+            risk_signals = payload.get("risk_signals")
+            script_signal = isinstance(risk_signals, list) and any(
+                "script" in str(signal).lower() for signal in risk_signals
+            )
+            if "script" in install_kind or script_signal:
+                scripts_prevented += 1
+        if event_name == "changed_artifact_caught":
+            changed_fields = payload.get("changed_fields")
+            risk_signals = payload.get("risk_signals")
+            touched_launch_surface = isinstance(changed_fields, list) and any(
+                str(item) in {"command", "args"} for item in changed_fields
+            )
+            secret_signal = isinstance(risk_signals, list) and any(
+                any(token in str(signal).lower() for token in ("token", "secret", ".env", "credential"))
+                for signal in risk_signals
+            )
+            if touched_launch_surface and secret_signal:
+                tokens_protected += 1
+    return {
+        "installs_stopped_before_execution": {
+            "value": installs_stopped,
+            "source": "guard_events:install_time_block|install_time_review",
+        },
+        "scripts_prevented": {
+            "value": scripts_prevented,
+            "source": "guard_events:risk_signals|install_kind",
+        },
+        "tokens_protected": {
+            "value": tokens_protected,
+            "source": "guard_events:changed_artifact_caught",
+        },
+    }
+
+
+def _build_weekly_firewall_digest(*, metrics: dict[str, dict[str, object]], now: str) -> dict[str, object]:
+    installs_stopped = int(metrics["installs_stopped_before_execution"]["value"])
+    scripts_prevented = int(metrics["scripts_prevented"]["value"])
+    tokens_protected = int(metrics["tokens_protected"]["value"])
+    headline = (
+        "Package firewall summary: "
+        f"{installs_stopped} installs stopped before execution, "
+        f"{scripts_prevented} scripts prevented, "
+        f"{tokens_protected} token-protection incidents."
+    )
+    return {
+        "subject": "HOL Guard weekly package firewall summary",
+        "generated_at": now,
+        "period_days": 7,
+        "headline": headline,
+        "body_preview": (
+            "HOL Guard weekly digest\n"
+            f"{headline}\n"
+            "Review the approval queue and sync health to keep package protection current."
+        ),
+    }
+
+
+def _pain_signal_artifact_identity(event_name: str, payload: dict[str, object]) -> tuple[str | None, str | None]:
+    artifact_id = _optional_string(payload.get("artifact_id"))
+    artifact_name = _optional_string(payload.get("artifact_name"))
+    if artifact_id is not None and artifact_name is not None:
+        return (artifact_id, artifact_name)
+    if event_name == "supply_chain_bundle_refresh_requested":
+        fallback_id = artifact_id or "guard:supply-chain:feed"
+        return (fallback_id, artifact_name or fallback_id)
+    if event_name == "approval_gate/remote_policy_sync_blocked":
+        return ("guard:policy:disable", "remote policy sync disabled")
+    return (None, None)
+
+
+def _warning_occurrence_key(payload: dict[str, object]) -> tuple[str, str] | None:
+    artifact_id = _optional_string(payload.get("artifact_id"))
+    harness = _optional_string(payload.get("harness")) or _optional_string(payload.get("executor"))
+    if artifact_id is None or harness is None:
+        return None
+    return (harness, artifact_id)
+
+
+def _should_emit_pain_signal(
+    *,
+    event_name: str,
+    payload: dict[str, object],
+    warn_occurrences: dict[tuple[str, str], int] | None,
+) -> bool:
+    if event_name in {"install_time_block", "install_time_review"}:
+        return True
+    if event_name == "install_time_warn":
+        warn_key = _warning_occurrence_key(payload)
+        if warn_key is None:
+            return False
+        if warn_occurrences is None:
+            return False
+        return warn_occurrences.get(warn_key, 0) >= 2
+    if event_name == "changed_artifact_caught":
+        policy_action = _optional_string(payload.get("policy_action"))
+        return policy_action in {"block", "sandbox-required", "require-reapproval"}
+    if event_name == "supply_chain_bundle_refresh_requested":
+        reason = _optional_string(payload.get("reason"))
+        return reason == "feed_stale"
+    return event_name == "approval_gate/remote_policy_sync_blocked"
 
 
 def _pain_signal_sync_url(sync_url: str) -> str:
