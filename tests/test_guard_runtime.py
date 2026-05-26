@@ -13078,6 +13078,21 @@ def test_guard_runtime_blocks_pytest_config_addopts_log_file(tmp_path):
     assert binary_match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_allows_pytest_config_addopts_log_formatting(tmp_path):
+    _write_text(
+        tmp_path / "pytest.ini",
+        "[pytest]\naddopts = --log-file-level INFO --log-file-format %(message)s --log-file-date-format %H:%M:%S\n",
+    )
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "python3 -m pytest tests/test_guard_harness_smoke.py -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
 def test_guard_runtime_checks_absolute_selected_test_root_pytest_config_addopts(tmp_path):
     test_root = tmp_path / "sub"
     _write_text(test_root / "pytest.ini", "[pytest]\naddopts = -p evil\n")
