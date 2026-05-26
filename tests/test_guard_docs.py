@@ -121,3 +121,31 @@ def test_static_docs_cover_ci_wrapper_examples() -> None:
     assert "hol-guard protect -- npm ci" in docs_text
     assert "install dependencies through hol guard" in docs_text
     assert ".github/workflows" in docs_text
+
+
+def test_static_docs_include_skill_guidance_for_package_install_workflows() -> None:
+    docs_text = "\n".join(
+        [
+            _read_repo_file("docs/guard/SKILL.md"),
+            _read_repo_file("docs/guard/get-started.md"),
+        ]
+    ).lower()
+
+    assert "before package installs" in docs_text
+    assert "hol-guard protect --dry-run -- npm install" in docs_text
+    assert "hol-guard supply-chain audit --json" in docs_text
+
+
+def test_static_docs_cover_false_positive_remediation_and_incident_response() -> None:
+    docs_text = "\n".join(
+        [
+            _read_repo_file("docs/guard/remediation.md"),
+            _read_repo_file("docs/guard/incident-response.md"),
+            _read_repo_file("docs/guard/get-started.md"),
+        ]
+    ).lower()
+
+    assert "verified false positive" in docs_text
+    assert "expiring exception" in docs_text
+    assert "blocked malware" in docs_text
+    assert "supply-chain audit --json" in docs_text
