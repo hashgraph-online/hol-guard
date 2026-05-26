@@ -197,14 +197,6 @@ def _finalize_resume_attempt(
     supported = bool(resume["supported"])
     thread_id = str(resume["thread_id"]) if resume.get("thread_id") is not None else None
     attempt_count = int(resume["attempt_count"])
-    if action == "block":
-        return _skip_blocked_resume(
-            store=store,
-            request_id=request_id,
-            resume=resume,
-            attempt_count=attempt_count,
-            now=now,
-        )
     if strategy == "manual-only" or not supported:
         message = _manual_resume_message(action)
         store.update_request_resume(
