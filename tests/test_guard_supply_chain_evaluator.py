@@ -593,6 +593,52 @@ def test_evaluate_package_request_artifact_fails_closed_on_untrusted_cloud_http_
     assert any(reason["code"] == expected_code for reason in result.reasons)
 
 
+def test_evaluate_package_request_artifact_strict_mode_blocks_on_cloud_unreachable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    (store.guard_home / "config.toml").write_text('security_level = "strict"\n', encoding="utf-8")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "demo-token",
+        "2026-05-19T00:00:00Z",
+        workspace_id=WORKSPACE_ID,
+    )
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+                normalized_severity="low",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                risk_score=220,
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    def raise_timeout(*args: object, **kwargs: object) -> object:
+        raise TimeoutError("network unreachable")
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_timeout)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert result.enforcement == "premium_cloud"
+    assert any(reason["code"] == "cloud_validation_error" for reason in result.reasons)
+
+
 def test_evaluate_package_request_artifact_fails_closed_on_invalid_cloud_response(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1075,9 +1121,7 @@ def test_evaluate_package_request_artifact_warns_for_low_confidence_transitive_l
     assert "react/node_modules/debug" in result.user_copy.harness_message
 
 
-def test_transitive_lockfile_resolution_uses_bounded_deadline(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_transitive_lockfile_resolution_uses_bounded_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
     response = _bundle_response(
@@ -1127,9 +1171,7 @@ def test_transitive_lockfile_resolution_uses_bounded_deadline(
     assert captured["deadline"] == pytest.approx(100.2)
 
 
-def test_transitive_lockfile_timeout_surfaces_warn_result(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_transitive_lockfile_timeout_surfaces_warn_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
     response = _bundle_response(
