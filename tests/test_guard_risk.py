@@ -831,11 +831,23 @@ def test_tool_action_request_classifier_blocks_docker_push():
         "bash",
         {"command": "docker --context prod push registry.example.com/app:v1"},
     )
+    build_push_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker build --push -t registry.example.com/app:v1 ."},
+    )
+    buildx_push_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker buildx build --push -t registry.example.com/app:v1 ."},
+    )
 
     assert request is not None
     assert request.action_class == "docker-sensitive command"
     assert context_request is not None
     assert context_request.action_class == "docker-sensitive command"
+    assert build_push_request is not None
+    assert build_push_request.action_class == "docker-sensitive command"
+    assert buildx_push_request is not None
+    assert buildx_push_request.action_class == "docker-sensitive command"
 
 
 def test_tool_action_request_classifier_blocks_python_test_module_invocation():

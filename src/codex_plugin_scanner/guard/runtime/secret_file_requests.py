@@ -80,7 +80,9 @@ _DOCKER_ALWAYS_SENSITIVE_SUBCOMMANDS = frozenset({"compose", "login", "push", "r
 _DOCKER_BUILD_SUBCOMMANDS = frozenset({"build"})
 _DOCKER_BUILDX_BUILD_SUBCOMMANDS = frozenset({"b", "build"})
 _DOCKER_BUILD_SECRET_FLAGS = frozenset({"--allow", "--secret", "--ssh"})
-_DOCKER_BUILD_OUTPUT_FLAGS = frozenset({"--cache-to", "--iidfile", "--load", "--metadata-file", "--output", "-o"})
+_DOCKER_BUILD_OUTPUT_FLAGS = frozenset(
+    {"--cache-to", "--iidfile", "--load", "--metadata-file", "--output", "--push", "-o"}
+)
 _DOCKER_BUILD_METADATA_FLAGS = frozenset({"--annotation", "--label"})
 _DOCKER_GLOBAL_OPTIONS_WITH_VALUES = frozenset(
     {
@@ -717,7 +719,8 @@ def _docker_sensitive_tool_action_request(
         command_text=command_text,
         action_class="docker-sensitive command",
         reason=(
-            "Guard treats Docker login, run, compose, and credential-bearing build actions as sensitive because they "
+            "Guard treats Docker login, run, compose, push, and credential-bearing build "
+            "actions as sensitive because they "
             "can expose credentials or execute privileged container workflows."
         ),
     )
