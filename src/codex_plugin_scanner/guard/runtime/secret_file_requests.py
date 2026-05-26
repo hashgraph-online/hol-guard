@@ -130,6 +130,7 @@ _PYTEST_CONFIG_MUTATING_ADDOPTS_MARKERS = (
     "--debug",
     "--junitxml",
     "--junit-xml",
+    "--log-file",
     "-p",
 )
 _PYTEST_UNSAFE_ENV_KEYS = frozenset({"PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE"})
