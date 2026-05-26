@@ -314,6 +314,13 @@ export function HomeWorkspace(props: {
             onOpenAppDetail={props.onOpenAppDetail}
           />
 
+          <HomeProtectionModule
+            snapshot={snapshot}
+            managedInstalls={managedInstalls}
+            onOpenFleet={props.onOpenFleet}
+            onOpenSupplyChain={props.onOpenSupplyChain}
+          />
+
           {dailyStory && (
             <CollapsibleCard
               id="daily-brief"
@@ -339,23 +346,6 @@ export function HomeWorkspace(props: {
         </section>
 
         <section className="space-y-6">
-          <HomeProtectionModule
-            snapshot={snapshot}
-            managedInstalls={managedInstalls}
-            onOpenFleet={props.onOpenFleet}
-            onOpenSupplyChain={props.onOpenSupplyChain}
-          />
-
-          <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
-
-          <CloudStatusCard
-            snapshot={snapshot}
-            showUpsell={cloudUpsellVisible}
-            onOpenSettings={props.onOpenSettings}
-          />
-
-          <KeyboardHelpCard onOpenHelp={props.onOpenHelp} />
-
           {snapshot.latest_receipts.length > 0 && (
             <RecentProtectionSection receipts={snapshot.latest_receipts} />
           )}
@@ -378,6 +368,18 @@ export function HomeWorkspace(props: {
             </div>
           )}
         </section>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
+
+        <CloudStatusCard
+          snapshot={snapshot}
+          showUpsell={cloudUpsellVisible}
+          onOpenSettings={props.onOpenSettings}
+        />
+
+        <KeyboardHelpCard onOpenHelp={props.onOpenHelp} />
       </div>
 
       {props.clearConfirm && (
