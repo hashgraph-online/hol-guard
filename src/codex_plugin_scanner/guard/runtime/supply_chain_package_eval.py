@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import posixpath
 import re
+import tarfile
 import time
 import urllib.error
 import urllib.parse
@@ -63,6 +66,10 @@ _LOCKFILE_PARSE_BUDGET_SECONDS = 0.2
 _TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD = 900
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
 _PYPI_REGISTRY_METADATA_BASE_URL = "https://pypi.org/pypi"
+_TARBALL_SCAN_TIMEOUT_SECONDS = 2
+_TARBALL_SCAN_MAX_BYTES = 6 * 1024 * 1024
+_TARBALL_SCAN_MAX_FILES = 500
+_TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES = 256 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -1006,13 +1013,7 @@ def _heuristic_result(
                 severity="high",
             )
         if package_result is None and source_url is not None and _is_external_https_tarball_source(source_url):
-            package_result = _heuristic_package_result(
-                target=target,
-                decision="ask",
-                code="external_tarball_source",
-                message="External tarball source requires review before install.",
-                severity="medium",
-            )
+            package_result = _external_tarball_dependency_result(target)
         if package_result is None:
             if lockfile_parse_warning is not None:
                 packages.append(lockfile_parse_warning)
@@ -2064,6 +2065,135 @@ def _is_external_https_tarball_source(source_url: str) -> bool:
         and normalized_path.endswith((".tgz", ".tar.gz", ".tar"))
         and hostname != "registry.npmjs.org"
     )
+
+
+def _external_tarball_dependency_result(target: dict[str, object]) -> dict[str, object]:
+    source_url = _optional_string(target.get("source_url"))
+    if source_url is None:
+        return _heuristic_package_result(
+            target=target,
+            decision="ask",
+            code="external_tarball_source",
+            message="External tarball source requires review before install.",
+            severity="medium",
+        )
+    scan = _scan_external_tarball(source_url)
+    if scan is None:
+        return _heuristic_package_result(
+            target=target,
+            decision="ask",
+            code="external_tarball_source",
+            message="External tarball source requires review before install.",
+            severity="medium",
+        )
+    return _heuristic_package_result(
+        target=target,
+        decision=scan["decision"],
+        code=scan["code"],
+        message=scan["message"],
+        severity=scan["severity"],
+    )
+
+
+def _scan_external_tarball(source_url: str) -> dict[str, str] | None:
+    archive_bytes = _download_external_tarball(source_url)
+    if archive_bytes is None:
+        return None
+    if len(archive_bytes) > _TARBALL_SCAN_MAX_BYTES:
+        return {
+            "decision": "block",
+            "code": "tarball_size_limit",
+            "message": "External tarball exceeded Guard scan size limits.",
+            "severity": "high",
+        }
+    return _scan_tarball_archive_bytes(archive_bytes)
+
+
+def _download_external_tarball(source_url: str) -> bytes | None:
+    request = urllib.request.Request(source_url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=_TARBALL_SCAN_TIMEOUT_SECONDS) as response:
+            payload = response.read(_TARBALL_SCAN_MAX_BYTES + 1)
+    except OSError:
+        return None
+    return payload
+
+
+def _scan_tarball_archive_bytes(archive_bytes: bytes) -> dict[str, str] | None:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*") as archive:
+            member_count = 0
+            for member in archive:
+                if member_count >= _TARBALL_SCAN_MAX_FILES:
+                    return {
+                        "decision": "block",
+                        "code": "tarball_file_count_limit",
+                        "message": "External tarball exceeded Guard file-count limits.",
+                        "severity": "high",
+                    }
+                member_count += 1
+                if _tarball_member_is_unsafe(member):
+                    return {
+                        "decision": "block",
+                        "code": "tarball_zip_slip",
+                        "message": "External tarball contains unsafe archive paths.",
+                        "severity": "high",
+                    }
+                if not member.isfile():
+                    continue
+                if not member.name.endswith("package.json"):
+                    continue
+                extracted = archive.extractfile(member)
+                if extracted is None:
+                    continue
+                package_json = extracted.read(_TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES + 1)
+                if len(package_json) > _TARBALL_SCAN_MAX_PACKAGE_JSON_BYTES:
+                    return {
+                        "decision": "block",
+                        "code": "tarball_package_json_limit",
+                        "message": "External tarball package manifest exceeded Guard scan limits.",
+                        "severity": "high",
+                    }
+                if _package_json_has_install_scripts(package_json):
+                    return {
+                        "decision": "block",
+                        "code": "tarball_install_script",
+                        "message": "External tarball declares install-time scripts and was blocked.",
+                        "severity": "high",
+                    }
+    except (tarfile.TarError, OSError, UnicodeDecodeError, ValueError):
+        return None
+    return None
+
+
+def _tarball_member_is_unsafe(member: tarfile.TarInfo) -> bool:
+    normalized_name = posixpath.normpath(member.name)
+    if member.name.startswith(("/", "\\")):
+        return True
+    if normalized_name in {"..", "."} or normalized_name.startswith("../"):
+        return True
+    if ":" in normalized_name.split("/", 1)[0]:
+        return True
+    if member.issym() or member.islnk():
+        link_target = posixpath.normpath(member.linkname or "")
+        if link_target.startswith("/") or link_target.startswith("../") or link_target == "..":
+            return True
+    return False
+
+
+def _package_json_has_install_scripts(payload: bytes) -> bool:
+    try:
+        parsed = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    scripts = parsed.get("scripts")
+    if not isinstance(scripts, dict):
+        return False
+    for key in ("preinstall", "install", "postinstall", "prepare"):
+        value = scripts.get(key)
+        if isinstance(value, str) and value.strip():
+            return True
+    return False
 
 
 def _lockfile_dependency_versions(
