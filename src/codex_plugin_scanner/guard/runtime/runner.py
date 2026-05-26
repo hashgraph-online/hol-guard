@@ -2077,11 +2077,19 @@ def _cloud_sync_receipt_payload(
     changed_capabilities = [str(item) for item in receipt.get("changed_capabilities", []) if isinstance(item, str)]
     capabilities_summary = _optional_string(receipt.get("capabilities_summary"))
     if changed_capabilities:
-        capabilities = changed_capabilities
+        capabilities = [
+            _cloud_sync_sanitize_text(item, fallback="redacted-capability") for item in changed_capabilities
+        ]
     elif capabilities_summary is not None:
-        capabilities = [capabilities_summary]
+        capabilities = [_cloud_sync_sanitize_text(capabilities_summary, fallback="redacted-capability")]
     else:
         capabilities = []
+    summary_input = (
+        _optional_string(receipt.get("provenance_summary"))
+        or capabilities_summary
+        or f"Guard recorded a {policy_decision} decision."
+    )
+    summary = _cloud_sync_sanitize_text(summary_input, fallback=f"Guard recorded a {policy_decision} decision.")
     payload: dict[str, object] = {
         "receiptId": _optional_string(receipt.get("receipt_id")) or f"guard-receipt-{receipt_fingerprint}",
         "artifactId": artifact_id,
@@ -2099,9 +2107,7 @@ def _cloud_sync_receipt_payload(
         "harness": _optional_string(receipt.get("harness")) or "unknown",
         "policyDecision": policy_decision,
         "recommendation": _cloud_sync_recommendation(policy_decision),
-        "summary": _optional_string(receipt.get("provenance_summary"))
-        or capabilities_summary
-        or f"Guard recorded a {policy_decision} decision.",
+        "summary": summary,
     }
     publisher = _optional_string(receipt.get("publisher"))
     if publisher is not None:
@@ -2162,6 +2168,34 @@ def _cloud_sync_recommendation(policy_decision: str) -> str:
     if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
         return "review"
     return "monitor"
+
+
+def _cloud_sync_sanitize_text(value: str, *, fallback: str) -> str:
+    redacted = redact_sensitive_text(value).strip()
+    if not redacted:
+        return fallback
+    if _looks_like_source_excerpt(redacted):
+        return fallback
+    if len(redacted) > 320:
+        return f"{redacted[:317]}..."
+    return redacted
+
+
+def _looks_like_source_excerpt(value: str) -> bool:
+    lowered = value.lower()
+    suspicious_tokens = (
+        "function ",
+        "def ",
+        "class ",
+        "import ",
+        "from ",
+        " => ",
+        "console.log(",
+        "<script",
+        "#!/bin/",
+    )
+    has_structured_code_shape = "\n" in value and ("{" in value or "}" in value or ";" in value)
+    return has_structured_code_shape or any(token in lowered for token in suspicious_tokens)
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
