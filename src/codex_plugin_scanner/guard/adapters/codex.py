@@ -181,6 +181,8 @@ def _is_managed_hook_command(command: object) -> bool:
         tokens = shlex.split(command)
     except ValueError:
         return False
+    if tokens and Path(tokens[0]).name == "hol-guard-codex-hook.sh":
+        return True
     if len(tokens) < 3:
         return False
     executable = Path(tokens[0]).name.lower()
