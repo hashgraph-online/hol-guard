@@ -2154,11 +2154,12 @@ def _scan_tarball_archive_bytes(archive_bytes: bytes) -> dict[str, str] | None:
                         "message": "External tarball package manifest exceeded Guard scan limits.",
                         "severity": "high",
                     }
-                if _package_json_has_install_scripts(package_json):
+                install_script_risk = _package_json_install_script_risk(package_json)
+                if install_script_risk is not None:
                     return {
                         "decision": "block",
-                        "code": "tarball_install_script",
-                        "message": "External tarball declares install-time scripts and was blocked.",
+                        "code": install_script_risk["code"],
+                        "message": install_script_risk["message"],
                         "severity": "high",
                     }
     except (tarfile.TarError, OSError, UnicodeDecodeError, ValueError):
@@ -2181,19 +2182,43 @@ def _tarball_member_is_unsafe(member: tarfile.TarInfo) -> bool:
     return False
 
 
-def _package_json_has_install_scripts(payload: bytes) -> bool:
+def _package_json_install_script_risk(payload: bytes) -> dict[str, str] | None:
     try:
         parsed = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return False
+        return None
     scripts = parsed.get("scripts")
     if not isinstance(scripts, dict):
-        return False
+        return None
     for key in ("preinstall", "install", "postinstall", "prepare"):
         value = scripts.get(key)
         if isinstance(value, str) and value.strip():
-            return True
-    return False
+            normalized = value.lower()
+            touches_credentials = bool(
+                re.search(
+                    r"\b(?:npm_token|node_auth_token|_authtoken|pypi_token)\b|\.npmrc|\.pypirc",
+                    normalized,
+                )
+            )
+            exfiltrates = bool(
+                re.search(
+                    r"\b(?:curl|wget|axios|urllib)\b|\bhttps?\.request\b|\bfetch\s*\(|\brequests\.",
+                    normalized,
+                )
+            )
+            if touches_credentials and exfiltrates:
+                return {
+                    "code": "credential_theft_install_script",
+                    "message": (
+                        "External tarball install script attempts to read local package-manager credentials "
+                        "and exfiltrate them."
+                    ),
+                }
+            return {
+                "code": "tarball_install_script",
+                "message": "External tarball declares install-time scripts and was blocked.",
+            }
+    return None
 
 
 def _lockfile_dependency_versions(
@@ -3457,4 +3482,6 @@ def _bundle_reason_message(
         return f"Cached bundle is stale, so Guard kept {package_label} in monitor mode."
     if reason == "known_malware_or_kev":
         return f"Cached bundle flagged {package_label} from advisory intelligence."
+    if reason == "maintainer_compromise":
+        return f"Cached bundle flagged {package_label} for probable maintainer compromise."
     return f"Cached bundle matched {package_label}."
