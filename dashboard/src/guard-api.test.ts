@@ -5,6 +5,7 @@ import {
   fetchQueueSummary,
   fetchResumeStatus,
   formatHarnessCommand,
+  normalizeRuntimeSnapshot,
   normalizeApprovalRequest,
   parseActionEnvelope,
   parseDecisionV2,
@@ -28,6 +29,30 @@ function assert(condition: boolean, message: string): void {
 }
 
 const snapshot = buildDemoRuntimeSnapshot();
+
+const partialSupplyChainSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  items: null,
+  queue_summary: null,
+  supply_chain: {
+    package_manager_protection: {
+      path_status: "in_path",
+      protected_managers: ["npm"],
+    },
+  },
+});
+assert(
+  partialSupplyChainSnapshot.supply_chain?.package_manager_protection.protected_managers.length === 1,
+  "T761: runtime normalizer preserves valid supply-chain manager arrays"
+);
+assert(
+  partialSupplyChainSnapshot.supply_chain?.package_manager_protection.unprotected_managers.length === 0,
+  "T761: runtime normalizer defaults missing supply-chain manager arrays"
+);
+assert(
+  partialSupplyChainSnapshot.supply_chain?.package_manager_protection.shim_dir === "",
+  "T761: runtime normalizer defaults missing supply-chain strings"
+);
 
 assert(
   formatHarnessCommand(["hol-guard", "apps", "connect", "opencode"]) === "hol-guard apps connect opencode",

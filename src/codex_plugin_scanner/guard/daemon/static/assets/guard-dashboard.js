@@ -12892,6 +12892,9 @@ function isStringOrNull(value) {
 function isStringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
+function normalizeStringArray(value) {
+  return isStringArray(value) ? value : [];
+}
 function isNonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
@@ -13057,6 +13060,44 @@ function normalizeQueueSummary(raw, pendingCount) {
     next_selectable_request_id: isStringOrNull(raw["next_selectable_request_id"]) ? raw["next_selectable_request_id"] : null
   };
 }
+function normalizePackageManagerProtection(raw) {
+  if (!isRecord(raw)) {
+    return void 0;
+  }
+  const pathStatus = raw["path_status"] === "in_path" ? "in_path" : "missing_from_path";
+  const shimDir = typeof raw["shim_dir"] === "string" ? raw["shim_dir"] : "";
+  return {
+    path_status: pathStatus,
+    path_contains_shim_dir: raw["path_contains_shim_dir"] === true,
+    shim_dir: shimDir,
+    supported_managers: normalizeStringArray(raw["supported_managers"]),
+    installed_managers: normalizeStringArray(raw["installed_managers"]),
+    active_managers: normalizeStringArray(raw["active_managers"]),
+    missing_shims: normalizeStringArray(raw["missing_shims"]),
+    protected_managers: normalizeStringArray(raw["protected_managers"]),
+    unprotected_managers: normalizeStringArray(raw["unprotected_managers"])
+  };
+}
+function normalizeSupplyChainSnapshot(raw) {
+  if (!isRecord(raw)) {
+    return void 0;
+  }
+  const packageManagerProtection = normalizePackageManagerProtection(raw["package_manager_protection"]);
+  if (!packageManagerProtection) {
+    return void 0;
+  }
+  return {
+    package_manager_protection: packageManagerProtection
+  };
+}
+function normalizeRuntimeSnapshot(snapshot) {
+  return {
+    ...snapshot,
+    items: normalizeApprovalRequests(snapshot.items),
+    queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
+    supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain)
+  };
+}
 function normalizeQueueCopy(raw) {
   if (!isRecord(raw)) {
     return null;
@@ -13156,11 +13197,7 @@ async function fetchRuntimeSnapshot() {
     return buildDemoRuntimeSnapshot();
   }
   const snapshot = await readJson("/v1/runtime");
-  return {
-    ...snapshot,
-    items: normalizeApprovalRequests(snapshot.items),
-    queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count)
-  };
+  return normalizeRuntimeSnapshot(snapshot);
 }
 function buildDemoRuntimeSnapshot() {
   const demoRequests2 = getDemoRequests();
