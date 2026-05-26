@@ -13,49 +13,73 @@ _HARNESS_COVERAGE_MATRIX = (
         "harness": "codex",
         "tool_name": "bash",
         "command": "npm install minimist@1.2.8",
-        "proof_test": "tests/test_guard_package_hook_phase14.py::test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses[codex]",
+        "proof_test": (
+            "tests/test_guard_package_hook_phase14.py::"
+            "test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses[codex]"
+        ),
     },
     {
         "harness": "claude-code",
         "tool_name": "bash",
         "command": "npm install minimist@1.2.8",
-        "proof_test": "tests/test_guard_package_hook_phase14.py::test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses[claude-code]",
+        "proof_test": (
+            "tests/test_guard_package_hook_phase14.py::"
+            "test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses[claude-code]"
+        ),
     },
     {
         "harness": "copilot",
         "tool_name": "bash",
         "command": "npm install minimist@1.2.8",
-        "proof_test": "tests/test_guard_package_hook_phase14.py::test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses[copilot]",
+        "proof_test": (
+            "tests/test_guard_package_hook_phase14.py::"
+            "test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses[copilot]"
+        ),
     },
     {
         "harness": "gemini",
         "tool_name": "bash",
         "command": "npm install minimist@1.2.8",
-        "proof_test": "tests/test_guard_package_hook_phase14.py::test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses[gemini]",
+        "proof_test": (
+            "tests/test_guard_package_hook_phase14.py::"
+            "test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses[gemini]"
+        ),
     },
     {
         "harness": "cursor",
         "tool_name": "run_terminal_command",
         "command": "npm install minimist@1.2.8",
-        "proof_test": "tests/test_guard_mcp_package_proxy_phase14.py::test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[cursor]",
+        "proof_test": (
+            "tests/test_guard_mcp_package_proxy_phase14.py::"
+            "test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[cursor]"
+        ),
     },
     {
         "harness": "opencode",
         "tool_name": "run_terminal_command",
         "command": "npm install minimist@1.2.8",
-        "proof_test": "tests/test_guard_mcp_package_proxy_phase14.py::test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[opencode]",
+        "proof_test": (
+            "tests/test_guard_mcp_package_proxy_phase14.py::"
+            "test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[opencode]"
+        ),
     },
     {
         "harness": "hermes",
         "tool_name": "run_terminal_command",
         "command": "npm install minimist@1.2.8",
-        "proof_test": "tests/test_guard_mcp_package_proxy_phase14.py::test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[hermes]",
+        "proof_test": (
+            "tests/test_guard_mcp_package_proxy_phase14.py::"
+            "test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[hermes]"
+        ),
     },
     {
         "harness": "openclaw",
         "tool_name": "run_terminal_command",
         "command": "npm install minimist@1.2.8",
-        "proof_test": "tests/test_guard_mcp_package_proxy_phase14.py::test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[openclaw]",
+        "proof_test": (
+            "tests/test_guard_mcp_package_proxy_phase14.py::"
+            "test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[openclaw]"
+        ),
     },
 )
 
