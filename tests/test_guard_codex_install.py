@@ -13,6 +13,7 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 
@@ -87,8 +88,11 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "codex_hooks" not in config_text
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
-    assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
-    assert hooks_payload["hooks"]["PermissionRequest"][0]["matcher"] == "Bash|^apply_patch$|Edit|Write|mcp__.*"
+    assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert (
+        hooks_payload["hooks"]["PermissionRequest"][0]["matcher"]
+        == codex_adapter._CODEX_GUARD_PERMISSION_MATCHER
+    )
     assert "UserPromptSubmit" in hooks_payload["hooks"]
     assert "matcher" not in hooks_payload["hooks"]["UserPromptSubmit"][0]
     prompt_handler = hooks_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]
@@ -234,7 +238,7 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
                 "hooks": {
                     "PreToolUse": [
                         {
-                            "matcher": "Bash",
+                "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
                             "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
                         }
                     ],
@@ -286,13 +290,13 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
     assert len(hooks_payload["hooks"]["PreToolUse"]) == 2
     assert hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "python3 custom-pre.py"
     managed_group = hooks_payload["hooks"]["PreToolUse"][1]
-    assert managed_group["matcher"] == "Bash"
+    assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
     assert "hook" in managed_group["hooks"][0]["command"]
     assert "codex" in managed_group["hooks"][0]["command"]
     assert restored_hooks["hooks"]["PreToolUse"] == [
         {
-            "matcher": "Bash",
+            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
             "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
         }
     ]
@@ -347,7 +351,7 @@ def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, ca
     assert len(hooks_payload["hooks"]["PreToolUse"]) == 1
     assert len(hooks_payload["hooks"]["PermissionRequest"]) == 1
     assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
-    assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
+    assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]["statusMessage"] == "HOL Guard checking tool action"
     assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
 
@@ -438,7 +442,7 @@ def test_guard_install_codex_migrates_legacy_wrapper_script_hook(tmp_path, capsy
     wrapper_command = shlex.join([str(home_dir / ".codex" / "hooks" / "hol-guard-codex-hook.sh"), "--legacy"])
     managed_events = {
         "PreToolUse": {
-            "matcher": "Bash",
+            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
             "hooks": [
                 {
                     "type": "command",
@@ -554,7 +558,7 @@ def test_guard_install_codex_workspace_cleans_stale_global_managed_hook(tmp_path
     assert home_hooks_path.exists() is False
     assert len(workspace_hooks["hooks"]["PreToolUse"]) == 1
     managed_group = workspace_hooks["hooks"]["PreToolUse"][0]
-    assert managed_group["matcher"] == "Bash"
+    assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
 
 
@@ -600,7 +604,7 @@ def test_guard_uninstall_codex_preserves_user_hooks_in_managed_bash_group(tmp_pa
     assert uninstall_rc == 0
     assert restored_hooks["hooks"]["PreToolUse"] == [
         {
-            "matcher": "Bash",
+            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
             "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
         }
     ]
