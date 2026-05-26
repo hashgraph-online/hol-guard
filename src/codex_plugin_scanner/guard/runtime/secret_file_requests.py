@@ -206,6 +206,22 @@ _READ_ONLY_LOOKUP_COMMANDS = frozenset(
 )
 _READ_ONLY_LOOKUP_FILTERS = frozenset({"grep", "egrep", "fgrep", "head", "sed", "tail"})
 _FIND_EXEC_PLACEHOLDER_TARGET = "guard-find-placeholder.py"
+_FIND_EXEC_ACTION_FLAGS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
+_FIND_EXEC_TERMINATOR_TOKENS = frozenset({";", r"\;", "+"})
+_FIND_PATH_VALUE_PREDICATES = frozenset(
+    {
+        "-ilname",
+        "-iname",
+        "-iwholename",
+        "-ipath",
+        "-iregex",
+        "-lname",
+        "-name",
+        "-path",
+        "-regex",
+        "-wholename",
+    }
+)
 _NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
 _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
     {
@@ -1248,6 +1264,9 @@ def _shell_pipeline_reads_sensitive_path_to_network(
     secret_in_pipeline = False
     segment: list[str] = []
     for token in [*parts, ";"]:
+        if token == ";" and _find_segment_expects_exec_terminator(segment):
+            segment.append(token)
+            continue
         if token in {"|", "|&"}:
             if _shell_segment_network_sink_receives_pipeline(segment) and secret_in_pipeline:
                 return True
@@ -1265,11 +1284,34 @@ def _shell_pipeline_reads_sensitive_path_to_network(
     return False
 
 
+def _find_segment_expects_exec_terminator(segment: list[str]) -> bool:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name != "find" or command_index is None:
+        return False
+    args = segment[command_index + 1 :]
+    index = 0
+    while index < len(args):
+        if args[index] not in _FIND_EXEC_ACTION_FLAGS:
+            index += 1
+            continue
+        index += 1
+        while index < len(args) and args[index] not in _FIND_EXEC_TERMINATOR_TOKENS:
+            index += 1
+        if index >= len(args):
+            return True
+        index += 1
+    return False
+
+
 def _shell_segment_reads_sensitive_path(segment: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     command_name, command_index = _shell_segment_primary_command(segment)
-    if command_name not in _SHELL_LOCAL_READ_COMMANDS or command_index is None:
+    if command_name is None or command_index is None:
         return False
     command_segment = segment[command_index:]
+    if command_name == "find":
+        return _find_segment_reads_sensitive_path(command_segment, cwd=cwd, home_dir=home_dir)
+    if command_name not in _SHELL_LOCAL_READ_COMMANDS:
+        return False
     if not _shell_read_segment_can_emit_stdout(command_segment):
         return False
     for token in _shell_segment_file_operand_tokens(command_segment):
@@ -1279,6 +1321,78 @@ def _shell_segment_reads_sensitive_path(segment: list[str], *, cwd: Path | None,
         if classify_sensitive_path(normalized_token, cwd=cwd, home_dir=home_dir) is not None:
             return True
     return False
+
+
+def _find_segment_reads_sensitive_path(
+    command_segment: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    args = command_segment[1:]
+    if not _find_exec_reads_file_content(args):
+        return False
+    return any(
+        _find_target_candidate_is_sensitive(candidate, cwd=cwd, home_dir=home_dir)
+        for candidate in _find_target_candidates(args)
+    )
+
+
+def _find_exec_reads_file_content(args: list[str]) -> bool:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg not in _FIND_EXEC_ACTION_FLAGS:
+            index += 1
+            continue
+        if index + 1 >= len(args):
+            return False
+        command_name = Path(args[index + 1]).name.lower()
+        exec_index = index + 2
+        exec_args: list[str] = []
+        while exec_index < len(args) and args[exec_index] not in _FIND_EXEC_TERMINATOR_TOKENS:
+            exec_args.append(args[exec_index])
+            exec_index += 1
+        if command_name in _SHELL_LOCAL_READ_COMMANDS:
+            if command_name == "sed" and not _find_exec_sed_args_are_read_only(exec_args):
+                index = exec_index + 1 if exec_index < len(args) else exec_index
+                continue
+            return True
+        index = exec_index + 1 if exec_index < len(args) else exec_index
+    return False
+
+
+def _find_target_candidates(args: list[str]) -> tuple[str, ...]:
+    candidates: list[str] = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in _FIND_EXEC_ACTION_FLAGS:
+            index += 1
+            while index < len(args) and args[index] not in _FIND_EXEC_TERMINATOR_TOKENS:
+                index += 1
+            if index < len(args):
+                index += 1
+            continue
+        if arg in _FIND_PATH_VALUE_PREDICATES and index + 1 < len(args):
+            candidates.append(args[index + 1])
+            index += 2
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        candidates.append(arg)
+        index += 1
+    return tuple(candidates)
+
+
+def _find_target_candidate_is_sensitive(candidate: str, *, cwd: Path | None, home_dir: Path | None) -> bool:
+    normalized = _shell_command_token_without_attached_redirection(candidate).strip("'\"")
+    if normalized in {"", "-", "{}", _FIND_EXEC_PLACEHOLDER_TARGET}:
+        return False
+    if classify_sensitive_path(normalized, cwd=cwd, home_dir=home_dir) is not None:
+        return True
+    return _path_text_looks_sensitive(normalized)
 
 
 def _shell_segment_network_sink_receives_pipeline(segment: list[str]) -> bool:
@@ -4297,33 +4411,21 @@ def _find_or_fd_uses_write_or_exec_action(parts: list[str], *, home_dir: Path | 
 
 
 def _find_args_use_write_or_unsafe_exec_action(args: list[str]) -> bool:
-    value_taking_predicates = {
-        "-ilname",
-        "-iname",
-        "-iwholename",
-        "-ipath",
-        "-iregex",
-        "-lname",
-        "-name",
-        "-path",
-        "-regex",
-        "-wholename",
-    }
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg in value_taking_predicates and index + 1 < len(args):
+        if arg in _FIND_PATH_VALUE_PREDICATES and index + 1 < len(args):
             index += 2
             continue
         if arg in {"-delete", "-fprint", "-fprint0", "-fprintf", "-fls"}:
             return True
-        if arg in {"-exec", "-execdir", "-ok", "-okdir"}:
+        if arg in _FIND_EXEC_ACTION_FLAGS:
             if index + 1 >= len(args):
                 return True
             command_name = Path(args[index + 1]).name.lower()
             exec_args: list[str] = []
             exec_index = index + 2
-            while exec_index < len(args) and args[exec_index] not in {";", r"\;", "+"}:
+            while exec_index < len(args) and args[exec_index] not in _FIND_EXEC_TERMINATOR_TOKENS:
                 exec_args.append(args[exec_index])
                 exec_index += 1
             is_safe_builtin = command_name in {"echo", "printf", "true", "false", "test", "["}
