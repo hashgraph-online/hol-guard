@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.edge_events import build_runtime_session_event
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -583,3 +586,76 @@ def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailabl
 
     assert result["runtime_session_synced_at"] == "2026-04-24T00:01:00+00:00"
     assert store.list_guard_events_v1(uploaded=False, limit=10) == []
+
+
+def test_sync_runtime_session_emits_package_manager_coverage_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    context = HarnessContext(
+        home_dir=store.guard_home,
+        workspace_dir=workspace_dir,
+        guard_home=store.guard_home,
+    )
+    install_payload = install_package_shims(context, managers=("npm",))
+    shim_dir = Path(str(install_payload["shim_dir"]))
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{original_path}")
+    store.set_sync_payload(
+        "supply_chain_bundle_summary",
+        {
+            "synced_at": "2026-04-24T00:00:00+00:00",
+        },
+        "2026-04-24T00:00:00+00:00",
+    )
+
+    captured_body: dict[str, object] = {}
+
+    def _runtime_sync_response(**kwargs):
+        request = kwargs["request"]
+        captured_body.update(json.loads(request.data.decode("utf-8")))
+        return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
+
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_urlopen_json_with_timeout_retry",
+        _runtime_sync_response,
+    )
+
+    guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "harness": "codex",
+            "surface": "cli",
+            "status": "active",
+            "updatedAt": "2026-04-24T00:01:00+00:00",
+            "workspace": str(workspace_dir),
+        },
+    )
+
+    session_payload = captured_body["session"]
+    assert isinstance(session_payload, dict)
+    assert session_payload["deviceId"] == store.get_or_create_installation_id()
+    assert session_payload["deviceName"] == store.get_device_metadata()["device_label"]
+    assert session_payload["packageManagerCoverage"] == {
+        "generatedAt": "2026-04-24T00:01:00+00:00",
+        "configuredManagers": ["npm"],
+        "protectedManagers": ["npm"],
+        "missingManagers": [],
+        "pathActive": True,
+        "bypasses": [],
+        "staleIntel": {
+            "status": "fresh",
+            "lastSyncedAt": "2026-04-24T00:00:00+00:00",
+            "nextRefreshAt": "2026-04-24T00:15:00+00:00",
+        },
+    }
