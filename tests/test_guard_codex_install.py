@@ -431,6 +431,85 @@ def test_guard_install_codex_migrates_stale_python_c_managed_hooks(tmp_path, cap
     assert str(stale_worktree) not in all_commands
 
 
+def test_guard_install_codex_migrates_legacy_wrapper_script_hook(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    wrapper_command = str(home_dir / ".codex" / "hooks" / "hol-guard-codex-hook.sh")
+    managed_events = {
+        "PreToolUse": {
+            "matcher": "Bash",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": wrapper_command,
+                    "timeout": 30,
+                    "statusMessage": "HOL Guard checking tool action",
+                }
+            ],
+        },
+        "PermissionRequest": {
+            "matcher": "Bash|^apply_patch$|Edit|Write|mcp__.*",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": wrapper_command,
+                    "timeout": 30,
+                    "statusMessage": "HOL Guard checking Codex approval request",
+                }
+            ],
+        },
+        "UserPromptSubmit": {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": wrapper_command,
+                    "timeout": 30,
+                    "statusMessage": "HOL Guard checking prompt",
+                }
+            ],
+        },
+        "PostToolUse": {
+            "matcher": "Bash",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": wrapper_command,
+                    "timeout": 30,
+                    "statusMessage": "HOL Guard checking tool result",
+                }
+            ],
+        },
+    }
+    _write_text(
+        workspace_dir / ".codex" / "hooks.json",
+        json.dumps({"hooks": {key: [value] for key, value in managed_events.items()}}, indent=2) + "\n",
+    )
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    hooks_payload = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+
+    assert install_rc == 0
+    assert len(hooks_payload["hooks"]["PreToolUse"]) == 1
+    assert len(hooks_payload["hooks"]["PermissionRequest"]) == 1
+    assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
+    assert len(hooks_payload["hooks"]["PostToolUse"]) == 1
+    all_commands = json.dumps(hooks_payload)
+    assert wrapper_command not in all_commands
+
+
 def test_guard_install_codex_workspace_cleans_stale_global_managed_hook(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
