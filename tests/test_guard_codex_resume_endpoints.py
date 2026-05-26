@@ -162,7 +162,7 @@ def test_codex_approve_without_resume_binding_returns_honest_manual_fallback(tmp
     assert "approval is now saved" in payload["copy"]["body"]
 
 
-def test_codex_block_resume_prompt_includes_request_id_and_safe_alternative(
+def test_codex_block_does_not_resume_codex_thread(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -198,15 +198,66 @@ def test_codex_block_resume_prompt_includes_request_id_and_safe_alternative(
     finally:
         daemon.stop()
 
-    assert payload["codex_resume"]["status"] == "sent"
-    assert [payload["method"] for payload in captured_payloads] == [
-        "initialize",
-        "initialized",
-        "thread/resume",
-        "turn/start",
-    ]
-    prompt = captured_payloads[3]["params"]["input"][0]["text"]
-    assert prompt == "HOL Guard blocked request `req-block`. Do not retry that action. Explain a safe alternative."
+    assert payload["codex_resume"]["status"] == "skipped"
+    assert payload["codex_resume"]["reason"] == "blocked_not_resumed"
+    assert payload["codex_resume"]["supported"] is False
+    assert captured_payloads == []
+
+
+def test_codex_block_with_missing_socket_does_not_start_headless_resume(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        codex_app_server_module.shutil,
+        "which",
+        lambda command: "/usr/bin/codex" if command == "codex" else None,
+    )
+    monkeypatch.setattr(
+        codex_app_server_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: pytest.fail("blocked requests must not start codex exec resume"),
+    )
+
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-block-headless"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-block-headless",
+        socket_path=None,
+        thread_id="blocked-session-1",
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+        command_text="cat ~/.npmrc",
+        status="approval_wait_timeout",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        blocked = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-block-headless/block",
+            {"scope": "artifact", "reason": "blocked"},
+        )
+        retried = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-block-headless/resume",
+            {},
+        )
+    finally:
+        daemon.stop()
+
+    assert blocked["codex_resume"]["status"] == "skipped"
+    assert blocked["codex_resume"]["reason"] == "blocked_not_resumed"
+    assert retried["status"] == "skipped"
+    assert retried["reason"] == "blocked_not_resumed"
 
 
 def test_codex_approve_defers_headless_resume_while_live_hook_waits(
@@ -241,6 +292,40 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
     assert payload["codex_resume"]["status"] == "pending"
     assert payload["codex_resume"]["reason"] == "live_hook_waiting"
     assert "original Codex action continue" in payload["codex_resume"]["message"]
+
+
+def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-live-block"), "2026-05-19T10:00:00+00:00")
+    missing_socket = tmp_path / "missing-codex.sock"
+    _seed_codex_operation(
+        store,
+        request_id="req-live-block",
+        socket_path=missing_socket,
+        thread_id="live-block-session-1",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-live-block/block",
+            {"scope": "artifact", "reason": "blocked"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codex_resume"]["status"] == "skipped"
+    assert payload["codex_resume"]["reason"] == "blocked_not_resumed"
+    assert payload["codex_resume"]["supported"] is False
 
 
 def test_codex_approve_pretooluse_no_wait_starts_headless_resume(

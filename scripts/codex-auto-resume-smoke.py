@@ -426,16 +426,22 @@ def _assert_expected_outcome(
     if not isinstance(codex_resume, dict):
         raise AssertionError("approval payload did not include codex_resume")
     status = str(codex_resume.get("status") or "")
-    if status not in {"in_progress", "sent", "already_sent"}:
-        raise AssertionError(f"expected codex_resume status to show live continuation, got {status!r}")
-    if "turn/start" not in transcript:
-        raise AssertionError(f"same-thread Codex app-server prompt was not sent:\n{transcript}")
     if decision == "allow":
+        if status not in {"in_progress", "sent", "already_sent"}:
+            raise AssertionError(f"expected codex_resume status to show live continuation, got {status!r}")
+        if "turn/start" not in transcript:
+            raise AssertionError(f"same-thread Codex app-server prompt was not sent:\n{transcript}")
         if proof_created:
             raise AssertionError("allow smoke must not start a separate headless Codex proof run")
         if not final_message.strip():
             raise AssertionError("allow flow returned an empty resume message")
         return
+    if status != "skipped":
+        raise AssertionError(f"expected blocked Codex request not to resume, got {status!r}")
+    if str(codex_resume.get("reason") or "") != "blocked_not_resumed":
+        raise AssertionError(f"block flow returned unexpected resume reason: {codex_resume!r}")
+    if "turn/start" in transcript:
+        raise AssertionError(f"block flow must not send a same-thread Codex prompt:\n{transcript}")
     if proof_created:
         raise AssertionError("block flow unexpectedly created the proof file")
     if not final_message.strip():

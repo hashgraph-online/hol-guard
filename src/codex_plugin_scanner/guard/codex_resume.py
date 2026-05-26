@@ -66,6 +66,15 @@ def retry_request_resume(
     resume = get_request_resume_status(store, request_id=request_id, now=now)
     if resume is None:
         raise ValueError("resume_not_supported")
+    if action == "block":
+        attempt_count = int(resume.get("attempt_count") or 0) + 1
+        return _skip_blocked_resume(
+            store=store,
+            request_id=request_id,
+            resume=resume,
+            attempt_count=attempt_count,
+            now=now,
+        )
     if str(resume.get("status")) == "sent" and not force:
         return {
             **resume,
@@ -123,6 +132,14 @@ def defer_request_resume_to_live_hook(
     if resume is None:
         return None
     attempt_count = int(resume.get("attempt_count") or 0)
+    if action == "block":
+        return _skip_blocked_resume(
+            store=store,
+            request_id=request_id,
+            resume=resume,
+            attempt_count=attempt_count,
+            now=now,
+        )
     message = (
         "Decision saved. Codex is still waiting for this browser decision, "
         "so HOL Guard will let the original Codex action continue without starting a second headless run."
@@ -235,6 +252,34 @@ def _finalize_resume_attempt(
     return result
 
 
+def _skip_blocked_resume(
+    *,
+    store: GuardStore,
+    request_id: str,
+    resume: dict[str, object],
+    attempt_count: int,
+    now: str,
+) -> dict[str, object]:
+    store.update_request_resume(
+        request_id=request_id,
+        resolution_action="block",
+        strategy=str(resume.get("strategy")) if isinstance(resume.get("strategy"), str) else None,
+        supported=False,
+        status="skipped",
+        reason="blocked_not_resumed",
+        message=_blocked_resume_message(),
+        last_error=None,
+        attempt_count=attempt_count,
+        last_attempt_at=now,
+        sent_at=None,
+        now=now,
+    )
+    result = store.get_request_resume(request_id)
+    if result is None:
+        raise ValueError("resume_not_supported")
+    return result
+
+
 def _dispatch_resume_attempt(
     *,
     store: GuardStore,
@@ -325,11 +370,6 @@ def _normalize_dispatch_result(
 
 
 def _manual_resume_message(action: str) -> str:
-    if action == "block":
-        return (
-            "Decision saved. HOL Guard could not find the original Codex chat to message. "
-            "Do not retry that action in Codex. Ask for a safe alternative instead."
-        )
     return (
         "Decision saved. HOL Guard could not find the original Codex chat to message. "
         "Return to Codex and retry the same request; this approval is now saved."
@@ -337,14 +377,16 @@ def _manual_resume_message(action: str) -> str:
 
 
 def _failed_resume_message(action: str) -> str:
-    if action == "block":
-        return (
-            "Decision saved. HOL Guard could not send Codex a continuation message in the original chat. "
-            "Do not retry that action in Codex. Ask for a safe alternative instead."
-        )
     return (
         "Decision saved. HOL Guard could not send Codex a continuation message in the original chat. "
         "Return to Codex and retry the same request; this approval is now saved."
+    )
+
+
+def _blocked_resume_message() -> str:
+    return (
+        "Decision saved. HOL Guard blocked this Codex request and will not resume or retry it. "
+        "Do not retry that action in Codex. Ask for a safe alternative instead."
     )
 
 
