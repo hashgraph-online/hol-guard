@@ -151,6 +151,12 @@ The important handoff is that local protection does not depend on Guard Cloud be
 | I need to understand recent activity | `hol-guard events` | Use `--name <event>` to filter a noisy local timeline |
 | Cloud sync or pairing looks wrong | `hol-guard connect status` | `hol-guard connect repair`, `hol-guard connect`, or `hol-guard sync --json` depending on the status output |
 
+## Additional playbooks
+
+- [AI skill guidance](./SKILL.md) for package-install interception workflows (`protect`, `scan`, `audit`).
+- [False-positive remediation](./remediation.md) for scoped and expiring exception handling.
+- [Blocked malware incident response](./incident-response.md) for containment and recovery.
+
 ## Evidence-first decisions
 
 Guard now scores local decisions from structured evidence, not only string heuristics. Each changed artifact carries:
