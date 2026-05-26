@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import shlex
 import sys
@@ -46,6 +45,8 @@ _MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking tool action"
 _MANAGED_PROMPT_HOOK_STATUS_MESSAGE = "HOL Guard checking prompt"
 _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE = "HOL Guard checking Codex approval request"
 _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE = "HOL Guard checking tool result"
+_CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
+_CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
     "HOL Guard checking Bash command",
     _MANAGED_HOOK_STATUS_MESSAGE,
@@ -92,18 +93,7 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
         guard_args.extend(["--home", str(context.home_dir)])
     if context.workspace_dir is not None:
         guard_args.extend(["--workspace", str(context.workspace_dir)])
-    launcher_env = merge_guard_launcher_env()
-    pythonpath = launcher_env.get("PYTHONPATH", "")
-    if not pythonpath.strip():
-        return (sys.executable, "-m", "codex_plugin_scanner.cli", *guard_args)
-    path_entries = [entry for entry in pythonpath.split(os.pathsep) if entry.strip()]
-    code = (
-        "import sys;"
-        f"sys.path[:0]={path_entries!r};"
-        "from codex_plugin_scanner.cli import main;"
-        f"raise SystemExit(main({guard_args!r}))"
-    )
-    return (sys.executable, "-c", code)
+    return (sys.executable, "-m", "codex_plugin_scanner.cli", *guard_args)
 
 
 def _hook_command(context: HarnessContext) -> str:
@@ -112,7 +102,7 @@ def _hook_command(context: HarnessContext) -> str:
 
 def _pre_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
-        "matcher": "Bash",
+        "matcher": _CODEX_GUARD_TOOL_MATCHER,
         "hooks": [
             {
                 "type": "command",
@@ -139,7 +129,7 @@ def _prompt_hook_group(context: HarnessContext) -> dict[str, object]:
 
 def _permission_request_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
-        "matcher": "Bash|^apply_patch$|Edit|Write|mcp__.*",
+        "matcher": _CODEX_GUARD_PERMISSION_MATCHER,
         "hooks": [
             {
                 "type": "command",
