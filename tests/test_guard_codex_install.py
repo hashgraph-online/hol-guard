@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -81,6 +82,12 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert manifest["managed_config_path"] == str(workspace_dir / ".codex" / "config.toml")
     assert manifest["managed_hooks_path"] == str(hooks_path)
     assert manifest["managed_shell_guard_path"] == str(home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh")
+    assert manifest["managed_shell_guard_paths"] == {
+        "zsh": str(home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh"),
+        "bash": str(home_dir / "managed" / "codex" / "codex-bashenv-guard.bash"),
+        "fish": str(home_dir / "managed" / "codex" / "codex-fish-guard.fish"),
+        "fish_conf": str(home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish"),
+    }
     assert set(manifest["managed_servers"]) == {"global_tools", "workspace_skill"}
     assert "--server-name" in config_text
     assert "guard" in config_text
@@ -112,8 +119,18 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "codex" in permission_handler["command"]
     zshenv_text = (home_dir / ".zshenv").read_text(encoding="utf-8")
     shell_guard_text = (home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh").read_text(encoding="utf-8")
+    bash_guard_text = (home_dir / "managed" / "codex" / "codex-bashenv-guard.bash").read_text(encoding="utf-8")
+    fish_guard_text = (home_dir / "managed" / "codex" / "codex-fish-guard.fish").read_text(encoding="utf-8")
+    fish_conf_text = (home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish").read_text(encoding="utf-8")
     assert "HOL Guard Codex shell guard" in zshenv_text
     assert "TRAPDEBUG" in shell_guard_text
+    assert "BASH_ENV" in (home_dir / ".bash_profile").read_text(encoding="utf-8")
+    assert "BASH_ENV" in (home_dir / ".bashrc").read_text(encoding="utf-8")
+    assert (home_dir / ".bash_login").exists() is False
+    assert (home_dir / ".profile").exists() is False
+    assert "extdebug" in bash_guard_text
+    assert "fish_preexec" in fish_guard_text
+    assert "codex-fish-guard.fish" in fish_conf_text
     assert ".npmrc" in shell_guard_text
 
 
@@ -156,11 +173,42 @@ def test_guard_install_codex_replaces_existing_zshenv_guard_block(tmp_path, caps
     assert zshenv_text.count("HOL Guard Codex shell guard") == 2
 
 
-def test_guard_uninstall_codex_removes_zshenv_guard_block(tmp_path, capsys):
+def test_guard_install_codex_does_not_shadow_existing_bash_profile_precedence(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    _write_text(home_dir / ".profile", "export KEEP_PROFILE=1\n")
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert (home_dir / ".bash_profile").exists() is False
+    assert (home_dir / ".bash_login").exists() is False
+    assert "export KEEP_PROFILE=1" in (home_dir / ".profile").read_text(encoding="utf-8")
+    assert "BASH_ENV" in (home_dir / ".profile").read_text(encoding="utf-8")
+
+
+def test_guard_uninstall_codex_removes_shell_guard_blocks(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(home_dir / ".zshenv", "export KEEP_ME=1\n")
+    _write_text(home_dir / ".bashrc", "export KEEP_BASHRC=1\n")
+    _write_text(home_dir / ".bash_profile", "export KEEP_BASH_PROFILE=1\n")
+    _write_text(home_dir / ".bash_login", "export KEEP_BASH_LOGIN=1\n")
+    _write_text(home_dir / ".profile", "export KEEP_PROFILE=1\n")
 
     install_rc = main(
         [
@@ -176,6 +224,8 @@ def test_guard_uninstall_codex_removes_zshenv_guard_block(tmp_path, capsys):
     )
     json.loads(capsys.readouterr().out)
     guard_path = home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh"
+    bash_guard_path = home_dir / "managed" / "codex" / "codex-bashenv-guard.bash"
+    fish_guard_path = home_dir / "managed" / "codex" / "codex-fish-guard.fish"
 
     uninstall_rc = main(
         [
@@ -194,10 +244,17 @@ def test_guard_uninstall_codex_removes_zshenv_guard_block(tmp_path, capsys):
     assert install_rc == 0
     assert uninstall_rc == 0
     assert guard_path.exists() is False
+    assert bash_guard_path.exists() is False
+    assert fish_guard_path.exists() is False
     assert (home_dir / ".zshenv").read_text(encoding="utf-8") == "export KEEP_ME=1\n"
+    assert (home_dir / ".bashrc").read_text(encoding="utf-8") == "export KEEP_BASHRC=1\n"
+    assert (home_dir / ".bash_profile").read_text(encoding="utf-8") == "export KEEP_BASH_PROFILE=1\n"
+    assert (home_dir / ".bash_login").read_text(encoding="utf-8") == "export KEEP_BASH_LOGIN=1\n"
+    assert (home_dir / ".profile").read_text(encoding="utf-8") == "export KEEP_PROFILE=1\n"
+    assert (home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish").exists() is False
 
 
-def test_guard_uninstall_codex_deletes_managed_only_zshenv(tmp_path, capsys):
+def test_guard_uninstall_codex_deletes_managed_only_shell_startup_files(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -233,6 +290,57 @@ def test_guard_uninstall_codex_deletes_managed_only_zshenv(tmp_path, capsys):
     assert install_rc == 0
     assert uninstall_rc == 0
     assert (home_dir / ".zshenv").exists() is False
+    assert (home_dir / ".bashrc").exists() is False
+    assert (home_dir / ".bash_profile").exists() is False
+    assert (home_dir / ".bash_login").exists() is False
+    assert (home_dir / ".profile").exists() is False
+    assert (home_dir / ".config" / "fish" / "conf.d" / "hol-guard-codex.fish").exists() is False
+
+
+def test_guard_codex_shell_guards_block_zsh_and_bash_secret_reads(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    npmrc_path = home_dir / ".npmrc"
+    _write_text(npmrc_path, "FAKE_HOL_GUARD_SHOULD_NOT_PRINT\n")
+
+    assert rc == 0
+    shell_commands = []
+    zsh_path = shutil.which("zsh")
+    if zsh_path:
+        shell_commands.append((zsh_path, [zsh_path, "-lc", "cat ~/.np''mrc"]))
+    bash_path = shutil.which("bash")
+    if bash_path:
+        shell_commands.append((bash_path, [bash_path, "-lc", "cat ~/.np''mrc"]))
+    if not shell_commands:
+        return
+
+    for shell_name, command in shell_commands:
+        result = subprocess.run(
+            command,
+            cwd=workspace_dir,
+            env={**os.environ, "HOME": str(home_dir), "CODEX_MANAGED_BY_BUN": "1"},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        combined = f"{result.stdout}\n{result.stderr}"
+        assert "FAKE_HOL_GUARD_SHOULD_NOT_PRINT" not in combined, shell_name
+        assert "HOL Guard blocked Codex before it could read a secret-looking local file." in combined, shell_name
 
 
 def test_guard_apps_connect_codex_defaults_to_project_scope_when_local_codex_config_exists(
