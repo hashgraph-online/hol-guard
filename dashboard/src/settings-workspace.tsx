@@ -1588,76 +1588,101 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
     : null;
 
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-4">
-      <SettingToggle
-        id="settings-approval-gate"
-        label="Require password for approvals"
-        checked={props.enabled}
-        onChange={props.onToggle}
-      />
-      <p className="mt-1 px-1 text-xs text-slate-500">
-        By default, password proof protects allow decisions and broad trust changes. Enable strict mode below to require proof for block decisions too.
-      </p>
+    <div className="space-y-4 rounded-xl border border-slate-100 bg-slate-50/40 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <SettingToggle
+            id="settings-approval-gate"
+            label="Require password for approvals"
+            checked={props.enabled}
+            onChange={props.onToggle}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Password proof protects allow decisions and broad trust changes. Enable strict mode to also require proof for block decisions.
+          </p>
+        </div>
+      </div>
+
+      {failClosed && props.enabled && (
+        <div className="rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2">
+          <p className="text-xs text-brand-purple">
+            Guard is in fail-closed mode. Fix approval gate state before making trust or policy changes.
+          </p>
+        </div>
+      )}
 
       {props.enabled && (
-        <div className="mt-4 space-y-3">
-          {showCurrentPassword && (
-            <label className="block">
-              <span className="text-xs font-medium text-slate-500">Current password</span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={props.currentPassword}
-                onChange={props.onCurrentPasswordChange}
-                className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-              />
-            </label>
-          )}
-          <SettingToggle
-            id="settings-approval-gate-strict"
-            label="Require password for block decisions too"
-            checked={props.strictAllDecisions}
-            onChange={props.onStrictAllDecisionsChange}
-          />
-          <label className="block">
-            <span className="text-xs font-medium text-slate-500">New password</span>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={props.newPassword}
-              onChange={props.onNewPasswordChange}
-              className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-500">Confirm password</span>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={props.confirmPassword}
-              onChange={props.onConfirmPasswordChange}
-              className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-500">Cooldown after approval</span>
-            <select
-              value={String(props.cooldownSeconds)}
-              onChange={props.onCooldownChange}
-              className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-            >
-              {cooldownOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </label>
-          {failClosed && (
-            <div className="rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2">
-              <p className="text-xs text-brand-purple">
-                Guard is in fail-closed mode. Fix approval gate state before making trust or policy changes.
-              </p>
+        <div className="space-y-3">
+          {/* Gate credentials */}
+          <div className="rounded-xl border border-slate-100 bg-white p-4">
+            <SectionLabel>Gate credentials</SectionLabel>
+            <p className="mt-1 text-xs text-slate-500">
+              {wasConfigured
+                ? "Enter current password to verify changes. Leave new password empty to keep the existing one."
+                : "Choose a password to protect approval decisions."}
+            </p>
+            <div className="mt-3 space-y-3">
+              {showCurrentPassword && (
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-500">Current password</span>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={props.currentPassword}
+                    onChange={props.onCurrentPasswordChange}
+                    className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  />
+                </label>
+              )}
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500">New password</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={props.newPassword}
+                  onChange={props.onNewPasswordChange}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500">Confirm new password</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={props.confirmPassword}
+                  onChange={props.onConfirmPasswordChange}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+              </label>
             </div>
-          )}
+          </div>
+
+          {/* Gate rules */}
+          <div className="rounded-xl border border-slate-100 bg-white p-4">
+            <SectionLabel>Gate rules</SectionLabel>
+            <div className="mt-3 space-y-3">
+              <SettingToggle
+                id="settings-approval-gate-strict"
+                label="Require password for block decisions too"
+                checked={props.strictAllDecisions}
+                onChange={props.onStrictAllDecisionsChange}
+              />
+              <label className="block">
+                <span className="text-xs font-medium text-slate-500">Cooldown after approval</span>
+                <select
+                  value={String(props.cooldownSeconds)}
+                  onChange={props.onCooldownChange}
+                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                >
+                  {cooldownOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          {/* Authenticator app */}
           <div className="overflow-hidden rounded-xl border border-brand-blue/15 bg-white">
             <div className="flex items-center justify-between gap-2">
               <div className="px-4 py-3">
@@ -1740,10 +1765,12 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
             )}
           </div>
 
+          {/* Active cooldown */}
           {cooldownActive && cooldownLabel !== null && (
-            <div className="rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2">
-              <p className="text-xs text-brand-dark">Cooldown active until {cooldownLabel}</p>
-              <div className="mt-2 space-y-2">
+            <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">
+              <SectionLabel>Active cooldown</SectionLabel>
+              <p className="mt-1 text-xs text-brand-dark">Cooldown active until {cooldownLabel}</p>
+              <div className="mt-3 space-y-3">
                 <label className="block">
                   <span className="text-xs font-medium text-slate-500">Password to revoke</span>
                   <input
@@ -1751,7 +1778,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                     autoComplete="current-password"
                     value={props.revokePassword}
                     onChange={props.onRevokePasswordChange}
-                    className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                    className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   />
                 </label>
                 {totpEnabled && (
@@ -1763,12 +1790,12 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                       pattern="[0-9]*"
                       value={props.totpCode}
                       onChange={props.onTotpCodeChange}
-                      className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                      className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                     />
                   </label>
                 )}
                 {props.revokeError !== null && (
-                <p className="text-xs text-brand-purple">{props.revokeError}</p>
+                  <p className="text-xs text-brand-purple">{props.revokeError}</p>
                 )}
                 <ActionButton onClick={props.onRevokeCooldown} disabled={props.revokingCooldown} variant="outline">
                   {props.revokingCooldown ? "Revoking…" : "Revoke cooldown"}
