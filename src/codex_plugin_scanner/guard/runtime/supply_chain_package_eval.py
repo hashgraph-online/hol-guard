@@ -248,7 +248,15 @@ def evaluate_package_request_artifact(
         )
         _persist_evidence(store=store, artifact=artifact, evaluation=result, now=now_value)
         if result.refresh_required:
-            store.add_event("supply_chain_bundle_refresh_requested", {"artifact_id": artifact.artifact_id}, now_value)
+            store.add_event(
+                "supply_chain_bundle_refresh_requested",
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "reason": "feed_stale",
+                },
+                now_value,
+            )
         return result
     if bundle_evaluation is not None and bundle_evaluation.refresh_required:
         fallback = _finalize_evaluation(
@@ -257,7 +265,15 @@ def evaluate_package_request_artifact(
             workspace_fingerprint=workspace_fingerprint,
         )
         _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
-        store.add_event("supply_chain_bundle_refresh_requested", {"artifact_id": artifact.artifact_id}, now_value)
+        store.add_event(
+            "supply_chain_bundle_refresh_requested",
+            {
+                "artifact_id": artifact.artifact_id,
+                "artifact_name": artifact.name,
+                "reason": "feed_stale",
+            },
+            now_value,
+        )
         return fallback
     if not _artifact_has_package_material(artifact, targets):
         no_material_result = _empty_package_material_result(
@@ -311,7 +327,15 @@ def evaluate_package_request_artifact(
             fallback = _with_additional_reason(fallback, cloud_fallback_reason)
         _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
         if fallback.refresh_required:
-            store.add_event("supply_chain_bundle_refresh_requested", {"artifact_id": artifact.artifact_id}, now_value)
+            store.add_event(
+                "supply_chain_bundle_refresh_requested",
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "reason": "feed_stale",
+                },
+                now_value,
+            )
         return fallback
     heuristic = _heuristic_result(artifact=artifact, targets=targets, workspace_dir=workspace_dir)
     if heuristic is None:
