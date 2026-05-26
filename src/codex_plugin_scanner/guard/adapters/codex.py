@@ -644,6 +644,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             payloads=hook_payloads,
             skip_config_path=target_config_path,
         )
+        self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=target_config_path)
         hooks_path = self._remove_json_hook_files(context, payloads=hook_payloads)
         shell_guard_paths = self._install_shell_guards(context)
         shim_manifest = install_guard_shim(self.harness, context)
@@ -772,6 +773,28 @@ class CodexHarnessAdapter(HarnessAdapter):
             config_payload = read_toml_payload(config_path)
             if _migrate_hooks_json_into_config(config_payload, hooks_payload) and config_payload:
                 write_toml_payload(config_path, config_payload)
+
+    def _remove_managed_hooks_from_alternate_configs(
+        self,
+        context: HarnessContext,
+        *,
+        skip_config_path: Path,
+    ) -> None:
+        for config_path, _hooks_path in self._config_hook_pairs(context):
+            if config_path == skip_config_path or not config_path.is_file():
+                continue
+            config_payload = read_toml_payload(config_path)
+            hooks = config_payload.get("hooks")
+            if not isinstance(hooks, dict):
+                continue
+            cleaned_hooks, managed_removed = _remove_managed_hook_events(hooks)
+            if not managed_removed:
+                continue
+            if cleaned_hooks:
+                config_payload["hooks"] = cleaned_hooks
+            else:
+                config_payload.pop("hooks", None)
+            write_toml_payload(config_path, config_payload)
 
     def _remove_json_hook_files(
         self,
