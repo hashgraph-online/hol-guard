@@ -1,9 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import { resolve } from "node:path";
+import { resolveProofDir } from "./e2e/proof-dir";
 
-const PROOF_DIR = resolve(
-  "/tmp/hol-guard-user/.copilot/session-state/e7da8953-ad9e-4481-ad56-31e82b2339d2/files/proofs/scrg/phase12-scrg171-172",
-);
+const PROOF_DIR = resolveProofDir();
 
 const E2E_PORT = 4175;
 
