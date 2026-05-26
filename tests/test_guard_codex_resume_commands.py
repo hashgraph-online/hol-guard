@@ -360,6 +360,54 @@ def test_guard_approvals_resume_starts_headless_codex_when_app_server_unavailabl
     assert launched[0]["env"]["CODEX_HOME"] == str(codex_home)
 
 
+def test_guard_approvals_resume_does_not_start_headless_codex_for_blocked_request(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        codex_app_server_module.shutil,
+        "which",
+        lambda command: "/usr/local/bin/codex" if command == "codex" else None,
+    )
+    monkeypatch.setattr(
+        codex_app_server_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: pytest.fail("blocked requests must not start codex exec resume"),
+    )
+
+    home_dir = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(home_dir)
+    store.add_approval_request(_request("req-cli-block"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-cli-block",
+        socket_path=None,
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+    )
+    store.resolve_approval_request(
+        "req-cli-block",
+        resolution_action="block",
+        resolution_scope="artifact",
+        reason="blocked",
+        resolved_at="2026-05-19T10:01:00+00:00",
+    )
+
+    rc = main(["guard", "approvals", "resume", "req-cli-block", "--home", str(home_dir), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "skipped"
+    assert output["reason"] == "blocked_not_resumed"
+    assert output["supported"] is False
+    assert "blocked this Codex request" in output["message"]
+
+
 def test_guard_approvals_resume_reports_missing_codex_home_without_spawning(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

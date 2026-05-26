@@ -19,7 +19,7 @@ def _load_smoke_module():
     return module
 
 
-def test_codex_auto_resume_smoke_script_sends_same_thread_app_server_messages() -> None:
+def test_codex_auto_resume_smoke_script_resumes_only_allowed_requests() -> None:
     module = _load_smoke_module()
     args = argparse.Namespace(
         codex_home=None,
@@ -37,9 +37,9 @@ def test_codex_auto_resume_smoke_script_sends_same_thread_app_server_messages() 
     assert allow_result.proof_created is False
     assert allow_result.assistant_message
     assert "turn/start" in allow_result.transcript_excerpt
-    assert block_result.resume_status == "sent"
+    assert block_result.resume_status == "skipped"
     assert block_result.request_id
     assert block_result.resume_strategy == "codex-app-server-thread"
     assert block_result.proof_created is False
     assert block_result.assistant_message
-    assert "turn/start" in block_result.transcript_excerpt
+    assert "turn/start" not in block_result.transcript_excerpt
