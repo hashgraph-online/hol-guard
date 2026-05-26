@@ -1049,6 +1049,11 @@ def _sync_supply_chain_bundle_incremental(
             if isinstance(raw_cached_response, dict):
                 try:
                     response = load_supply_chain_bundle_response(raw_cached_response)
+                    verify_supply_chain_bundle_response(
+                        response,
+                        trusted_keys=trusted_keys or None,
+                        cached_bundle_version=cached_bundle_version,
+                    )
                 except SupplyChainBundleError:
                     response = None
         if response is None:
@@ -1132,6 +1137,11 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
     ):
         try:
             response = load_supply_chain_bundle_response(cached_bundle)
+            verify_supply_chain_bundle_response(
+                response,
+                trusted_keys=trusted_keys or None,
+                cached_bundle_version=cached_bundle_version,
+            )
         except SupplyChainBundleError:
             request = urllib.request.Request(bundle_url, method="GET", headers=headers)
             payload = _fetch_supply_chain_bundle_payload(request)
