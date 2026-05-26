@@ -71,14 +71,16 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     managed_install = output["managed_install"]
     manifest = managed_install["manifest"]
     config_text = (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
+    config_payload = tomllib.loads(config_text)
     hooks_path = workspace_dir / ".codex" / "hooks.json"
-    hooks_payload = json.loads(hooks_path.read_text(encoding="utf-8"))
+    hooks_payload = config_payload["hooks"]
 
     assert rc == 0
     assert managed_install["active"] is True
     assert manifest["mode"] == "codex-mcp-proxy"
     assert manifest["managed_config_path"] == str(workspace_dir / ".codex" / "config.toml")
     assert manifest["managed_hooks_path"] == str(hooks_path)
+    assert manifest["managed_shell_guard_path"] == str(home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh")
     assert set(manifest["managed_servers"]) == {"global_tools", "workspace_skill"}
     assert "--server-name" in config_text
     assert "guard" in config_text
@@ -86,30 +88,151 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert 'approval_policy = "never"' in config_text
     assert "hooks = true" in config_text
     assert "codex_hooks" not in config_text
+    assert hooks_path.exists() is False
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
-    assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
-    assert (
-        hooks_payload["hooks"]["PermissionRequest"][0]["matcher"]
-        == codex_adapter._CODEX_GUARD_PERMISSION_MATCHER
-    )
-    assert "UserPromptSubmit" in hooks_payload["hooks"]
-    assert "matcher" not in hooks_payload["hooks"]["UserPromptSubmit"][0]
-    prompt_handler = hooks_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+    assert hooks_payload["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert hooks_payload["PermissionRequest"][0]["matcher"] == codex_adapter._CODEX_GUARD_PERMISSION_MATCHER
+    assert "UserPromptSubmit" in hooks_payload
+    assert "matcher" not in hooks_payload["UserPromptSubmit"][0]
+    prompt_handler = hooks_payload["UserPromptSubmit"][0]["hooks"][0]
     assert prompt_handler["type"] == "command"
     assert "codex_plugin_scanner.cli" in prompt_handler["command"]
     assert "hook" in prompt_handler["command"]
     assert "codex" in prompt_handler["command"]
-    handler = hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]
+    handler = hooks_payload["PreToolUse"][0]["hooks"][0]
     assert handler["type"] == "command"
     assert "codex_plugin_scanner.cli" in handler["command"]
     assert "hook" in handler["command"]
     assert "codex" in handler["command"]
-    permission_handler = hooks_payload["hooks"]["PermissionRequest"][0]["hooks"][0]
+    permission_handler = hooks_payload["PermissionRequest"][0]["hooks"][0]
     assert permission_handler["type"] == "command"
     assert "codex_plugin_scanner.cli" in permission_handler["command"]
     assert "hook" in permission_handler["command"]
     assert "codex" in permission_handler["command"]
+    zshenv_text = (home_dir / ".zshenv").read_text(encoding="utf-8")
+    shell_guard_text = (home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh").read_text(encoding="utf-8")
+    assert "HOL Guard Codex shell guard" in zshenv_text
+    assert "TRAPDEBUG" in shell_guard_text
+    assert ".npmrc" in shell_guard_text
+
+
+def test_guard_install_codex_replaces_existing_zshenv_guard_block(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    _write_text(
+        home_dir / ".zshenv",
+        "\n".join(
+            [
+                "export KEEP_ME=1",
+                "",
+                "# >>> HOL Guard Codex shell guard >>>",
+                "source /tmp/old",
+                "# <<< HOL Guard Codex shell guard <<<",
+                "",
+            ]
+        ),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    zshenv_text = (home_dir / ".zshenv").read_text(encoding="utf-8")
+
+    assert rc == 0
+    assert "export KEEP_ME=1" in zshenv_text
+    assert "/tmp/old" not in zshenv_text
+    assert zshenv_text.count("HOL Guard Codex shell guard") == 2
+
+
+def test_guard_uninstall_codex_removes_zshenv_guard_block(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / ".zshenv", "export KEEP_ME=1\n")
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    guard_path = home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh"
+
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    assert install_rc == 0
+    assert uninstall_rc == 0
+    assert guard_path.exists() is False
+    assert (home_dir / ".zshenv").read_text(encoding="utf-8") == "export KEEP_ME=1\n"
+
+
+def test_guard_uninstall_codex_deletes_managed_only_zshenv(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    assert install_rc == 0
+    assert uninstall_rc == 0
+    assert (home_dir / ".zshenv").exists() is False
 
 
 def test_guard_apps_connect_codex_defaults_to_project_scope_when_local_codex_config_exists(
@@ -140,9 +263,7 @@ def test_guard_apps_connect_codex_defaults_to_project_scope_when_local_codex_con
     assert rc == 0
     assert output["managed_install"]["active"] is True
     assert output["managed_install"]["workspace"] == str(workspace_dir)
-    assert output["managed_install"]["manifest"]["managed_config_path"] == str(
-        workspace_dir / ".codex" / "config.toml"
-    )
+    assert output["managed_install"]["manifest"]["managed_config_path"] == str(workspace_dir / ".codex" / "config.toml")
 
 
 def test_guard_apps_connect_codex_stays_global_without_local_codex_config(
@@ -182,9 +303,7 @@ args = ["-m", "http.server", "9000"]
     assert rc == 0
     assert output["managed_install"]["active"] is True
     assert output["managed_install"]["workspace"] is None
-    assert output["managed_install"]["manifest"]["managed_config_path"] == str(
-        home_dir / ".codex" / "config.toml"
-    )
+    assert output["managed_install"]["manifest"]["managed_config_path"] == str(home_dir / ".codex" / "config.toml")
 
 
 def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, capsys):
@@ -238,7 +357,7 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
                 "hooks": {
                     "PreToolUse": [
                         {
-                "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
+                            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
                             "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
                         }
                     ],
@@ -268,6 +387,7 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
         ]
     )
     json.loads(capsys.readouterr().out)
+    config_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
     hooks_payload = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
 
     uninstall_rc = main(
@@ -287,9 +407,9 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
 
     assert install_rc == 0
     assert uninstall_rc == 0
-    assert len(hooks_payload["hooks"]["PreToolUse"]) == 2
+    assert len(config_payload["hooks"]["PreToolUse"]) == 1
     assert hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "python3 custom-pre.py"
-    managed_group = hooks_payload["hooks"]["PreToolUse"][1]
+    managed_group = config_payload["hooks"]["PreToolUse"][0]
     assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
     assert "hook" in managed_group["hooks"][0]["command"]
@@ -319,8 +439,7 @@ def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, ca
             {
                 "type": "command",
                 "command": (
-                    "python -m codex_plugin_scanner.cli guard hook "
-                    f"--guard-home {context.guard_home} --harness codex"
+                    f"python -m codex_plugin_scanner.cli guard hook --guard-home {context.guard_home} --harness codex"
                 ),
                 "timeoutSec": 30,
                 "statusMessage": "HOL Guard checking Bash command",
@@ -345,15 +464,16 @@ def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, ca
         ]
     )
     json.loads(capsys.readouterr().out)
-    hooks_payload = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    config_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
 
     assert install_rc == 0
-    assert len(hooks_payload["hooks"]["PreToolUse"]) == 1
-    assert len(hooks_payload["hooks"]["PermissionRequest"]) == 1
-    assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
-    assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
-    assert hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]["statusMessage"] == "HOL Guard checking tool action"
-    assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
+    assert (workspace_dir / ".codex" / "hooks.json").exists() is False
+    assert len(config_payload["hooks"]["PreToolUse"]) == 1
+    assert len(config_payload["hooks"]["PermissionRequest"]) == 1
+    assert len(config_payload["hooks"]["UserPromptSubmit"]) == 1
+    assert config_payload["hooks"]["PreToolUse"][0]["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
+    assert config_payload["hooks"]["PreToolUse"][0]["hooks"][0]["statusMessage"] == "HOL Guard checking tool action"
+    assert len(config_payload["hooks"]["UserPromptSubmit"]) == 1
 
 
 def test_guard_install_codex_migrates_stale_python_c_managed_hooks(tmp_path, capsys):
@@ -361,18 +481,15 @@ def test_guard_install_codex_migrates_stale_python_c_managed_hooks(tmp_path, cap
     workspace_dir = tmp_path / "workspace"
     stale_worktree = tmp_path / "deleted-worktree"
     _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
-    stale_command = (
-        f"{sys.executable} -c "
-        + shlex.quote(
-            "import sys;"
-            f"sys.path[:0]=[{str(stale_worktree / 'src')!r}];"
-            "from codex_plugin_scanner.cli import main;"
-            "raise SystemExit(main(["
-            '"guard", "hook", "--guard-home", '
-            f"{str(home_dir / '.hol-guard')!r}, "
-            '"--harness", "codex"'
-            "]))"
-        )
+    stale_command = f"{sys.executable} -c " + shlex.quote(
+        "import sys;"
+        f"sys.path[:0]=[{str(stale_worktree / 'src')!r}];"
+        "from codex_plugin_scanner.cli import main;"
+        "raise SystemExit(main(["
+        '"guard", "hook", "--guard-home", '
+        f"{str(home_dir / '.hol-guard')!r}, "
+        '"--harness", "codex"'
+        "]))"
     )
     _write_text(
         workspace_dir / ".codex" / "hooks.json",
@@ -424,14 +541,15 @@ def test_guard_install_codex_migrates_stale_python_c_managed_hooks(tmp_path, cap
         ]
     )
     json.loads(capsys.readouterr().out)
-    hooks_payload = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    config_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
 
     assert install_rc == 0
-    assert len(hooks_payload["hooks"]["PreToolUse"]) == 1
-    assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
-    assert len(hooks_payload["hooks"]["PermissionRequest"]) == 1
-    assert len(hooks_payload["hooks"]["PostToolUse"]) == 1
-    all_commands = json.dumps(hooks_payload)
+    assert (workspace_dir / ".codex" / "hooks.json").exists() is False
+    assert len(config_payload["hooks"]["PreToolUse"]) == 1
+    assert len(config_payload["hooks"]["UserPromptSubmit"]) == 1
+    assert len(config_payload["hooks"]["PermissionRequest"]) == 1
+    assert len(config_payload["hooks"]["PostToolUse"]) == 1
+    all_commands = json.dumps(config_payload["hooks"])
     assert str(stale_worktree) not in all_commands
 
 
@@ -503,14 +621,15 @@ def test_guard_install_codex_migrates_legacy_wrapper_script_hook(tmp_path, capsy
         ]
     )
     json.loads(capsys.readouterr().out)
-    hooks_payload = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    config_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
 
     assert install_rc == 0
-    assert len(hooks_payload["hooks"]["PreToolUse"]) == 1
-    assert len(hooks_payload["hooks"]["PermissionRequest"]) == 1
-    assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
-    assert len(hooks_payload["hooks"]["PostToolUse"]) == 1
-    all_commands = json.dumps(hooks_payload)
+    assert (workspace_dir / ".codex" / "hooks.json").exists() is False
+    assert len(config_payload["hooks"]["PreToolUse"]) == 1
+    assert len(config_payload["hooks"]["PermissionRequest"]) == 1
+    assert len(config_payload["hooks"]["UserPromptSubmit"]) == 1
+    assert len(config_payload["hooks"]["PostToolUse"]) == 1
+    all_commands = json.dumps(config_payload["hooks"])
     assert wrapper_command not in all_commands
 
 
@@ -550,14 +669,14 @@ def test_guard_install_codex_workspace_cleans_stale_global_managed_hook(tmp_path
     json.loads(capsys.readouterr().out)
 
     home_hooks_path = home_dir / ".codex" / "hooks.json"
-    workspace_hooks_path = workspace_dir / ".codex" / "hooks.json"
-    workspace_hooks = json.loads(workspace_hooks_path.read_text(encoding="utf-8"))
+    workspace_config = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    workspace_hooks = workspace_config["hooks"]
 
     assert global_install_rc == 0
     assert workspace_install_rc == 0
     assert home_hooks_path.exists() is False
-    assert len(workspace_hooks["hooks"]["PreToolUse"]) == 1
-    managed_group = workspace_hooks["hooks"]["PreToolUse"][0]
+    assert len(workspace_hooks["PreToolUse"]) == 1
+    managed_group = workspace_hooks["PreToolUse"][0]
     assert managed_group["matcher"] == codex_adapter._CODEX_GUARD_TOOL_MATCHER
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
 
@@ -581,9 +700,23 @@ def test_guard_uninstall_codex_preserves_user_hooks_in_managed_bash_group(tmp_pa
     )
     json.loads(capsys.readouterr().out)
     hooks_path = workspace_dir / ".codex" / "hooks.json"
-    hooks_payload = json.loads(hooks_path.read_text(encoding="utf-8"))
-    hooks_payload["hooks"]["PreToolUse"][0]["hooks"].append({"type": "command", "command": "python3 custom-pre.py"})
-    hooks_path.write_text(json.dumps(hooks_payload, indent=2) + "\n", encoding="utf-8")
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": codex_adapter._CODEX_GUARD_TOOL_MATCHER,
+                            "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     uninstall_rc = main(
         [

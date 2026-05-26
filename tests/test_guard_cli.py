@@ -17,6 +17,11 @@ from typing import ClassVar
 import pytest
 from rich.console import Console
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redef]
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
@@ -50,6 +55,17 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _read_codex_config(path: Path) -> dict[str, object]:
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def _read_codex_hooks(config_path: Path) -> dict[str, object]:
+    hooks = _read_codex_config(config_path).get("hooks")
+    assert isinstance(hooks, dict)
+    return hooks
 
 
 def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str) -> None:
@@ -3943,7 +3959,7 @@ args = ["-lc", "echo hi"]
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
         config_text = (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
-        hooks_payload = json.loads((home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+        hooks_payload = _read_codex_hooks(home_dir / ".codex" / "config.toml")
 
         assert rc == 0
         assert output["status"] == "current"
@@ -3951,7 +3967,7 @@ args = ["-lc", "echo hi"]
         assert output["managed_install"]["active"] is True
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
-        assert hooks_payload["hooks"]["PreToolUse"]
+        assert hooks_payload["PreToolUse"]
 
     def test_guard_update_repairs_missing_codex_config_for_managed_install(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -3980,7 +3996,7 @@ args = ["-lc", "echo hi"]
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
         config_text = (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
-        hooks_payload = json.loads((home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+        hooks_payload = _read_codex_hooks(home_dir / ".codex" / "config.toml")
 
         assert rc == 0
         assert output["status"] == "current"
@@ -3988,7 +4004,7 @@ args = ["-lc", "echo hi"]
         assert output["managed_install"]["active"] is True
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
-        assert hooks_payload["hooks"]["PreToolUse"]
+        assert hooks_payload["PreToolUse"]
 
     def test_guard_update_repairs_workspace_codex_install_in_recorded_workspace(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -4018,14 +4034,14 @@ args = ["-lc", "echo hi"]
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
         config_text = (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
-        hooks_payload = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+        hooks_payload = _read_codex_hooks(workspace_dir / ".codex" / "config.toml")
 
         assert rc == 0
         assert output["status"] == "current"
         assert output["managed_install"]["workspace"] == str(workspace_dir)
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
-        assert hooks_payload["hooks"]["PreToolUse"]
+        assert hooks_payload["PreToolUse"]
         assert (home_dir / ".codex" / "config.toml").exists() is False
 
     def test_guard_update_repairs_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
@@ -4235,7 +4251,7 @@ args = ["-lc", "echo hi"]
         assert output["status"] == "current"
         assert output["managed_install"]["harness"] == "codex"
         assert output["managed_install"]["active"] is True
-        assert (home_dir / ".codex" / "hooks.json").is_file()
+        assert _read_codex_hooks(home_dir / ".codex" / "config.toml")["PreToolUse"]
 
     def test_guard_update_repairs_workspace_codex_when_lookup_fails_from_home_scoped_context(
         self, tmp_path, monkeypatch, capsys
@@ -4291,7 +4307,7 @@ args = ["-lc", "echo hi"]
         assert output["status"] == "current"
         assert output["managed_install"]["workspace"] == str(workspace_dir)
         assert output["managed_install"]["active"] is True
-        assert (workspace_dir / ".codex" / "hooks.json").is_file()
+        assert _read_codex_hooks(workspace_dir / ".codex" / "config.toml")["PreToolUse"]
         assert (home_dir / ".codex" / "config.toml").exists() is False
 
     def test_guard_update_repairs_workspace_codex_without_existing_codex_directory(self, tmp_path, monkeypatch, capsys):
@@ -4337,7 +4353,7 @@ args = ["-lc", "echo hi"]
         assert output["managed_install"]["workspace"] == str(workspace_dir)
         assert output["managed_install"]["active"] is True
         assert (workspace_dir / ".codex" / "config.toml").is_file()
-        assert (workspace_dir / ".codex" / "hooks.json").is_file()
+        assert _read_codex_hooks(workspace_dir / ".codex" / "config.toml")["PreToolUse"]
 
     def test_guard_doctor_warns_when_codex_native_hooks_are_missing(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -4359,7 +4375,6 @@ args = ["-lc", "echo hi"]
 
         assert rc == 0
         assert output["native_hook_state"]["protection_active"] is False
-        assert any("native hooks are disabled" in warning for warning in output["warnings"])
         assert any("managed Codex hooks are missing" in warning for warning in output["warnings"])
 
     def test_guard_doctor_reports_runtime_detector_registry_state(self, tmp_path, monkeypatch, capsys):
