@@ -2128,6 +2128,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     capabilities = [str(item) for item in session.get("capabilities", []) if isinstance(item, str)]
     package_manager_coverage = _cloud_package_manager_coverage(
         store,
+        workspace=workspace,
         generated_at=updated_at,
     )
     return {
@@ -2158,12 +2159,13 @@ def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
 def _cloud_package_manager_coverage(
     store: GuardStore,
     *,
+    workspace: str,
     generated_at: str,
 ) -> dict[str, object]:
     coverage = package_shim_cloud_coverage(
         HarnessContext(
             home_dir=Path.home(),
-            workspace_dir=Path.cwd(),
+            workspace_dir=Path(workspace),
             guard_home=store.guard_home,
         ),
         generated_at=generated_at,
