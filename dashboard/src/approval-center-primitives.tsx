@@ -19,6 +19,10 @@ import {
   HiMiniChevronUp,
   HiMiniChevronLeft,
   HiMiniChevronRight,
+  HiMiniMagnifyingGlass,
+  HiMiniLink,
+  HiMiniBugAnt,
+  HiMiniCog6Tooth,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -62,7 +66,7 @@ const footerSections = [
 export function ShellHeader(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
+  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
   onNavigate: (pathname: string) => void;
   onOpenMobileQueue?: () => void;
 }) {
@@ -136,13 +140,17 @@ const sidebarLinks = [
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
+  { href: "/supply-chain", label: "Supply Chain", view: "supply-chain", icon: HiMiniLink },
+  { href: "/audit", label: "Audit", view: "audit", icon: HiMiniBugAnt },
+  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniMagnifyingGlass },
+  { href: "/feed-health", label: "Feed Health", view: "feed-health", icon: HiMiniCog6Tooth },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
 ] as const;
 
 export function ShellSidebar(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
+  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
