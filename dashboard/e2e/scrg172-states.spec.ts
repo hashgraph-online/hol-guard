@@ -9,10 +9,9 @@ import {
   emptyInventoryPayload,
   defaultSettingsPayload,
 } from "./fixture-states";
+import { resolveProofDir } from "./proof-dir";
 
-const PROOF_DIR = resolve(
-  "/tmp/hol-guard-user/.copilot/session-state/e7da8953-ad9e-4481-ad56-31e82b2339d2/files/proofs/scrg/phase12-scrg171-172",
-);
+const PROOF_DIR = resolveProofDir();
 
 type FixtureState = "free" | "paid" | "degraded";
 
