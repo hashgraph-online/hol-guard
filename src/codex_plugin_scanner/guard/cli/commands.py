@@ -227,6 +227,7 @@ _HOOK_DAEMON_PERMISSIVE_REASON = (
 _HOOK_DAEMON_PRESERVED_DENY_REASON = (
     "HOL Guard daemon was unreachable; preserving the existing deny decision for this action."
 )
+_CODEX_PROMPT_APPROVAL_WAIT_MAX_SECONDS = 8
 _GUARD_HELP_GROUPS = (
     "HOL Guard AI Antivirus command center:\n"
     "  start        First-run protection setup for one local AI harness\n"
@@ -3611,7 +3612,7 @@ def _codex_browser_approval_decision(
 ) -> str | None:
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return None
-    if event_name in {"PreToolUse", "UserPromptSubmit"}:
+    if event_name == "PreToolUse":
         return None
     approval_requests = response_payload.get("approval_requests")
     if not isinstance(approval_requests, list):
@@ -3624,6 +3625,8 @@ def _codex_browser_approval_decision(
     if not request_ids:
         return None
     wait_timeout_seconds = max(config.approval_wait_timeout_seconds, 0)
+    if event_name == "UserPromptSubmit":
+        wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_PROMPT_APPROVAL_WAIT_MAX_SECONDS)
     wait_result = wait_for_approval_requests(
         store=store,
         request_ids=request_ids,
@@ -3663,7 +3666,7 @@ def _codex_hook_waits_for_browser_approval(
 ) -> bool:
     return (
         _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action)
-        and event_name not in {"PreToolUse", "UserPromptSubmit"}
+        and event_name != "PreToolUse"
     )
 
 

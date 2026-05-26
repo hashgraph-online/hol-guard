@@ -159,10 +159,23 @@ def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_pat
     }
 
 
-def test_gr076b_codex_prompt_secret_read_does_not_wait_for_browser_approval(tmp_path: Path) -> None:
+def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
+    observed_timeouts: list[int] = []
+
+    def unresolved_wait(*args: object, **kwargs: object) -> dict[str, object]:
+        del args
+        timeout_seconds = kwargs.get("timeout_seconds")
+        assert isinstance(timeout_seconds, int)
+        observed_timeouts.append(timeout_seconds)
+        return {"resolved": False, "status": "timeout", "items": []}
+
+    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", unresolved_wait)
 
     exit_code, output = _run_hook(
         tmp_path,
@@ -179,7 +192,7 @@ def test_gr076b_codex_prompt_secret_read_does_not_wait_for_browser_approval(tmp_
     assert exit_code == 0
     assert payload["decision"] == "block"
     assert payload["continue"] is False
-    assert "approval_wait" not in payload
+    assert observed_timeouts == [8]
     assert "Open HOL Guard" in str(payload["reason"])
     assert "/approvals/" in str(payload["reason"])
 
