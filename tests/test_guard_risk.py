@@ -803,7 +803,7 @@ def test_tool_action_request_classifier_allows_simple_project_deploy_script():
     assert request is None
 
 
-def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
+def test_tool_action_request_classifier_allows_routine_docker_build():
     build_request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "docker build --platform linux/amd64 -t registry.example.com/app:v1 ."},
@@ -812,10 +812,6 @@ def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
         "bash",
         {"command": "docker buildx build --platform linux/amd64 -t registry.example.com/app:v1 ."},
     )
-    push_request = extract_sensitive_tool_action_request(
-        "bash",
-        {"command": "docker push registry.example.com/app:v1"},
-    )
     build_arg_request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "docker build --build-arg FOO=disk-space -t registry.example.com/app:v1 ."},
@@ -823,8 +819,35 @@ def test_tool_action_request_classifier_allows_routine_docker_build_and_push():
 
     assert build_request is None
     assert buildx_request is None
-    assert push_request is None
     assert build_arg_request is None
+
+
+def test_tool_action_request_classifier_blocks_docker_push():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker push registry.example.com/app:v1"},
+    )
+    context_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker --context prod push registry.example.com/app:v1"},
+    )
+    build_push_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker build --push -t registry.example.com/app:v1 ."},
+    )
+    buildx_push_request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "docker buildx build --push -t registry.example.com/app:v1 ."},
+    )
+
+    assert request is not None
+    assert request.action_class == "docker-sensitive command"
+    assert context_request is not None
+    assert context_request.action_class == "docker-sensitive command"
+    assert build_push_request is not None
+    assert build_push_request.action_class == "docker-sensitive command"
+    assert buildx_push_request is not None
+    assert buildx_push_request.action_class == "docker-sensitive command"
 
 
 def test_tool_action_request_classifier_blocks_python_test_module_invocation():
