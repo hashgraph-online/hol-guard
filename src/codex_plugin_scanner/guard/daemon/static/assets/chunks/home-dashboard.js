@@ -361,6 +361,15 @@ function HomeWorkspace(props) {
             onOpenAppDetail: props.onOpenAppDetail
           }
         ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HomeProtectionModule,
+          {
+            snapshot,
+            managedInstalls,
+            onOpenFleet: props.onOpenFleet,
+            onOpenSupplyChain: props.onOpenSupplyChain
+          }
+        ),
         dailyStory && /* @__PURE__ */ jsxRuntimeExports.jsxs(
           CollapsibleCard,
           {
@@ -387,25 +396,6 @@ function HomeWorkspace(props) {
         )
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          HomeProtectionModule,
-          {
-            snapshot,
-            managedInstalls,
-            onOpenFleet: props.onOpenFleet,
-            onOpenSupplyChain: props.onOpenSupplyChain
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DeviceProofCard, { device: snapshot.device, proofStatus: snapshot.proof_status }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CloudStatusCard,
-          {
-            snapshot,
-            showUpsell: cloudUpsellVisible,
-            onOpenSettings: props.onOpenSettings
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(KeyboardHelpCard, { onOpenHelp: props.onOpenHelp }),
         snapshot.latest_receipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProtectionSection, { receipts: snapshot.latest_receipts }),
         policyItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Reset remembered decisions" }),
@@ -420,6 +410,18 @@ function HomeWorkspace(props) {
           )) })
         ] })
       ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DeviceProofCard, { device: snapshot.device, proofStatus: snapshot.proof_status }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CloudStatusCard,
+        {
+          snapshot,
+          showUpsell: cloudUpsellVisible,
+          onOpenSettings: props.onOpenSettings
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(KeyboardHelpCard, { onOpenHelp: props.onOpenHelp })
     ] }),
     props.clearConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ClearConfirmDialog,
