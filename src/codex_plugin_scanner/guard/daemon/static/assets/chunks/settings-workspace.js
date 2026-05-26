@@ -1,4 +1,4 @@
-import { x as requireReact, y as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, z as fetchSettings, C as fetchRuntimeSnapshot, D as revokeApprovalGateCooldown, F as enrollApprovalGateTotp, I as verifyApprovalGateTotp, J as disableApprovalGateTotp, K as updateSettings, L as clearPolicy, M as clearReviewQueue, N as clearEvidence, O as exportDiagnostics, Q as repairApprovalCenter, R as setupDesktopNotifications, E as EmptyState, G as GuardHero, T as Tag, U as HiMiniMagnifyingGlass, S as SectionLabel, a as HiMiniShieldCheck, V as HiMiniLockClosed, W as HiMiniCog6Tooth, B as Badge, A as ActionButton, H as HiMiniCheckCircle, m as HiMiniExclamationTriangle, e as HiMiniChevronUp, g as HiMiniChevronDown, X as HiMiniBellAlert, Y as approvalGateCooldownLabel, d as HiMiniXMark } from "../guard-dashboard.js";
+import { z as requireReact, C as getDefaultExportFromCjs, j as jsxRuntimeExports, r as reactExports, D as fetchSettings, F as fetchRuntimeSnapshot, I as revokeApprovalGateCooldown, J as enrollApprovalGateTotp, K as verifyApprovalGateTotp, L as disableApprovalGateTotp, M as updateSettings, N as clearPolicy, O as clearReviewQueue, Q as clearEvidence, R as exportDiagnostics, U as repairApprovalCenter, V as setupDesktopNotifications, E as EmptyState, G as GuardHero, T as Tag, W as HiMiniMagnifyingGlass, S as SectionLabel, H as HiMiniShieldCheck, X as HiMiniLockClosed, Y as HiMiniCog6Tooth, B as Badge, A as ActionButton, d as HiMiniCheckCircle, a as HiMiniExclamationTriangle, m as HiMiniChevronUp, n as HiMiniChevronDown, Z as HiMiniBellAlert, _ as approvalGateCooldownLabel, l as HiMiniXMark } from "../guard-dashboard.js";
 import { a as resolveProtectionLevelCopy } from "./runtime-overview.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, s as securityLevelLabel } from "./app-catalog.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
@@ -155,7 +155,7 @@ function requireRSBlock() {
     [1, 70, 44],
     [2, 35, 17],
     [2, 35, 13],
-    // 4
+    // 4		
     [1, 100, 80],
     [2, 50, 32],
     [2, 50, 24],
@@ -170,7 +170,7 @@ function requireRSBlock() {
     [4, 43, 27],
     [4, 43, 19],
     [4, 43, 15],
-    // 7
+    // 7		
     [2, 98, 78],
     [4, 49, 31],
     [2, 32, 14, 4, 33, 15],
@@ -185,7 +185,7 @@ function requireRSBlock() {
     [3, 58, 36, 2, 59, 37],
     [4, 36, 16, 4, 37, 17],
     [4, 36, 12, 4, 37, 13],
-    // 10
+    // 10		
     [2, 86, 68, 2, 87, 69],
     [4, 69, 43, 1, 70, 44],
     [6, 43, 19, 2, 44, 20],
@@ -2153,7 +2153,10 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: "Feature toggles" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { id: "settings-telemetry", label: "Telemetry", checked: draft.telemetry, onChange: handleBooleanChange("telemetry") }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { id: "settings-cloud-sync", label: "Cloud sync", checked: draft.sync, onChange: handleBooleanChange("sync") }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { id: "settings-billing", label: "Billing features", checked: draft.billing, onChange: handleBooleanChange("billing") })
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { id: "settings-billing", label: "Billing features", checked: draft.billing, onChange: handleBooleanChange("billing") }),
+                  perfSnapshot !== null && perfSnapshot.cloud_state === "local_only" && draft.billing && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 ml-11 text-xs text-slate-500", children: "Billing features require a cloud connection. Connect this machine to access paid features and blocked-install analytics." })
+                ] })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
