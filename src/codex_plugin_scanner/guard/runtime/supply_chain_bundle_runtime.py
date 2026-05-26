@@ -232,6 +232,19 @@ def _is_high_confidence_block(package: SupplyChainBundlePackage) -> bool:
     )
 
 
+def _blocking_bundle_reason(package: SupplyChainBundlePackage) -> str | None:
+    if _is_high_confidence_block(package):
+        return "known_malware_or_kev"
+    if (
+        package.default_action == "block"
+        and package.source_integrity_state == "high-risk"
+        and package.exploit_level in {"active", "elevated"}
+        and package.normalized_severity in {"high", "critical"}
+    ):
+        return "maintainer_compromise"
+    return None
+
+
 def evaluate_cached_supply_chain_bundle(
     response: SupplyChainBundleResponse,
     *,
@@ -261,12 +274,13 @@ def evaluate_cached_supply_chain_bundle(
             stale=stale,
         )
     package = max(matches, key=lambda item: item.risk_score)
-    if _is_high_confidence_block(package):
+    blocking_reason = _blocking_bundle_reason(package)
+    if blocking_reason is not None:
         return OfflineSupplyChainDecision(
             action="block",
             bundle_version=response.bundle.bundle_version,
             matched_advisory_ids=package.related_advisory_ids,
-            reason="known_malware_or_kev",
+            reason=blocking_reason,
             stale=stale,
         )
     if stale:
