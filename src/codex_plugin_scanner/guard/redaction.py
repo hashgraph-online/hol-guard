@@ -52,6 +52,11 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
         r"\1=*****",
     ),
     (
+        "python-index-token",
+        re.compile(r"(?im)\b(index-url|extra-index-url)\s*[:=]\s*(https?://[^@\s]+@[^\s]+)"),
+        r"\1=*****",
+    ),
+    (
         "private-key",
         re.compile(
             r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
