@@ -2175,9 +2175,7 @@ def _cloud_package_manager_coverage(
     next_refresh_at = None
     if isinstance(summary, dict):
         synced_at = _optional_string(summary.get("synced_at") or summary.get("syncedAt"))
-        next_refresh_at = _optional_string(
-            summary.get("next_refresh_at") or summary.get("nextRefreshAt")
-        )
+        next_refresh_at = _optional_string(summary.get("next_refresh_at") or summary.get("nextRefreshAt"))
     reference_timestamp = _parse_iso_timestamp(generated_at) or datetime.now(timezone.utc)
     stale_status = "unknown"
     if synced_at is not None:
