@@ -96,6 +96,7 @@ def _seed_codex_operation(
     command_text: str | None = None,
     hook_event_name: str | None = None,
     waits_for_browser_approval: bool | None = None,
+    browser_wait_deadline_at: str | None = None,
     status: str = "waiting_on_approval",
 ) -> None:
     session = store.upsert_guard_session(
@@ -125,6 +126,8 @@ def _seed_codex_operation(
         metadata["hook_event_name"] = hook_event_name
     if waits_for_browser_approval is not None:
         metadata["codex_hook_waits_for_browser_approval"] = waits_for_browser_approval
+    if browser_wait_deadline_at is not None:
+        metadata["codex_browser_wait_deadline_at"] = browser_wait_deadline_at
     store.upsert_guard_operation(
         operation_id=f"operation-{request_id}",
         session_id=str(session["session_id"]),
@@ -273,6 +276,7 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
         thread_id="live-session-1",
         hook_event_name="PostToolUse",
         waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
         status="waiting_on_approval",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -294,6 +298,66 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
     assert "original Codex action continue" in payload["codex_resume"]["message"]
 
 
+def test_codex_approve_stale_live_hook_wait_starts_headless_resume(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launched: list[list[str]] = []
+
+    class _FakeProcess:
+        pid = 1031
+
+    def _fake_popen(command, **_kwargs):
+        launched.append(command)
+        return _FakeProcess()
+
+    monkeypatch.setattr(
+        codex_app_server_module.shutil,
+        "which",
+        lambda command: "/usr/bin/codex" if command == "codex" else None,
+    )
+    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", _fake_popen)
+
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-stale-live"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-stale-live",
+        socket_path=None,
+        thread_id="stale-live-session-1",
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+        command_text="npm install minimist@1.2.8",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
+        browser_wait_deadline_at="2000-01-01T00:00:00+00:00",
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-stale-live/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codex_resume"]["status"] == "sent"
+    assert payload["codex_resume"]["reason"] == "headless_resume_started"
+    assert payload["codex_resume"]["strategy"] == "codex-headless-exec"
+    assert launched[0][:5] == ["/usr/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
+    assert "stale-live-session-1" in launched[0]
+
+
 def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
     tmp_path: Path,
 ) -> None:
@@ -307,6 +371,7 @@ def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
         thread_id="live-block-session-1",
         hook_event_name="PostToolUse",
         waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
         status="waiting_on_approval",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -405,6 +470,7 @@ def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
         thread_id="live-session-retry-1",
         hook_event_name="PostToolUse",
         waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
         status="waiting_on_approval",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
