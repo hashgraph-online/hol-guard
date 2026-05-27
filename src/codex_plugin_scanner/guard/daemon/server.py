@@ -61,7 +61,6 @@ from ..cli.install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
-from ..local_supply_chain import build_local_supply_chain_posture
 from ..codex_resume import (
     defer_request_resume_to_live_hook,
     get_request_resume_status,
@@ -79,6 +78,7 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..local_supply_chain import build_local_supply_chain_posture
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
