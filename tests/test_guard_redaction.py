@@ -105,13 +105,10 @@ class TestRedactText:
         assert result.text == "Running build step: pnpm install"
         assert result.classifiers == ()
 
-    def test_result_preserves_sha256_of_original(self) -> None:
-        import hashlib
-
+    def test_result_does_not_hash_secret_bearing_input(self) -> None:
         original = "MY_TOKEN=abcdef"
         result = redact_text(original)
-        expected_sha = hashlib.sha256(original.encode("utf-8")).hexdigest()
-        assert result.original_sha256 == expected_sha
+        assert result.original_sha256 == ""
 
     def test_result_is_frozen(self) -> None:
         result = redact_text("clean text")
