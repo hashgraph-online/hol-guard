@@ -734,6 +734,79 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
     assert sync_calls == [True]
 
 
+def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "cloud-token",
+        "2026-05-23T17:18:00.000Z",
+        workspace_id="workspace-1",
+    )
+    sync_calls: list[int] = []
+    sync_started = threading.Event()
+    sync_release = threading.Event()
+
+    def blocking_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+        assert current_store is store
+        sync_calls.append(1)
+        sync_started.set()
+        sync_release.wait(timeout=5)
+        return {
+            "synced_at": "2026-05-23T17:18:40.061Z",
+            "receipts_stored": 1,
+        }
+
+    monkeypatch.setattr(daemon_server, "sync_receipts", blocking_sync_receipts, raising=False)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        first_status, first_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/test",
+                token=token,
+                payload={
+                    "harness": "opencode",
+                    "operation": "scan",
+                    "workspace_id": "workspace-1",
+                },
+            ),
+        )
+        assert sync_started.wait(timeout=2)
+        second_status, second_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/test",
+                token=token,
+                payload={
+                    "harness": "opencode",
+                    "operation": "scan",
+                    "workspace_id": "workspace-1",
+                },
+            ),
+        )
+    finally:
+        sync_release.set()
+        daemon.stop()
+
+    assert first_status == 200
+    assert first_payload["cloud_sync"] == {
+        "status": "queued",
+        "message": "Guard Cloud sync started.",
+    }
+    assert second_status == 200
+    assert second_payload["cloud_sync"] == {
+        "status": "in_progress",
+        "message": "Guard Cloud sync already running.",
+    }
+    assert len(sync_calls) == 1
+
+
 def test_headless_policy_sync_persists_policy_and_receipt(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
