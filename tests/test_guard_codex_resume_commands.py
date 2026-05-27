@@ -9,15 +9,8 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
-from codex_plugin_scanner.guard import codex_resume as codex_resume_module
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
-
-
-def _stub_codex_binary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        codex_resume_module.shutil, "which", lambda command: "/usr/bin/codex" if command == "codex" else None
-    )
 
 
 def _request(request_id: str) -> GuardApprovalRequest:
@@ -231,37 +224,33 @@ def test_guard_doctor_codex_reports_resume_diagnostics(
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["codex_resume"]["codex_binary_found"] in {True, False}
+    assert output["codex_resume"]["codex_binary_found"] is False
     assert output["codex_resume"]["app_server_support"] in {True, False}
     assert "remote-control socket" in output["codex_resume"]["app_server_support_reason"]
     assert output["codex_resume"]["app_server_socket_available"] in {True, False}
-    assert output["codex_resume"]["headless_resume_support"] in {True, False}
-    assert "codex exec resume" in output["codex_resume"]["headless_resume_support_reason"] or (
-        "codex` was not found" in output["codex_resume"]["headless_resume_support_reason"]
-    )
+    assert output["codex_resume"]["headless_resume_support"] is False
+    assert "Disabled by design" in output["codex_resume"]["headless_resume_support_reason"]
     assert output["codex_resume"]["latest_attempt"] is None
 
 
-def test_guard_doctor_codex_reports_app_server_support_from_codex_binary(
+def test_guard_doctor_codex_reports_headless_resume_disabled(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     GuardStore(guard_home)
-    _stub_codex_binary(monkeypatch)
 
     rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["codex_resume"]["codex_binary_found"] is True
+    assert output["codex_resume"]["codex_binary_found"] is False
     assert output["codex_resume"]["app_server_support"] in {True, False}
     assert "remote-control socket" in output["codex_resume"]["app_server_support_reason"]
     assert output["codex_resume"]["app_server_socket_available"] in {True, False}
-    assert output["codex_resume"]["headless_resume_support"] is True
-    assert "codex exec resume" in output["codex_resume"]["headless_resume_support_reason"]
+    assert output["codex_resume"]["headless_resume_support"] is False
+    assert "does not continue the visible Codex App chat" in output["codex_resume"]["headless_resume_support_reason"]
     assert "remote_control_support" not in output["codex_resume"]
 
 
@@ -296,31 +285,14 @@ def test_guard_approvals_resume_rejects_unsafe_headless_thread_id(
     assert rc == 0
     assert output["status"] == "skipped"
     assert output["reason"] == "unsafe_thread_id"
-    assert output["strategy"] == "codex-headless-exec"
+    assert output["strategy"] == "codex-app-server-thread"
     assert "retry the same request" in output["message"]
 
 
-def test_guard_approvals_resume_starts_headless_codex_when_app_server_unavailable(
+def test_guard_approvals_resume_requires_app_server_when_socket_unavailable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    launched: list[dict[str, object]] = []
-
-    class _FakeProcess:
-        pid = 4455
-
-    def _fake_popen(command, **kwargs):
-        launched.append({"command": command, **kwargs})
-        return _FakeProcess()
-
-    monkeypatch.setattr(
-        codex_app_server_module.shutil,
-        "which",
-        lambda command: "/usr/local/bin/codex" if command == "codex" else None,
-    )
-    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", _fake_popen)
-
     home_dir = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     codex_home = tmp_path / "codex-home"
@@ -347,35 +319,16 @@ def test_guard_approvals_resume_starts_headless_codex_when_app_server_unavailabl
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["status"] == "sent"
-    assert output["reason"] == "headless_resume_started"
-    assert output["strategy"] == "codex-headless-exec"
-    assert "background" in output["message"]
-    assert "open Codex App chat" in output["message"]
-    assert len(launched) == 1
-    assert launched[0]["cwd"] == workspace
-    assert launched[0]["command"][:5] == ["/usr/local/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
-    assert "--" in launched[0]["command"]
-    assert "thread-1" in launched[0]["command"]
-    assert launched[0]["env"]["CODEX_HOME"] == str(codex_home)
+    assert output["status"] == "failed"
+    assert output["reason"] == "socket_not_available"
+    assert output["strategy"] == "codex-app-server-thread"
+    assert "original chat" in output["message"]
 
 
 def test_guard_approvals_resume_does_not_start_headless_codex_for_blocked_request(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        codex_app_server_module.shutil,
-        "which",
-        lambda command: "/usr/local/bin/codex" if command == "codex" else None,
-    )
-    monkeypatch.setattr(
-        codex_app_server_module.subprocess,
-        "Popen",
-        lambda *_args, **_kwargs: pytest.fail("blocked requests must not start codex exec resume"),
-    )
-
     home_dir = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     codex_home = tmp_path / "codex-home"
@@ -408,13 +361,10 @@ def test_guard_approvals_resume_does_not_start_headless_codex_for_blocked_reques
     assert "blocked this Codex request" in output["message"]
 
 
-def test_guard_approvals_resume_reports_missing_codex_home_without_spawning(
+def test_guard_approvals_resume_reports_missing_app_server_without_spawning(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", lambda *_args, **_kwargs: pytest.fail("no spawn"))
-
     home_dir = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -439,6 +389,6 @@ def test_guard_approvals_resume_reports_missing_codex_home_without_spawning(
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["status"] == "skipped"
-    assert output["reason"] == "codex_home_not_available"
-    assert output["strategy"] == "codex-headless-exec"
+    assert output["status"] == "failed"
+    assert output["reason"] == "socket_not_available"
+    assert output["strategy"] == "codex-app-server-thread"
