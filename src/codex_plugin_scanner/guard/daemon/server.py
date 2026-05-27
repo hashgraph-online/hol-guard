@@ -106,6 +106,13 @@ from .manager import (
     write_guard_daemon_state,
 )
 
+_HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
+_HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
+
+
+def _headless_cloud_sync_store_key(store: GuardStore) -> str:
+    return str(store.guard_home.expanduser().resolve())
+
 
 def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
     """Return a lightweight snapshot dict including package manager shim coverage."""
@@ -363,9 +370,24 @@ def _queue_headless_cloud_sync(
             "status": "not_configured",
             "message": "Guard Cloud sync is not paired on this machine.",
         }
+    store_key = _headless_cloud_sync_store_key(store)
+    with _HEADLESS_CLOUD_SYNC_STATE_LOCK:
+        if store_key in _HEADLESS_CLOUD_SYNC_IN_FLIGHT:
+            return {
+                "status": "in_progress",
+                "message": "Guard Cloud sync already running.",
+            }
+        _HEADLESS_CLOUD_SYNC_IN_FLIGHT.add(store_key)
+
+    def _run_and_finalize() -> None:
+        try:
+            _run_headless_cloud_sync(store=store)
+        finally:
+            with _HEADLESS_CLOUD_SYNC_STATE_LOCK:
+                _HEADLESS_CLOUD_SYNC_IN_FLIGHT.discard(store_key)
+
     threading.Thread(
-        target=_run_headless_cloud_sync,
-        kwargs={"store": store},
+        target=_run_and_finalize,
         daemon=True,
         name="guard-headless-app-cloud-sync",
     ).start()
