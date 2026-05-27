@@ -138,7 +138,7 @@ def test_gr096_managed_hook_json_matches_each_harness_schema(tmp_path: Path) -> 
     opencode_manifest = OpenCodeHarnessAdapter().install(context)
     CopilotHarnessAdapter().install(context)
 
-    codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_config_path"])))
+    codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_hook_config_path"])))
     claude_hooks = json.loads((context.workspace_dir / ".claude" / "settings.local.json").read_text(encoding="utf-8"))[
         "hooks"
     ]
@@ -159,7 +159,7 @@ def test_gr099_managed_hooks_use_lightweight_cli_entrypoints(tmp_path: Path) -> 
     ClaudeCodeHarnessAdapter().install(context)
     CopilotHarnessAdapter().install(context)
 
-    codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_config_path"])))
+    codex_hooks = _read_codex_hooks(Path(str(codex_manifest["managed_hook_config_path"])))
     claude_hooks = json.loads((context.workspace_dir / ".claude" / "settings.local.json").read_text(encoding="utf-8"))[
         "hooks"
     ]
