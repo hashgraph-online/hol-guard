@@ -3019,6 +3019,11 @@ class GuardStore:
             self._credential_payload_token_hash(previous_payload) if previous_payload is not None else None
         )
         previous_workspace_id = previous_payload.get("workspace_id") if previous_payload is not None else None
+        previous_workspace = (
+            previous_workspace_id.strip()
+            if isinstance(previous_workspace_id, str) and previous_workspace_id.strip()
+            else None
+        )
         effective_workspace_id = normalized_workspace_id
         can_preserve_workspace = (
             previous_sync_url == sync_url
@@ -3029,6 +3034,11 @@ class GuardStore:
         )
         if effective_workspace_id is None and can_preserve_workspace:
             effective_workspace_id = previous_workspace_id.strip()
+        workspace_changed = (
+            previous_workspace is not None
+            and effective_workspace_id is not None
+            and previous_workspace != effective_workspace_id
+        )
         payload = {
             "sync_url": sync_url,
             "token_ref": self._sync_token_ref,
@@ -3040,7 +3050,10 @@ class GuardStore:
             credentials_changed = True
         else:
             credentials_changed = (
-                previous_sync_url != sync_url or previous_token_hash is None or previous_token_hash != token_hash
+                previous_sync_url != sync_url
+                or previous_token_hash is None
+                or previous_token_hash != token_hash
+                or workspace_changed
             )
         self._secret_store.set_secret(self._sync_token_ref, token)
         connection.execute(

@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.edge_events import build_runtime_session_event
-from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
@@ -124,6 +124,38 @@ def test_sync_credentials_workspace_metadata_update_preserves_cached_policy(tmp_
 
     assert store.get_cloud_workspace_id() == "workspace-alpha"
     assert store.get_sync_payload("policy") == {"policy": "team"}
+
+
+def test_sync_credentials_workspace_switch_clears_stale_cloud_policy_allows(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    store.set_sync_payload("policy", {"policy": "workspace-alpha"}, "2026-04-24T00:00:00+00:00")
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="harness",
+            action="allow",
+            source="cloud-sync",
+            reason="workspace alpha cloud allow",
+        ),
+        "2026-04-24T00:00:00+00:00",
+    )
+
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:01:00+00:00",
+        workspace_id="workspace-beta",
+    )
+
+    assert store.get_cloud_workspace_id() == "workspace-beta"
+    assert store.get_sync_payload("policy") is None
+    assert not any(item["source"] in {"cloud-sync", "team-policy"} for item in store.list_policy_decisions())
 
 
 def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_path: Path) -> None:
