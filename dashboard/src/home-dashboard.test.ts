@@ -148,6 +148,12 @@ for (const { harness, expected } of displayNames) {
   );
 }
 
+assert(harnessDisplayName(undefined as unknown as string) === "Unknown app", "L095: harnessDisplayName handles undefined gracefully");
+assert(harnessDisplayName(null as unknown as string) === "Unknown app", "L095: harnessDisplayName handles null gracefully");
+assert(harnessDisplayName({} as unknown as string) === "Unknown app", "L095: harnessDisplayName handles object gracefully");
+assert(harnessDisplayName([] as unknown as string) === "Unknown app", "L095: harnessDisplayName handles array gracefully");
+assert(harnessDisplayName(42 as unknown as string) === "Unknown app", "L095: harnessDisplayName handles number gracefully");
+
 const queuedCountForInbox = (pendingCount: number): string => {
   const state = buildHomePrimaryState(pendingCount, 1);
   return state.ctaLabel;

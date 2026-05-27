@@ -564,12 +564,48 @@ function normalizeSupplyChainSnapshot(raw: unknown): SupplyChainSnapshot | undef
   };
 }
 
+function normalizeManagedInstall(raw: unknown): GuardManagedInstall | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+  const harness = raw["harness"];
+  if (typeof harness !== "string") {
+    return undefined;
+  }
+  const active = raw["active"] === true;
+  const workspace = isStringOrNull(raw["workspace"]) ? raw["workspace"] : null;
+  const manifest = isRecord(raw["manifest"]) ? raw["manifest"] : {};
+  const updatedAt = typeof raw["updated_at"] === "string" ? raw["updated_at"] : "";
+  return {
+    harness,
+    active,
+    workspace,
+    manifest,
+    updated_at: updatedAt,
+  };
+}
+
+function normalizeManagedInstalls(raw: unknown): GuardManagedInstall[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const result: GuardManagedInstall[] = [];
+  for (const item of raw) {
+    const normalized = normalizeManagedInstall(item);
+    if (normalized !== undefined) {
+      result.push(normalized);
+    }
+  }
+  return result;
+}
+
 export function normalizeRuntimeSnapshot(snapshot: RuntimeSnapshotPayload): GuardRuntimeSnapshot {
   return {
     ...snapshot,
     items: normalizeApprovalRequests(snapshot.items),
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
     supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
+    managed_installs: normalizeManagedInstalls(snapshot.managed_installs),
   };
 }
 
