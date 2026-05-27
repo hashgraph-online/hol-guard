@@ -1120,26 +1120,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 harness=adapter.harness,
                 action_path=token_action_path,
                 handoff_token=handoff_token,
+                auto_start=True,
                 include_dashboard_session_token=True,
                 local_origin=local_origin,
                 workspace_id=self._optional_string(decoded.get("workspace_id")) or "",
             )
             return
         is_user_navigation = self._browser_user_navigation_is_allowed()
-        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and (
-            self._hosted_dashboard_referrer_is_allowed() or is_user_navigation
-        ):
+        is_hosted_referrer = self._hosted_dashboard_referrer_is_allowed()
+        workspace_id = self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or ""
+        navigation_allowed = is_hosted_referrer or is_user_navigation
+        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and (navigation_allowed or workspace_id):
             self._write_cloud_app_handoff_page(
                 harness=adapter.harness,
                 action_path=action_path,
                 handoff_token=self._cloud_app_handoff_token(
                     harness=adapter.harness,
                     action_path=action_path,
-                    workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
+                    workspace_id=workspace_id,
                 ),
-                include_dashboard_session_token=is_user_navigation,
+                auto_start=navigation_allowed,
+                include_dashboard_session_token=is_user_navigation or not navigation_allowed,
                 local_origin=local_origin,
-                workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
+                workspace_id=workspace_id,
             )
             return
         cloud_params: dict[str, str] = {"guardDaemon": local_origin}
@@ -1253,6 +1256,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness: str,
         action_path: str,
         handoff_token: str,
+        auto_start: bool,
         include_dashboard_session_token: bool,
         local_origin: str,
         workspace_id: str,
@@ -1266,6 +1270,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "localOrigin": local_origin,
             "operation": operation,
             "redirectBase": redirect_base,
+            "autoStart": auto_start,
             "workspaceId": workspace_id,
         }
         success_fragment_args = ""
@@ -1336,6 +1341,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
       padding: 14px 18px;
     }}
     button:disabled {{ cursor: wait; opacity: .72; }}
+    button[hidden] {{ display: none; }}
   </style>
 </head>
 <body>
@@ -1347,11 +1353,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
       then it will return you to HOL Cloud.
     </p>
     <div id="status" class="status">Starting local Guard setup...</div>
+    <button id="continue" type="button" disabled>Continue setup</button>
   </main>
   <script id="guard-handoff-data" type="application/json">{script_payload}</script>
   <script>
     const data = JSON.parse(document.getElementById('guard-handoff-data').textContent);
     const statusNode = document.getElementById('status');
+    const continueButton = document.getElementById('continue');
     const finish = (params, fragmentOnlyParams = {{}}) => {{
       const query = new URLSearchParams(params);
       const fragment = new URLSearchParams(params);
@@ -1408,7 +1416,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         fail(error instanceof Error ? error.message : 'Local Guard setup failed');
       }}
     }};
-    completeSetup();
+    if (data.autoStart) {{
+      continueButton.hidden = true;
+      completeSetup();
+    }} else {{
+      statusNode.textContent = 'Ready to connect this browser to local Guard.';
+      continueButton.disabled = false;
+      continueButton.addEventListener('click', () => {{
+        continueButton.disabled = true;
+        completeSetup();
+      }}, {{ once: true }});
+    }}
   </script>
 </body>
 </html>"""

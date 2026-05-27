@@ -810,6 +810,38 @@ def test_cloud_app_handoff_redirects_to_guard_cloud_when_referrer_and_fetch_meta
     assert auth_token not in location
 
 
+def test_cloud_app_handoff_workspace_fallback_requires_local_continue_when_fetch_metadata_missing(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=connect&workspaceId=workspace-alpha",
+                method="GET",
+                origin=None,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert "HOL Guard local handoff" in body
+    assert "Continue setup" in body
+    script_payload = _handoff_script_payload(body)
+    assert script_payload["autoStart"] is False
+    assert script_payload["workspaceId"] == "workspace-alpha"
+    browser_token = script_payload["dashboardSessionToken"]
+    assert isinstance(browser_token, str)
+    assert browser_token.startswith("gld1.")
+    assert auth_token not in body
+
+
 def test_cloud_app_handoff_redirects_to_guard_cloud_for_silent_fetch(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
