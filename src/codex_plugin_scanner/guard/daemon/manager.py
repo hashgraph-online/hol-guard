@@ -133,11 +133,7 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
     if not isinstance(port, int):
         return None
     pid = payload.get("pid")
-    if (
-        not isinstance(pid, int)
-        or pid <= 0
-        or not _guard_daemon_pid_is_running(pid)
-    ):
+    if not isinstance(pid, int) or pid <= 0 or not _guard_daemon_pid_is_running(pid):
         return None
     url = f"http://127.0.0.1:{port}"
     try:
