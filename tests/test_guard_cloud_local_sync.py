@@ -646,6 +646,9 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     assert isinstance(session_payload, dict)
     assert session_payload["deviceId"] == store.get_or_create_installation_id()
     assert session_payload["deviceName"] == store.get_device_metadata()["device_label"]
+    assert session_payload["localIdentity"]["daemonId"] == store.get_or_create_installation_id()
+    assert session_payload["localIdentity"]["daemonStatus"] == "healthy"
+    assert session_payload["localIdentity"]["relayState"] == "online"
     assert session_payload["packageManagerCoverage"] == {
         "generatedAt": "2026-04-24T00:01:00+00:00",
         "configuredManagers": ["npm"],
