@@ -2253,6 +2253,11 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         workspace=workspace,
         generated_at=updated_at,
     )
+    local_identity = _cloud_local_identity_payload(
+        device_id,
+        daemon_version=_optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
+        observed_at=updated_at,
+    )
     return {
         "sessionId": session_id,
         "harness": _optional_string(session.get("harness")) or "hol-guard",
@@ -2264,7 +2269,8 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
         "deviceId": device_id,
         "deviceName": device_name,
-        "localIdentity": _cloud_local_identity_payload(device_id),
+        "localIdentity": local_identity,
+        "localIdentitySource": _cloud_local_identity_source_payload(local_identity),
         "packageManagerCoverage": package_manager_coverage,
         "workspace": workspace,
         "capabilities": capabilities,
@@ -2274,13 +2280,22 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     }
 
 
-def _cloud_local_identity_payload(device_id: str) -> dict[str, object]:
+def _cloud_local_identity_payload(
+    device_id: str,
+    *,
+    daemon_version: str,
+    observed_at: str,
+) -> dict[str, object]:
     hostname = _safe_hostname()
     private_ip = _safe_private_ip()
+    if private_ip is None:
+        private_ip = _safe_private_ipv6()
     payload: dict[str, object] = {
         "daemonId": device_id,
+        "daemonVersion": daemon_version,
         "daemonStatus": "healthy",
         "relayState": "online",
+        "lastSyncedAt": observed_at,
     }
     if hostname is not None:
         payload["hostname"] = hostname
@@ -2288,6 +2303,24 @@ def _cloud_local_identity_payload(device_id: str) -> dict[str, object]:
         payload["ipAddress"] = private_ip
         payload["privateIpAddress"] = private_ip
     return payload
+
+
+def _cloud_local_identity_source_payload(local_identity: dict[str, object]) -> dict[str, str]:
+    source: dict[str, str] = {
+        "daemonId": "local-guard",
+        "daemonVersion": "local-guard",
+        "daemonStatus": "local-guard",
+        "relayState": "local-guard",
+    }
+    if "hostname" in local_identity:
+        source["hostname"] = "local-guard"
+    if "ipAddress" in local_identity:
+        source["ipAddress"] = "local-guard"
+    if "privateIpAddress" in local_identity:
+        source["privateIpAddress"] = "local-guard"
+    if "publicIpAddress" in local_identity:
+        source["publicIpAddress"] = "local-guard"
+    return source
 
 
 def _safe_hostname() -> str | None:
@@ -2308,6 +2341,16 @@ def _safe_private_ip() -> str | None:
         address = socket.gethostbyname(socket.gethostname())
         if address and not address.startswith("127."):
             return address[:128]
+    return None
+
+
+def _safe_private_ipv6() -> str | None:
+    with suppress(OSError):
+        addresses = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)
+        for entry in addresses:
+            candidate = entry[4][0]
+            if isinstance(candidate, str) and candidate and candidate != "::1":
+                return candidate[:128]
     return None
 
 
