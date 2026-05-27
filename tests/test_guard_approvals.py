@@ -1155,11 +1155,18 @@ class TestGuardApprovals:
             "_load_state",
             lambda _guard_home: {
                 "port": 5530,
+                "pid": 12345,
                 "auth_token": "token-123",
                 "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
                 "source_root": daemon_manager_module._current_guard_daemon_source_root(),
                 "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
             },
+        )
+        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_guard_daemon_pid_matches_command",
+            lambda _pid, expected_guard_home=None: True,
         )
         monkeypatch.setattr(
             daemon_manager_module.urllib.request,
@@ -1195,11 +1202,18 @@ class TestGuardApprovals:
             "_load_state",
             lambda _guard_home: {
                 "port": 5530,
+                "pid": 12345,
                 "auth_token": "token-123",
                 "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
                 "source_root": daemon_manager_module._current_guard_daemon_source_root(),
                 "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
             },
+        )
+        monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_guard_daemon_pid_matches_command",
+            lambda _pid, expected_guard_home=None: True,
         )
         monkeypatch.setattr(
             daemon_manager_module.urllib.request,
