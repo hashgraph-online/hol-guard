@@ -2155,6 +2155,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
         "deviceId": device_id,
         "deviceName": device_name,
+        "localIdentity": _cloud_local_identity_payload(device_id),
         "packageManagerCoverage": package_manager_coverage,
         "workspace": workspace,
         "capabilities": capabilities,
@@ -2162,6 +2163,44 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         "createdAt": created_at,
         "updatedAt": updated_at,
     }
+
+
+def _cloud_local_identity_payload(device_id: str) -> dict[str, object]:
+    hostname = _safe_hostname()
+    private_ip = _safe_private_ip()
+    payload: dict[str, object] = {
+        "daemonId": device_id,
+        "daemonStatus": "healthy",
+        "relayState": "online",
+    }
+    if hostname is not None:
+        payload["hostname"] = hostname
+    if private_ip is not None:
+        payload["ipAddress"] = private_ip
+        payload["privateIpAddress"] = private_ip
+    return payload
+
+
+def _safe_hostname() -> str | None:
+    with suppress(OSError):
+        hostname = socket.gethostname().strip()
+        if hostname:
+            return hostname[:255]
+    return None
+
+
+def _safe_private_ip() -> str | None:
+    with suppress(OSError):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            address = sock.getsockname()[0]
+            if isinstance(address, str) and address and not address.startswith("127."):
+                return address[:128]
+    with suppress(OSError):
+        address = socket.gethostbyname(socket.gethostname())
+        if address and not address.startswith("127."):
+            return address[:128]
+    return None
 
 
 def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
