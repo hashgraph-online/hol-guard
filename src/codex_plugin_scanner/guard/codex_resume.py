@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
@@ -163,24 +162,20 @@ def defer_request_resume_to_live_hook(
 
 
 def inspect_codex_resume_capabilities(store: GuardStore) -> dict[str, object]:
-    binary_path = shutil.which("codex")
     socket_available = default_codex_app_server_socket_available()
     latest_attempt = store.get_latest_request_resume(harness="codex")
     return {
-        "codex_binary_found": binary_path is not None,
+        "codex_binary_found": False,
         "app_server_support": socket_available,
         "app_server_support_reason": (
             "Same-chat continuation requires the Codex app-server remote-control socket. "
             "When the socket is missing, HOL Guard cannot visibly continue the open Codex App chat."
         ),
         "app_server_socket_available": socket_available,
-        "headless_resume_support": binary_path is not None,
+        "headless_resume_support": False,
         "headless_resume_support_reason": (
-            "When the live app-server socket is gone, HOL Guard resumes saved Codex exec threads with "
-            "`codex exec resume` from the original workspace. This is a background retry, not a visible "
-            "message in the open Codex App chat."
-            if binary_path is not None
-            else "`codex` was not found on PATH, so HOL Guard can only save the approval for manual retry."
+            "Disabled by design. `codex exec resume` starts a separate background run and does not continue "
+            "the visible Codex App chat. HOL Guard only auto-continues Codex through the app-server socket."
         ),
         "latest_attempt": latest_attempt,
     }
@@ -352,15 +347,7 @@ def _normalize_dispatch_result(
     raw_supported = raw_result.get("supported")
     supported = raw_supported if isinstance(raw_supported, bool) else raw_status != "skipped"
     if raw_status == "sent":
-        message = (
-            "HOL Guard sent Codex a continuation message in the original chat."
-            if effective_strategy != "codex-headless-exec"
-            else (
-                "HOL Guard started a background `codex exec resume` retry for this saved thread. "
-                "The command can complete in Codex history, but this open Codex App chat will not visibly "
-                "continue unless the Codex app-server remote-control socket is enabled."
-            )
-        )
+        message = "HOL Guard sent Codex a continuation message in the original chat."
         return {
             "status": "sent",
             "reason": raw_reason,
