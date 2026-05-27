@@ -15046,6 +15046,172 @@ def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
     assert payload["receipts_stored"] == 65
 
 
+def test_sync_receipts_uses_rowid_cursor_and_sync_context(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    for index in range(3):
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-{index}",
+                timestamp="2026-04-19T00:00:00+00:00",
+                harness="codex",
+                artifact_id=f"artifact-{index}",
+                artifact_hash=f"sha256:{index:064x}",
+                policy_decision="review",
+                capabilities_summary="requests file write",
+                changed_capabilities=("fs_write",),
+                provenance_summary="local codex workspace",
+                artifact_name=f"artifact-{index}",
+                source_scope="workspace",
+            )
+        )
+
+    sync_payloads: list[dict[str, object]] = []
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"statuses": []})
+        sync_payloads.append(payload)
+        return _Response(
+            {
+                "syncedAt": "2026-04-19T00:00:10+00:00",
+                "receiptsStored": len(payload["receipts"]),
+                "advisories": [],
+                "policy": {},
+                "alertPreferences": {},
+                "teamPolicyPack": {},
+                "exceptions": [],
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    first_summary = guard_runner_module.sync_receipts(store)
+    cursor_payload = store.get_sync_payload("receipt_sync_cursor")
+    assert isinstance(cursor_payload, dict)
+    first_cursor_rowid = cursor_payload["last_rowid"]
+    assert isinstance(first_cursor_rowid, int)
+    assert first_summary["receipts"] == 3
+    assert "syncContext" in sync_payloads[0]
+    assert sync_payloads[0]["syncContext"]["localGuardOnlineAt"]
+
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-late",
+            timestamp="2026-04-18T23:59:00+00:00",
+            harness="codex",
+            artifact_id="artifact-late",
+            artifact_hash="sha256:late",
+            policy_decision="review",
+            capabilities_summary="late insert",
+            changed_capabilities=("fs_write",),
+            provenance_summary="local codex workspace",
+            artifact_name="artifact-late",
+            source_scope="workspace",
+        )
+    )
+
+    second_summary = guard_runner_module.sync_receipts(store)
+    assert second_summary["receipts"] == 1
+    assert len(sync_payloads) == 2
+    assert sync_payloads[1]["receipts"][0]["receiptId"] == "receipt-late"
+    assert sync_payloads[1]["syncContext"]["lastReceiptSyncAt"] == "2026-04-19T00:00:10+00:00"
+    latest_cursor = store.get_sync_payload("receipt_sync_cursor")
+    assert isinstance(latest_cursor, dict)
+    assert isinstance(latest_cursor["last_rowid"], int)
+    assert latest_cursor["last_rowid"] > first_cursor_rowid
+
+
+def test_sync_receipts_backfills_when_cursor_is_ahead_of_local_rows(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    for index in range(2):
+        store.add_receipt(
+            GuardReceipt(
+                receipt_id=f"receipt-{index}",
+                timestamp="2026-04-19T00:00:00+00:00",
+                harness="codex",
+                artifact_id=f"artifact-{index}",
+                artifact_hash=f"sha256:{index:064x}",
+                policy_decision="review",
+                capabilities_summary="requests file write",
+                changed_capabilities=("fs_write",),
+                provenance_summary="local codex workspace",
+                artifact_name=f"artifact-{index}",
+                source_scope="workspace",
+            )
+        )
+    store.set_sync_payload(
+        "receipt_sync_cursor",
+        {"last_rowid": 9999, "synced_at": "2026-04-19T00:00:05+00:00"},
+        "2026-04-19T00:00:05+00:00",
+    )
+
+    uploaded_sizes: list[int] = []
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"statuses": []})
+        uploaded_sizes.append(len(payload["receipts"]))
+        return _Response(
+            {
+                "syncedAt": "2026-04-19T00:00:10+00:00",
+                "receiptsStored": len(payload["receipts"]),
+                "advisories": [],
+                "policy": {},
+                "alertPreferences": {},
+                "teamPolicyPack": {},
+                "exceptions": [],
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    summary = guard_runner_module.sync_receipts(store)
+
+    assert uploaded_sizes == [2]
+    assert summary["receipt_cursor_backfill"] is True
+    cursor_payload = store.get_sync_payload("receipt_sync_cursor")
+    assert isinstance(cursor_payload, dict)
+    assert cursor_payload["last_rowid"] == store.latest_receipt_rowid()
+
+
 def test_sync_receipts_marks_latest_connect_first_sync_succeeded(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     connect_request = store.create_guard_connect_request(

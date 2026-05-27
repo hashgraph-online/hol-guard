@@ -1583,8 +1583,9 @@ class GuardStore:
     def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
         if harness is not None:
             query = """
-                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-                        changed_capabilities_json,
+                select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+                       capabilities_summary,
+                       changed_capabilities_json,
                        provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
                        diff_summary, approval_source, timestamp
                 from runtime_receipts
@@ -1595,8 +1596,9 @@ class GuardStore:
             params: tuple[object, ...] = (harness, limit)
         else:
             query = """
-                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-                        changed_capabilities_json,
+                select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+                       capabilities_summary,
+                       changed_capabilities_json,
                        provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
                        diff_summary, approval_source, timestamp
                 from runtime_receipts
@@ -1608,6 +1610,7 @@ class GuardStore:
             rows = connection.execute(query, params).fetchall()
         return [
             {
+                "receipt_rowid": int(row["receipt_rowid"]),
                 "receipt_id": str(row["receipt_id"]),
                 "harness": str(row["harness"]),
                 "artifact_id": str(row["artifact_id"]),
@@ -1626,6 +1629,76 @@ class GuardStore:
             }
             for row in rows
         ]
+
+    def list_receipts_since_rowid(
+        self,
+        *,
+        after_rowid: int | None,
+        limit: int = 200,
+        harness: str | None = None,
+    ) -> list[dict[str, object]]:
+        if harness is not None:
+            query = """
+                select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+                       capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
+                       artifact_name, source_scope, scanner_evidence_json, diff_summary, approval_source, timestamp
+                from runtime_receipts
+                where rowid > ? and harness = ?
+                order by rowid asc
+                limit ?
+                """
+            params: tuple[object, ...] = (after_rowid or 0, harness, limit)
+        else:
+            query = """
+                select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+                       capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
+                       artifact_name, source_scope, scanner_evidence_json, diff_summary, approval_source, timestamp
+                from runtime_receipts
+                where rowid > ?
+                order by rowid asc
+                limit ?
+                """
+            params = (after_rowid or 0, limit)
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [
+            {
+                "receipt_rowid": int(row["receipt_rowid"]),
+                "receipt_id": str(row["receipt_id"]),
+                "harness": str(row["harness"]),
+                "artifact_id": str(row["artifact_id"]),
+                "artifact_hash": str(row["artifact_hash"]),
+                "policy_decision": str(row["policy_decision"]),
+                "capabilities_summary": str(row["capabilities_summary"]),
+                "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
+                "provenance_summary": str(row["provenance_summary"]),
+                "user_override": row["user_override"],
+                "artifact_name": row["artifact_name"],
+                "source_scope": row["source_scope"],
+                "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
+                "diff_summary": row["diff_summary"],
+                "approval_source": row["approval_source"],
+                "timestamp": str(row["timestamp"]),
+            }
+            for row in rows
+        ]
+
+    def latest_receipt_rowid(self, *, harness: str | None = None) -> int | None:
+        query = "select max(rowid) as max_rowid from runtime_receipts"
+        params: tuple[object, ...] = ()
+        if harness is not None:
+            query += " where harness = ?"
+            params = (harness,)
+        with self._connect() as connection:
+            row = connection.execute(query, params).fetchone()
+        if row is None:
+            return None
+        max_rowid = row["max_rowid"]
+        if isinstance(max_rowid, int):
+            return max_rowid
+        if isinstance(max_rowid, str) and max_rowid.isdigit():
+            return int(max_rowid)
+        return None
 
     def get_receipt(self, receipt_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
