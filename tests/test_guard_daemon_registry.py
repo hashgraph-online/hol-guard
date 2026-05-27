@@ -119,3 +119,11 @@ class TestHealthzEndpoint:
             assert "tables" in payload
         finally:
             server.stop()
+
+    def test_healthz_includes_guard_home_for_daemon_identity(self, tmp_path: Path) -> None:
+        url, server = self._start_server(tmp_path)
+        try:
+            payload = self._get_healthz(url)
+            assert payload["guard_home"] == str(server.store.guard_home.resolve())
+        finally:
+            server.stop()

@@ -137,13 +137,17 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
         not isinstance(pid, int)
         or pid <= 0
         or not _guard_daemon_pid_is_running(pid)
-        or not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
     ):
         return None
     url = f"http://127.0.0.1:{port}"
     try:
         with urllib.request.urlopen(f"{url}/healthz", timeout=1) as response:
-            if response.status == 200 and _healthz_payload_is_current(response.read().decode("utf-8")):
+            raw_payload = response.read().decode("utf-8")
+            if response.status != 200 or not _healthz_payload_is_current(raw_payload):
+                return None
+            if _healthz_payload_matches_guard_home(raw_payload, guard_home):
+                return url
+            if _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
                 return url
     except (OSError, ValueError, urllib.error.URLError):
         return None
@@ -827,3 +831,16 @@ def _healthz_payload_is_current(raw_payload: str) -> bool:
         return False
     table_names = {table for table in tables if isinstance(table, str)}
     return REQUIRED_DAEMON_TABLES.issubset(table_names)
+
+
+def _healthz_payload_matches_guard_home(raw_payload: str, guard_home: Path) -> bool:
+    payload = json.loads(raw_payload)
+    if not isinstance(payload, dict):
+        return False
+    payload_guard_home = payload.get("guard_home")
+    if not isinstance(payload_guard_home, str) or not payload_guard_home.strip():
+        return False
+    try:
+        return Path(payload_guard_home).resolve() == guard_home.resolve()
+    except OSError:
+        return Path(payload_guard_home) == guard_home

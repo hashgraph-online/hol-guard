@@ -442,6 +442,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "tables": store.list_table_names(),
                     "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
                     "package_version": __version__,
+                    "guard_home": str(store.guard_home.resolve()),
                 }
             )
             return
