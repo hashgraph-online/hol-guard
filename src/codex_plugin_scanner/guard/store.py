@@ -1647,7 +1647,11 @@ class GuardStore:
                 order by rowid asc
                 limit ?
                 """
-            params: tuple[object, ...] = (after_rowid or 0, harness, limit)
+            params: tuple[object, ...] = (
+                after_rowid if after_rowid is not None else 0,
+                harness,
+                limit,
+            )
         else:
             query = """
                 select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
@@ -1658,7 +1662,7 @@ class GuardStore:
                 order by rowid asc
                 limit ?
                 """
-            params = (after_rowid or 0, limit)
+            params = (after_rowid if after_rowid is not None else 0, limit)
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
         return [
