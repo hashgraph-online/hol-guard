@@ -474,6 +474,26 @@ def test_cloud_app_handoff_start_mints_handoff_url_for_hosted_dashboard(tmp_path
     assert "dashboardSessionToken" in body
 
 
+def test_cloud_app_handoff_start_requires_dashboard_session(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={"action": "connect"},
+                origin="https://hol.org",
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 401
+    assert payload["error"] == "unauthorized"
+
+
 def test_cloud_app_handoff_start_response_is_not_cacheable(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
