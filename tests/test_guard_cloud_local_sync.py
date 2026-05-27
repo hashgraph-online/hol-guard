@@ -679,8 +679,14 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     assert session_payload["deviceId"] == store.get_or_create_installation_id()
     assert session_payload["deviceName"] == store.get_device_metadata()["device_label"]
     assert session_payload["localIdentity"]["daemonId"] == store.get_or_create_installation_id()
+    assert session_payload["localIdentity"]["daemonVersion"] == guard_runner_module.__version__
     assert session_payload["localIdentity"]["daemonStatus"] == "healthy"
     assert session_payload["localIdentity"]["relayState"] == "online"
+    assert session_payload["localIdentity"]["lastSyncedAt"] == "2026-04-24T00:01:00+00:00"
+    assert session_payload["localIdentitySource"]["daemonId"] == "local-guard"
+    assert session_payload["localIdentitySource"]["daemonVersion"] == "local-guard"
+    assert session_payload["localIdentitySource"]["daemonStatus"] == "local-guard"
+    assert session_payload["localIdentitySource"]["relayState"] == "local-guard"
     assert session_payload["packageManagerCoverage"] == {
         "generatedAt": "2026-04-24T00:01:00+00:00",
         "configuredManagers": ["npm"],
@@ -694,3 +700,105 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
             "nextRefreshAt": "2026-04-24T00:15:00+00:00",
         },
     }
+
+
+def test_sync_runtime_session_prefers_ipv6_private_identity_when_ipv4_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-ipv6",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    monkeypatch.setattr(guard_runner_module, "_safe_private_ip", lambda: None)
+    monkeypatch.setattr(guard_runner_module, "_safe_private_ipv6", lambda: "fd00::42")
+    captured_body: dict[str, object] = {}
+
+    def _runtime_sync_response(**kwargs):
+        request = kwargs["request"]
+        captured_body.update(json.loads(request.data.decode("utf-8")))
+        return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
+
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_urlopen_json_with_timeout_retry",
+        _runtime_sync_response,
+    )
+
+    guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "harness": "codex",
+            "surface": "cli",
+            "status": "active",
+            "updatedAt": "2026-04-24T00:01:00+00:00",
+            "workspace": str(tmp_path / "workspace"),
+        },
+    )
+
+    session_payload = captured_body["session"]
+    assert isinstance(session_payload, dict)
+    assert session_payload["localIdentity"]["ipAddress"] == "fd00::42"
+    assert session_payload["localIdentity"]["privateIpAddress"] == "fd00::42"
+    assert session_payload["localIdentitySource"]["privateIpAddress"] == "local-guard"
+
+
+def test_sync_runtime_session_keeps_local_identity_when_package_coverage_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-no-coverage",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    monkeypatch.setattr(
+        guard_runner_module,
+        "package_shim_cloud_coverage",
+        lambda *_args, **_kwargs: {
+            "generatedAt": "2026-04-24T00:01:00+00:00",
+            "configuredManagers": [],
+            "protectedManagers": [],
+            "missingManagers": [],
+            "pathActive": False,
+            "bypasses": [],
+            "staleIntel": {
+                "status": "unknown",
+                "lastSyncedAt": None,
+                "nextRefreshAt": None,
+            },
+        },
+    )
+    captured_body: dict[str, object] = {}
+
+    def _runtime_sync_response(**kwargs):
+        request = kwargs["request"]
+        captured_body.update(json.loads(request.data.decode("utf-8")))
+        return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
+
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_urlopen_json_with_timeout_retry",
+        _runtime_sync_response,
+    )
+
+    guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "harness": "codex",
+            "surface": "cli",
+            "status": "active",
+            "updatedAt": "2026-04-24T00:01:00+00:00",
+            "workspace": str(tmp_path / "workspace"),
+        },
+    )
+
+    session_payload = captured_body["session"]
+    assert isinstance(session_payload, dict)
+    assert session_payload["localIdentity"]["daemonId"] == store.get_or_create_installation_id()
+    assert session_payload["localIdentitySource"]["daemonId"] == "local-guard"
