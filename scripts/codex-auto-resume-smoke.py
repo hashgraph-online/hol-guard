@@ -156,7 +156,7 @@ def _run_scenario_in_dir(*, decision: str, args: argparse.Namespace, temp_dir: P
             daemon_port=daemon.port,
             codex_home=args.codex_home,
             socket_path=socket_path,
-            operation_status="approval_wait_timeout",
+            operation_status="waiting_on_approval",
         )
         action_path = "approve" if decision == "allow" else "block"
         approval_payload = _post_json(
@@ -540,7 +540,10 @@ def _queue_pending_request(
             "codex_app_server_socket": str(socket_path),
             "command_text": _proof_command(),
             "tool_name": "Bash",
-            "event": "PreToolUse",
+            "event": "PostToolUse",
+            "hook_event_name": "PostToolUse",
+            "codex_hook_waits_for_browser_approval": True,
+            "codex_browser_wait_deadline_at": "2000-01-01T00:00:00+00:00",
         },
         now=now,
     )

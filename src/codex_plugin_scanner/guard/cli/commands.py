@@ -2732,10 +2732,11 @@ def run_guard_command(
                         "tool_name": str(payload.get("tool_name", "")),
                         "hook_name": "permissionRequest",
                         "hook_event_name": "PermissionRequest",
-                        "codex_hook_waits_for_browser_approval": _codex_hook_waits_for_browser_approval(
+                        **_codex_browser_wait_metadata(
                             args=args,
                             event_name="PermissionRequest",
                             policy_action=policy_action,
+                            config=config,
                         ),
                         "command_text": _hook_command_text(payload),
                         "workspace": str(runtime_workspace) if runtime_workspace else None,
@@ -3206,10 +3207,11 @@ def run_guard_command(
                                 "tool_name": str(payload.get("tool_name", "")),
                                 "event": str(payload.get("event", "")),
                                 "hook_event_name": event_name,
-                                "codex_hook_waits_for_browser_approval": _codex_hook_waits_for_browser_approval(
+                                **_codex_browser_wait_metadata(
                                     args=args,
                                     event_name=event_name,
                                     policy_action=policy_action,
+                                    config=config,
                                 ),
                                 "command_text": _hook_command_text(payload),
                                 "workspace": str(workspace) if workspace else None,
@@ -3670,6 +3672,33 @@ def _codex_hook_waits_for_browser_approval(
         _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action)
         and event_name != "PreToolUse"
     )
+
+
+def _codex_browser_wait_metadata(
+    *,
+    args: argparse.Namespace,
+    event_name: str,
+    policy_action: str,
+    config: GuardConfig,
+) -> dict[str, object]:
+    waits_for_browser = _codex_hook_waits_for_browser_approval(
+        args=args,
+        event_name=event_name,
+        policy_action=policy_action,
+    )
+    if not waits_for_browser:
+        return {"codex_hook_waits_for_browser_approval": False}
+    wait_timeout_seconds = max(config.approval_wait_timeout_seconds, 0)
+    if event_name == "UserPromptSubmit":
+        wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_PROMPT_APPROVAL_WAIT_MAX_SECONDS)
+    started_at = datetime.now(timezone.utc)
+    deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
+    return {
+        "codex_hook_waits_for_browser_approval": True,
+        "codex_browser_wait_started_at": started_at.isoformat(),
+        "codex_browser_wait_deadline_at": deadline_at.isoformat(),
+        "codex_browser_wait_timeout_seconds": wait_timeout_seconds,
+    }
 
 
 def _update_codex_browser_operation_status(
