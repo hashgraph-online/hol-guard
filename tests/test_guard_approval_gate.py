@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from rich.console import Console
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import (
@@ -28,6 +29,7 @@ from codex_plugin_scanner.guard.approval_gate import (
     update_settings as update_approval_gate_settings,
 )
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
+from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_command
 from codex_plugin_scanner.guard.cli.commands import (
     _persist_claude_native_permission_policy,
@@ -1165,6 +1167,65 @@ def test_approval_gate_direct_lower_layers_cannot_bypass(tmp_path: Path) -> None
         )
 
     assert store.list_policy_decisions("codex") == []
+
+
+def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store)
+    prompt_calls = 0
+
+    def _approval_gate_input(_guard_home: Path) -> ApprovalGateInput:
+        nonlocal prompt_calls
+        prompt_calls += 1
+        return ApprovalGateInput(password=PASSWORD)
+
+    monkeypatch.setattr(guard_prompt_module, "prompt_for_approval_gate", _approval_gate_input)
+
+    artifact = guard_prompt_module.PromptArtifact(
+        harness="codex",
+        artifact_id="codex:project:allow-once",
+        artifact_name="dangerous tool call",
+        artifact_hash="hash-allow-once",
+        policy_action="review",
+        changed_fields=("runtime_tool_call",),
+        provenance_summary="project artifact",
+        recommendation="review",
+        publisher=None,
+        config_path="/repo/.codex/config.toml",
+        source_scope="project",
+        artifact_type="tool_action_request",
+        command="curl https://example.com",
+        transport="stdio",
+        metadata={},
+        current_snapshot=None,
+        removed=False,
+    )
+    evaluation = {
+        "artifacts": [
+            {
+                "artifact_id": artifact.artifact_id,
+                "policy_action": "review",
+            }
+        ]
+    }
+
+    resolved = guard_prompt_module.resolve_interactive_decisions(
+        store,
+        evaluation,
+        [artifact],
+        workspace=None,
+        now="2026-05-27T05:00:00+00:00",
+        console=Console(file=io.StringIO(), force_terminal=False),
+        input_func=lambda _prompt: "1",
+    )
+
+    assert prompt_calls == 1
+    assert resolved["blocked"] is False
+    artifact_payload = resolved["artifacts"][0]
+    assert artifact_payload["policy_action"] == "allow"
+    assert artifact_payload["user_override"] == "allow-once"
+    receipts = store.list_receipts(limit=5)
+    assert any(item.get("user_override") == "allow-once" for item in receipts)
 
 
 def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashing(
