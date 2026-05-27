@@ -206,6 +206,8 @@ _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
 _RUNTIME_SYNC_TIMEOUT_SECONDS = 10
 _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
 _RECEIPT_SYNC_BATCH_SIZE = 50
+_RECEIPT_SYNC_CURSOR_PAGE_SIZE = 200
+_RECEIPT_SYNC_CURSOR_BACKFILL_ROWS = 200
 _PAIN_SIGNAL_TIMEOUT_SECONDS = 10
 _PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
 _GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS = 24
@@ -827,7 +829,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     if credentials is None:
         raise GuardSyncNotConfiguredError("Guard is not logged in.")
     sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
-    receipts = store.list_receipts(limit=200)
+    prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
+    receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
     inventory = store.list_inventory()
     payload: dict[str, object] = {}
     receipts_stored_total = 0
@@ -838,6 +841,9 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     team_policy_pack_payload: dict[str, object] | None = None
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
+    local_guard_online_at = _now()
+    sync_context = _receipt_sync_context(store=store, local_guard_online_at=local_guard_online_at)
+    latest_uploaded_rowid: int | None = None
     for receipt_batch in _iter_receipt_sync_batches(receipts):
         body = json.dumps(
             {
@@ -845,7 +851,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
                     receipt_batch,
                     device_id=device_id,
                     device_name=device_name,
-                )
+                ),
+                "syncContext": sync_context,
             }
         ).encode("utf-8")
         request = urllib.request.Request(
@@ -869,6 +876,10 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
             raise RuntimeError(_sync_http_error_message(error)) from error
         except OSError as error:
             raise RuntimeError(_sync_url_error_message(error)) from error
+        batch_rowids = [item.get("receipt_rowid") for item in receipt_batch]
+        for rowid in batch_rowids:
+            if isinstance(rowid, int) and (latest_uploaded_rowid is None or rowid > latest_uploaded_rowid):
+                latest_uploaded_rowid = rowid
         batch_receipts_stored = payload.get("receiptsStored")
         if isinstance(batch_receipts_stored, int):
             receipts_stored_total += batch_receipts_stored
@@ -889,6 +900,12 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
             exceptions_payload.extend(item for item in exceptions if isinstance(item, dict))
         remote_decisions.update(_build_remote_policy_decisions(payload))
     now = _sync_timestamp(payload)
+    persisted_cursor_rowid = latest_uploaded_rowid if latest_uploaded_rowid is not None else prior_receipt_cursor
+    _persist_receipt_sync_cursor(
+        store=store,
+        latest_uploaded_rowid=persisted_cursor_rowid,
+        synced_at=now,
+    )
     deduped_advisories = _dedupe_sync_payload_items(advisories_payload)
     deduped_exceptions = _dedupe_sync_payload_items(exceptions_payload)
     advisories_stored = 0
@@ -939,6 +956,13 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "remote_policies_stored": remote_policies_stored,
         "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
+        "receipt_cursor_rowid": persisted_cursor_rowid,
+        "receipt_cursor_backfill": bool(
+            prior_receipt_cursor is not None and len(receipts) > 0 and not any(
+                isinstance(item.get("receipt_rowid"), int) and int(item.get("receipt_rowid")) > prior_receipt_cursor
+                for item in receipts
+            )
+        ),
         "inventory": 0,
         "inventory_tracked": len(inventory),
         "value_metrics": value_metrics,
@@ -1400,6 +1424,11 @@ def sync_runtime_session(
                 "runtime_sessions_visible": 0,
                 "runtime_session_sync_skipped": True,
                 "runtime_session_sync_reason": "runtime_session_endpoint_unavailable",
+                "local_guard_online_at": recorded_at,
+                "runtime_harness": session_payload["harness"],
+                "runtime_surface": session_payload["surface"],
+                "runtime_workspace": session_payload["workspace"],
+                "runtime_device_id": session_payload["deviceId"],
             }
             store.set_sync_payload("runtime_session_summary", summary, recorded_at)
             return summary
@@ -1414,6 +1443,11 @@ def sync_runtime_session(
         "runtime_session_synced_at": synced_at,
         "runtime_session_id": session_payload["sessionId"],
         "runtime_sessions_visible": len(payload.get("items", [])) if isinstance(payload.get("items"), list) else 0,
+        "local_guard_online_at": synced_at,
+        "runtime_harness": session_payload["harness"],
+        "runtime_surface": session_payload["surface"],
+        "runtime_workspace": session_payload["workspace"],
+        "runtime_device_id": session_payload["deviceId"],
     }
     store.set_sync_payload("runtime_session_summary", summary, synced_at)
     workspace_id = store.get_cloud_workspace_id()
@@ -2076,6 +2110,72 @@ def _iter_receipt_sync_batches(receipts: list[dict[str, object]]) -> tuple[list[
         receipts[index : index + _RECEIPT_SYNC_BATCH_SIZE]
         for index in range(0, len(receipts), _RECEIPT_SYNC_BATCH_SIZE)
     )
+
+
+def _receipt_sync_cursor_rowid(store: GuardStore) -> int | None:
+    payload = store.get_sync_payload("receipt_sync_cursor")
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get("last_rowid")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            return int(stripped)
+    return None
+
+
+def _receipt_sync_rows_for_upload(store: GuardStore, *, cursor_rowid: int | None) -> list[dict[str, object]]:
+    if cursor_rowid is None:
+        return store.list_receipts(limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
+    latest_rowid = store.latest_receipt_rowid()
+    if latest_rowid is None:
+        return []
+    if cursor_rowid > latest_rowid:
+        backfill_after = max(latest_rowid - _RECEIPT_SYNC_CURSOR_BACKFILL_ROWS, 0)
+        return store.list_receipts_since_rowid(after_rowid=backfill_after, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
+    return store.list_receipts_since_rowid(after_rowid=cursor_rowid, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
+
+
+def _receipt_sync_context(store: GuardStore, *, local_guard_online_at: str) -> dict[str, object]:
+    runtime_summary = store.get_sync_payload("runtime_session_summary")
+    runtime_synced_at = (
+        _optional_string(runtime_summary.get("runtime_session_synced_at"))
+        if isinstance(runtime_summary, dict)
+        else None
+    )
+    prior_summary = store.get_sync_payload("sync_summary")
+    receipt_synced_at = (
+        _optional_string(prior_summary.get("synced_at") or prior_summary.get("syncedAt"))
+        if isinstance(prior_summary, dict)
+        else None
+    )
+    sync_health = "healthy" if runtime_synced_at is not None else "degraded"
+    context: dict[str, object] = {
+        "localGuardOnlineAt": local_guard_online_at,
+        "syncHealth": sync_health,
+    }
+    if runtime_synced_at is not None:
+        context["lastRuntimeSyncAt"] = runtime_synced_at
+    if receipt_synced_at is not None:
+        context["lastReceiptSyncAt"] = receipt_synced_at
+    return context
+
+
+def _persist_receipt_sync_cursor(
+    *,
+    store: GuardStore,
+    latest_uploaded_rowid: int | None,
+    synced_at: str,
+) -> None:
+    if latest_uploaded_rowid is None:
+        return
+    payload = {
+        "last_rowid": latest_uploaded_rowid,
+        "synced_at": synced_at,
+    }
+    store.set_sync_payload("receipt_sync_cursor", payload, synced_at)
 
 
 def _cloud_sync_receipt_payload(
