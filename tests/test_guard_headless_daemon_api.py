@@ -119,6 +119,21 @@ def _dashboard_token(auth_token: str) -> str:
     return f"gld1.{payload}.{encoded_signature}"
 
 
+def _dashboard_token_with_claims(auth_token: str, claims: dict[str, object]) -> str:
+    payload_json = json.dumps(
+        {
+            "version": "guard-local-daemon-session.v1",
+            "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
+            **claims,
+        },
+        separators=(",", ":"),
+    )
+    payload = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("ascii").rstrip("=")
+    signature = hmac.new(auth_token.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).digest()
+    encoded_signature = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+    return f"gld1.{payload}.{encoded_signature}"
+
+
 def _handoff_script_payload(body: str) -> dict[str, object]:
     match = re.search(
         r'<script id="guard-handoff-data" type="application/json">([^<]+)</script>',
@@ -167,12 +182,208 @@ def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: P
         "scan",
         "policy_sync",
     ]
+    assert payload["package_firewall_api"]["operations"] == [
+        "status",
+        "install",
+        "repair",
+        "test",
+        "audit",
+        "sync",
+        "remove",
+    ]
+    assert payload["package_firewall_api"]["routes"]["status"] == "/v1/supply-chain/package-shims"
     assert "codex" in payload["supported_harnesses"]
     assert payload["safe_failure_reasons"]["unsupported"] == "Harness is not supported by this daemon."
     codex_item = next(item for item in payload["items"] if item["harness"] == "codex")
     assert codex_item["display_name"] == "Codex"
     assert codex_item["headless_actions"] == ["install", "repair", "remove", "status", "scan"]
     assert codex_item["status"] in {"inactive", "observed", "protected"}
+
+
+def test_supply_chain_package_firewall_status_reports_free_upgrade_gate(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["operation"] == "status"
+    assert payload["entitlement"] == {
+        "allowed": False,
+        "reason": "paid_guard_cloud_required",
+        "tier": "free",
+        "upgrade_cta": "Upgrade to HOL Guard Cloud to run package firewall actions.",
+    }
+    assert "npm" in payload["supported_managers"]
+    assert payload["actions"] == {
+        "install": "paid_required",
+        "repair": "paid_required",
+        "test": "paid_required",
+        "audit": "paid_required",
+        "sync": "paid_required",
+        "remove": "paid_required",
+    }
+
+
+def test_supply_chain_package_firewall_install_requires_paid_entitlement(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                token=token,
+                payload={"managers": ["npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 402
+    assert payload["error"] == "paid_guard_cloud_required"
+    assert payload["operation"] == "install"
+    assert payload["entitlement"]["tier"] == "free"
+    assert payload["available_actions"] == ["status", "education", "cli_fallback"]
+
+
+def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "cloud-token",
+        "2026-05-27T16:00:00.000Z",
+        workspace_id="workspace-1",
+    )
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        install_status, install_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                token=token,
+                payload={"managers": ["npm", "pip"]},
+            ),
+        )
+        test_status, test_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/test",
+                token=token,
+                payload={"managers": ["npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert install_status == 200
+    assert install_payload["operation"] == "install"
+    assert install_payload["status"] == "completed"
+    assert install_payload["result"]["installed_managers"] == ["npm", "pip"]
+    assert install_payload["receipt"]["operation"] == "install"
+    assert test_status == 200
+    assert test_payload["operation"] == "test"
+    assert test_payload["status"] == "completed"
+    assert test_payload["result"]["tested_managers"] == ["npm"]
+    assert test_payload["result"]["blocked_execution"] is True
+
+
+def test_supply_chain_package_firewall_rejects_duplicate_managers(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                token=token,
+                payload={"managers": ["npm", "npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "duplicate_manager"
+
+
+def test_supply_chain_dashboard_session_claims_scope_action_and_managers(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "cloud-token",
+        "2026-05-27T16:00:00.000Z",
+        workspace_id="workspace-1",
+    )
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        token = _dashboard_token_with_claims(
+            auth_token,
+            {
+                "action_path": "package_shims_install",
+                "allowed_action_paths": ["package_shims_install"],
+                "managers": ["npm"],
+                "workspace_id": "workspace-1",
+            },
+        )
+        allowed_status, allowed_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                dashboard_session_token=token,
+                payload={"managers": ["npm"], "workspace_id": "workspace-1"},
+            ),
+        )
+        denied_status, denied_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                dashboard_session_token=token,
+                payload={"managers": ["pip"], "workspace_id": "workspace-1"},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert allowed_status == 200
+    assert allowed_payload["operation"] == "install"
+    assert denied_status == 401
+    assert denied_payload["error"] == "unauthorized"
 
 
 def test_headless_capabilities_rejects_dashboard_session_from_guard_token_header(tmp_path: Path) -> None:

@@ -1,6 +1,8 @@
 """SCRG264-270: shim status, PATH verification, tamper detection, repair, daemon coverage."""
+
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -12,12 +14,14 @@ from codex_plugin_scanner.guard.shims import (
     install_package_shims,
     package_shim_status,
     repair_package_shims,
+    uninstall_package_shims,
 )
 
 
 def _make_context(tmp_path: Path):
     """Build a minimal HarnessContext-like object for testing."""
     from unittest.mock import MagicMock
+
     ctx = MagicMock()
     ctx.guard_home = tmp_path / "guard_home"
     ctx.guard_home.mkdir(parents=True, exist_ok=True)
@@ -174,19 +178,88 @@ class TestScrg266ShimAutoRepair:
         assert result["repaired"] == []
         assert result["nothing_to_repair"] is True
 
+    def test_repair_only_selected_managers(self, tmp_path: Path) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm", "pip"))
+        shim_dir = ctx.guard_home / "package-shims" / "bin"
+        (shim_dir / "npm").unlink()
+        (shim_dir / "pip").unlink()
+        result = repair_package_shims(ctx, managers=("npm",))
+        assert result["repaired"] == ["npm"]
+        assert (shim_dir / "npm").exists()
+        assert not (shim_dir / "pip").exists()
+
+    def test_repair_reports_path_repair_when_shim_exists_but_path_inactive(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm",))
+        real_dir = tmp_path / "usr" / "bin"
+        real_dir.mkdir(parents=True)
+        real_binary = real_dir / "npm"
+        real_binary.write_text("#!/bin/sh\nexit 0", encoding="utf-8")
+        real_binary.chmod(0o755)
+        shim_dir = ctx.guard_home / "package-shims" / "bin"
+        monkeypatch.setenv("PATH", f"{real_dir}:{shim_dir}")
+        result = repair_package_shims(ctx, managers=("npm",))
+        assert result["repaired"] == []
+        assert result["path_repair_required"] == ["npm"]
+        assert result["shell_hints"]["bash"].startswith("export PATH=")
+
+    def test_status_includes_shell_hints_for_path_repair(self, tmp_path: Path) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm",))
+        result = package_shim_status(ctx)
+        assert result["shell_hints"]["zsh"].startswith("export PATH=")
+        assert "fish_add_path" in result["shell_hints"]["fish"]
+
 
 class TestScrg267FixtureAllManagers:
     """SCRG267: fixture tests for each supported manager."""
 
-    @pytest.mark.parametrize("manager", [
-        "npm", "pnpm", "yarn", "pip", "poetry", "uv", "pipenv", "bun",
-    ])
+    @pytest.mark.parametrize(
+        "manager",
+        [
+            "npm",
+            "pnpm",
+            "yarn",
+            "pip",
+            "poetry",
+            "uv",
+            "pipenv",
+            "bun",
+        ],
+    )
     def test_install_and_status_for_manager(self, manager: str, tmp_path: Path) -> None:
         ctx = _make_context(tmp_path)
         install_package_shims(ctx, managers=(manager,))
         result = package_shim_status(ctx)
         assert manager in result["installed_managers"]
         assert manager in result["active_managers"]
+
+    def test_uninstall_preserves_remaining_manager_integrity(self, tmp_path: Path) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm", "pip"))
+        result = uninstall_package_shims(ctx, managers=("npm",))
+        assert result["remaining_managers"] == ["pip"]
+        status = package_shim_status(ctx)
+        pip_detail = next((m for m in status.get("manager_details", []) if m["manager"] == "pip"), None)
+        assert pip_detail is not None
+        assert pip_detail["integrity"] == "ok"
+
+    def test_uninstall_tolerates_null_manifest_hashes(self, tmp_path: Path) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm", "pip"))
+        manifest_path = ctx.guard_home / "package-shims" / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["content_hashes"] = None
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        result = uninstall_package_shims(ctx, managers=("npm",))
+
+        assert result["remaining_managers"] == ["pip"]
 
     @pytest.mark.parametrize("manager", ["npm", "pip"])
     def test_status_manager_details_include_integrity(self, manager: str, tmp_path: Path) -> None:
@@ -198,12 +271,37 @@ class TestScrg267FixtureAllManagers:
         assert "integrity" in detail
         assert "shim_path" in detail
 
+    def test_status_manager_details_include_real_binary_and_path_order(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm",))
+        shim_dir = ctx.guard_home / "package-shims" / "bin"
+        real_dir = tmp_path / "usr" / "bin"
+        real_dir.mkdir(parents=True)
+        real_binary = real_dir / "npm"
+        real_binary.write_text("#!/bin/sh\nexit 0", encoding="utf-8")
+        real_binary.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{shim_dir}:{real_dir}")
+
+        result = package_shim_status(ctx)
+        detail = next((m for m in result.get("manager_details", []) if m["manager"] == "npm"), None)
+
+        assert detail is not None
+        assert detail["real_binary_found"] is True
+        assert detail["real_binary_path"] == str(real_binary)
+        assert detail["path_index"] == 0
+        assert detail["real_binary_path_index"] == 1
+
 
 class TestScrg270DaemonShimCoverage:
     """SCRG270: daemon snapshot includes shim coverage."""
 
     def test_daemon_snapshot_route_includes_shim_coverage(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.daemon.server import _build_snapshot_payload
+
         ctx = _make_context(tmp_path)
         install_package_shims(ctx, managers=("npm", "pip"))
         snapshot = _build_snapshot_payload(ctx)
