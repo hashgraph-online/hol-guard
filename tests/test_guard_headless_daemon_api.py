@@ -436,6 +436,41 @@ def test_cloud_app_handoff_serves_token_authenticated_local_action_page(tmp_path
     assert auth_token not in body
 
 
+def test_cloud_app_handoff_allows_user_initiated_browser_navigation_without_referrer(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=connect",
+                method="GET",
+                origin=None,
+                extra_headers={
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Site": "cross-site",
+                    "Sec-Fetch-User": "?1",
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert "HOL Guard local handoff" in body
+    assert "handoffToken" in body
+    assert "dashboardSessionToken" in body
+    script_payload = _handoff_script_payload(body)
+    browser_token = script_payload["dashboardSessionToken"]
+    assert isinstance(browser_token, str)
+    assert browser_token.startswith("gld1.")
+    assert auth_token not in body
+
+
 def test_cloud_app_handoff_start_mints_handoff_url_for_hosted_dashboard(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

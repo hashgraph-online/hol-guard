@@ -1125,7 +1125,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace_id=self._optional_string(decoded.get("workspace_id")) or "",
             )
             return
-        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and self._cloud_app_handoff_navigation_is_allowed():
+        is_user_navigation = self._browser_user_navigation_is_allowed()
+        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and (
+            self._hosted_dashboard_referrer_is_allowed() or is_user_navigation
+        ):
             self._write_cloud_app_handoff_page(
                 harness=adapter.harness,
                 action_path=action_path,
@@ -1134,7 +1137,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     action_path=action_path,
                     workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
                 ),
-                include_dashboard_session_token=False,
+                include_dashboard_session_token=is_user_navigation,
                 local_origin=local_origin,
                 workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
             )
@@ -1436,8 +1439,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         signature = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
         return f"gld1.{payload}.{signature}"
 
-    def _cloud_app_handoff_navigation_is_allowed(self) -> bool:
-        return self._hosted_dashboard_referrer_is_allowed()
+    def _browser_user_navigation_is_allowed(self) -> bool:
+        fetch_mode = (self.headers.get("Sec-Fetch-Mode") or "").strip().lower()
+        fetch_dest = (self.headers.get("Sec-Fetch-Dest") or "").strip().lower()
+        fetch_user = (self.headers.get("Sec-Fetch-User") or "").strip()
+        fetch_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        return (
+            fetch_mode == "navigate"
+            and fetch_dest in {"document", ""}
+            and fetch_user == "?1"
+            and fetch_site in {"cross-site", "same-site", "none", ""}
+        )
 
     def _hosted_dashboard_referrer_is_allowed(self) -> bool:
         referrer = self.headers.get("Referer")
