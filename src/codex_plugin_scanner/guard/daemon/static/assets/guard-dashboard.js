@@ -13796,7 +13796,7 @@ function normalizePackageShimEntries(value, supportedManagers) {
   const managers = /* @__PURE__ */ new Set([
     ...supportedManagers,
     ...normalizeStringArray(status.installed_managers),
-    ...normalizeStringArray(status.protected_managers),
+    ...normalizeStringArray(status.active_managers),
     ...detailByManager.keys()
   ]);
   return Array.from(managers).sort().map((manager) => normalizePackageShimEntry(manager, detailByManager.get(manager) ?? null));

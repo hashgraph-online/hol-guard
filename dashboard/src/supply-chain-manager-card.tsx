@@ -99,8 +99,8 @@ function ActionButtonRow({
   const testState = actions.test ?? "disabled";
   const removeState = actions.remove ?? "disabled";
 
-  const showInstall = !shim.active && installState !== "disabled";
-  const showRepair = shim.active && repairState !== "disabled";
+  const showInstall = !shim.installed && installState !== "disabled";
+  const showRepair = shim.installed && repairState !== "disabled";
   const showTest = testState !== "disabled";
   const showRemove = removeState !== "disabled" && shim.installed;
 

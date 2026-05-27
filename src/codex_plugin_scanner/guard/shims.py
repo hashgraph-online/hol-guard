@@ -419,9 +419,12 @@ def uninstall_package_shims(
     remaining = [manager for manager in manifest_managers if manager not in requested_managers]
     manifest_path = _package_shim_manifest_path(context)
     if remaining:
+        manifest_hashes = manifest.get("content_hashes")
         content_hashes = {
             manager: hash_value
-            for manager, hash_value in dict(manifest.get("content_hashes", {})).items()
+            for manager, hash_value in (
+                manifest_hashes.items() if isinstance(manifest_hashes, dict) else ()
+            )
             if manager in remaining and isinstance(hash_value, str)
         }
         manifest_path.write_text(

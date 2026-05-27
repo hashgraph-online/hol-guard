@@ -176,8 +176,8 @@ function ActionButtonRow({
   const repairState = actions.repair ?? "disabled";
   const testState = actions.test ?? "disabled";
   const removeState = actions.remove ?? "disabled";
-  const showInstall = !shim.active && installState !== "disabled";
-  const showRepair = shim.active && repairState !== "disabled";
+  const showInstall = !shim.installed && installState !== "disabled";
+  const showRepair = shim.installed && repairState !== "disabled";
   const showTest = testState !== "disabled";
   const showRemove = removeState !== "disabled" && shim.installed;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
@@ -488,8 +488,9 @@ function PackageFirewallPanel() {
     try {
       const data = await fetchPackageFirewallStatus();
       setPanelLoad({ phase: "loaded", data });
-    } catch {
-      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to refresh package firewall status.";
+      setPanelLoad({ phase: "error", message });
     }
   }, []);
   const handleAction = reactExports.useCallback(

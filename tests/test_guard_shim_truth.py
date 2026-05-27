@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -247,6 +248,18 @@ class TestScrg267FixtureAllManagers:
         pip_detail = next((m for m in status.get("manager_details", []) if m["manager"] == "pip"), None)
         assert pip_detail is not None
         assert pip_detail["integrity"] == "ok"
+
+    def test_uninstall_tolerates_null_manifest_hashes(self, tmp_path: Path) -> None:
+        ctx = _make_context(tmp_path)
+        install_package_shims(ctx, managers=("npm", "pip"))
+        manifest_path = ctx.guard_home / "package-shims" / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["content_hashes"] = None
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        result = uninstall_package_shims(ctx, managers=("npm",))
+
+        assert result["remaining_managers"] == ["pip"]
 
     @pytest.mark.parametrize("manager", ["npm", "pip"])
     def test_status_manager_details_include_integrity(self, manager: str, tmp_path: Path) -> None:

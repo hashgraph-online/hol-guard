@@ -278,8 +278,10 @@ export function PackageFirewallPanel() {
     try {
       const data = await fetchPackageFirewallStatus();
       setPanelLoad({ phase: "loaded", data });
-    } catch {
-      return;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to refresh package firewall status.";
+      setPanelLoad({ phase: "error", message });
     }
   }, []);
 

@@ -1517,7 +1517,7 @@ function normalizePackageShimEntries(value: unknown, supportedManagers: string[]
   const managers = new Set([
     ...supportedManagers,
     ...normalizeStringArray(status.installed_managers),
-    ...normalizeStringArray(status.protected_managers),
+    ...normalizeStringArray(status.active_managers),
     ...detailByManager.keys(),
   ]);
   return Array.from(managers)
