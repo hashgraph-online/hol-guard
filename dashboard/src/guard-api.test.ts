@@ -54,6 +54,54 @@ assert(
   "T761: runtime normalizer defaults missing supply-chain strings"
 );
 
+const malformedManagedInstallsSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  items: null,
+  queue_summary: null,
+  managed_installs: [
+    { harness: "claude-code", active: true, workspace: null, manifest: {}, updated_at: "2026-05-27T00:00:00Z" },
+    { harness: { name: "invalid" }, active: true, workspace: null, manifest: {}, updated_at: "2026-05-27T00:00:00Z" },
+    { harness: "opencode", active: false, workspace: "/tmp", manifest: { version: "1.0" }, updated_at: "2026-05-27T00:00:00Z" },
+    null,
+    "invalid-string",
+    { active: true, workspace: null, manifest: {}, updated_at: "2026-05-27T00:00:00Z" },
+  ],
+});
+assert(
+  malformedManagedInstallsSnapshot.managed_installs?.length === 2,
+  "T762: runtime normalizer filters out malformed managed_installs"
+);
+assert(
+  malformedManagedInstallsSnapshot.managed_installs?.[0].harness === "claude-code",
+  "T762: runtime normalizer preserves valid managed_installs"
+);
+assert(
+  malformedManagedInstallsSnapshot.managed_installs?.[0].active === true,
+  "T762: runtime normalizer preserves active flag"
+);
+assert(
+  malformedManagedInstallsSnapshot.managed_installs?.[1].harness === "opencode",
+  "T762: runtime normalizer preserves second valid managed_install"
+);
+assert(
+  malformedManagedInstallsSnapshot.managed_installs?.[1].workspace === "/tmp",
+  "T762: runtime normalizer preserves workspace"
+);
+assert(
+  malformedManagedInstallsSnapshot.managed_installs?.[1].manifest.version === "1.0",
+  "T762: runtime normalizer preserves manifest"
+);
+
+const noManagedInstallsSnapshot = normalizeRuntimeSnapshot({
+  ...snapshot,
+  items: null,
+  queue_summary: null,
+});
+assert(
+  noManagedInstallsSnapshot.managed_installs === undefined || noManagedInstallsSnapshot.managed_installs?.length === 0,
+  "T762: runtime normalizer handles missing managed_installs"
+);
+
 assert(
   formatHarnessCommand(["hol-guard", "apps", "connect", "opencode"]) === "hol-guard apps connect opencode",
   "T760: harness setup fallback command should use real hol-guard apps connect command"

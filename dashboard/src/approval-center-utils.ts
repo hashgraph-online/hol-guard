@@ -513,6 +513,9 @@ function serializeMcpInput(payload: Record<string, unknown>): string | null {
 }
 
 export function harnessDisplayName(harness: string): string {
+  if (typeof harness !== "string") {
+    return "Unknown app";
+  }
   const normalized = normalizeHarnessSlug(harness);
   if (normalized === null) {
     switch (harness.trim().toLowerCase()) {

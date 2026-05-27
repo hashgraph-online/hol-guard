@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, T as Tag, b as HiMiniInformationCircle, E as EmptyState, d as HiMiniCheckCircle, a as HiMiniExclamationTriangle, e as HiMiniXCircle, h as harnessDisplayName, B as Badge, m as HiMiniChevronUp, n as HiMiniChevronDown, f as formatRelativeTime, ab as HiMiniArrowPath } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, T as Tag, b as HiMiniInformationCircle, E as EmptyState, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, h as HiMiniXCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime, ab as HiMiniArrowPath } from "../guard-dashboard.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 function buildSupplyChainStats(snapshot) {
   const managedInstalls = snapshot.managed_installs ?? [];
