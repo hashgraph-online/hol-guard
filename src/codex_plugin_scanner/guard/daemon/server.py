@@ -1129,6 +1129,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         is_document_navigation = self._browser_document_navigation_is_allowed()
         is_hosted_referrer = self._hosted_dashboard_referrer_is_allowed()
         workspace_id = self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or ""
+        self._apply_cloud_app_sync_credentials(
+            sync_url=self._optional_string(handoff_query.get("syncUrl", [None])[-1]),
+            sync_token=self._optional_string(handoff_query.get("syncToken", [None])[-1]),
+            workspace_id=self._optional_string(handoff_query.get("syncWorkspaceId", [None])[-1]) or workspace_id,
+        )
         navigation_allowed = is_hosted_referrer or is_document_navigation
         if action_path in _CLOUD_APP_HANDOFF_ACTIONS and (navigation_allowed or workspace_id):
             self._write_cloud_app_handoff_page(
@@ -1169,6 +1174,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             or self._optional_string(payload.get("workspaceId"))
             or ""
         )
+        self._apply_cloud_app_sync_credentials(
+            sync_url=self._optional_string(payload.get("sync_url")) or self._optional_string(payload.get("syncUrl")),
+            sync_token=(
+                self._optional_string(payload.get("sync_token"))
+                or self._optional_string(payload.get("syncToken"))
+            ),
+            workspace_id=(
+                self._optional_string(payload.get("sync_workspace_id"))
+                or self._optional_string(payload.get("syncWorkspaceId"))
+                or workspace_id
+            ),
+        )
         local_origin = self._local_daemon_origin()
         handoff_token = self._cloud_app_handoff_token(
             harness=adapter.harness,
@@ -1188,6 +1205,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "Pragma": "no-cache",
                 "Expires": "0",
             },
+        )
+
+    def _apply_cloud_app_sync_credentials(
+        self,
+        *,
+        sync_url: str | None,
+        sync_token: str | None,
+        workspace_id: str,
+    ) -> None:
+        if sync_url is None or sync_token is None or not workspace_id:
+            return
+        parsed = urlparse(sync_url)
+        sync_origin = f"{parsed.scheme}://{parsed.netloc}"
+        if (
+            sync_origin not in _HOSTED_GUARD_DASHBOARD_ORIGINS
+            or not parsed.path.endswith("/api/guard/receipts/sync")
+        ):
+            return
+        self.server.store.set_sync_credentials(  # type: ignore[attr-defined]
+            sync_url=sync_url,
+            token=sync_token,
+            now=_now(),
+            workspace_id=workspace_id,
         )
 
     def _cloud_app_handoff_token(
@@ -1360,6 +1400,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     const data = JSON.parse(document.getElementById('guard-handoff-data').textContent);
     const statusNode = document.getElementById('status');
     const continueButton = document.getElementById('continue');
+    window.history.replaceState(null, '', `${{data.localOrigin}}/v1/apps/${{data.harness}}/cloud`);
     const finish = (params, fragmentOnlyParams = {{}}) => {{
       const query = new URLSearchParams(params);
       const fragment = new URLSearchParams(params);

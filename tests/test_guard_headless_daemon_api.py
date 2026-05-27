@@ -508,6 +508,71 @@ def test_cloud_app_handoff_start_mints_handoff_url_for_hosted_dashboard(tmp_path
     assert "dashboardSessionToken" in body
 
 
+def test_cloud_app_handoff_start_saves_sync_credentials(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={
+                    "action": "connect",
+                    "sync_url": "https://hol.org/api/guard/receipts/sync",
+                    "sync_token": "guard-runtime-token",
+                    "sync_workspace_id": "workspace-123",
+                },
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["status"] == "ready"
+    credentials = store.get_sync_credentials()
+    assert credentials is not None
+    assert credentials["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+    assert credentials["token"] == "guard-runtime-token"
+
+
+def test_cloud_app_handoff_navigation_saves_sync_credentials(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    path = (
+        "/v1/apps/codex/cloud?action=connect&workspaceId=workspace-123"
+        "&syncUrl=https%3A%2F%2Fhol.org%2Fapi%2Fguard%2Freceipts%2Fsync"
+        "&syncToken=guard-runtime-token&syncWorkspaceId=workspace-123"
+    )
+    daemon.start()
+    try:
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                path,
+                method="GET",
+                origin=None,
+                extra_headers={
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Site": "cross-site",
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert "HOL Guard local handoff" in body
+    assert "guard-runtime-token" not in body
+    credentials = store.get_sync_credentials()
+    assert credentials is not None
+    assert credentials["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+    assert credentials["token"] == "guard-runtime-token"
+
+
 def test_cloud_app_handoff_start_response_is_not_cacheable(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
