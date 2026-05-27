@@ -10,7 +10,11 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class RedactedText:
-    """Safe text plus minimal metadata about removed secrets."""
+    """Safe text plus minimal metadata about removed secrets.
+
+    ``original_sha256`` is a legacy payload key. It fingerprints the redacted
+    output, not the original secret-bearing input.
+    """
 
     text: str
     count: int
@@ -112,7 +116,7 @@ def redact_text(value: str) -> RedactedText:
         text=redacted_value,
         count=total_count,
         classifiers=tuple(dict.fromkeys(classifiers)),
-        original_sha256=hashlib.sha256(value.encode("utf-8")).hexdigest(),
+        original_sha256=hashlib.sha256(redacted_value.encode("utf-8")).hexdigest(),
     )
 
 
