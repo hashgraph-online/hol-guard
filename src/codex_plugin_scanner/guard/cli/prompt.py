@@ -81,6 +81,12 @@ def resolve_interactive_decisions(
             evaluation["blocked"] = True
             return evaluation
         if choice == "allow_once":
+            _interactive_gate_grant(
+                store,
+                action="allow",
+                scope="artifact",
+                now=now,
+            )
             _record_override_receipt(store, artifact, "allow", "allow-once", now)
             _set_decision_payload(decisions_by_artifact, artifact.artifact_id, "allow", "allow-once")
             continue
