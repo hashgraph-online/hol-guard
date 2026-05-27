@@ -2156,7 +2156,7 @@ def _receipt_sync_context(store: GuardStore, *, local_guard_online_at: str) -> d
     )
     prior_summary = store.get_sync_payload("sync_summary")
     receipt_synced_at = (
-        _optional_string(prior_summary.get("synced_at") or prior_summary.get("syncedAt"))
+        _optional_string(prior_summary.get("synced_at")) or _optional_string(prior_summary.get("syncedAt"))
         if isinstance(prior_summary, dict)
         else None
     )
