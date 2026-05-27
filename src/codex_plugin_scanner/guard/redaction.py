@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,8 +11,9 @@ from pathlib import Path
 class RedactedText:
     """Safe text plus minimal metadata about removed secrets.
 
-    ``original_sha256`` is a legacy payload key. It fingerprints the redacted
-    output, not the original secret-bearing input.
+    ``original_sha256`` is a legacy payload key kept for response shape
+    compatibility. It is intentionally empty so secret-bearing input never
+    becomes a hash oracle.
     """
 
     text: str
@@ -116,7 +116,7 @@ def redact_text(value: str) -> RedactedText:
         text=redacted_value,
         count=total_count,
         classifiers=tuple(dict.fromkeys(classifiers)),
-        original_sha256=hashlib.sha256(redacted_value.encode("utf-8")).hexdigest(),
+        original_sha256="",
     )
 
 
