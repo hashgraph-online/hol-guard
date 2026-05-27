@@ -29,3 +29,20 @@ Avoid broad or permanent exceptions.
 
 - Keep the remediation trail in Guard evidence/audit output.
 - Remove temporary exceptions as soon as upstream data is corrected.
+
+## 5. Package firewall recovery
+
+Use the local dashboard Package Firewall panel first when the daemon is paired. It can protect, repair, test, audit, sync, or remove package manager shims with proof receipts.
+
+CLI fallback:
+
+1. Check current shim state:
+   - `hol-guard package-shims status --json`
+2. Install interception for selected managers:
+   - `hol-guard package-shims install --manager npm --manager pip --json`
+3. Repair missing or tampered shims:
+   - `hol-guard package-shims repair --manager npm --json`
+4. Remove a selected shim:
+   - `hol-guard package-shims uninstall --manager npm --json`
+
+If status reports `path_repair_required`, prepend the returned shim directory to PATH using the shell hint in the JSON payload, then restart the shell before testing again.

@@ -175,7 +175,7 @@ from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
-from ..shims import install_package_shims, package_shim_status, uninstall_package_shims
+from ..shims import install_package_shims, package_shim_status, repair_package_shims, uninstall_package_shims
 from ..store import GuardStore
 from .approval_commands import (
     add_approval_parser,
@@ -487,12 +487,12 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
 
     package_shims_parser = guard_subparsers.add_parser(
         "package-shims",
-        help="Install, inspect, or remove package-manager PATH shims routed through Guard protect",
+        help="Install, repair, inspect, or remove package-manager PATH shims routed through Guard protect",
     )
     package_shims_parser.add_argument(
         "package_shims_command",
         nargs="?",
-        choices=("install", "status", "uninstall"),
+        choices=("install", "repair", "status", "uninstall"),
         default="status",
     )
     package_shims_parser.add_argument(
@@ -1854,6 +1854,8 @@ def run_guard_command(
         shim_command = getattr(args, "package_shims_command", "status")
         if shim_command == "install":
             payload = install_package_shims(context, managers=requested_managers or None)
+        elif shim_command == "repair":
+            payload = repair_package_shims(context, managers=requested_managers or None)
         elif shim_command == "uninstall":
             payload = uninstall_package_shims(context, managers=requested_managers or None)
         else:
