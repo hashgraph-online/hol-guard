@@ -124,6 +124,6 @@ class TestHealthzEndpoint:
         url, server = self._start_server(tmp_path)
         try:
             payload = self._get_healthz(url)
-            assert payload["guard_home"] == str(server.store.guard_home.resolve())
+            assert payload["guard_home"] == str((tmp_path / "guard-home").resolve())
         finally:
             server.stop()
