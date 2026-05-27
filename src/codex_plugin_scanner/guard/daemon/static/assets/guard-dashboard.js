@@ -13090,12 +13090,46 @@ function normalizeSupplyChainSnapshot(raw) {
     package_manager_protection: packageManagerProtection
   };
 }
+function normalizeManagedInstall(raw) {
+  if (!isRecord(raw)) {
+    return void 0;
+  }
+  const harness = raw["harness"];
+  if (typeof harness !== "string") {
+    return void 0;
+  }
+  const active = raw["active"] === true;
+  const workspace = isStringOrNull(raw["workspace"]) ? raw["workspace"] : null;
+  const manifest = isRecord(raw["manifest"]) ? raw["manifest"] : {};
+  const updatedAt = typeof raw["updated_at"] === "string" ? raw["updated_at"] : "";
+  return {
+    harness,
+    active,
+    workspace,
+    manifest,
+    updated_at: updatedAt
+  };
+}
+function normalizeManagedInstalls(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const result = [];
+  for (const item of raw) {
+    const normalized = normalizeManagedInstall(item);
+    if (normalized !== void 0) {
+      result.push(normalized);
+    }
+  }
+  return result;
+}
 function normalizeRuntimeSnapshot(snapshot) {
   return {
     ...snapshot,
     items: normalizeApprovalRequests(snapshot.items),
     queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count),
-    supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain)
+    supply_chain: normalizeSupplyChainSnapshot(snapshot.supply_chain),
+    managed_installs: normalizeManagedInstalls(snapshot.managed_installs)
   };
 }
 function normalizeQueueCopy(raw) {
@@ -14373,6 +14407,9 @@ function serializeMcpInput(payload) {
   }
 }
 function harnessDisplayName(harness) {
+  if (typeof harness !== "string") {
+    return "Unknown app";
+  }
   const normalized = normalizeHarnessSlug(harness);
   if (normalized === null) {
     switch (harness.trim().toLowerCase()) {
