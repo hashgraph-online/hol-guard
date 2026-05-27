@@ -309,7 +309,10 @@ def _hooks_payload_has_unmanaged_entries(hooks_payload: dict[str, object]) -> bo
     if not isinstance(hooks, dict):
         return False
     cleaned_hooks, _ = _remove_managed_hook_events(hooks)
-    return any(isinstance(groups, list) and bool(groups) for groups in cleaned_hooks.values())
+    return any(
+        isinstance(cleaned_hooks.get(event_name), list) and bool(cleaned_hooks.get(event_name))
+        for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
+    )
 
 
 def _payload_has_hooks_feature_enabled(config_payload: dict[str, object]) -> bool:
@@ -395,7 +398,7 @@ end
 
 
 def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
-    config_path = CodexHarnessAdapter._target_config_path(context)
+    config_path = CodexHarnessAdapter._hook_config_path(context)
     hooks_path = CodexHarnessAdapter._hooks_path(context)
     config_payload = _read_toml(config_path)
     features = config_payload.get("features") if isinstance(config_payload, dict) else None
@@ -483,8 +486,6 @@ class CodexHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _hooks_path(context: HarnessContext) -> Path:
-        if context.workspace_dir is not None:
-            return context.workspace_dir / ".codex" / "hooks.json"
         return context.home_dir / ".codex" / "hooks.json"
 
     @staticmethod
@@ -598,19 +599,31 @@ class CodexHarnessAdapter(HarnessAdapter):
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
         target_config_path = self._target_config_path(context)
+        hook_config_path = self._hook_config_path(context)
         hook_payloads = self._load_hook_payloads(context)
         original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
         payload = read_toml_payload(target_config_path)
+        hook_payload = payload if hook_config_path == target_config_path else read_toml_payload(hook_config_path)
+        for config_path, hooks_path in self._config_hook_pairs(context):
+            json_hook_payload = hook_payloads.get(hooks_path, {})
+            if not json_hook_payload:
+                continue
+            if config_path == target_config_path:
+                hook_config_payload = payload
+            elif config_path == hook_config_path:
+                hook_config_payload = hook_payload
+            else:
+                hook_config_payload = read_toml_payload(config_path)
+            if not _payload_has_hooks_feature_enabled(hook_config_payload) and _hooks_payload_has_unmanaged_entries(
+                json_hook_payload
+            ):
+                raise RuntimeError(
+                    "Guard refused to enable existing Codex hook entries without explicit approval. "
+                    f"Review or remove unmanaged hooks in {hooks_path} before running install."
+                )
         target_hooks_path = self._hooks_path(context)
         target_hook_payload = hook_payloads.get(target_hooks_path, {})
-        if not _payload_has_hooks_feature_enabled(payload) and _hooks_payload_has_unmanaged_entries(
-            target_hook_payload
-        ):
-            raise RuntimeError(
-                "Guard refused to enable existing Codex hook entries without explicit approval. "
-                f"Review or remove unmanaged hooks in {target_hooks_path} before running install."
-            )
-        target_hooks_migrated = _migrate_hooks_json_into_config(payload, target_hook_payload)
+        target_hooks_migrated = _migrate_hooks_json_into_config(hook_payload, target_hook_payload)
         backup_path = self._backup_path(context)
         if not backup_path.exists():
             backup_path.parent.mkdir(parents=True, exist_ok=True)
@@ -619,13 +632,13 @@ class CodexHarnessAdapter(HarnessAdapter):
         mcp_servers = payload.get("mcp_servers")
         if not isinstance(mcp_servers, dict):
             mcp_servers = {}
-        features = payload.get("features")
+        features = hook_payload.get("features")
         if not isinstance(features, dict):
             features = {}
         features.pop("codex_hooks", None)
         features["hooks"] = True
-        payload["features"] = features
-        self._install_config_hooks(payload, context)
+        hook_payload["features"] = features
+        self._install_config_hooks(hook_payload, context)
         existing_workspace_server_names = {
             name for name, value in mcp_servers.items() if isinstance(name, str) and isinstance(value, dict)
         }
@@ -639,12 +652,14 @@ class CodexHarnessAdapter(HarnessAdapter):
             mcp_servers[server.name] = self._proxy_server_entry(context, server)
         payload["mcp_servers"] = mcp_servers
         write_toml_payload(target_config_path, payload)
+        if hook_config_path != target_config_path:
+            write_toml_payload(hook_config_path, hook_payload)
         self._migrate_alternate_hook_configs(
             context,
             payloads=hook_payloads,
-            skip_config_path=target_config_path,
+            skip_config_path=hook_config_path,
         )
-        self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=target_config_path)
+        self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=hook_config_path)
         hooks_path = self._remove_json_hook_files(context, payloads=hook_payloads)
         shell_guard_paths = self._install_shell_guards(context)
         shim_manifest = install_guard_shim(self.harness, context)
@@ -655,6 +670,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "mode": "codex-mcp-proxy",
             "managed_config_path": str(target_config_path),
+            "managed_hook_config_path": str(hook_config_path),
             "managed_hooks_path": str(hooks_path),
             "managed_shell_guard_path": str(shell_guard_paths["zsh"]),
             "managed_shell_guard_paths": {shell: str(path) for shell, path in shell_guard_paths.items()},
@@ -666,6 +682,7 @@ class CodexHarnessAdapter(HarnessAdapter):
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         target_config_path = self._target_config_path(context)
+        hook_config_path = self._hook_config_path(context)
         backup_path = self._backup_path(context)
         if backup_path.is_file():
             original_text = backup_path.read_text(encoding="utf-8")
@@ -676,6 +693,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                 target_config_path.unlink()
             backup_path.unlink()
         hooks_path = self._remove_hooks(context)
+        self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=target_config_path)
         self._uninstall_shell_guard(context)
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
@@ -685,6 +703,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "mode": "codex-mcp-proxy",
             "managed_config_path": str(target_config_path),
+            "managed_hook_config_path": str(hook_config_path),
             "managed_hooks_path": str(hooks_path),
             "backup_path": str(backup_path),
         }
@@ -713,6 +732,10 @@ class CodexHarnessAdapter(HarnessAdapter):
     def _target_config_path(context: HarnessContext) -> Path:
         if context.workspace_dir is not None:
             return context.workspace_dir / ".codex" / "config.toml"
+        return context.home_dir / ".codex" / "config.toml"
+
+    @staticmethod
+    def _hook_config_path(context: HarnessContext) -> Path:
         return context.home_dir / ".codex" / "config.toml"
 
     @staticmethod
