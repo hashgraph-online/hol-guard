@@ -1670,12 +1670,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         raise ValueError("unsupported_supply_chain_operation")
 
     def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
-        workspace = self._optional_string(payload.get("workspace_dir")) or self._optional_string(
-            payload.get("workspace")
-        )
         return HarnessContext(
             home_dir=Path.home().resolve(),
-            workspace_dir=Path(workspace).expanduser().resolve() if workspace else None,
+            workspace_dir=None,
             guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
 
