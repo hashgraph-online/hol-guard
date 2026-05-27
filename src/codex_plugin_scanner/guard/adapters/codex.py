@@ -178,58 +178,40 @@ def _hook_command(context: HarnessContext) -> str:
     return shlex.join(_hook_command_parts(context))
 
 
+def _managed_hook_entry(context: HarnessContext, status_message: str) -> dict[str, object]:
+    return {
+        "type": "command",
+        "command": _hook_command(context),
+        "timeout": 30,
+        "statusMessage": status_message,
+        "env": merge_guard_launcher_env(),
+    }
+
+
 def _pre_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
         "matcher": _CODEX_GUARD_TOOL_MATCHER,
-        "hooks": [
-            {
-                "type": "command",
-                "command": _hook_command(context),
-                "timeout": 30,
-                "statusMessage": _MANAGED_HOOK_STATUS_MESSAGE,
-            }
-        ],
+        "hooks": [_managed_hook_entry(context, _MANAGED_HOOK_STATUS_MESSAGE)],
     }
 
 
 def _prompt_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
-        "hooks": [
-            {
-                "type": "command",
-                "command": _hook_command(context),
-                "timeout": 30,
-                "statusMessage": _MANAGED_PROMPT_HOOK_STATUS_MESSAGE,
-            }
-        ],
+        "hooks": [_managed_hook_entry(context, _MANAGED_PROMPT_HOOK_STATUS_MESSAGE)],
     }
 
 
 def _permission_request_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
         "matcher": _CODEX_GUARD_PERMISSION_MATCHER,
-        "hooks": [
-            {
-                "type": "command",
-                "command": _hook_command(context),
-                "timeout": 30,
-                "statusMessage": _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
-            }
-        ],
+        "hooks": [_managed_hook_entry(context, _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE)],
     }
 
 
 def _post_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
         "matcher": "Bash",
-        "hooks": [
-            {
-                "type": "command",
-                "command": _hook_command(context),
-                "timeout": 30,
-                "statusMessage": _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
-            }
-        ],
+        "hooks": [_managed_hook_entry(context, _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE)],
     }
 
 

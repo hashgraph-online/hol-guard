@@ -8,10 +8,10 @@ from pathlib import Path
 
 
 def merge_guard_launcher_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Preserve launcher import context when Guard is invoked from source checkouts."""
+    """Pin Guard subprocesses to the package that wrote the launcher config."""
 
     merged: dict[str, str] = {}
-    pythonpath = _normalize_launcher_pythonpath(os.environ.get("PYTHONPATH"))
+    pythonpath = str(Path(__file__).resolve().parents[2])
     if pythonpath:
         merged["PYTHONPATH"] = pythonpath
     if env is None:
@@ -29,11 +29,6 @@ def merge_guard_launcher_env(env: Mapping[str, str] | None = None) -> dict[str, 
             continue
         merged[key] = value
     return merged
-
-
-def _normalize_launcher_pythonpath(value: str | None) -> str:
-    return _merge_path_entries("", value or "", relative_base=Path.cwd())
-
 
 def _merge_path_entries(left: str, right: str, relative_base: Path | None = None) -> str:
     values: list[str] = []
