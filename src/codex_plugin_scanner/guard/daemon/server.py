@@ -3114,6 +3114,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             }
         ):
             return True
+        if len(path_parts) == 5 and path_parts[:2] == ["v1", "apps"] and path_parts[3:] == ["cloud", "start"]:
+            return True
         if len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision":
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision"
