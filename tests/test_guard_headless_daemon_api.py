@@ -436,7 +436,7 @@ def test_cloud_app_handoff_serves_token_authenticated_local_action_page(tmp_path
     assert auth_token not in body
 
 
-def test_cloud_app_handoff_allows_user_initiated_browser_navigation_without_referrer(tmp_path: Path) -> None:
+def test_cloud_app_handoff_allows_document_navigation_without_referrer(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -453,7 +453,6 @@ def test_cloud_app_handoff_allows_user_initiated_browser_navigation_without_refe
                     "Sec-Fetch-Mode": "navigate",
                     "Sec-Fetch-Dest": "document",
                     "Sec-Fetch-Site": "cross-site",
-                    "Sec-Fetch-User": "?1",
                 },
             ),
         )

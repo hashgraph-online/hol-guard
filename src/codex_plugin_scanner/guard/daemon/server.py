@@ -1126,10 +1126,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace_id=self._optional_string(decoded.get("workspace_id")) or "",
             )
             return
-        is_user_navigation = self._browser_user_navigation_is_allowed()
+        is_document_navigation = self._browser_document_navigation_is_allowed()
         is_hosted_referrer = self._hosted_dashboard_referrer_is_allowed()
         workspace_id = self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or ""
-        navigation_allowed = is_hosted_referrer or is_user_navigation
+        navigation_allowed = is_hosted_referrer or is_document_navigation
         if action_path in _CLOUD_APP_HANDOFF_ACTIONS and (navigation_allowed or workspace_id):
             self._write_cloud_app_handoff_page(
                 harness=adapter.harness,
@@ -1140,7 +1140,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     workspace_id=workspace_id,
                 ),
                 auto_start=navigation_allowed,
-                include_dashboard_session_token=is_user_navigation or not navigation_allowed,
+                include_dashboard_session_token=is_document_navigation or not navigation_allowed,
                 local_origin=local_origin,
                 workspace_id=workspace_id,
             )
@@ -1457,15 +1457,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         signature = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
         return f"gld1.{payload}.{signature}"
 
-    def _browser_user_navigation_is_allowed(self) -> bool:
+    def _browser_document_navigation_is_allowed(self) -> bool:
         fetch_mode = (self.headers.get("Sec-Fetch-Mode") or "").strip().lower()
         fetch_dest = (self.headers.get("Sec-Fetch-Dest") or "").strip().lower()
-        fetch_user = (self.headers.get("Sec-Fetch-User") or "").strip()
         fetch_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
         return (
             fetch_mode == "navigate"
             and fetch_dest in {"document", ""}
-            and fetch_user == "?1"
             and fetch_site in {"cross-site", "same-site", "none", ""}
         )
 
