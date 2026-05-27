@@ -73,6 +73,7 @@ ApprovalGatePurpose = Literal[
     "native_policy",
     "tool_call_policy",
     "headless_policy_sync",
+    "supply_chain_firewall",
 ]
 
 _ACTIVE_GRANTS: dict[str, dict[str, object]] = {}

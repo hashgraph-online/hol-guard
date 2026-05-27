@@ -502,6 +502,55 @@ def test_guard_package_shims_install_merges_manifest_entries(tmp_path: Path, cap
     assert second_payload["installed_now"] == ["pip"]
 
 
+def test_guard_package_shims_repair_command_restores_selected_manager(tmp_path: Path, capsys) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    install_rc = main(
+        [
+            "guard",
+            "package-shims",
+            "install",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--manager",
+            "npm",
+            "--manager",
+            "pip",
+            "--json",
+        ]
+    )
+    install_payload = json.loads(capsys.readouterr().out)
+    assert install_rc == 0
+    shim_dir = Path(str(install_payload["shim_dir"]))
+    (shim_dir / "npm").unlink()
+    (shim_dir / "pip").unlink()
+
+    repair_rc = main(
+        [
+            "guard",
+            "package-shims",
+            "repair",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--manager",
+            "npm",
+            "--json",
+        ]
+    )
+    repair_payload = json.loads(capsys.readouterr().out)
+
+    assert repair_rc == 0
+    assert repair_payload["repaired"] == ["npm"]
+    assert (shim_dir / "npm").exists()
+    assert not (shim_dir / "pip").exists()
+
+
 def test_guard_package_shims_install_does_not_mutate_path_environment(
     tmp_path: Path,
     capsys,

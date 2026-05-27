@@ -10,6 +10,10 @@ Use this guidance when an AI agent is about to add or update dependencies.
    - `hol-guard supply-chain scan --json`
 3. Explain a specific package verdict:
    - `hol-guard supply-chain explain <package>@<version> --ecosystem <ecosystem>`
+4. Confirm package manager interception is installed:
+   - `hol-guard package-shims status --json`
+5. Repair a missing or tampered package manager shim:
+   - `hol-guard package-shims repair --manager npm --json`
 
 ## During CI and automation
 

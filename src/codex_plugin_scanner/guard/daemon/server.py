@@ -78,6 +78,7 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..local_supply_chain import build_local_supply_chain_posture
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
@@ -87,7 +88,13 @@ from ..runtime.runner import (
     sync_supply_chain_bundle,
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
-from ..shims import package_shim_status
+from ..shims import (
+    install_package_shims,
+    package_shim_status,
+    package_shim_supported_managers,
+    repair_package_shims,
+    uninstall_package_shims,
+)
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
@@ -108,6 +115,8 @@ from .manager import (
 
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
+_SUPPLY_CHAIN_PACKAGE_ACTIONS = {"install", "repair", "test", "audit", "sync", "remove", "uninstall"}
+_SUPPLY_CHAIN_PAID_TIERS = {"paid", "premium", "enterprise", "guard_cloud", "guard-cloud"}
 
 
 def _headless_cloud_sync_store_key(store: GuardStore) -> str:
@@ -464,6 +473,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             context = self._harness_context({})
             self._write_json({"items": list_harness_setup_items(context, self.server.store)})  # type: ignore[attr-defined]
             return
+        if parsed.path == "/v1/supply-chain/package-shims":
+            self._handle_supply_chain_package_firewall_status()
+            return
+        if parsed.path == "/v1/supply-chain/entitlement":
+            self._write_json(self._supply_chain_entitlement())
+            return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
             self._handle_cloud_app_handoff(path_parts[2], parsed.query)
             return
@@ -803,6 +818,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/notifications/setup":
             self._handle_notification_setup(payload)
             return
+        if (
+            len(path_parts) == 4
+            and path_parts[:3] == ["v1", "supply-chain", "package-shims"]
+            and path_parts[3] in _SUPPLY_CHAIN_PACKAGE_ACTIONS
+        ):
+            self._handle_supply_chain_package_firewall_action(path_parts[3], payload)
+            return
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
+            self._handle_supply_chain_package_firewall_action(path_parts[2], payload)
+            return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
             return
@@ -981,6 +1006,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         "status": "/v1/apps/status",
                         "scan": "/v1/apps/test",
                         "policy_sync": "/v1/policy/sync",
+                    },
+                },
+                "package_firewall_api": {
+                    "operations": ["status", "install", "repair", "test", "audit", "sync", "remove"],
+                    "routes": {
+                        "audit": "/v1/supply-chain/audit",
+                        "install": "/v1/supply-chain/package-shims/install",
+                        "remove": "/v1/supply-chain/package-shims/remove",
+                        "repair": "/v1/supply-chain/package-shims/repair",
+                        "status": "/v1/supply-chain/package-shims",
+                        "sync": "/v1/supply-chain/sync",
+                        "test": "/v1/supply-chain/package-shims/test",
                     },
                 },
                 "safe_failure_reasons": _headless_safe_failure_reasons(),
@@ -1529,6 +1566,158 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "status": "completed",
             }
         )
+
+    def _handle_supply_chain_package_firewall_status(self) -> None:
+        entitlement = self._supply_chain_entitlement()
+        status = package_shim_status(self._harness_context({}))
+        allowed = bool(entitlement["allowed"])
+        self._write_json(
+            {
+                "actions": self._supply_chain_action_states(allowed),
+                "cli_fallback": {
+                    "install": "hol-guard package-shims install --json",
+                    "status": "hol-guard package-shims status --json",
+                    "remove": "hol-guard package-shims uninstall --json",
+                },
+                "entitlement": entitlement,
+                "operation": "status",
+                "status": "completed",
+                "supported_managers": list(package_shim_supported_managers()),
+                "package_shims": status,
+            }
+        )
+
+    def _handle_supply_chain_package_firewall_action(self, action: str, payload: dict[str, object]) -> None:
+        operation = "remove" if action == "uninstall" else action
+        entitlement = self._supply_chain_entitlement()
+        if not bool(entitlement["allowed"]):
+            self._write_json(
+                {
+                    "available_actions": ["status", "education", "cli_fallback"],
+                    "entitlement": entitlement,
+                    "error": "paid_guard_cloud_required",
+                    "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+                    "operation": operation,
+                },
+                status=402,
+            )
+            return
+        context = self._supply_chain_context(payload)
+        managers, manager_error = self._supply_chain_managers(payload)
+        if manager_error is not None:
+            self._write_json({"error": manager_error, "operation": operation}, status=400)
+            return
+        try:
+            if operation in {"install", "repair", "remove"}:
+                require_high_risk(
+                    self.server.store.guard_home,  # type: ignore[attr-defined]
+                    purpose="supply_chain_firewall",
+                    approval_gate_input=approval_gate_input_from_mapping(payload),
+                )
+            result = self._run_supply_chain_package_action(operation, context, managers)
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        except ValueError as error:
+            self._write_json({"error": str(error), "operation": operation}, status=400)
+            return
+        receipt = self._record_headless_receipt(
+            harness="package-firewall",
+            operation=operation,
+            payload=payload,
+            result=result,
+            workspace_id=self._optional_string(payload.get("workspace_id"))
+            or self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
+        )
+        self._write_json(
+            {
+                "entitlement": entitlement,
+                "operation": operation,
+                "receipt": receipt,
+                "result": result,
+                "status": "completed",
+            }
+        )
+
+    def _run_supply_chain_package_action(
+        self,
+        operation: str,
+        context: HarnessContext,
+        managers: tuple[str, ...] | None,
+    ) -> dict[str, object]:
+        if operation == "install":
+            return install_package_shims(context, managers=managers)
+        if operation == "repair":
+            return repair_package_shims(context, managers=managers)
+        if operation == "remove":
+            return uninstall_package_shims(context, managers=managers)
+        if operation == "test":
+            status = package_shim_status(context)
+            installed = {str(manager) for manager in status.get("installed_managers", []) if isinstance(manager, str)}
+            tested_managers = list(managers or tuple(sorted(installed)))
+            return {
+                "blocked_execution": all(manager in installed for manager in tested_managers),
+                "package_shims": status,
+                "tested_managers": tested_managers,
+            }
+        if operation == "audit":
+            return build_local_supply_chain_posture(
+                self.server.store,  # type: ignore[attr-defined]
+                load_guard_config(self.server.store.guard_home),  # type: ignore[attr-defined]
+            )
+        if operation == "sync":
+            return sync_supply_chain_bundle(self.server.store)  # type: ignore[attr-defined]
+        raise ValueError("unsupported_supply_chain_operation")
+
+    def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
+        return HarnessContext(
+            home_dir=Path.home().resolve(),
+            workspace_dir=None,
+            guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+        )
+
+    @staticmethod
+    def _supply_chain_managers(payload: dict[str, object]) -> tuple[tuple[str, ...] | None, str | None]:
+        managers_value = payload.get("managers")
+        if managers_value is None:
+            return None, None
+        if not isinstance(managers_value, list) or not all(isinstance(manager, str) for manager in managers_value):
+            return None, "invalid_managers"
+        supported = set(package_shim_supported_managers())
+        normalized = [manager.strip().lower() for manager in managers_value if manager.strip()]
+        if len(normalized) != len(set(normalized)):
+            return None, "duplicate_manager"
+        managers = tuple(normalized)
+        if not managers:
+            return None, "invalid_managers"
+        if not set(managers).issubset(supported):
+            return None, "unsupported_manager"
+        return managers, None
+
+    def _supply_chain_entitlement(self) -> dict[str, object]:
+        entitlement_payload = self.server.store.get_sync_payload("supply_chain_bundle_entitlement")  # type: ignore[attr-defined]
+        entitlement = entitlement_payload if isinstance(entitlement_payload, dict) else {}
+        tier = self._optional_string(entitlement.get("tier"))
+        normalized_tier = tier.strip().lower() if tier is not None else "free"
+        allowed = normalized_tier in _SUPPLY_CHAIN_PAID_TIERS
+        return {
+            "allowed": allowed,
+            "reason": "paid_entitlement_active" if allowed else "paid_guard_cloud_required",
+            "tier": normalized_tier,
+            "upgrade_cta": None if allowed else "Upgrade to HOL Guard Cloud to run package firewall actions.",
+        }
+
+    @staticmethod
+    def _supply_chain_action_states(allowed: bool) -> dict[str, str]:
+        state = "available" if allowed else "paid_required"
+        return {
+            "install": state,
+            "repair": state,
+            "test": state,
+            "audit": state,
+            "sync": state,
+            "remove": state,
+        }
 
     @staticmethod
     def _policy_memory_payload(value: object) -> dict[str, object]:
@@ -2502,7 +2691,59 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 and payload_harness == harness
                 and (not workspace_id or payload_workspace_id == workspace_id)
             )
+        supply_chain_action = self._supply_chain_claim_action_for_request(path, path_parts)
+        if supply_chain_action is not None:
+            return self._supply_chain_dashboard_claims_authorize(
+                claims,
+                payload=payload,
+                supply_chain_action=supply_chain_action,
+            )
         return False
+
+    def _supply_chain_dashboard_claims_authorize(
+        self,
+        claims: dict[str, object],
+        *,
+        payload: dict[str, object] | None,
+        supply_chain_action: str,
+    ) -> bool:
+        action_path = self._optional_string(claims.get("action_path"))
+        allowed_claim = claims.get("allowed_action_paths")
+        allowed_actions = (
+            {item for item in allowed_claim if isinstance(item, str)} if isinstance(allowed_claim, list) else set()
+        )
+        if supply_chain_action != action_path and supply_chain_action not in allowed_actions:
+            return False
+        if payload is None:
+            return supply_chain_action == "package_shims_status"
+        workspace_id = self._optional_string(claims.get("workspace_id")) or ""
+        payload_workspace_id = self._optional_string(payload.get("workspace_id")) or ""
+        if workspace_id and payload_workspace_id != workspace_id:
+            return False
+        managers_claim = claims.get("managers")
+        if not isinstance(managers_claim, list):
+            return True
+        allowed_managers = {item for item in managers_claim if isinstance(item, str)}
+        managers_value = payload.get("managers")
+        if managers_value is None:
+            return True
+        if not isinstance(managers_value, list) or not all(isinstance(manager, str) for manager in managers_value):
+            return False
+        return set(managers_value).issubset(allowed_managers)
+
+    @staticmethod
+    def _supply_chain_claim_action_for_request(path: str, path_parts: list[str]) -> str | None:
+        if path == "/v1/supply-chain/package-shims":
+            return "package_shims_status"
+        if path == "/v1/supply-chain/entitlement":
+            return "supply_chain_entitlement"
+        if len(path_parts) == 4 and path_parts[:3] == ["v1", "supply-chain", "package-shims"]:
+            action = "remove" if path_parts[3] == "uninstall" else path_parts[3]
+            if action in {"install", "repair", "test", "remove"}:
+                return f"package_shims_{action}"
+        if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
+            return f"package_shims_{path_parts[2]}"
+        return None
 
     def _tokens_match(self, token: object) -> bool:
         if not isinstance(token, str):
@@ -2608,6 +2849,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         }:
             return True
         if len(path_parts) == 3 and path_parts[:2] in (["v1", "requests"], ["v1", "receipts"]):
+            return True
+        if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
         if (
             len(path_parts) == 4
@@ -2847,6 +3090,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         }:
             return True
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
+            return True
+        if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
             return True

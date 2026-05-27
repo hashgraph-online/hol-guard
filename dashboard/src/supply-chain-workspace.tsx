@@ -14,6 +14,7 @@ import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-c
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type { GuardManagedInstall, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
 import { resolvePackageManagerProtectionCopy } from "./runtime-overview";
+import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
 
 export type SupplyChainFilterState = {
   statusFilter: "all" | "protected" | "unprotected";
@@ -201,6 +202,8 @@ export function SupplyChainWorkspace({ snapshot, onGoHome }: SupplyChainWorkspac
         <StatCard label="Protected managers" value={stats.protectedManagers} tone="green" />
         <StatCard label="Unprotected managers" value={stats.unprotectedManagers} tone={stats.unprotectedManagers > 0 ? "attention" : "slate"} />
       </div>
+
+      <PackageFirewallPanel />
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
