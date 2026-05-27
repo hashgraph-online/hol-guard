@@ -4042,7 +4042,7 @@ args = ["-lc", "echo hi"]
         assert "hooks = true" in config_text
         assert "codex_hooks" not in config_text
         assert hooks_payload["PreToolUse"]
-        assert "hooks" not in _read_codex_config(workspace_dir / ".codex" / "config.toml")
+        assert (workspace_dir / ".codex" / "config.toml").exists() is False
 
     def test_guard_update_repairs_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
@@ -4352,9 +4352,8 @@ args = ["-lc", "echo hi"]
         assert output["status"] == "current"
         assert output["managed_install"]["workspace"] == str(workspace_dir)
         assert output["managed_install"]["active"] is True
-        assert (workspace_dir / ".codex" / "config.toml").is_file()
         assert _read_codex_hooks(home_dir / ".codex" / "config.toml")["PreToolUse"]
-        assert "hooks" not in _read_codex_config(workspace_dir / ".codex" / "config.toml")
+        assert (workspace_dir / ".codex" / "config.toml").exists() is False
 
     def test_guard_doctor_warns_when_codex_native_hooks_are_missing(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"

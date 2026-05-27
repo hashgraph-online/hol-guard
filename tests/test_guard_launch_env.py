@@ -675,13 +675,15 @@ url = "https://workspace.example/mcp"
         ]
     )
     json.loads(capsys.readouterr().out)
-    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+    with (home_dir / ".codex" / "config.toml").open("rb") as handle:
         payload = tomllib.load(handle)
-    workspace_servers = payload["mcp_servers"]
+    global_servers = payload["mcp_servers"]
+    workspace_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
 
     assert rc == 0
-    assert workspace_servers["shared"]["url"] == "https://workspace.example/mcp"
-    assert workspace_servers["global_only"]["command"] == os.sys.executable
+    assert workspace_payload["mcp_servers"]["shared"]["url"] == "https://workspace.example/mcp"
+    assert "shared" not in global_servers
+    assert global_servers["global_only"]["command"] == os.sys.executable
 
 
 def test_guard_run_launches_hermes_with_guard_overlay_paths(monkeypatch, tmp_path, capsys):
