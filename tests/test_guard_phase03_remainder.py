@@ -217,8 +217,8 @@ def test_doctor_does_not_mark_harness_command_presence_as_guard_active(
 
 def test_codex_doctor_marks_partial_native_hook_install_as_broken(tmp_path: Path) -> None:
     context = _context(tmp_path)
-    config_path = context.workspace_dir / ".codex" / "config.toml"
-    hooks_path = context.workspace_dir / ".codex" / "hooks.json"
+    config_path = context.home_dir / ".codex" / "config.toml"
+    hooks_path = context.home_dir / ".codex" / "hooks.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text("[features]\nhooks = true\n", encoding="utf-8")
     hooks_path.write_text(
