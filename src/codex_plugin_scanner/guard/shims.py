@@ -208,6 +208,7 @@ def get_path_order_status(
     path_dirs = (path_env or os.environ.get("PATH", "")).split(os.pathsep)
     shim_dir_index: int | None = None
     real_dir_index: int | None = None
+    real_binary_path: str | None = None
     for idx, dir_entry in enumerate(path_dirs):
         d = Path(dir_entry)
         if d == shim_dir and shim_dir_index is None:
@@ -216,11 +217,15 @@ def get_path_order_status(
             candidate = d / command
             if candidate.exists() and candidate.is_file() and candidate != shim_path and real_dir_index is None:
                 real_dir_index = idx
+                real_binary_path = str(candidate)
     if shim_dir_index is None:
         return {
             "shim_precedes_real": False,
             "real_binary_found": real_dir_index is not None,
+            "real_binary_path": real_binary_path,
+            "real_binary_path_index": real_dir_index,
             "shim_in_path": False,
+            "shim_path_index": None,
             "path_broken": True,
             "shim_dir": str(shim_dir),
         }
@@ -228,7 +233,10 @@ def get_path_order_status(
         return {
             "shim_precedes_real": True,
             "real_binary_found": False,
+            "real_binary_path": None,
+            "real_binary_path_index": None,
             "shim_in_path": True,
+            "shim_path_index": shim_dir_index,
             "path_broken": False,
             "shim_dir": str(shim_dir),
         }
@@ -236,7 +244,10 @@ def get_path_order_status(
     return {
         "shim_precedes_real": precedes,
         "real_binary_found": True,
+        "real_binary_path": real_binary_path,
+        "real_binary_path_index": real_dir_index,
         "shim_in_path": True,
+        "shim_path_index": shim_dir_index,
         "path_broken": not precedes,
         "shim_dir": str(shim_dir),
     }
@@ -278,6 +289,12 @@ def install_package_shims(
     }
     _package_shim_manifest_path(context).write_text(json.dumps(manifest_payload, sort_keys=True), encoding="utf-8")
     program_name = _command_program_name()
+    shell_hints = _path_export_hints(shim_dir)
+    path_repair_required = [
+        manager
+        for manager in tracked_managers
+        if not bool(get_path_order_status(context, manager=manager).get("shim_precedes_real"))
+    ]
     return {
         "installed_managers": list(tracked_managers),
         "installed_count": len(tracked_managers),
@@ -286,6 +303,9 @@ def install_package_shims(
         "shim_dir": str(shim_dir),
         "manifest_path": str(_package_shim_manifest_path(context)),
         "path_export_hint": _path_export_hint(shim_dir),
+        "path_repair_required": path_repair_required,
+        "restart_shell_required": bool(path_repair_required),
+        "shell_hints": shell_hints,
         "status_command": f"{program_name} package-shims status --json",
         "uninstall_command": f"{program_name} package-shims uninstall --json",
     }
@@ -328,7 +348,11 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
                 "integrity": integrity,
                 "manager": manager,
                 "path_active": bool(path_status.get("shim_precedes_real")),
+                "path_index": path_status.get("shim_path_index"),
                 "path_status": path_status,
+                "real_binary_found": bool(path_status.get("real_binary_found")),
+                "real_binary_path": path_status.get("real_binary_path"),
+                "real_binary_path_index": path_status.get("real_binary_path_index"),
                 "shim_path": str(shim_path),
             }
         )
@@ -350,6 +374,7 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
         "manager_details": manager_details,
         "manifest_path": str(_package_shim_manifest_path(context)),
         "missing_managers": missing_managers,
+        "shell_hints": _path_export_hints(shim_dir),
         "shim_dir": str(shim_dir),
     }
 
@@ -394,8 +419,21 @@ def uninstall_package_shims(
     remaining = [manager for manager in manifest_managers if manager not in requested_managers]
     manifest_path = _package_shim_manifest_path(context)
     if remaining:
+        manifest_hashes = manifest.get("content_hashes")
+        content_hashes = {
+            manager: hash_value
+            for manager, hash_value in (manifest_hashes.items() if isinstance(manifest_hashes, dict) else ())
+            if manager in remaining and isinstance(hash_value, str)
+        }
         manifest_path.write_text(
-            json.dumps({"installed_managers": remaining, "shim_dir": str(shim_dir)}, sort_keys=True),
+            json.dumps(
+                {
+                    "content_hashes": content_hashes,
+                    "installed_managers": remaining,
+                    "shim_dir": str(shim_dir),
+                },
+                sort_keys=True,
+            ),
             encoding="utf-8",
         )
     elif manifest_path.exists():
@@ -413,26 +451,43 @@ def package_shim_supported_managers() -> tuple[str, ...]:
     return tuple(sorted(_PACKAGE_SHIM_COMMANDS.keys()))
 
 
-def repair_package_shims(context: HarnessContext) -> dict[str, object]:
+def repair_package_shims(
+    context: HarnessContext,
+    *,
+    managers: tuple[str, ...] | None = None,
+) -> dict[str, object]:
     """Detect missing or tampered shims and reinstall them. Returns repair summary."""
     status = package_shim_status(context)
+    selected_managers = set(_normalize_package_shim_managers(managers)) if managers else None
     managers_to_repair: list[str] = []
+    path_repair_required: list[str] = []
     for detail in status.get("manager_details", []):
-        if isinstance(detail, dict) and detail.get("integrity") in ("missing", "tampered"):
-            m = detail.get("manager")
-            if isinstance(m, str):
-                managers_to_repair.append(m)
+        if not isinstance(detail, dict):
+            continue
+        manager = detail.get("manager")
+        if not isinstance(manager, str):
+            continue
+        if selected_managers is not None and manager not in selected_managers:
+            continue
+        if detail.get("integrity") in ("missing", "tampered"):
+            managers_to_repair.append(manager)
+        elif not bool(detail.get("path_active")):
+            path_repair_required.append(manager)
     if not managers_to_repair:
         return {
             "repaired": [],
             "repaired_count": 0,
             "already_ok": status.get("installed_managers", []),
+            "path_repair_required": path_repair_required,
+            "shell_hints": status.get("shell_hints", {}),
             "nothing_to_repair": True,
         }
     result = install_package_shims(context, managers=tuple(managers_to_repair))
     return {
         "repaired": managers_to_repair,
         "repaired_count": len(managers_to_repair),
+        "path_repair_required": path_repair_required,
+        "shell_hints": status.get("shell_hints", {}),
         "install_result": result,
     }
 
@@ -537,6 +592,16 @@ def _path_export_hint(shim_dir: Path) -> str:
     if os.name == "nt":
         return f"set PATH={shim_dir};%PATH%"
     return f'export PATH="{shim_dir}:$PATH"'
+
+
+def _path_export_hints(shim_dir: Path) -> dict[str, str]:
+    posix_hint = f'export PATH="{shim_dir}:$PATH"'
+    return {
+        "bash": posix_hint,
+        "zsh": posix_hint,
+        "fish": f"fish_add_path --prepend {shim_dir}",
+        "powershell": f'$env:Path = "{shim_dir};$env:Path"',
+    }
 
 
 __all__ = [

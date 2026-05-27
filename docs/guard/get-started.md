@@ -127,13 +127,15 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 | I need the chronological log | `hol-guard events` | What happened over time on this machine? |
 | I need supply-chain coverage labels | `hol-guard cloud sync-intel` | Which ecosystems are protected, beta, or monitor-only right now? |
 | I need a workspace install scan or one-package verdict | `hol-guard supply-chain scan` or `hol-guard supply-chain explain <package> --ecosystem <ecosystem>` | Which current dependencies or package versions would Guard warn, review, or block right now? |
+| I need one-click package manager interception | Local dashboard Package Firewall or `hol-guard package-shims install --manager npm --json` | Can Guard intercept npm, pip, pnpm, yarn, bun, uv, poetry, pipenv, pipx, cargo, go, composer, bundle, mvn, and gradle before installs run? |
+| A package manager shim is missing or behind PATH | Local dashboard Repair or `hol-guard package-shims repair --manager npm --json` | Which shell PATH change or shim reinstall restores protection? |
 
 ## One continuity model
 
 Guard uses the same product loop across the local daemon, the CLI, and Guard Cloud:
 
 1. **Home** answers whether this machine is protected right now. `hol-guard status` and the local Home view show the same next action, latest proof, and cloud sync state.
-2. **Protect** owns install, repair, remove, status, and first protected action proof. The daemon handles these actions directly when available; the CLI commands stay visible as a fallback when the daemon is offline, unsupported, or missing a local session token.
+2. **Protect** owns install, repair, remove, status, and first protected action proof. The local dashboard exposes Protect, Repair, Test, Audit, Sync, and Remove for paid Guard Cloud users with a paired daemon. Free users still see status, supported managers, education, and CLI fallback. The daemon handles these actions directly when available; the CLI commands stay visible as a fallback when the daemon is offline, unsupported, or missing a local session token.
 3. **Inbox** owns decisions that need judgment. Local approvals use the same categories and policy memory scopes that cloud review uses, so a scoped decision can be synced without changing meaning.
 4. **Evidence** owns durable proof. Receipts from daemon actions, CLI actions, and cloud sync use the same local store before any optional upload.
 5. **Settings** owns policy. Local config remains the source of truth for offline protection, while cloud sync can distribute shared policy memory when you connect a workspace.

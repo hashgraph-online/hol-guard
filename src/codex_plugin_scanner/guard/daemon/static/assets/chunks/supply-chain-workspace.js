@@ -1,5 +1,592 @@
-import { r as reactExports, j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, T as Tag, b as HiMiniInformationCircle, E as EmptyState, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, h as HiMiniXCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime, ab as HiMiniArrowPath } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ag as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, ab as HiMiniArrowPath, T as Tag, v as HiMiniWrenchScrewdriver, ah as HiMiniBeaker, ac as HiMiniTrash, ai as fetchPackageFirewallStatus, aj as runPackageFirewallAction, ak as runPackageAudit, al as runPackageSync, S as SectionLabel, E as EmptyState, am as HiMiniBugAnt, b as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
+function UpgradeCta({ entitlement }) {
+  const upgradeUrl = entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 rounded-xl border border-brand-blue/20 bg-gradient-to-br from-brand-blue/[0.04] to-brand-dark/[0.02] px-4 py-4 sm:flex-row sm:items-center sm:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-2.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniShieldCheck,
+        {
+          className: "mt-0.5 h-5 w-5 shrink-0 text-brand-blue",
+          "aria-hidden": "true"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Upgrade to enable active protection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-slate-500", children: entitlement.upgrade_cta ?? entitlement.reason ?? "Package firewall actions require a Guard Cloud subscription." })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: upgradeUrl, variant: "primary", children: [
+      "Upgrade",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
+    ] })
+  ] });
+}
+function CliFallback({ commands }) {
+  const items = Object.entries(commands);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-slate-50 px-4 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "CLI fallback" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-1.5", children: items.map(([label, command]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mr-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400", children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all font-mono text-xs text-brand-dark", children: command })
+    ] }, label)) })
+  ] });
+}
+function FreeUserView({ data }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(UpgradeCta, { entitlement: data.entitlement }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400", children: "Would be protected" }),
+      data.supported_managers.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "No supported managers detected on this machine." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1.5", children: data.supported_managers.map((mgr) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "span",
+        {
+          className: "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 font-mono text-xs text-slate-600",
+          children: mgr
+        },
+        mgr
+      )) })
+    ] }),
+    data.cli_fallback !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CliFallback, { commands: data.cli_fallback })
+  ] });
+}
+function ReceiptProofCard({ receipt }) {
+  if (receipt === null) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Proof receipt" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-1 sm:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-medium uppercase tracking-wide text-slate-400", children: "ID" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-xs text-brand-dark", children: receipt.id })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-medium uppercase tracking-wide text-slate-400", children: "Operation" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs text-brand-dark", children: receipt.operation })
+      ] })
+    ] })
+  ] });
+}
+function DismissButton({ onDismiss }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      onClick: onDismiss,
+      "aria-label": "Dismiss result",
+      className: "shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-blue/30",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4", "aria-hidden": "true" })
+    }
+  );
+}
+function ActionResultPanel({ completed, onDismiss }) {
+  const { response } = completed;
+  const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `rounded-xl border px-4 py-3 ${isOk ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-brand-attention/20 bg-brand-attention/[0.04]"}`,
+      role: "status",
+      "aria-live": "polite",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-2", children: [
+            isOk ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              HiMiniCheckCircle,
+              {
+                className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green",
+                "aria-hidden": "true"
+              }
+            ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+              HiMiniExclamationTriangle,
+              {
+                className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
+                "aria-hidden": "true"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium capitalize text-brand-dark", children: [
+                completed.op,
+                completed.manager !== null ? ` — ${completed.manager}` : ""
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: response.result })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DismissButton, { onDismiss })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptProofCard, { receipt: response.receipt })
+      ]
+    }
+  );
+}
+function ShimStatusDot({ active }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "span",
+    {
+      className: `inline-block h-2 w-2 shrink-0 rounded-full ${active ? "bg-brand-green" : "bg-slate-300"}`,
+      "aria-hidden": "true"
+    }
+  );
+}
+function RemoveConfirmRow({ manager, onConfirm, onCancel, anyPending }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "flex flex-wrap items-center gap-2 rounded-lg border border-brand-attention/30 bg-brand-attention/[0.04] px-3 py-2",
+      role: "alert",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs font-medium text-brand-dark", children: [
+          "Remove shim for ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono", children: manager }),
+          "?"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ml-auto flex items-center gap-1.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onCancel, disabled: anyPending, children: "Cancel" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ActionButton,
+            {
+              variant: "danger",
+              onClick: onConfirm,
+              disabled: anyPending,
+              "aria-busy": anyPending,
+              children: anyPending ? "Removing…" : "Confirm Remove"
+            }
+          )
+        ] })
+      ]
+    }
+  );
+}
+function ActionBtn({ label, icon, variant, onClick, disabled }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant, onClick, disabled, children: [
+    icon,
+    label
+  ] });
+}
+function ActionButtonRow({
+  shim,
+  actions,
+  anyPending,
+  onInstall,
+  onRepair,
+  onTest,
+  onRemoveRequest
+}) {
+  const installState = actions.install ?? "disabled";
+  const repairState = actions.repair ?? "disabled";
+  const testState = actions.test ?? "disabled";
+  const removeState = actions.remove ?? "disabled";
+  const showInstall = !shim.installed && installState !== "disabled";
+  const showRepair = shim.installed && repairState !== "disabled";
+  const showTest = testState !== "disabled";
+  const showRemove = removeState !== "disabled" && shim.installed;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
+    showInstall && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ActionBtn,
+      {
+        label: "Protect",
+        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
+        variant: "primary",
+        onClick: onInstall,
+        disabled: anyPending || installState === "paid_required"
+      }
+    ),
+    showRepair && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ActionBtn,
+      {
+        label: "Repair",
+        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
+        variant: "secondary",
+        onClick: onRepair,
+        disabled: anyPending || repairState === "paid_required"
+      }
+    ),
+    showTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ActionBtn,
+      {
+        label: "Test",
+        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
+        variant: "outline",
+        onClick: onTest,
+        disabled: anyPending || testState === "paid_required"
+      }
+    ),
+    showRemove && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ActionBtn,
+      {
+        label: "Remove",
+        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
+        variant: "danger",
+        onClick: onRemoveRequest,
+        disabled: anyPending || removeState === "paid_required"
+      }
+    )
+  ] });
+}
+function ManagerActionCard({
+  shim,
+  actions,
+  anyPending,
+  isMine,
+  isConfirmingRemove,
+  onInstall,
+  onRepair,
+  onTest,
+  onRemoveRequest,
+  onRemoveConfirm,
+  onRemoveCancel
+}) {
+  const handleInstall = reactExports.useCallback(() => onInstall(shim.manager), [onInstall, shim.manager]);
+  const handleRepair = reactExports.useCallback(() => onRepair(shim.manager), [onRepair, shim.manager]);
+  const handleTest = reactExports.useCallback(() => onTest(shim.manager), [onTest, shim.manager]);
+  const handleRemoveRequest = reactExports.useCallback(
+    () => onRemoveRequest(shim.manager),
+    [onRemoveRequest, shim.manager]
+  );
+  const handleRemoveConfirm = reactExports.useCallback(
+    () => onRemoveConfirm(shim.manager),
+    [onRemoveConfirm, shim.manager]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ShimStatusDot, { active: shim.active }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate font-mono text-sm font-semibold text-brand-dark", children: shim.manager }),
+        isMine && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HiMiniArrowPath,
+          {
+            className: "h-3.5 w-3.5 shrink-0 animate-spin text-brand-blue",
+            "aria-label": "Running…"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: shim.active ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "green", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mr-0.5 inline h-3 w-3", "aria-hidden": "true" }),
+        "Protected"
+      ] }) : shim.installed ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mr-0.5 inline h-3 w-3", "aria-hidden": "true" }),
+        "Inactive"
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "Uninstalled" }) })
+    ] }),
+    isConfirmingRemove ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      RemoveConfirmRow,
+      {
+        manager: shim.manager,
+        onConfirm: handleRemoveConfirm,
+        onCancel: onRemoveCancel,
+        anyPending
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ActionButtonRow,
+      {
+        shim,
+        actions,
+        anyPending,
+        onInstall: handleInstall,
+        onRepair: handleRepair,
+        onTest: handleTest,
+        onRemoveRequest: handleRemoveRequest
+      }
+    ),
+    shim.shim_path !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-[10px] text-slate-400", children: shim.shim_path })
+  ] });
+}
+function LoadingRow({ width }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `h-4 animate-pulse rounded-md bg-slate-100 ${width}`, "aria-hidden": "true" });
+}
+function LoadingSkeleton() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "space-y-3 px-4 py-5",
+      "aria-label": "Loading package firewall status",
+      "aria-busy": "true",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/3" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-2/3" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/2" })
+      ]
+    }
+  );
+}
+function ErrorBanner({ message, onRetry }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniExclamationTriangle,
+        {
+          className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
+          "aria-hidden": "true"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", children: message })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry" })
+  ] });
+}
+function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }) {
+  const auditRunning = pendingOp?.op === "audit";
+  const syncRunning = pendingOp?.op === "sync";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      ActionButton,
+      {
+        variant: "outline",
+        onClick: onAudit,
+        disabled: anyPending,
+        "aria-busy": auditRunning,
+        children: [
+          auditRunning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
+          "Audit"
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      ActionButton,
+      {
+        variant: "outline",
+        onClick: onSync,
+        disabled: anyPending,
+        "aria-busy": syncRunning,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            HiMiniArrowPath,
+            {
+              className: `mr-1.5 h-3.5 w-3.5 ${syncRunning ? "animate-spin" : ""}`,
+              "aria-hidden": "true"
+            }
+          ),
+          "Sync"
+        ]
+      }
+    )
+  ] });
+}
+function FailureBanner({ failed }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "flex items-start gap-2 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.04] px-3 py-2.5",
+      role: "alert",
+      "aria-live": "assertive",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HiMiniExclamationTriangle,
+          {
+            className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
+            "aria-hidden": "true"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
+            failed.op,
+            " failed",
+            failed.manager !== null ? ` for ${failed.manager}` : ""
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: failed.message })
+        ] })
+      ]
+    }
+  );
+}
+function PaidUserView({
+  data,
+  pendingOp,
+  lastCompleted,
+  lastFailed,
+  confirmRemoveManager,
+  onInstall,
+  onRepair,
+  onTest,
+  onRemoveRequest,
+  onRemoveConfirm,
+  onRemoveCancel,
+  onAudit,
+  onSync,
+  onDismissResult
+}) {
+  const anyPending = pendingOp !== null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package manager actions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        GlobalActionsBar,
+        {
+          anyPending,
+          pendingOp,
+          onAudit,
+          onSync
+        }
+      )
+    ] }),
+    lastFailed !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(FailureBanner, { failed: lastFailed }),
+    lastCompleted !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionResultPanel, { completed: lastCompleted, onDismiss: onDismissResult }),
+    data.package_shims.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "No package managers detected",
+        body: "Guard has not detected any package managers on this machine.",
+        tone: "teach"
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-3 sm:grid-cols-2", children: data.package_shims.map((shim) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ManagerActionCard,
+      {
+        shim,
+        actions: data.actions,
+        anyPending,
+        isMine: pendingOp?.manager === shim.manager,
+        isConfirmingRemove: confirmRemoveManager === shim.manager,
+        onInstall,
+        onRepair,
+        onTest,
+        onRemoveRequest,
+        onRemoveConfirm,
+        onRemoveCancel
+      },
+      shim.manager
+    )) })
+  ] });
+}
+function RefreshButton({ disabled, spinning, onRefresh }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ActionButton,
+    {
+      variant: "ghost",
+      onClick: onRefresh,
+      disabled,
+      "aria-label": "Refresh status",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniArrowPath,
+        {
+          className: `h-4 w-4 ${spinning ? "animate-spin" : ""}`,
+          "aria-hidden": "true"
+        }
+      )
+    }
+  );
+}
+function PackageFirewallPanel() {
+  const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
+  const [pendingOp, setPendingOp] = reactExports.useState(null);
+  const [lastCompleted, setLastCompleted] = reactExports.useState(null);
+  const [lastFailed, setLastFailed] = reactExports.useState(null);
+  const [confirmRemoveManager, setConfirmRemoveManager] = reactExports.useState(null);
+  const load = reactExports.useCallback(async () => {
+    setPanelLoad({ phase: "loading" });
+    try {
+      const data = await fetchPackageFirewallStatus();
+      setPanelLoad({ phase: "loaded", data });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load package firewall status.";
+      setPanelLoad({ phase: "error", message });
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    void load();
+  }, [load]);
+  const refreshAfterOp = reactExports.useCallback(async () => {
+    try {
+      const data = await fetchPackageFirewallStatus();
+      setPanelLoad({ phase: "loaded", data });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to refresh package firewall status.";
+      setPanelLoad({ phase: "error", message });
+    }
+  }, []);
+  const handleAction = reactExports.useCallback(
+    async (op, manager) => {
+      setPendingOp({ op, manager });
+      setLastFailed(null);
+      try {
+        const response = await runPackageFirewallAction(op, manager);
+        setLastCompleted({ op, manager, response });
+        await refreshAfterOp();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Action failed.";
+        setLastFailed({ op, manager, message });
+      } finally {
+        setPendingOp(null);
+      }
+    },
+    [refreshAfterOp]
+  );
+  const handleGlobalOp = reactExports.useCallback(
+    async (op) => {
+      setPendingOp({ op, manager: null });
+      setLastFailed(null);
+      try {
+        const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
+        setLastCompleted({ op, manager: null, response });
+        await refreshAfterOp();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Operation failed.";
+        setLastFailed({ op, manager: null, message });
+      } finally {
+        setPendingOp(null);
+      }
+    },
+    [refreshAfterOp]
+  );
+  const handleInstall = reactExports.useCallback(
+    (manager) => void handleAction("install", manager),
+    [handleAction]
+  );
+  const handleRepair = reactExports.useCallback(
+    (manager) => void handleAction("repair", manager),
+    [handleAction]
+  );
+  const handleTest = reactExports.useCallback(
+    (manager) => void handleAction("test", manager),
+    [handleAction]
+  );
+  const handleRemoveRequest = reactExports.useCallback(
+    (manager) => setConfirmRemoveManager(manager),
+    []
+  );
+  const handleRemoveConfirm = reactExports.useCallback(
+    (manager) => {
+      setConfirmRemoveManager(null);
+      void handleAction("remove", manager);
+    },
+    [handleAction]
+  );
+  const handleRemoveCancel = reactExports.useCallback(() => setConfirmRemoveManager(null), []);
+  const handleAudit = reactExports.useCallback(() => void handleGlobalOp("audit"), [handleGlobalOp]);
+  const handleSync = reactExports.useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
+  const handleDismissResult = reactExports.useCallback(() => setLastCompleted(null), []);
+  const handleRetry = reactExports.useCallback(() => void load(), [load]);
+  const anyPending = pendingOp !== null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package firewall actions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-slate-500", children: "Protect, repair, test, or remove package manager shims." })
+      ] }),
+      panelLoad.phase === "loaded" && /* @__PURE__ */ jsxRuntimeExports.jsx(RefreshButton, { disabled: anyPending, spinning: anyPending, onRefresh: handleRetry })
+    ] }),
+    panelLoad.phase === "loading" && /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingSkeleton, {}),
+    panelLoad.phase === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBanner, { message: panelLoad.message, onRetry: handleRetry }),
+    panelLoad.phase === "loaded" && (panelLoad.data.entitlement.allowed ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PaidUserView,
+      {
+        data: panelLoad.data,
+        pendingOp,
+        lastCompleted,
+        lastFailed,
+        confirmRemoveManager,
+        onInstall: handleInstall,
+        onRepair: handleRepair,
+        onTest: handleTest,
+        onRemoveRequest: handleRemoveRequest,
+        onRemoveConfirm: handleRemoveConfirm,
+        onRemoveCancel: handleRemoveCancel,
+        onAudit: handleAudit,
+        onSync: handleSync,
+        onDismissResult: handleDismissResult
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(FreeUserView, { data: panelLoad.data }))
+  ] });
+}
 function buildSupplyChainStats(snapshot) {
   const managedInstalls = snapshot.managed_installs ?? [];
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -107,6 +694,7 @@ function SupplyChainWorkspace({ snapshot, onGoHome }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Protected managers", value: stats.protectedManagers, tone: "green" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Unprotected managers", value: stats.unprotectedManagers, tone: stats.unprotectedManagers > 0 ? "attention" : "slate" })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PackageFirewallPanel, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
