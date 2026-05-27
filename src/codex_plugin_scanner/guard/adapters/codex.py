@@ -41,6 +41,80 @@ def _read_toml(path: Path) -> dict[str, object]:
         return {}
 
 
+def _artifact_from_guard_proxy_args(
+    *,
+    args: tuple[str, ...],
+    fallback_name: str,
+    fallback_scope: str,
+    fallback_config_path: Path,
+    harness: str,
+) -> GuardArtifact | None:
+    """Expose the wrapped server for status/review without re-wrapping it."""
+
+    parsed = _parse_guard_proxy_args(args)
+    command = parsed.get("command")
+    if command is None:
+        return None
+    name = parsed.get("server-name") or fallback_name
+    source_scope = parsed.get("source-scope") or fallback_scope
+    config_path = parsed.get("config-path") or str(fallback_config_path)
+    transport = parsed.get("transport") or "stdio"
+    server_args = tuple(parsed.get("arg", ()))
+    env_keys = tuple(sorted(parsed.get("server-env-key", ())))
+    return GuardArtifact(
+        artifact_id=f"codex:{source_scope}:{name}",
+        name=name,
+        harness=harness,
+        artifact_type="mcp_server",
+        source_scope=source_scope,
+        config_path=config_path,
+        command=command,
+        args=server_args,
+        transport=transport,
+        metadata={
+            "env": {},
+            "env_keys": list(env_keys),
+            "guard_managed_proxy": True,
+        },
+    )
+
+
+def _parse_guard_proxy_args(args: tuple[str, ...]) -> dict[str, str | tuple[str, ...]]:
+    parsed: dict[str, str | tuple[str, ...]] = {}
+    repeated: dict[str, list[str]] = {"arg": [], "server-env-key": []}
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if not token.startswith("--"):
+            index += 1
+            continue
+        key_value = token[2:]
+        if "=" in key_value:
+            key, value = key_value.split("=", 1)
+            if key in repeated:
+                repeated[key].append(value)
+            else:
+                parsed[key] = value
+            index += 1
+            continue
+        key = key_value
+        if key in repeated:
+            if index + 1 < len(args):
+                repeated[key].append(args[index + 1])
+                index += 2
+            else:
+                index += 1
+            continue
+        if index + 1 < len(args) and not args[index + 1].startswith("--"):
+            parsed[key] = args[index + 1]
+            index += 2
+        else:
+            index += 1
+    for key, values in repeated.items():
+        parsed[key] = tuple(values)
+    return parsed
+
+
 _MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking tool action"
 _MANAGED_PROMPT_HOOK_STATUS_MESSAGE = "HOL Guard checking prompt"
 _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE = "HOL Guard checking Codex approval request"
@@ -480,8 +554,6 @@ class CodexHarnessAdapter(HarnessAdapter):
         return "global"
 
     def policy_path(self, context: HarnessContext) -> Path:
-        if context.workspace_dir is not None:
-            return context.workspace_dir / ".codex" / "config.toml"
         return context.home_dir / ".codex" / "config.toml"
 
     @staticmethod
@@ -524,6 +596,15 @@ class CodexHarnessAdapter(HarnessAdapter):
                     command = server_config.get("command")
                     args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
                     if is_guard_proxy_command(command if isinstance(command, str) else None, args):
+                        proxy_artifact = _artifact_from_guard_proxy_args(
+                            args=args,
+                            fallback_name=name,
+                            fallback_scope=scope,
+                            fallback_config_path=config_path,
+                            harness=self.harness,
+                        )
+                        if proxy_artifact is not None:
+                            artifacts.append(proxy_artifact)
                         continue
                     url = server_config.get("url")
                     env = server_config.get("env")
@@ -639,15 +720,24 @@ class CodexHarnessAdapter(HarnessAdapter):
         features["hooks"] = True
         hook_payload["features"] = features
         self._install_config_hooks(hook_payload, context)
-        existing_workspace_server_names = {
-            name for name, value in mcp_servers.items() if isinstance(name, str) and isinstance(value, dict)
-        }
+        workspace_payload = (
+            read_toml_payload(context.workspace_dir / ".codex" / "config.toml")
+            if context.workspace_dir is not None
+            else {}
+        )
+        workspace_servers = workspace_payload.get("mcp_servers")
+        existing_workspace_server_names = (
+            {name for name, value in workspace_servers.items() if isinstance(name, str) and isinstance(value, dict)}
+            if isinstance(workspace_servers, dict)
+            else set()
+        )
         for server in managed_servers:
             if self._should_skip_workspace_override(
                 context=context,
                 server=server,
                 existing_workspace_server_names=existing_workspace_server_names,
             ):
+                mcp_servers.pop(server.name, None)
                 continue
             mcp_servers[server.name] = self._proxy_server_entry(context, server)
         payload["mcp_servers"] = mcp_servers
@@ -660,6 +750,11 @@ class CodexHarnessAdapter(HarnessAdapter):
             skip_config_path=hook_config_path,
         )
         self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=hook_config_path)
+        self._remove_managed_mcp_servers_from_alternate_configs(
+            context,
+            managed_servers=managed_servers,
+            skip_config_path=target_config_path,
+        )
         hooks_path = self._remove_json_hook_files(context, payloads=hook_payloads)
         shell_guard_paths = self._install_shell_guards(context)
         shim_manifest = install_guard_shim(self.harness, context)
@@ -694,6 +789,11 @@ class CodexHarnessAdapter(HarnessAdapter):
             backup_path.unlink()
         hooks_path = self._remove_hooks(context)
         self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=target_config_path)
+        self._remove_managed_mcp_servers_from_alternate_configs(
+            context,
+            managed_servers=(),
+            skip_config_path=target_config_path,
+        )
         self._uninstall_shell_guard(context)
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
@@ -730,8 +830,6 @@ class CodexHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _target_config_path(context: HarnessContext) -> Path:
-        if context.workspace_dir is not None:
-            return context.workspace_dir / ".codex" / "config.toml"
         return context.home_dir / ".codex" / "config.toml"
 
     @staticmethod
@@ -809,6 +907,15 @@ class CodexHarnessAdapter(HarnessAdapter):
             config_payload = read_toml_payload(config_path)
             hooks = config_payload.get("hooks")
             if not isinstance(hooks, dict):
+                features = config_payload.get("features")
+                if isinstance(features, dict):
+                    features.pop("hooks", None)
+                    features.pop("codex_hooks", None)
+                    if features:
+                        config_payload["features"] = features
+                    else:
+                        config_payload.pop("features", None)
+                    write_toml_payload(config_path, config_payload)
                 continue
             cleaned_hooks, managed_removed = _remove_managed_hook_events(hooks)
             if not managed_removed:
@@ -817,6 +924,53 @@ class CodexHarnessAdapter(HarnessAdapter):
                 config_payload["hooks"] = cleaned_hooks
             else:
                 config_payload.pop("hooks", None)
+                features = config_payload.get("features")
+                if isinstance(features, dict):
+                    features.pop("hooks", None)
+                    features.pop("codex_hooks", None)
+                    if not features:
+                        config_payload.pop("features", None)
+            write_toml_payload(config_path, config_payload)
+
+    def _remove_managed_mcp_servers_from_alternate_configs(
+        self,
+        context: HarnessContext,
+        *,
+        managed_servers: tuple[ManagedMcpServer, ...],
+        skip_config_path: Path,
+    ) -> None:
+        managed_names_by_path: dict[Path, set[str]] = {}
+        for server in managed_servers:
+            managed_names_by_path.setdefault(Path(server.config_path), set()).add(server.name)
+        for config_path, _hooks_path in self._config_hook_pairs(context):
+            if config_path == skip_config_path or not config_path.is_file():
+                continue
+            config_payload = read_toml_payload(config_path)
+            mcp_servers = config_payload.get("mcp_servers")
+            if not isinstance(mcp_servers, dict):
+                continue
+            names = managed_names_by_path.get(config_path, set())
+            changed = False
+            cleaned_servers: dict[str, object] = {}
+            for name, server_config in mcp_servers.items():
+                if (
+                    isinstance(name, str)
+                    and name in names
+                    and isinstance(server_config, dict)
+                    and not is_guard_proxy_command(
+                        server_config.get("command") if isinstance(server_config.get("command"), str) else None,
+                        tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str)),
+                    )
+                ):
+                    changed = True
+                    continue
+                cleaned_servers[name] = server_config
+            if not changed:
+                continue
+            if cleaned_servers:
+                config_payload["mcp_servers"] = cleaned_servers
+            else:
+                config_payload.pop("mcp_servers", None)
             write_toml_payload(config_path, config_payload)
 
     def _remove_json_hook_files(

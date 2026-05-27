@@ -418,9 +418,9 @@ def _codex_backup_repair_target(context: HarnessContext) -> tuple[HarnessContext
 
 
 def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessContext, ...]:
-    contexts: list[HarnessContext] = [context]
     if context.workspace_dir is not None:
-        return tuple(contexts)
+        return (context,)
+    contexts: list[HarnessContext] = []
     home_dir = context.home_dir.resolve()
     seen_workspaces: set[Path] = set()
     current_dir = Path.cwd().resolve()
@@ -435,6 +435,7 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
                 guard_home=context.guard_home,
             )
         )
+    contexts.append(context)
     return tuple(contexts)
 
 
