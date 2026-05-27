@@ -157,6 +157,8 @@ def proxy_process_env(server_env: dict[str, str]) -> dict[str, str]:
 def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
     if artifact.artifact_type != "mcp_server":
         return None
+    if _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
+        return None
     if artifact.command is None or not artifact.name.strip():
         return None
     if is_guard_proxy_command(artifact.command, artifact.args):
