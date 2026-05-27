@@ -2190,12 +2190,11 @@ def _safe_hostname() -> str | None:
 
 
 def _safe_private_ip() -> str | None:
-    with suppress(OSError):
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.connect(("8.8.8.8", 80))
-            address = sock.getsockname()[0]
-            if isinstance(address, str) and address and not address.startswith("127."):
-                return address[:128]
+    with suppress(OSError), socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.connect(("8.8.8.8", 80))
+        address = sock.getsockname()[0]
+        if isinstance(address, str) and address and not address.startswith("127."):
+            return address[:128]
     with suppress(OSError):
         address = socket.gethostbyname(socket.gethostname())
         if address and not address.startswith("127."):
