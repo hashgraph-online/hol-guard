@@ -506,3 +506,62 @@ export type GuardSettingsExport = {
   privacy_warning: string;
   settings: GuardSettings;
 };
+
+export const PACKAGE_FIREWALL_ACTION_TYPES = ["install", "repair", "test", "remove"] as const;
+export type PackageFirewallActionType = (typeof PACKAGE_FIREWALL_ACTION_TYPES)[number];
+export const PACKAGE_FIREWALL_GLOBAL_ACTION_TYPES = ["audit", "sync"] as const;
+export type PackageFirewallGlobalActionType = (typeof PACKAGE_FIREWALL_GLOBAL_ACTION_TYPES)[number];
+
+export type PackageFirewallActionState = "available" | "paid_required" | "pending" | "disabled";
+
+export type PackageFirewallEntitlement = {
+  allowed: boolean;
+  reason: string;
+  tier: string;
+  upgrade_cta: string | null;
+  upgrade_url: string | null;
+};
+
+export type PackageShimEntry = {
+  active: boolean;
+  installed: boolean;
+  integrity: string;
+  manager: string;
+  path_index: number | null;
+  real_binary_found: boolean;
+  real_binary_path: string | null;
+  real_binary_path_index: number | null;
+  shim_path: string | null;
+};
+
+export type PackageFirewallReceipt = {
+  id: string;
+  operation: string;
+  status: string;
+  timestamp: string;
+};
+
+export type PackageFirewallCliFallback = {
+  install?: string;
+  status?: string;
+  remove?: string;
+};
+
+export type PackageFirewallStatusResponse = {
+  operation: string;
+  status: string;
+  supported_managers: string[];
+  package_shims: PackageShimEntry[];
+  entitlement: PackageFirewallEntitlement;
+  actions: Partial<Record<PackageFirewallActionType | PackageFirewallGlobalActionType, PackageFirewallActionState>>;
+  cli_fallback: PackageFirewallCliFallback | null;
+};
+
+export type PackageFirewallActionResponse = {
+  operation: string;
+  status: string;
+  result: string;
+  result_detail: Record<string, unknown>;
+  receipt: PackageFirewallReceipt | null;
+  entitlement: PackageFirewallEntitlement;
+};

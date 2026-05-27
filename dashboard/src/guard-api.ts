@@ -13,6 +13,15 @@ import type {
   GuardApprovalPage,
   GuardApprovalPageFilters,
   GuardApprovalPageStatus,
+  PackageFirewallActionResponse,
+  PackageFirewallActionState,
+  PackageFirewallActionType,
+  PackageFirewallCliFallback,
+  PackageFirewallEntitlement,
+  PackageFirewallGlobalActionType,
+  PackageFirewallReceipt,
+  PackageShimEntry,
+  PackageFirewallStatusResponse,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardDecisionV2,
@@ -1406,6 +1415,204 @@ export async function loadAuditPage(): Promise<AuditPageData> {
     fetchReceipts(),
   ]);
   return { snapshot, receipts };
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function booleanValue(value: unknown): boolean {
+  return value === true;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizePackageFirewallEntitlement(value: unknown): PackageFirewallEntitlement {
+  const record = isRecord(value) ? value : {};
+  return {
+    allowed: booleanValue(record.allowed),
+    reason: stringValue(record.reason) ?? "unknown",
+    tier: stringValue(record.tier) ?? "free",
+    upgrade_cta: stringValue(record.upgrade_cta),
+    upgrade_url: stringValue(record.upgrade_url),
+  };
+}
+
+function normalizePackageFirewallReceipt(value: unknown): PackageFirewallReceipt | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = stringValue(value.id);
+  const operation = stringValue(value.operation);
+  const status = stringValue(value.status);
+  const timestamp = stringValue(value.timestamp);
+  if (id === null || operation === null || status === null || timestamp === null) {
+    return null;
+  }
+  return { id, operation, status, timestamp };
+}
+
+function normalizePackageFirewallActions(
+  value: unknown,
+): PackageFirewallStatusResponse["actions"] {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const allowedStates = new Set(["available", "paid_required", "pending", "disabled"]);
+  const entries = Object.entries(value).filter(
+    (entry): entry is [PackageFirewallActionType | PackageFirewallGlobalActionType, PackageFirewallActionState] =>
+      typeof entry[1] === "string" && allowedStates.has(entry[1]),
+  );
+  return Object.fromEntries(entries);
+}
+
+function normalizePackageFirewallCliFallback(value: unknown): PackageFirewallCliFallback | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const fallback: PackageFirewallCliFallback = {};
+  const install = stringValue(value.install);
+  const status = stringValue(value.status);
+  const remove = stringValue(value.remove);
+  if (install !== null) {
+    fallback.install = install;
+  }
+  if (status !== null) {
+    fallback.status = status;
+  }
+  if (remove !== null) {
+    fallback.remove = remove;
+  }
+  return Object.keys(fallback).length > 0 ? fallback : null;
+}
+
+function normalizePackageShimEntry(manager: string, detail: Record<string, unknown> | null): PackageShimEntry {
+  return {
+    active: booleanValue(detail?.path_active),
+    installed: detail !== null && stringValue(detail.integrity) !== "missing",
+    integrity: stringValue(detail?.integrity) ?? "uninstalled",
+    manager,
+    path_index: numberValue(detail?.path_index),
+    real_binary_found: booleanValue(detail?.real_binary_found),
+    real_binary_path: stringValue(detail?.real_binary_path),
+    real_binary_path_index: numberValue(detail?.real_binary_path_index),
+    shim_path: stringValue(detail?.shim_path),
+  };
+}
+
+function normalizePackageShimEntries(value: unknown, supportedManagers: string[]): PackageShimEntry[] {
+  const status = isRecord(value) ? value : {};
+  const detailRows = Array.isArray(status.manager_details)
+    ? status.manager_details.filter(isRecord)
+    : [];
+  const detailByManager = new Map<string, Record<string, unknown>>();
+  for (const detail of detailRows) {
+    const manager = stringValue(detail.manager);
+    if (manager !== null) {
+      detailByManager.set(manager, detail);
+    }
+  }
+  const managers = new Set([
+    ...supportedManagers,
+    ...normalizeStringArray(status.installed_managers),
+    ...normalizeStringArray(status.protected_managers),
+    ...detailByManager.keys(),
+  ]);
+  return Array.from(managers)
+    .sort()
+    .map((manager) => normalizePackageShimEntry(manager, detailByManager.get(manager) ?? null));
+}
+
+function actionResultSummary(operation: string, detail: Record<string, unknown>): string {
+  const countKeys = ["installed_now_count", "repaired_count"];
+  for (const key of countKeys) {
+    const count = numberValue(detail[key]);
+    if (count !== null) {
+      return `${operation} completed for ${count} manager${count === 1 ? "" : "s"}.`;
+    }
+  }
+  const tested = normalizeStringArray(detail.tested_managers);
+  if (tested.length > 0) {
+    return `Test completed for ${tested.join(", ")}.`;
+  }
+  return `${operation} completed.`;
+}
+
+function normalizePackageFirewallStatus(value: unknown): PackageFirewallStatusResponse {
+  const record = isRecord(value) ? value : {};
+  const supportedManagers = normalizeStringArray(record.supported_managers);
+  return {
+    actions: normalizePackageFirewallActions(record.actions),
+    cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
+    entitlement: normalizePackageFirewallEntitlement(record.entitlement),
+    operation: stringValue(record.operation) ?? "status",
+    package_shims: normalizePackageShimEntries(record.package_shims, supportedManagers),
+    status: stringValue(record.status) ?? "unknown",
+    supported_managers: supportedManagers,
+  };
+}
+
+function normalizePackageFirewallAction(value: unknown): PackageFirewallActionResponse {
+  const record = isRecord(value) ? value : {};
+  const result = isRecord(record.result) ? record.result : {};
+  const operation = stringValue(record.operation) ?? "unknown";
+  return {
+    entitlement: normalizePackageFirewallEntitlement(record.entitlement),
+    operation,
+    receipt: normalizePackageFirewallReceipt(record.receipt),
+    result: typeof record.result === "string" ? record.result : actionResultSummary(operation, result),
+    result_detail: result,
+    status: stringValue(record.status) ?? "unknown",
+  };
+}
+
+export async function fetchPackageFirewallStatus(): Promise<PackageFirewallStatusResponse> {
+  return normalizePackageFirewallStatus(await readJson<unknown>("/v1/supply-chain/package-shims"));
+}
+
+export async function runPackageFirewallAction(
+  action: PackageFirewallActionType,
+  manager: string | null,
+): Promise<PackageFirewallActionResponse> {
+  const payload = manager !== null ? { managers: [manager] } : {};
+  const response = await readJson<unknown>(
+    `/v1/supply-chain/package-shims/${action}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+  return normalizePackageFirewallAction(response);
+}
+
+export async function runPackageAudit(): Promise<PackageFirewallActionResponse> {
+  const response = await readJson<unknown>("/v1/supply-chain/audit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: JSON.stringify({}),
+  });
+  return normalizePackageFirewallAction(response);
+}
+
+export async function runPackageSync(): Promise<PackageFirewallActionResponse> {
+  const response = await readJson<unknown>("/v1/supply-chain/sync", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: JSON.stringify({}),
+  });
+  return normalizePackageFirewallAction(response);
 }
 
 export type EvidencePageData = {

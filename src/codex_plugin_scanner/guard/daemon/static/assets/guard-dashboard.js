@@ -13709,6 +13709,178 @@ async function retryResume(requestId) {
   const payload = await response.json();
   return normalizeCodexResume(payload);
 }
+function stringValue(value) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+function booleanValue(value) {
+  return value === true;
+}
+function numberValue(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+function normalizePackageFirewallEntitlement(value) {
+  const record = isRecord(value) ? value : {};
+  return {
+    allowed: booleanValue(record.allowed),
+    reason: stringValue(record.reason) ?? "unknown",
+    tier: stringValue(record.tier) ?? "free",
+    upgrade_cta: stringValue(record.upgrade_cta),
+    upgrade_url: stringValue(record.upgrade_url)
+  };
+}
+function normalizePackageFirewallReceipt(value) {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = stringValue(value.id);
+  const operation = stringValue(value.operation);
+  const status = stringValue(value.status);
+  const timestamp = stringValue(value.timestamp);
+  if (id === null || operation === null || status === null || timestamp === null) {
+    return null;
+  }
+  return { id, operation, status, timestamp };
+}
+function normalizePackageFirewallActions(value) {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const allowedStates = /* @__PURE__ */ new Set(["available", "paid_required", "pending", "disabled"]);
+  const entries = Object.entries(value).filter(
+    (entry) => typeof entry[1] === "string" && allowedStates.has(entry[1])
+  );
+  return Object.fromEntries(entries);
+}
+function normalizePackageFirewallCliFallback(value) {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const fallback = {};
+  const install = stringValue(value.install);
+  const status = stringValue(value.status);
+  const remove = stringValue(value.remove);
+  if (install !== null) {
+    fallback.install = install;
+  }
+  if (status !== null) {
+    fallback.status = status;
+  }
+  if (remove !== null) {
+    fallback.remove = remove;
+  }
+  return Object.keys(fallback).length > 0 ? fallback : null;
+}
+function normalizePackageShimEntry(manager, detail) {
+  return {
+    active: booleanValue(detail?.path_active),
+    installed: detail !== null && stringValue(detail.integrity) !== "missing",
+    integrity: stringValue(detail?.integrity) ?? "uninstalled",
+    manager,
+    path_index: numberValue(detail?.path_index),
+    real_binary_found: booleanValue(detail?.real_binary_found),
+    real_binary_path: stringValue(detail?.real_binary_path),
+    real_binary_path_index: numberValue(detail?.real_binary_path_index),
+    shim_path: stringValue(detail?.shim_path)
+  };
+}
+function normalizePackageShimEntries(value, supportedManagers) {
+  const status = isRecord(value) ? value : {};
+  const detailRows = Array.isArray(status.manager_details) ? status.manager_details.filter(isRecord) : [];
+  const detailByManager = /* @__PURE__ */ new Map();
+  for (const detail of detailRows) {
+    const manager = stringValue(detail.manager);
+    if (manager !== null) {
+      detailByManager.set(manager, detail);
+    }
+  }
+  const managers = /* @__PURE__ */ new Set([
+    ...supportedManagers,
+    ...normalizeStringArray(status.installed_managers),
+    ...normalizeStringArray(status.protected_managers),
+    ...detailByManager.keys()
+  ]);
+  return Array.from(managers).sort().map((manager) => normalizePackageShimEntry(manager, detailByManager.get(manager) ?? null));
+}
+function actionResultSummary(operation, detail) {
+  const countKeys = ["installed_now_count", "repaired_count"];
+  for (const key of countKeys) {
+    const count = numberValue(detail[key]);
+    if (count !== null) {
+      return `${operation} completed for ${count} manager${count === 1 ? "" : "s"}.`;
+    }
+  }
+  const tested = normalizeStringArray(detail.tested_managers);
+  if (tested.length > 0) {
+    return `Test completed for ${tested.join(", ")}.`;
+  }
+  return `${operation} completed.`;
+}
+function normalizePackageFirewallStatus(value) {
+  const record = isRecord(value) ? value : {};
+  const supportedManagers = normalizeStringArray(record.supported_managers);
+  return {
+    actions: normalizePackageFirewallActions(record.actions),
+    cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
+    entitlement: normalizePackageFirewallEntitlement(record.entitlement),
+    operation: stringValue(record.operation) ?? "status",
+    package_shims: normalizePackageShimEntries(record.package_shims, supportedManagers),
+    status: stringValue(record.status) ?? "unknown",
+    supported_managers: supportedManagers
+  };
+}
+function normalizePackageFirewallAction(value) {
+  const record = isRecord(value) ? value : {};
+  const result = isRecord(record.result) ? record.result : {};
+  const operation = stringValue(record.operation) ?? "unknown";
+  return {
+    entitlement: normalizePackageFirewallEntitlement(record.entitlement),
+    operation,
+    receipt: normalizePackageFirewallReceipt(record.receipt),
+    result: typeof record.result === "string" ? record.result : actionResultSummary(operation, result),
+    result_detail: result,
+    status: stringValue(record.status) ?? "unknown"
+  };
+}
+async function fetchPackageFirewallStatus() {
+  return normalizePackageFirewallStatus(await readJson("/v1/supply-chain/package-shims"));
+}
+async function runPackageFirewallAction(action, manager) {
+  const payload = manager !== null ? { managers: [manager] } : {};
+  const response = await readJson(
+    `/v1/supply-chain/package-shims/${action}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders()
+      },
+      body: JSON.stringify(payload)
+    }
+  );
+  return normalizePackageFirewallAction(response);
+}
+async function runPackageAudit() {
+  const response = await readJson("/v1/supply-chain/audit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({})
+  });
+  return normalizePackageFirewallAction(response);
+}
+async function runPackageSync() {
+  const response = await readJson("/v1/supply-chain/sync", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({})
+  });
+  return normalizePackageFirewallAction(response);
+}
 var DefaultContext = {
   color: void 0,
   size: void 0,
@@ -13987,6 +14159,9 @@ function HiMiniBolt(props) {
 }
 function HiMiniBellAlert(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.214 3.227a.75.75 0 0 0-1.156-.955 8.97 8.97 0 0 0-1.856 3.825.75.75 0 0 0 1.466.316 7.47 7.47 0 0 1 1.546-3.186ZM16.942 2.272a.75.75 0 0 0-1.157.955 7.47 7.47 0 0 1 1.547 3.186.75.75 0 0 0 1.466-.316 8.971 8.971 0 0 0-1.856-3.825Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.91 32.91 0 0 0 3.256.508 3.5 3.5 0 0 0 6.972 0 32.903 32.903 0 0 0 3.256-.508.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6Zm0 14.5a2 2 0 0 1-1.95-1.557 33.54 33.54 0 0 0 3.9 0A2 2 0 0 1 10 16.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniBeaker(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.5 3.528v4.644c0 .729-.29 1.428-.805 1.944l-1.217 1.216a8.75 8.75 0 0 1 3.55.621l.502.201a7.25 7.25 0 0 0 4.178.365l-2.403-2.403a2.75 2.75 0 0 1-.805-1.944V3.528a40.205 40.205 0 0 0-3 0Zm4.5.084.19.015a.75.75 0 1 0 .12-1.495 41.364 41.364 0 0 0-6.62 0 .75.75 0 0 0 .12 1.495L7 3.612v4.56c0 .331-.132.649-.366.883L2.6 13.09c-1.496 1.496-.817 4.15 1.403 4.475C5.961 17.852 7.963 18 10 18s4.039-.148 5.997-.436c2.22-.325 2.9-2.979 1.403-4.475l-4.034-4.034A1.25 1.25 0 0 1 13 8.172v-4.56Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniArrowTopRightOnSquare(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -22509,8 +22684,15 @@ export {
   clearLabelForScope as ad,
   formatHarnessCommand as ae,
   HiMiniCommandLine as af,
-  HiMiniSignal as ag,
-  HiMiniClock as ah,
+  HiMiniArrowTopRightOnSquare as ag,
+  HiMiniBeaker as ah,
+  fetchPackageFirewallStatus as ai,
+  runPackageFirewallAction as aj,
+  runPackageAudit as ak,
+  runPackageSync as al,
+  HiMiniBugAnt as am,
+  HiMiniSignal as an,
+  HiMiniClock as ao,
   HiMiniInformationCircle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,
