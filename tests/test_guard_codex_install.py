@@ -17,6 +17,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
+from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.codex_config import dump_toml
 
 
@@ -72,17 +73,17 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     output = json.loads(capsys.readouterr().out)
     managed_install = output["managed_install"]
     manifest = managed_install["manifest"]
-    config_text = (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
-    hook_config_text = (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
-    config_payload = tomllib.loads(hook_config_text)
-    workspace_config = tomllib.loads(config_text)
+    config_text = (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
+    config_payload = tomllib.loads(config_text)
+    workspace_config = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
     hooks_path = home_dir / ".codex" / "hooks.json"
     hooks_payload = config_payload["hooks"]
 
     assert rc == 0
     assert managed_install["active"] is True
     assert manifest["mode"] == "codex-mcp-proxy"
-    assert manifest["managed_config_path"] == str(workspace_dir / ".codex" / "config.toml")
+    assert manifest["managed_config_path"] == str(home_dir / ".codex" / "config.toml")
+    assert manifest["managed_hook_config_path"] == str(home_dir / ".codex" / "config.toml")
     assert manifest["managed_hooks_path"] == str(hooks_path)
     assert manifest["managed_shell_guard_path"] == str(home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh")
     assert manifest["managed_shell_guard_paths"] == {
@@ -95,10 +96,12 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "--server-name" in config_text
     assert "guard" in config_text
     assert "codex-mcp-proxy" in config_text
-    assert "hooks = true" in hook_config_text
-    assert "codex_hooks" not in hook_config_text
+    assert "hooks = true" in config_text
+    assert "codex_hooks" not in config_text
     assert workspace_config["approval_policy"] == "never"
+    assert "features" not in workspace_config
     assert "hooks" not in workspace_config
+    assert "mcp_servers" not in workspace_config
     assert hooks_path.exists() is False
     assert (workspace_dir / ".codex" / "hooks.json").exists() is False
     assert 'API_BASE = "https://hol.org"' in config_text
@@ -137,6 +140,43 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "fish_preexec" in fish_guard_text
     assert "codex-fish-guard.fish" in fish_conf_text
     assert ".npmrc" in shell_guard_text
+
+
+def test_guard_install_codex_detects_wrapped_servers_without_rewrapping(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    detection = CodexHarnessAdapter().detect(
+        HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            guard_home=home_dir,
+        )
+    )
+    artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
+
+    assert rc == 0
+    assert "codex:global:global_tools" in artifacts
+    assert "codex:project:workspace_skill" in artifacts
+    assert artifacts["codex:project:workspace_skill"].command == "node"
+    assert artifacts["codex:project:workspace_skill"].args == ("workspace-skill.js",)
+    assert artifacts["codex:project:workspace_skill"].metadata["guard_managed_proxy"] is True
+    assert managed_stdio_servers(detection) == ()
 
 
 def test_guard_install_codex_replaces_existing_zshenv_guard_block(tmp_path, capsys):
@@ -376,7 +416,7 @@ def test_guard_apps_connect_codex_defaults_to_project_scope_when_local_codex_con
     assert rc == 0
     assert output["managed_install"]["active"] is True
     assert output["managed_install"]["workspace"] == str(workspace_dir)
-    assert output["managed_install"]["manifest"]["managed_config_path"] == str(workspace_dir / ".codex" / "config.toml")
+    assert output["managed_install"]["manifest"]["managed_config_path"] == str(home_dir / ".codex" / "config.toml")
 
 
 def test_guard_apps_connect_codex_stays_global_without_local_codex_config(
@@ -423,7 +463,6 @@ def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, caps
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    original_text = (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
 
     install_rc = main(
         [
@@ -455,7 +494,8 @@ def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, caps
     assert install_rc == 0
     assert uninstall_rc == 0
     assert uninstall_output["managed_install"]["active"] is False
-    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_text
+    workspace_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    assert workspace_payload == {"approval_policy": "never"}
     assert (workspace_dir / ".codex" / "hooks.json").exists() is False
 
 
@@ -1413,7 +1453,7 @@ args = ["server.py", "--marker-path", "marker.json"]
         ]
     )
     json.loads(capsys.readouterr().out)
-    config_text = (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
+    config_text = (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
 
     assert rc == 0
     assert "--arg=--marker-path" in config_text
@@ -1423,7 +1463,6 @@ def test_guard_reinstall_codex_preserves_original_backup(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    original_text = (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
 
     first_install = main(
         [
@@ -1470,7 +1509,8 @@ def test_guard_reinstall_codex_preserves_original_backup(tmp_path, capsys):
     assert second_install == 0
     assert uninstall_rc == 0
     assert backup_path.exists() is False
-    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_text
+    workspace_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    assert workspace_payload == {"approval_policy": "never"}
 
 
 def test_guard_install_codex_preserves_inline_tables_inside_arrays(tmp_path, capsys):
@@ -1504,13 +1544,17 @@ args = ["workspace-skill.js"]
     json.loads(capsys.readouterr().out)
 
     with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
-        payload = tomllib.load(handle)
+        workspace_payload = tomllib.load(handle)
+    with (home_dir / ".codex" / "config.toml").open("rb") as handle:
+        global_payload = tomllib.load(handle)
 
     assert rc == 0
-    assert payload["profiles"] == [
+    assert workspace_payload["profiles"] == [
         {"name": "default", "mode": "safe"},
         {"name": "strict", "mode": "review"},
     ]
+    assert "mcp_servers" not in workspace_payload
+    assert "workspace_skill" in global_payload["mcp_servers"]
 
 
 def test_guard_reinstall_codex_refreshes_backup_after_completed_uninstall(tmp_path, capsys):
@@ -1590,7 +1634,8 @@ args = ["edited-workspace-skill.js"]
     assert second_uninstall == 0
     assert backup_path == Path(second_output["managed_install"]["manifest"]["backup_path"])
     assert backup_path.exists() is False
-    assert "edited-workspace-skill.js" in (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
+    workspace_payload = tomllib.loads((workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    assert workspace_payload == {"approval_policy": "never"}
 
 
 def test_guard_install_codex_proxy_entry_boots_outside_dev_shell_when_pythonpath_is_required(
@@ -1627,7 +1672,7 @@ args = [{str(canary_path)!r}, "--marker-path", {str(marker_path)!r}]
     )
     json.loads(capsys.readouterr().out)
 
-    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+    with (home_dir / ".codex" / "config.toml").open("rb") as handle:
         payload = tomllib.load(handle)
     proxy_entry = payload["mcp_servers"]["danger_lab"]
     proxy_env = dict(proxy_entry.get("env", {}))
@@ -1682,7 +1727,7 @@ env = { PYTHONPATH = "app/src", API_BASE = "https://hol.org" }
     )
     json.loads(capsys.readouterr().out)
 
-    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+    with (home_dir / ".codex" / "config.toml").open("rb") as handle:
         payload = tomllib.load(handle)
     proxy_env = payload["mcp_servers"]["danger_lab"]["env"]
 
@@ -1722,7 +1767,7 @@ env = { PYTHONPATH = "" }
     )
     json.loads(capsys.readouterr().out)
 
-    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+    with (home_dir / ".codex" / "config.toml").open("rb") as handle:
         payload = tomllib.load(handle)
     proxy_env = payload["mcp_servers"]["danger_lab"]["env"]
 
