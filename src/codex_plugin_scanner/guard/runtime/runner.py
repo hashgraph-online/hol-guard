@@ -880,6 +880,13 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         for rowid in batch_rowids:
             if isinstance(rowid, int) and (latest_uploaded_rowid is None or rowid > latest_uploaded_rowid):
                 latest_uploaded_rowid = rowid
+        batch_synced_at = _sync_timestamp(payload)
+        if latest_uploaded_rowid is not None:
+            _persist_receipt_sync_cursor(
+                store=store,
+                latest_uploaded_rowid=latest_uploaded_rowid,
+                synced_at=batch_synced_at,
+            )
         batch_receipts_stored = payload.get("receiptsStored")
         if isinstance(batch_receipts_stored, int):
             receipts_stored_total += batch_receipts_stored
@@ -958,7 +965,9 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "receipts": len(receipts),
         "receipt_cursor_rowid": persisted_cursor_rowid,
         "receipt_cursor_backfill": bool(
-            prior_receipt_cursor is not None and len(receipts) > 0 and not any(
+            prior_receipt_cursor is not None
+            and len(receipts) > 0
+            and not any(
                 isinstance(item.get("receipt_rowid"), int) and int(item.get("receipt_rowid")) > prior_receipt_cursor
                 for item in receipts
             )
@@ -2117,7 +2126,7 @@ def _receipt_sync_cursor_rowid(store: GuardStore) -> int | None:
     if not isinstance(payload, dict):
         return None
     value = payload.get("last_rowid")
-    if isinstance(value, int):
+    if isinstance(value, int) and not isinstance(value, bool):
         return value
     if isinstance(value, str):
         stripped = value.strip()
