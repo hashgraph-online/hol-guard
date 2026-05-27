@@ -53,6 +53,27 @@ env = { API_BASE = "https://hol.org", FEATURE_FLAG = "1" }
     )
 
 
+def test_guard_codex_hook_command_does_not_pin_custom_guard_home_in_real_global_config(
+    tmp_path,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    stale_guard_home = tmp_path / "pytest-stale-guard-home"
+    monkeypatch.setattr(codex_adapter.Path, "home", lambda: home_dir)
+
+    command = codex_adapter._hook_command(
+        HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            guard_home=stale_guard_home,
+        )
+    )
+
+    assert "--guard-home" not in shlex.split(command)
+    assert str(stale_guard_home) not in command
+
+
 def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

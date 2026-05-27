@@ -39,6 +39,25 @@ def test_clear_guard_daemon_state_preserves_auth_token_file(tmp_path):
     assert daemon_manager_module._auth_token_path(guard_home).read_text(encoding="utf-8") == "secret-token"
 
 
+def test_load_guard_daemon_url_rejects_live_port_when_state_pid_is_not_guard_daemon(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    daemon_manager_module.write_guard_daemon_state(guard_home, 4833, "secret-token")
+
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: False,
+    )
+    monkeypatch.setattr(
+        daemon_manager_module.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("stale pid must not be probed")),
+    )
+
+    assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
+
+
 def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     fchmod_calls: list[tuple[int, int]] = []

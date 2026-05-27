@@ -160,13 +160,16 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
     guard_args = [
         "guard",
         "hook",
-        "--guard-home",
-        str(context.guard_home),
         "--harness",
         "codex",
     ]
     if context.home_dir.resolve() != Path.home().resolve():
         guard_args.extend(["--home", str(context.home_dir)])
+    if (
+        context.home_dir.resolve() != Path.home().resolve()
+        and context.guard_home.resolve() != context.home_dir.resolve()
+    ):
+        guard_args.extend(["--guard-home", str(context.guard_home)])
     if context.workspace_dir is not None:
         guard_args.extend(["--workspace", str(context.workspace_dir)])
     return (sys.executable, "-m", "codex_plugin_scanner.cli", *guard_args)
