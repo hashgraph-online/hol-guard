@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniExclamationTriangle,
@@ -6,6 +6,8 @@ import {
   HiMiniXCircle,
   HiMiniInformationCircle,
   HiMiniArrowRight,
+  HiMiniChevronDown,
+  HiMiniChevronUp,
 } from "react-icons/hi2";
 import { ActionButton, SectionLabel, Tag } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
@@ -100,6 +102,12 @@ export function HomeProtectionModule({
     return Array.from(all).sort();
   }, [protection]);
 
+  const protectedCount = protection?.protected_managers.length ?? 0;
+  const totalCount = allManagers.length;
+  const defaultExpanded = totalCount <= 4;
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const hasManagers = totalCount > 0;
+
   const statusBorderClass =
     status === "protected"
       ? "border-brand-green/20 bg-brand-green/[0.04]"
@@ -132,7 +140,7 @@ export function HomeProtectionModule({
       ? "Package managers unprotected"
       : "Supply chain status unknown";
 
-  const hasManagers = allManagers.length > 0;
+  const handleToggle = () => setExpanded((prev) => !prev);
 
   return (
     <section
@@ -158,47 +166,89 @@ export function HomeProtectionModule({
             )}
           </div>
 
-          {hasManagers && (
-            <div
-              className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white/80 overflow-hidden"
-              role="table"
-              aria-label="Package manager coverage"
-            >
-              <div
-                className="flex items-center justify-between gap-2 px-3 py-1.5 bg-slate-50"
-                role="row"
-              >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
-                  Manager
-                </span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
-                  Status
-                </span>
-              </div>
-              <div role="rowgroup">
-                {allManagers.map((mgr) => (
-                  <div key={mgr} className="px-3" role="row">
-                    <ProtectedManagerRow
-                      manager={mgr}
-                      protected={protection?.protected_managers.includes(mgr) ?? false}
-                    />
-                  </div>
-                ))}
-              </div>
+          {(status === "unprotected" || status === "unknown") && (
+            <div className="flex items-center gap-3">
+              <ActionButton onClick={onOpenFleet} variant="secondary">
+                Set up protection
+                <HiMiniArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              </ActionButton>
+              {onOpenSupplyChain && (
+                <button
+                  type="button"
+                  onClick={onOpenSupplyChain}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded"
+                >
+                  View supply chain
+                  <HiMiniArrowRight className="h-3 w-3" aria-hidden="true" />
+                </button>
+              )}
             </div>
           )}
 
-          {lastBlocked && (
-            <div className="rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] px-3 py-2.5">
-              <p className="text-xs font-semibold text-brand-attention uppercase tracking-[0.15em]">
-                Last blocked install
-              </p>
-              <p className="mt-1 text-sm text-brand-dark">
-                {lastBlocked.harness}
-              </p>
-              <p className="text-xs text-slate-500">
-                {formatRelativeTime(lastBlocked.updated_at)}
-              </p>
+          {hasManagers && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Tag tone={protectedCount === totalCount ? "green" : protectedCount > 0 ? "attention" : "slate"}>
+                    {protectedCount} of {totalCount} protected
+                  </Tag>
+                  {lastBlocked && (
+                    <span className="text-xs text-slate-500">
+                      Last blocked{" "}
+                      <span className="font-medium text-brand-dark">{lastBlocked.harness}</span>{" "}
+                      {formatRelativeTime(lastBlocked.updated_at)}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggle}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-blue transition-colors hover:bg-brand-blue/[0.06] focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  aria-expanded={expanded}
+                >
+                  {expanded ? (
+                    <>
+                      Hide managers
+                      <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+                    </>
+                  ) : (
+                    <>
+                      Show all managers
+                      <HiMiniChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {expanded && (
+                <div
+                  className="divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white/80 overflow-hidden"
+                  role="table"
+                  aria-label="Package manager coverage"
+                >
+                  <div
+                    className="flex items-center justify-between gap-2 px-3 py-1.5 bg-slate-50"
+                    role="row"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
+                      Manager
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
+                      Status
+                    </span>
+                  </div>
+                  <div role="rowgroup">
+                    {allManagers.map((mgr) => (
+                      <div key={mgr} className="px-3" role="row">
+                        <ProtectedManagerRow
+                          manager={mgr}
+                          protected={protection?.protected_managers.includes(mgr) ?? false}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -212,19 +262,7 @@ export function HomeProtectionModule({
             </div>
           )}
 
-          {(status === "unprotected" || status === "unknown") && (
-            <div>
-              <p className="text-sm text-slate-600 mb-3">
-                Set up Guard on your AI apps to enable package manager protection.
-              </p>
-              <ActionButton onClick={onOpenFleet} variant="secondary">
-                Set up protection
-                <HiMiniArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
-              </ActionButton>
-            </div>
-          )}
-
-          {onOpenSupplyChain && status !== "unknown" && (
+          {status === "partial" && onOpenSupplyChain && (
             <div>
               <button
                 type="button"
