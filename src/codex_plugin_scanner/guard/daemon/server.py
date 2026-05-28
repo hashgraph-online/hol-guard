@@ -1120,23 +1120,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 harness=adapter.harness,
                 action_path=token_action_path,
                 handoff_token=handoff_token,
+                auto_start=True,
                 include_dashboard_session_token=True,
                 local_origin=local_origin,
                 workspace_id=self._optional_string(decoded.get("workspace_id")) or "",
             )
             return
-        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and self._cloud_app_handoff_navigation_is_allowed():
+        is_document_navigation = self._browser_document_navigation_is_allowed()
+        is_hosted_referrer = self._hosted_dashboard_referrer_is_allowed()
+        workspace_id = self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or ""
+        self._apply_cloud_app_sync_credentials(
+            sync_url=self._optional_string(handoff_query.get("syncUrl", [None])[-1]),
+            sync_token=self._optional_string(handoff_query.get("syncToken", [None])[-1]),
+            workspace_id=self._optional_string(handoff_query.get("syncWorkspaceId", [None])[-1]) or workspace_id,
+        )
+        navigation_allowed = is_hosted_referrer or is_document_navigation
+        if action_path in _CLOUD_APP_HANDOFF_ACTIONS and (navigation_allowed or workspace_id):
             self._write_cloud_app_handoff_page(
                 harness=adapter.harness,
                 action_path=action_path,
                 handoff_token=self._cloud_app_handoff_token(
                     harness=adapter.harness,
                     action_path=action_path,
-                    workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
+                    workspace_id=workspace_id,
                 ),
-                include_dashboard_session_token=False,
+                auto_start=navigation_allowed,
+                include_dashboard_session_token=is_document_navigation or not navigation_allowed,
                 local_origin=local_origin,
-                workspace_id=self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or "",
+                workspace_id=workspace_id,
             )
             return
         cloud_params: dict[str, str] = {"guardDaemon": local_origin}
@@ -1163,6 +1174,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             or self._optional_string(payload.get("workspaceId"))
             or ""
         )
+        self._apply_cloud_app_sync_credentials(
+            sync_url=self._optional_string(payload.get("sync_url")) or self._optional_string(payload.get("syncUrl")),
+            sync_token=(
+                self._optional_string(payload.get("sync_token")) or self._optional_string(payload.get("syncToken"))
+            ),
+            workspace_id=(
+                self._optional_string(payload.get("sync_workspace_id"))
+                or self._optional_string(payload.get("syncWorkspaceId"))
+                or workspace_id
+            ),
+        )
         local_origin = self._local_daemon_origin()
         handoff_token = self._cloud_app_handoff_token(
             harness=adapter.harness,
@@ -1182,6 +1204,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "Pragma": "no-cache",
                 "Expires": "0",
             },
+        )
+
+    def _apply_cloud_app_sync_credentials(
+        self,
+        *,
+        sync_url: str | None,
+        sync_token: str | None,
+        workspace_id: str,
+    ) -> None:
+        if sync_url is None or sync_token is None or not workspace_id:
+            return
+        parsed = urlparse(sync_url)
+        sync_origin = f"{parsed.scheme}://{parsed.netloc}"
+        if sync_origin not in _HOSTED_GUARD_DASHBOARD_ORIGINS or not parsed.path.endswith("/api/guard/receipts/sync"):
+            return
+        self.server.store.set_sync_credentials(  # type: ignore[attr-defined]
+            sync_url=sync_url,
+            token=sync_token,
+            now=_now(),
+            workspace_id=workspace_id,
         )
 
     def _cloud_app_handoff_token(
@@ -1250,6 +1292,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         harness: str,
         action_path: str,
         handoff_token: str,
+        auto_start: bool,
         include_dashboard_session_token: bool,
         local_origin: str,
         workspace_id: str,
@@ -1263,6 +1306,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "localOrigin": local_origin,
             "operation": operation,
             "redirectBase": redirect_base,
+            "autoStart": auto_start,
             "workspaceId": workspace_id,
         }
         success_fragment_args = ""
@@ -1333,6 +1377,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
       padding: 14px 18px;
     }}
     button:disabled {{ cursor: wait; opacity: .72; }}
+    button[hidden] {{ display: none; }}
   </style>
 </head>
 <body>
@@ -1344,11 +1389,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
       then it will return you to HOL Cloud.
     </p>
     <div id="status" class="status">Starting local Guard setup...</div>
+    <button id="continue" type="button" disabled>Continue setup</button>
   </main>
   <script id="guard-handoff-data" type="application/json">{script_payload}</script>
   <script>
     const data = JSON.parse(document.getElementById('guard-handoff-data').textContent);
     const statusNode = document.getElementById('status');
+    const continueButton = document.getElementById('continue');
+    window.history.replaceState(null, '', `${{data.localOrigin}}/v1/apps/${{data.harness}}/cloud`);
     const finish = (params, fragmentOnlyParams = {{}}) => {{
       const query = new URLSearchParams(params);
       const fragment = new URLSearchParams(params);
@@ -1405,7 +1453,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         fail(error instanceof Error ? error.message : 'Local Guard setup failed');
       }}
     }};
-    completeSetup();
+    if (data.autoStart) {{
+      continueButton.hidden = true;
+      completeSetup();
+    }} else {{
+      statusNode.textContent = 'Ready to connect this browser to local Guard.';
+      continueButton.disabled = false;
+      continueButton.addEventListener('click', () => {{
+        continueButton.disabled = true;
+        completeSetup();
+      }}, {{ once: true }});
+    }}
   </script>
 </body>
 </html>"""
@@ -1436,8 +1494,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         signature = _dashboard_session_signature(payload, self.server.auth_token)  # type: ignore[attr-defined]
         return f"gld1.{payload}.{signature}"
 
-    def _cloud_app_handoff_navigation_is_allowed(self) -> bool:
-        return self._hosted_dashboard_referrer_is_allowed()
+    def _browser_document_navigation_is_allowed(self) -> bool:
+        fetch_mode = (self.headers.get("Sec-Fetch-Mode") or "").strip().lower()
+        fetch_dest = (self.headers.get("Sec-Fetch-Dest") or "").strip().lower()
+        fetch_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        return (
+            fetch_mode == "navigate"
+            and fetch_dest in {"document", ""}
+            and fetch_site in {"cross-site", "same-site", "none", ""}
+        )
 
     def _hosted_dashboard_referrer_is_allowed(self) -> bool:
         referrer = self.headers.get("Referer")

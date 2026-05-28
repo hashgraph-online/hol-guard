@@ -301,6 +301,32 @@ def test_apps_test_alias_uses_safe_verification(tmp_path: Path, capsys: pytest.C
     assert payload["verification"]["writes_config"] is False
 
 
+def test_apps_repair_dry_run_explains_that_cloud_is_not_connected(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args = argparse.Namespace(
+        guard_command="apps",
+        apps_command="repair",
+        harness="codex",
+        dry_run=True,
+        home=str(tmp_path / "home"),
+        guard_home=str(tmp_path / "guard-home"),
+        workspace=str(tmp_path / "workspace"),
+        json=True,
+    )
+
+    exit_code = run_guard_command(args)
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["dry_run"] is True
+    assert payload["dry_run_effect"] == (
+        "No app config was changed and Guard Cloud was not connected. "
+        "Run hol-guard apps repair codex without --dry-run to finish setup."
+    )
+
+
 def test_apps_subcommand_preserves_parent_flags(tmp_path: Path) -> None:
     parser = argparse.ArgumentParser()
     add_guard_root_parser(parser)

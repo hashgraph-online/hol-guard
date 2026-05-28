@@ -837,6 +837,9 @@ def _render_apps(console: Console, payload: dict[str, object]) -> None:
         _render_managed_install(console, payload)
     else:
         _render_fallback(console, payload)
+    dry_run_effect = payload.get("dry_run_effect")
+    if isinstance(dry_run_effect, str) and dry_run_effect:
+        console.print(Panel(dry_run_effect, title="Dry run", border_style="yellow"))
     cloud_app = payload.get("cloud_app")
     if not isinstance(cloud_app, dict):
         return
