@@ -1186,9 +1186,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         is_document_navigation = self._browser_document_navigation_is_allowed()
         is_hosted_referrer = self._hosted_dashboard_referrer_is_allowed()
-        location_id = (
-            self._optional_string(handoff_query.get("location_id", [None])[-1])
-            or self._optional_string(handoff_query.get("locationId", [None])[-1])
+        location_id = self._optional_string(handoff_query.get("location_id", [None])[-1]) or self._optional_string(
+            handoff_query.get("locationId", [None])[-1]
         )
         workspace_id = self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or ""
         self._apply_cloud_app_sync_credentials(
@@ -1233,9 +1232,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if action_path not in _CLOUD_APP_HANDOFF_ACTIONS:
             self._write_json({"error": "unsupported_handoff_action"}, status=400)
             return
-        location_id = (
-            self._optional_string(payload.get("location_id"))
-            or self._optional_string(payload.get("locationId"))
+        location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
+            payload.get("locationId")
         )
         workspace_id = (
             self._optional_string(payload.get("workspace_id"))
@@ -1350,8 +1348,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         action_path = self._optional_string(decoded.get("action_path"))
         token_harness = self._optional_string(decoded.get("harness"))
         token_location_id = self._optional_string(decoded.get("location_id"))
-        requested_location_id = (
-            self._optional_string(payload.get("location_id")) or self._optional_string(payload.get("locationId"))
+        requested_location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
+            payload.get("locationId")
         )
         if token_harness != harness or action_path not in _CLOUD_APP_HANDOFF_ACTIONS:
             self._write_json({"error": "invalid_handoff_scope"}, status=403)
@@ -2862,9 +2860,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             location_id = self._optional_string(claims.get("location_id"))
             workspace_id = self._optional_string(claims.get("workspace_id")) or ""
             payload_harness = self._optional_string(payload.get("harness"))
-            payload_location_id = (
-                self._optional_string(payload.get("location_id"))
-                or self._optional_string(payload.get("locationId"))
+            payload_location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
+                payload.get("locationId")
             )
             payload_workspace_id = self._optional_string(payload.get("workspace_id")) or ""
             return (
