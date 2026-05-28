@@ -96,6 +96,7 @@ def _seed_codex_operation(
     command_text: str | None = None,
     hook_event_name: str | None = None,
     waits_for_browser_approval: bool | None = None,
+    browser_wait_deadline_at: str | None = None,
     status: str = "waiting_on_approval",
 ) -> None:
     session = store.upsert_guard_session(
@@ -125,6 +126,8 @@ def _seed_codex_operation(
         metadata["hook_event_name"] = hook_event_name
     if waits_for_browser_approval is not None:
         metadata["codex_hook_waits_for_browser_approval"] = waits_for_browser_approval
+    if browser_wait_deadline_at is not None:
+        metadata["codex_browser_wait_deadline_at"] = browser_wait_deadline_at
     store.upsert_guard_operation(
         operation_id=f"operation-{request_id}",
         session_id=str(session["session_id"]),
@@ -206,19 +209,7 @@ def test_codex_block_does_not_resume_codex_thread(
 
 def test_codex_block_with_missing_socket_does_not_start_headless_resume(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        codex_app_server_module.shutil,
-        "which",
-        lambda command: "/usr/bin/codex" if command == "codex" else None,
-    )
-    monkeypatch.setattr(
-        codex_app_server_module.subprocess,
-        "Popen",
-        lambda *_args, **_kwargs: pytest.fail("blocked requests must not start codex exec resume"),
-    )
-
     workspace = tmp_path / "workspace"
     codex_home = tmp_path / "codex-home"
     workspace.mkdir()
@@ -273,6 +264,7 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
         thread_id="live-session-1",
         hook_event_name="PostToolUse",
         waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
         status="waiting_on_approval",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -294,6 +286,48 @@ def test_codex_approve_defers_headless_resume_while_live_hook_waits(
     assert "original Codex action continue" in payload["codex_resume"]["message"]
 
 
+def test_codex_approve_stale_live_hook_wait_requires_app_server_socket(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    codex_home = tmp_path / "codex-home"
+    workspace.mkdir()
+    codex_home.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-stale-live"), "2026-05-19T10:00:00+00:00")
+    _seed_codex_operation(
+        store,
+        request_id="req-stale-live",
+        socket_path=None,
+        thread_id="stale-live-session-1",
+        workspace=str(workspace),
+        codex_home=str(codex_home),
+        command_text="npm install minimist@1.2.8",
+        hook_event_name="PostToolUse",
+        waits_for_browser_approval=True,
+        browser_wait_deadline_at="2000-01-01T00:00:00+00:00",
+        status="waiting_on_approval",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-stale-live/approve",
+            {"scope": "artifact", "reason": "reviewed"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["resolved"] is True
+    assert payload["codex_resume"]["status"] == "failed"
+    assert payload["codex_resume"]["reason"] == "socket_not_available"
+    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert "original chat" in payload["codex_resume"]["message"]
+
+
 def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
     tmp_path: Path,
 ) -> None:
@@ -307,6 +341,7 @@ def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
         thread_id="live-block-session-1",
         hook_event_name="PostToolUse",
         waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
         status="waiting_on_approval",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -328,26 +363,9 @@ def test_codex_block_does_not_defer_to_live_hook_waiting_on_browser_decision(
     assert payload["codex_resume"]["supported"] is False
 
 
-def test_codex_approve_pretooluse_no_wait_starts_headless_resume(
+def test_codex_approve_pretooluse_no_wait_requires_app_server_socket(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    launched: list[dict[str, object]] = []
-
-    class _FakeProcess:
-        pid = 1007
-
-    def _fake_popen(command, **kwargs):
-        launched.append({"command": command, **kwargs})
-        return _FakeProcess()
-
-    monkeypatch.setattr(
-        codex_app_server_module.shutil,
-        "which",
-        lambda command: "/usr/bin/codex" if command == "codex" else None,
-    )
-    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", _fake_popen)
-
     workspace = tmp_path / "workspace"
     codex_home = tmp_path / "codex-home"
     workspace.mkdir()
@@ -380,21 +398,14 @@ def test_codex_approve_pretooluse_no_wait_starts_headless_resume(
         daemon.stop()
 
     assert payload["resolved"] is True
-    assert payload["codex_resume"]["status"] == "sent"
-    assert payload["codex_resume"]["reason"] == "headless_resume_started"
-    assert payload["codex_resume"]["strategy"] == "codex-headless-exec"
-    assert len(launched) == 1
-    assert launched[0]["cwd"] == workspace
-    assert launched[0]["command"][:5] == ["/usr/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
-    assert "pretool-session-1" in launched[0]["command"]
+    assert payload["codex_resume"]["status"] == "failed"
+    assert payload["codex_resume"]["reason"] == "socket_not_available"
+    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
 
 
 def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(codex_app_server_module.shutil, "which", lambda _command: None)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-live-retry"), "2026-05-19T10:00:00+00:00")
     missing_socket = tmp_path / "missing-codex.sock"
@@ -405,6 +416,7 @@ def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
         thread_id="live-session-retry-1",
         hook_event_name="PostToolUse",
         waits_for_browser_approval=True,
+        browser_wait_deadline_at="2999-01-01T00:00:00+00:00",
         status="waiting_on_approval",
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -427,10 +439,10 @@ def test_codex_deferred_live_hook_resume_retry_reports_missing_chat_channel(
         daemon.stop()
 
     assert approved["codex_resume"]["status"] == "pending"
-    assert retried["status"] == "skipped"
-    assert retried["reason"] == "workspace_not_available"
-    assert retried["strategy"] == "codex-headless-exec"
-    assert "Codex chat" in retried["message"]
+    assert retried["status"] == "failed"
+    assert retried["reason"] == "socket_not_available"
+    assert retried["strategy"] == "codex-app-server-thread"
+    assert "original chat" in retried["message"]
 
 
 def test_request_resume_status_endpoint_returns_persisted_result(tmp_path: Path) -> None:
@@ -563,7 +575,7 @@ def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_mi
             "/v1/requests/req-retry/approve",
             {"scope": "artifact", "reason": "reviewed"},
         )
-        assert initial["codex_resume"]["reason"] == "codex_home_not_available"
+        assert initial["codex_resume"]["reason"] == "socket_not_available"
 
         retried = _post_json(
             daemon.port,
@@ -579,11 +591,11 @@ def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_mi
     finally:
         daemon.stop()
 
-    assert retried["status"] == "skipped"
-    assert retried["strategy"] == "codex-headless-exec"
+    assert retried["status"] == "failed"
+    assert retried["strategy"] == "codex-app-server-thread"
     assert retried["attempt_count"] == 2
     assert status_code == 200
-    assert current["status"] == "skipped"
+    assert current["status"] == "failed"
 
 
 def test_request_resume_retry_is_idempotent_after_success(
@@ -632,26 +644,9 @@ def test_request_resume_retry_is_idempotent_after_success(
     assert send_calls == 1
 
 
-def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
+def test_codex_approve_fails_without_app_server_socket_and_never_starts_exec_resume(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    launched: list[list[str]] = []
-
-    class _FakeProcess:
-        pid = 6789
-
-    def _fake_popen(command, **_kwargs):
-        launched.append(command)
-        return _FakeProcess()
-
-    monkeypatch.setattr(
-        codex_app_server_module.shutil,
-        "which",
-        lambda command: "/usr/local/bin/codex" if command == "codex" else None,
-    )
-    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", _fake_popen)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-exec"), "2026-05-19T10:00:00+00:00")
     missing_socket = tmp_path / "missing-codex.sock"
@@ -681,13 +676,10 @@ def test_codex_approve_falls_back_to_exec_resume_when_socket_binding_is_missing(
     finally:
         daemon.stop()
 
-    assert payload["codex_resume"]["status"] == "sent"
-    assert payload["codex_resume"]["reason"] == "headless_resume_started"
-    assert payload["codex_resume"]["strategy"] == "codex-headless-exec"
-    assert "background" in payload["codex_resume"]["message"]
-    assert "open Codex App chat" in payload["codex_resume"]["message"]
-    assert launched[0][:5] == ["/usr/local/bin/codex", "exec", "resume", "--json", "--skip-git-repo-check"]
-    assert "--" in launched[0]
+    assert payload["codex_resume"]["status"] == "failed"
+    assert payload["codex_resume"]["reason"] == "socket_not_available"
+    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
+    assert "original chat" in payload["codex_resume"]["message"]
 
 
 def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
@@ -741,18 +733,7 @@ def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
 
 def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _fake_popen(*_args, **_kwargs):
-        raise OSError("spawn failed")
-
-    monkeypatch.setattr(
-        codex_app_server_module.shutil,
-        "which",
-        lambda command: "/usr/local/bin/codex" if command == "codex" else None,
-    )
-    monkeypatch.setattr(codex_app_server_module.subprocess, "Popen", _fake_popen)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-oserror"), "2026-05-19T10:00:00+00:00")
     missing_socket = tmp_path / "missing-codex.sock"
@@ -781,8 +762,8 @@ def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(
 
     assert payload["resolved"] is True
     assert payload["codex_resume"]["status"] == "failed"
-    assert payload["codex_resume"]["reason"] == "headless_resume_launch_failed"
-    assert "spawn failed" in payload["codex_resume"]["last_error"]
+    assert payload["codex_resume"]["reason"] == "socket_not_available"
+    assert payload["codex_resume"]["strategy"] == "codex-app-server-thread"
 
 
 def test_codex_approve_returns_app_server_failure_after_transport_error_reason(
