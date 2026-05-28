@@ -1177,8 +1177,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self._apply_cloud_app_sync_credentials(
             sync_url=self._optional_string(payload.get("sync_url")) or self._optional_string(payload.get("syncUrl")),
             sync_token=(
-                self._optional_string(payload.get("sync_token"))
-                or self._optional_string(payload.get("syncToken"))
+                self._optional_string(payload.get("sync_token")) or self._optional_string(payload.get("syncToken"))
             ),
             workspace_id=(
                 self._optional_string(payload.get("sync_workspace_id"))
@@ -1218,10 +1217,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         parsed = urlparse(sync_url)
         sync_origin = f"{parsed.scheme}://{parsed.netloc}"
-        if (
-            sync_origin not in _HOSTED_GUARD_DASHBOARD_ORIGINS
-            or not parsed.path.endswith("/api/guard/receipts/sync")
-        ):
+        if sync_origin not in _HOSTED_GUARD_DASHBOARD_ORIGINS or not parsed.path.endswith("/api/guard/receipts/sync"):
             return
         self.server.store.set_sync_credentials(  # type: ignore[attr-defined]
             sync_url=sync_url,

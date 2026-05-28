@@ -30,6 +30,7 @@ def merge_guard_launcher_env(env: Mapping[str, str] | None = None) -> dict[str, 
         merged[key] = value
     return merged
 
+
 def _merge_path_entries(left: str, right: str, relative_base: Path | None = None) -> str:
     values: list[str] = []
     for entry in [*left.split(os.pathsep), *right.split(os.pathsep)]:
