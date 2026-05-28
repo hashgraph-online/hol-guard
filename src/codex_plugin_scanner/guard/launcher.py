@@ -7,11 +7,15 @@ from collections.abc import Mapping
 from pathlib import Path
 
 
-def merge_guard_launcher_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Preserve launcher import context when Guard is invoked from source checkouts."""
+def merge_guard_launcher_env(env: Mapping[str, str] | None = None, *, pin_package: bool = False) -> dict[str, str]:
+    """Preserve launcher import context while optionally pinning the current package."""
 
     merged: dict[str, str] = {}
-    pythonpath = _normalize_launcher_pythonpath(os.environ.get("PYTHONPATH"))
+    pythonpath = (
+        str(Path(__file__).resolve().parents[2])
+        if pin_package
+        else _normalize_launcher_pythonpath(os.environ.get("PYTHONPATH"))
+    )
     if pythonpath:
         merged["PYTHONPATH"] = pythonpath
     if env is None:
