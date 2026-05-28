@@ -1027,6 +1027,55 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _latest_cloud_sync_snapshot(self) -> dict[str, object]:
+        latest_payload = self.server.store.get_sync_payload("headless_app_sync_summary")  # type: ignore[attr-defined]
+        if not isinstance(latest_payload, dict):
+            latest_payload = self.server.store.get_sync_payload("sync_summary")  # type: ignore[attr-defined]
+        if isinstance(latest_payload, dict):
+            return dict(latest_payload)
+        return {}
+
+    def _headless_reconnect_payload(
+        self,
+        *,
+        cloud_sync: dict[str, object],
+        location_id: str | None,
+    ) -> dict[str, object]:
+        runtime_summary = self.server.store.get_sync_payload("runtime_session_summary")  # type: ignore[attr-defined]
+        runtime = runtime_summary if isinstance(runtime_summary, dict) else {}
+        latest_cloud_sync = self._latest_cloud_sync_snapshot()
+        cloud_sync_status = self._optional_string(cloud_sync.get("status")) or "unknown"
+        if cloud_sync_status in {"queued", "in_progress"}:
+            reconciliation_status = cloud_sync_status
+        elif cloud_sync_status == "not_configured":
+            reconciliation_status = "not_configured"
+        elif cloud_sync_status == "synced":
+            reconciliation_status = "synced"
+        else:
+            reconciliation_status = "pending"
+        return {
+            "correlation_id": str(uuid.uuid4()),
+            "freshness": {
+                "last_receipt_sync_at": self._optional_string(latest_cloud_sync.get("synced_at")),
+                "last_runtime_sync_at": (
+                    self._optional_string(runtime.get("runtime_session_synced_at"))
+                    or self._optional_string(runtime.get("synced_at"))
+                ),
+                "local_guard_online_at": self._optional_string(runtime.get("local_guard_online_at")),
+            },
+            "latest_cloud_sync": latest_cloud_sync,
+            "local_identity": {
+                "daemon_id": self._optional_string(runtime.get("runtime_device_id")),
+                "daemon_version": __version__,
+                "hostname": platform.node() or None,
+                "ip_address": None,
+                "private_ip_address": None,
+                "public_ip_address": None,
+            },
+            "location_id": location_id,
+            "reconciliation_status": reconciliation_status,
+        }
+
     def _headless_app_action_payload(
         self,
         *,
@@ -1065,11 +1114,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 operation=operation,
                 error_code=str(error),
             )
+        location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
+            payload.get("locationId")
+        )
         receipt = self._record_headless_receipt(
             harness=adapter.harness,
             operation=operation,
             payload=payload,
             result=result,
+            location_id=location_id,
             workspace_id=self._optional_string(payload.get("workspace_id")),
         )
         cloud_sync = _queue_headless_cloud_sync(store=self.server.store)  # type: ignore[attr-defined]
@@ -1084,6 +1137,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 operation=operation,
                 result=result,
                 receipt=receipt,
+            ),
+            "reconnect": self._headless_reconnect_payload(
+                cloud_sync=cloud_sync,
+                location_id=location_id,
             ),
             "status": "completed",
         }
@@ -1123,11 +1180,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 auto_start=True,
                 include_dashboard_session_token=True,
                 local_origin=local_origin,
+                location_id=self._optional_string(decoded.get("location_id")),
                 workspace_id=self._optional_string(decoded.get("workspace_id")) or "",
             )
             return
         is_document_navigation = self._browser_document_navigation_is_allowed()
         is_hosted_referrer = self._hosted_dashboard_referrer_is_allowed()
+        location_id = self._optional_string(handoff_query.get("location_id", [None])[-1]) or self._optional_string(
+            handoff_query.get("locationId", [None])[-1]
+        )
         workspace_id = self._optional_string(handoff_query.get("workspaceId", [None])[-1]) or ""
         self._apply_cloud_app_sync_credentials(
             sync_url=self._optional_string(handoff_query.get("syncUrl", [None])[-1]),
@@ -1142,11 +1203,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 handoff_token=self._cloud_app_handoff_token(
                     harness=adapter.harness,
                     action_path=action_path,
+                    location_id=location_id,
                     workspace_id=workspace_id,
                 ),
                 auto_start=navigation_allowed,
                 include_dashboard_session_token=is_document_navigation or not navigation_allowed,
                 local_origin=local_origin,
+                location_id=location_id,
                 workspace_id=workspace_id,
             )
             return
@@ -1169,6 +1232,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if action_path not in _CLOUD_APP_HANDOFF_ACTIONS:
             self._write_json({"error": "unsupported_handoff_action"}, status=400)
             return
+        location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
+            payload.get("locationId")
+        )
         workspace_id = (
             self._optional_string(payload.get("workspace_id"))
             or self._optional_string(payload.get("workspaceId"))
@@ -1189,6 +1255,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         handoff_token = self._cloud_app_handoff_token(
             harness=adapter.harness,
             action_path=action_path,
+            location_id=location_id,
             workspace_id=workspace_id,
         )
         handoff_query = urlencode({"handoffToken": handoff_token})
@@ -1197,6 +1264,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "daemon_version": __version__,
                 "handoff_url": f"{local_origin}/v1/apps/{adapter.harness}/cloud?{handoff_query}",
                 "local_origin": local_origin,
+                "location_id": location_id,
                 "status": "ready",
             },
             extra_headers={
@@ -1231,16 +1299,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         harness: str,
         action_path: str,
+        location_id: str | None,
         workspace_id: str,
     ) -> str:
+        claims: dict[str, object] = {
+            "action_path": action_path,
+            "harness": harness,
+            "nonce": secrets.token_urlsafe(16),
+            "version": "guard-cloud-app-handoff.v1",
+            "workspace_id": workspace_id,
+        }
+        if isinstance(location_id, str) and location_id.strip():
+            claims["location_id"] = location_id
         payload_json = json.dumps(
             {
-                "action_path": action_path,
+                **claims,
                 "expires_at": int(time.time()) + _CLOUD_APP_HANDOFF_TOKEN_TTL_SECONDS,
-                "harness": harness,
-                "nonce": secrets.token_urlsafe(16),
-                "version": "guard-cloud-app-handoff.v1",
-                "workspace_id": workspace_id,
             },
             separators=(",", ":"),
         )
@@ -1273,13 +1347,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         action_path = self._optional_string(decoded.get("action_path"))
         token_harness = self._optional_string(decoded.get("harness"))
+        token_location_id = self._optional_string(decoded.get("location_id"))
+        requested_location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
+            payload.get("locationId")
+        )
         if token_harness != harness or action_path not in _CLOUD_APP_HANDOFF_ACTIONS:
             self._write_json({"error": "invalid_handoff_scope"}, status=403)
             return
+        if requested_location_id is not None and requested_location_id != token_location_id:
+            self._write_json({"error": "invalid_handoff_scope"}, status=403)
+            return
+        location_id = token_location_id or requested_location_id
         status, action_payload = self._headless_app_action_payload(
             action_path=action_path,
             payload={
                 "harness": harness,
+                "location_id": location_id,
                 "operation": _HEADLESS_APP_ACTIONS[action_path][0],
                 "workspace_id": self._optional_string(decoded.get("workspace_id")) or "",
             },
@@ -1295,6 +1378,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         auto_start: bool,
         include_dashboard_session_token: bool,
         local_origin: str,
+        location_id: str | None,
         workspace_id: str,
     ) -> None:
         operation = _HEADLESS_APP_ACTIONS[action_path][0]
@@ -1309,11 +1393,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "autoStart": auto_start,
             "workspaceId": workspace_id,
         }
+        if isinstance(location_id, str) and location_id:
+            script_payload_dict["locationId"] = location_id
         success_fragment_args = ""
         if include_dashboard_session_token:
             script_payload_dict["dashboardSessionToken"] = self._cloud_app_dashboard_session_token(
                 action_path=action_path,
                 harness=harness,
+                location_id=location_id,
                 workspace_id=workspace_id,
             )
             success_fragment_args = """, {
@@ -1425,9 +1512,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
           headers: {{
             'Content-Type': 'application/json',
           }},
-          body: JSON.stringify({{
-            handoff_token: data.handoffToken,
-          }}),
+          body: JSON.stringify((() => {{
+            const handoffPayload = {{
+              handoff_token: data.handoffToken,
+            }};
+            if (typeof data.locationId === 'string' && data.locationId.length > 0) {{
+              handoffPayload.location_id = data.locationId;
+            }}
+            return handoffPayload;
+          }})()),
         }});
         const payload = await response.json().catch(() => ({{}}));
         if (!response.ok) {{
@@ -1477,16 +1570,28 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
-    def _cloud_app_dashboard_session_token(self, *, action_path: str, harness: str, workspace_id: str) -> str:
+    def _cloud_app_dashboard_session_token(
+        self,
+        *,
+        action_path: str,
+        harness: str,
+        location_id: str | None,
+        workspace_id: str,
+    ) -> str:
+        claims: dict[str, object] = {
+            "action_path": action_path,
+            "allowed_action_paths": sorted(_cloud_app_dashboard_session_actions(action_path)),
+            "harness": harness,
+            "version": "guard-local-daemon-session.v1",
+            "workspace_id": workspace_id,
+        }
+        if isinstance(location_id, str) and location_id.strip():
+            claims["location_id"] = location_id
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=_CLOUD_APP_DASHBOARD_SESSION_TTL_SECONDS)
         payload_json = json.dumps(
             {
-                "action_path": action_path,
-                "allowed_action_paths": sorted(_cloud_app_dashboard_session_actions(action_path)),
+                **claims,
                 "expires_at": expires_at.isoformat(),
-                "harness": harness,
-                "version": "guard-local-daemon-session.v1",
-                "workspace_id": workspace_id,
             },
             separators=(",", ":"),
         )
@@ -1801,6 +1906,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self,
         *,
         harness: str,
+        location_id: str | None = None,
         operation: str,
         payload: dict[str, object],
         result: dict[str, object],
@@ -1809,6 +1915,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         material = json.dumps(
             {
                 "harness": harness,
+                "location_id": location_id,
                 "operation": operation,
                 "result_keys": sorted(result.keys()),
                 "workspace_id": workspace_id,
@@ -1830,6 +1937,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             scanner_evidence=(
                 {
                     "operation": operation,
+                    "location_id": location_id,
                     "workspace_id": workspace_id,
                     "status": "completed",
                 },
@@ -2749,12 +2857,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if payload is None:
                 return False
             harness = self._optional_string(claims.get("harness"))
+            location_id = self._optional_string(claims.get("location_id"))
             workspace_id = self._optional_string(claims.get("workspace_id")) or ""
             payload_harness = self._optional_string(payload.get("harness"))
+            payload_location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
+                payload.get("locationId")
+            )
             payload_workspace_id = self._optional_string(payload.get("workspace_id")) or ""
             return (
                 harness is not None
                 and payload_harness == harness
+                and (not location_id or payload_location_id == location_id)
                 and (not workspace_id or payload_workspace_id == workspace_id)
             )
         supply_chain_action = self._supply_chain_claim_action_for_request(path, path_parts)
