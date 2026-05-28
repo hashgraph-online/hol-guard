@@ -436,6 +436,40 @@ def test_cloud_app_handoff_serves_token_authenticated_local_action_page(tmp_path
     assert auth_token not in body
 
 
+def test_cloud_app_handoff_allows_document_navigation_without_referrer(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=connect",
+                method="GET",
+                origin=None,
+                extra_headers={
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Site": "cross-site",
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert "HOL Guard local handoff" in body
+    assert "handoffToken" in body
+    assert "dashboardSessionToken" in body
+    script_payload = _handoff_script_payload(body)
+    browser_token = script_payload["dashboardSessionToken"]
+    assert isinstance(browser_token, str)
+    assert browser_token.startswith("gld1.")
+    assert auth_token not in body
+
+
 def test_cloud_app_handoff_start_mints_handoff_url_for_hosted_dashboard(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -472,6 +506,71 @@ def test_cloud_app_handoff_start_mints_handoff_url_for_hosted_dashboard(tmp_path
     assert "HOL Guard local handoff" in body
     assert "handoffToken" in body
     assert "dashboardSessionToken" in body
+
+
+def test_cloud_app_handoff_start_saves_sync_credentials(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={
+                    "action": "connect",
+                    "sync_url": "https://hol.org/api/guard/receipts/sync",
+                    "sync_token": "guard-runtime-token",
+                    "sync_workspace_id": "workspace-123",
+                },
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["status"] == "ready"
+    credentials = store.get_sync_credentials()
+    assert credentials is not None
+    assert credentials["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+    assert credentials["token"] == "guard-runtime-token"
+
+
+def test_cloud_app_handoff_navigation_saves_sync_credentials(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    path = (
+        "/v1/apps/codex/cloud?action=connect&workspaceId=workspace-123"
+        "&syncUrl=https%3A%2F%2Fhol.org%2Fapi%2Fguard%2Freceipts%2Fsync"
+        "&syncToken=guard-runtime-token&syncWorkspaceId=workspace-123"
+    )
+    daemon.start()
+    try:
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                path,
+                method="GET",
+                origin=None,
+                extra_headers={
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Site": "cross-site",
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert "HOL Guard local handoff" in body
+    assert "guard-runtime-token" not in body
+    credentials = store.get_sync_credentials()
+    assert credentials is not None
+    assert credentials["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+    assert credentials["token"] == "guard-runtime-token"
 
 
 def test_cloud_app_handoff_start_requires_dashboard_session(tmp_path: Path) -> None:
@@ -793,6 +892,38 @@ def test_cloud_app_handoff_redirects_to_guard_cloud_when_referrer_and_fetch_meta
     assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "https://hol.org/guard/apps/codex"
     assert parse_qs(parsed.query)["guardDaemon"] == [f"http://127.0.0.1:{daemon.port}"]
     assert auth_token not in location
+
+
+def test_cloud_app_handoff_workspace_fallback_requires_local_continue_when_fetch_metadata_missing(
+    tmp_path: Path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud?action=connect&workspaceId=workspace-alpha",
+                method="GET",
+                origin=None,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert "HOL Guard local handoff" in body
+    assert "Continue setup" in body
+    script_payload = _handoff_script_payload(body)
+    assert script_payload["autoStart"] is False
+    assert script_payload["workspaceId"] == "workspace-alpha"
+    browser_token = script_payload["dashboardSessionToken"]
+    assert isinstance(browser_token, str)
+    assert browser_token.startswith("gld1.")
+    assert auth_token not in body
 
 
 def test_cloud_app_handoff_redirects_to_guard_cloud_for_silent_fetch(tmp_path: Path) -> None:
