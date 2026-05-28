@@ -184,7 +184,7 @@ def _managed_hook_entry(context: HarnessContext, status_message: str) -> dict[st
         "command": _hook_command(context),
         "timeout": 30,
         "statusMessage": status_message,
-        "env": merge_guard_launcher_env(),
+        "env": merge_guard_launcher_env(pin_package=True),
     }
 
 

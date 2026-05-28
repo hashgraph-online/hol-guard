@@ -7,11 +7,15 @@ from collections.abc import Mapping
 from pathlib import Path
 
 
-def merge_guard_launcher_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Pin Guard subprocesses to the package that wrote the launcher config."""
+def merge_guard_launcher_env(env: Mapping[str, str] | None = None, *, pin_package: bool = False) -> dict[str, str]:
+    """Preserve launcher import context while optionally pinning the current package."""
 
     merged: dict[str, str] = {}
-    pythonpath = str(Path(__file__).resolve().parents[2])
+    pythonpath = (
+        str(Path(__file__).resolve().parents[2])
+        if pin_package
+        else _normalize_launcher_pythonpath(os.environ.get("PYTHONPATH"))
+    )
     if pythonpath:
         merged["PYTHONPATH"] = pythonpath
     if env is None:
@@ -29,6 +33,10 @@ def merge_guard_launcher_env(env: Mapping[str, str] | None = None) -> dict[str, 
             continue
         merged[key] = value
     return merged
+
+
+def _normalize_launcher_pythonpath(value: str | None) -> str:
+    return _merge_path_entries("", value or "", relative_base=Path.cwd())
 
 
 def _merge_path_entries(left: str, right: str, relative_base: Path | None = None) -> str:
