@@ -74,9 +74,11 @@ def test_guard_codex_hook_command_does_not_pin_custom_guard_home_in_real_global_
     assert str(stale_guard_home) not in command
 
 
-def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_path, capsys):
+def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
+    source_root = str(Path(__file__).resolve().parents[1] / "src")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path / "stale-site-packages"))
     _build_guard_fixture(home_dir, workspace_dir)
 
     rc = main(
@@ -136,16 +138,19 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "codex_plugin_scanner.cli" in prompt_handler["command"]
     assert "hook" in prompt_handler["command"]
     assert "codex" in prompt_handler["command"]
+    assert prompt_handler["env"]["PYTHONPATH"] == source_root
     handler = hooks_payload["PreToolUse"][0]["hooks"][0]
     assert handler["type"] == "command"
     assert "codex_plugin_scanner.cli" in handler["command"]
     assert "hook" in handler["command"]
     assert "codex" in handler["command"]
+    assert handler["env"]["PYTHONPATH"] == source_root
     permission_handler = hooks_payload["PermissionRequest"][0]["hooks"][0]
     assert permission_handler["type"] == "command"
     assert "codex_plugin_scanner.cli" in permission_handler["command"]
     assert "hook" in permission_handler["command"]
     assert "codex" in permission_handler["command"]
+    assert permission_handler["env"]["PYTHONPATH"] == source_root
     zshenv_text = (home_dir / ".zshenv").read_text(encoding="utf-8")
     shell_guard_text = (home_dir / "managed" / "codex" / "codex-zshenv-guard.zsh").read_text(encoding="utf-8")
     bash_guard_text = (home_dir / "managed" / "codex" / "codex-bashenv-guard.bash").read_text(encoding="utf-8")

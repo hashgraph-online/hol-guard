@@ -119,6 +119,11 @@ def build_harness_setup_plan(
         "steps": [step.to_dict() for step in steps],
         "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
     }
+    if dry_run and action in {"connect", "repair"}:
+        payload["dry_run_effect"] = (
+            "No app config was changed and Guard Cloud was not connected. "
+            f"Run hol-guard apps {action} {adapter.harness} without --dry-run to finish setup."
+        )
     if action == "uninstall":
         confirmation_phrase = uninstall_confirmation_token(adapter.harness)
         payload["confirmation_phrase"] = confirmation_phrase
