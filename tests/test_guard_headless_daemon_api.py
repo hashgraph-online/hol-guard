@@ -670,6 +670,51 @@ def test_cloud_app_handoff_page_mints_scoped_browser_session_token(tmp_path: Pat
     assert decoded["allowed_action_paths"] == ["connect", "status", "test"]
 
 
+def test_cloud_app_handoff_start_carries_location_scope_into_tokens(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        start_status, start_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={
+                    "action": "connect",
+                    "location_id": "location-alpha",
+                    "workspace_id": "workspace-1",
+                },
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+        assert start_status == 200
+        handoff_url = start_payload["handoff_url"]
+        assert isinstance(handoff_url, str)
+        handoff_query = parse_qs(urlparse(handoff_url).query)
+        handoff_token = handoff_query["handoffToken"][0]
+        handoff_claims = _decode_token_payload(handoff_token)
+        assert handoff_claims["location_id"] == "location-alpha"
+        status, body = _read_text_response(
+            _request(
+                daemon.port,
+                handoff_url.removeprefix(f"http://127.0.0.1:{daemon.port}"),
+                method="GET",
+                origin=None,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    script_payload = _handoff_script_payload(body)
+    assert script_payload["locationId"] == "location-alpha"
+    browser_token = script_payload["dashboardSessionToken"]
+    assert isinstance(browser_token, str)
+    browser_claims = _decode_token_payload(browser_token)
+    assert browser_claims["location_id"] == "location-alpha"
+
+
 def test_cloud_app_handoff_referrer_page_does_not_mint_browser_session_token(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -691,6 +736,94 @@ def test_cloud_app_handoff_referrer_page_does_not_mint_browser_session_token(tmp
     script_payload = _handoff_script_payload(body)
     assert "dashboardSessionToken" not in script_payload
     assert "guard-token" not in body
+
+
+def test_cloud_app_handoff_completion_rejects_location_scope_mismatch(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        start_status, start_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={
+                    "action": "connect",
+                    "location_id": "location-alpha",
+                    "workspace_id": "workspace-1",
+                },
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+        assert start_status == 200
+        handoff_url = start_payload["handoff_url"]
+        assert isinstance(handoff_url, str)
+        handoff_query = parse_qs(urlparse(handoff_url).query)
+        handoff_token = handoff_query["handoffToken"][0]
+        complete_status, complete_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/complete",
+                payload={
+                    "handoff_token": handoff_token,
+                    "location_id": "location-other",
+                },
+                token=None,
+                origin=f"http://127.0.0.1:{daemon.port}",
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert complete_status == 403
+    assert complete_payload["error"] == "invalid_handoff_scope"
+
+
+def test_cloud_app_handoff_completion_returns_reconnect_reconciliation_payload(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        start_status, start_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/start",
+                payload={
+                    "action": "connect",
+                    "location_id": "location-alpha",
+                    "workspace_id": "workspace-1",
+                },
+                origin="https://hol.org",
+                token=_dashboard_token_for(store),
+            ),
+        )
+        assert start_status == 200
+        handoff_url = start_payload["handoff_url"]
+        assert isinstance(handoff_url, str)
+        handoff_query = parse_qs(urlparse(handoff_url).query)
+        handoff_token = handoff_query["handoffToken"][0]
+        complete_status, complete_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/apps/codex/cloud/complete",
+                payload={
+                    "handoff_token": handoff_token,
+                    "location_id": "location-alpha",
+                },
+                token=None,
+                origin=f"http://127.0.0.1:{daemon.port}",
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert complete_status == 200
+    reconnect = complete_payload["reconnect"]
+    assert reconnect["location_id"] == "location-alpha"
+    assert reconnect["reconciliation_status"] in {"queued", "in_progress", "not_configured", "synced"}
+    assert isinstance(reconnect["latest_cloud_sync"], dict)
+    assert isinstance(reconnect["freshness"], dict)
 
 
 def test_cloud_app_handoff_scoped_session_rejects_settings_reset(tmp_path: Path) -> None:
