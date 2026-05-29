@@ -13,19 +13,21 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     build_harness_verification,
     cursor_local_action_payload,
 )
+from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _context(tmp_path: Path) -> HarnessContext:
+def _context(tmp_path: Path, *, workspace_cursor: bool = True) -> HarnessContext:
     home = tmp_path / "home"
     workspace = tmp_path / "workspace"
     guard_home = tmp_path / "guard-home"
     home.mkdir()
     workspace.mkdir()
     guard_home.mkdir()
-    cursor_dir = workspace / ".cursor"
-    cursor_dir.mkdir()
-    (cursor_dir / "mcp.json").write_text('{"mcpServers":{}}', encoding="utf-8")
+    if workspace_cursor:
+        cursor_dir = workspace / ".cursor"
+        cursor_dir.mkdir()
+        (cursor_dir / "mcp.json").write_text('{"mcpServers":{}}', encoding="utf-8")
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=guard_home)
 
 
@@ -69,3 +71,62 @@ def test_cursor_local_actions_reject_unknown_surfaces(tmp_path: Path) -> None:
         assert "Unsupported Cursor surface" in str(error)
     else:
         raise AssertionError("Expected unsupported Cursor surface to fail")
+
+
+def test_cursor_install_all_reports_auto_detected_cursor_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.install_commands.detect_all",
+        lambda _: [
+            HarnessDetection(
+                harness="cursor",
+                installed=False,
+                command_available=False,
+                config_paths=(str(context.workspace_dir / ".cursor" / "mcp.json"),),
+                artifacts=(),
+            )
+        ],
+    )
+
+    payload = apply_managed_install(
+        "install",
+        None,
+        True,
+        context,
+        store,
+        str(context.workspace_dir),
+        "2026-05-29T12:00:00Z",
+    )
+
+    assert payload["managed_install"]["harness"] == "cursor"
+    assert payload["cursor_action"]["app_id"] == "cursor"
+    assert payload["cursor_action"]["status"] == "protected"
+
+
+def test_cursor_editor_detection_uses_global_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    context = _context(tmp_path, workspace_cursor=False)
+    cursor_dir = context.home_dir / ".cursor"
+    cursor_dir.mkdir()
+    (cursor_dir / "mcp.json").write_text('{"mcpServers":{}}', encoding="utf-8")
+
+    payload = cursor_local_action_payload(
+        action="test",
+        surface="editor",
+        context=context,
+        protected=False,
+    )
+
+    assert payload["surface_statuses"] == [
+        {"surface": "editor", "status": "detected_unprotected"},
+        {"surface": "cli", "status": "not_detected"},
+    ]
+    assert payload["evidence"]["redactedPath"] == "$HOME/.cursor/mcp.json"

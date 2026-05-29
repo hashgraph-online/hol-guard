@@ -49,7 +49,9 @@ def apply_managed_install(
         skill_scan = scan_workspace_skills(context.workspace_dir, store, now)
         if skill_scan:
             payload["skill_scan"] = skill_scan
-    if requested_harness == "cursor" and len(managed_installs) == 1:
+    if len(managed_installs) == 1 and (
+        requested_harness == "cursor" or managed_installs[0].get("harness") == "cursor"
+    ):
         payload["cursor_action"] = cursor_local_action_payload(
             action=command,
             surface=None,
@@ -234,8 +236,7 @@ def _cursor_surface(surface: str | None) -> str:
 
 
 def _cursor_surface_statuses(context: HarnessContext, *, protected: bool) -> list[dict[str, str]]:
-    editor_path = context.workspace_dir / ".cursor" / "mcp.json" if context.workspace_dir is not None else None
-    editor_detected = editor_path is not None and editor_path.exists()
+    editor_detected = any(path.exists() for path in _cursor_editor_config_paths(context))
     cli_detected = get_adapter("cursor").resolved_executable(context) is not None
     return [
         {
@@ -260,9 +261,18 @@ def _cursor_status(detected: bool, *, protected: bool) -> str:
 def _cursor_redacted_path(context: HarnessContext, surface: str) -> str:
     if surface == "cli":
         return "PATH:cursor-agent"
-    if context.workspace_dir is not None:
+    workspace_path = context.workspace_dir / ".cursor" / "mcp.json" if context.workspace_dir is not None else None
+    if workspace_path is not None and workspace_path.exists():
         return "$WORKSPACE/.cursor/mcp.json"
     return "$HOME/.cursor/mcp.json"
+
+
+def _cursor_editor_config_paths(context: HarnessContext) -> tuple[Path, ...]:
+    paths: list[Path] = []
+    if context.workspace_dir is not None:
+        paths.append(context.workspace_dir / ".cursor" / "mcp.json")
+    paths.append(context.home_dir / ".cursor" / "mcp.json")
+    return tuple(paths)
 
 
 def uninstall_confirmation_token(harness: str) -> str:
