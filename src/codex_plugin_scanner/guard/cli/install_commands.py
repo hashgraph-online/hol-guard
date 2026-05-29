@@ -49,6 +49,13 @@ def apply_managed_install(
         skill_scan = scan_workspace_skills(context.workspace_dir, store, now)
         if skill_scan:
             payload["skill_scan"] = skill_scan
+    if requested_harness == "cursor" and len(managed_installs) == 1:
+        payload["cursor_action"] = cursor_local_action_payload(
+            action=command,
+            surface=None,
+            context=context,
+            protected=active,
+        )
     return payload
 
 
@@ -102,6 +109,7 @@ def build_harness_setup_plan(
     context: HarnessContext,
     *,
     dry_run: bool,
+    surface: str | None = None,
 ) -> dict[str, object]:
     adapter = get_adapter(requested_harness)
     contract = adapter.setup_contract()
@@ -138,6 +146,13 @@ def build_harness_setup_plan(
                 "requires_confirmation": True,
             }
         ]
+    if adapter.harness == "cursor":
+        payload["cursor_action"] = cursor_local_action_payload(
+            action=action,
+            surface=surface,
+            context=context,
+            protected=False,
+        )
     return payload
 
 
@@ -145,10 +160,11 @@ def build_harness_verification(
     requested_harness: str,
     context: HarnessContext,
     store: GuardStore | None = None,
+    surface: str | None = None,
 ) -> dict[str, object]:
     adapter = get_adapter(requested_harness)
     detection = _safe_setup_detection(adapter, context, store)
-    return {
+    payload: dict[str, object] = {
         "harness": adapter.harness,
         "safe": True,
         "contract": adapter.setup_contract().to_dict(),
@@ -163,6 +179,90 @@ def build_harness_verification(
             "steps": [step.to_dict() for step in adapter.verify_steps()],
         },
     }
+    if adapter.harness == "cursor":
+        payload["cursor_action"] = cursor_local_action_payload(
+            action="test",
+            surface=surface,
+            context=context,
+            protected=bool(detection["installed"]),
+        )
+    return payload
+
+
+def cursor_local_action_payload(
+    *,
+    action: str,
+    surface: str | None,
+    context: HarnessContext,
+    protected: bool,
+) -> dict[str, object]:
+    selected_surface = _cursor_surface(surface)
+    statuses = _cursor_surface_statuses(context, protected=protected)
+    selected_status = next(item["status"] for item in statuses if item["surface"] == selected_surface)
+    action_scope = f"cursor:{selected_surface}:{action}"
+    return {
+        "app_id": "cursor",
+        "action": action,
+        "surface": selected_surface,
+        "status": selected_status,
+        "surface_statuses": statuses,
+        "sync": {
+            "surface": selected_surface,
+            "status": selected_status,
+            "lastSeenAt": None,
+            "lastReceiptSyncedAt": None,
+            "daemonReachability": "local",
+            "protectedLocationId": None,
+        },
+        "evidence": {
+            "receiptId": None,
+            "artifactId": action_scope,
+            "actionScope": action_scope,
+            "surface": selected_surface,
+            "redactedPath": _cursor_redacted_path(context, selected_surface),
+            "policyDecision": "monitor",
+        },
+    }
+
+
+def _cursor_surface(surface: str | None) -> str:
+    if surface is None:
+        return "editor"
+    if surface in {"editor", "cli"}:
+        return surface
+    raise ValueError(f"Unsupported Cursor surface: {surface}")
+
+
+def _cursor_surface_statuses(context: HarnessContext, *, protected: bool) -> list[dict[str, str]]:
+    editor_path = context.workspace_dir / ".cursor" / "mcp.json" if context.workspace_dir is not None else None
+    editor_detected = editor_path is not None and editor_path.exists()
+    cli_detected = get_adapter("cursor").resolved_executable(context) is not None
+    return [
+        {
+            "surface": "editor",
+            "status": _cursor_status(editor_detected, protected=protected),
+        },
+        {
+            "surface": "cli",
+            "status": _cursor_status(cli_detected, protected=protected),
+        },
+    ]
+
+
+def _cursor_status(detected: bool, *, protected: bool) -> str:
+    if protected and detected:
+        return "protected"
+    if detected:
+        return "detected_unprotected"
+    return "not_detected"
+
+
+def _cursor_redacted_path(context: HarnessContext, surface: str) -> str:
+    if surface == "cli":
+        return "PATH:cursor-agent"
+    if context.workspace_dir is not None:
+        return "$WORKSPACE/.cursor/mcp.json"
+    return "$HOME/.cursor/mcp.json"
 
 
 def uninstall_confirmation_token(harness: str) -> str:
