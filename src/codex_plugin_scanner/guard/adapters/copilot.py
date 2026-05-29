@@ -48,14 +48,14 @@ _INLINE_GUARD_ARGS_PATTERN = re.compile(r"json\.loads\((?P<payload>'(?:[^'\\]|\\
 
 
 def _parse_copilot_json_text(raw_text: str) -> dict[str, object] | None:
-    for candidate in (raw_text, _strip_jsonc(raw_text)):
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
         try:
-            payload = json.loads(candidate)
+            payload = json.loads(_strip_jsonc(raw_text))
         except json.JSONDecodeError:
-            continue
-        if isinstance(payload, dict):
-            return payload
-    return None
+            return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _copilot_json_payload(path: Path) -> dict[str, object]:
