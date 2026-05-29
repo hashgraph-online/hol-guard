@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import glob as globlib
+import json
 from pathlib import Path
 
 from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessAdapter, HarnessContext
 from ..adapters.contracts import contract_for
+from ..adapters.cursor import CursorHarnessAdapter
+from ..adapters.mcp_servers import is_guard_proxy_command
 from ..consumer import detect_all
 from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk
 from ..store import GuardStore
@@ -27,6 +30,8 @@ def apply_managed_install(
     store: GuardStore,
     workspace: str | None,
     now: str,
+    *,
+    surface: str | None = None,
 ) -> dict[str, object]:
     targets = _resolve_targets(command, requested_harness, install_all, context, store)
     active = command == "install"
@@ -34,7 +39,15 @@ def apply_managed_install(
     for harness in targets:
         adapter = get_adapter(harness)
         canonical_harness = adapter.harness
-        manifest = adapter.install(context) if active else adapter.uninstall(context)
+        if isinstance(adapter, CursorHarnessAdapter):
+            selected_surface = _cursor_surface(surface)
+            manifest = (
+                adapter.install(context, surface=selected_surface)
+                if active
+                else adapter.uninstall(context, surface=selected_surface)
+            )
+        else:
+            manifest = adapter.install(context) if active else adapter.uninstall(context)
         store.set_managed_install(canonical_harness, active, workspace, manifest, now)
         managed_install = store.get_managed_install(canonical_harness)
         if managed_install is not None:
@@ -52,9 +65,9 @@ def apply_managed_install(
     if len(managed_installs) == 1 and (requested_harness == "cursor" or managed_installs[0].get("harness") == "cursor"):
         payload["cursor_action"] = cursor_local_action_payload(
             action=command,
-            surface=None,
+            surface=surface,
             context=context,
-            protected=active,
+            protected_surfaces=_cursor_protected_surfaces(managed_installs) if active else (),
         )
     return payload
 
@@ -69,7 +82,7 @@ def _managed_install_payload(managed_install: dict[str, object]) -> dict[str, ob
         payload["primary_integration"] = "native_hooks" if protection_contract.native_approval else "browser_fallback"
     manifest = payload.get("manifest")
     if isinstance(manifest, dict):
-        for key in ("config_path", "managed_config_path", "shim_path", "mode"):
+        for key in ("config_path", "managed_config_path", "shim_path", "shim_command", "mode", "surface"):
             value = manifest.get(key)
             if value is not None:
                 payload[key] = value
@@ -151,7 +164,7 @@ def build_harness_setup_plan(
             action=action,
             surface=surface,
             context=context,
-            protected=False,
+            protected_surfaces=(),
         )
     return payload
 
@@ -184,7 +197,7 @@ def build_harness_verification(
             action="test",
             surface=surface,
             context=context,
-            protected=bool(detection["installed"]),
+            protected_surfaces=_cursor_protected_surfaces_from_store(adapter.harness, store, detection),
         )
     return payload
 
@@ -194,10 +207,14 @@ def cursor_local_action_payload(
     action: str,
     surface: str | None,
     context: HarnessContext,
-    protected: bool,
+    protected: bool | None = None,
+    protected_surfaces: tuple[str, ...] = (),
 ) -> dict[str, object]:
     selected_surface = _cursor_surface(surface)
-    statuses = _cursor_surface_statuses(context, protected=protected)
+    selected_protected_surfaces = protected_surfaces
+    if protected is not None and protected:
+        selected_protected_surfaces = ("editor", "cli")
+    statuses = _cursor_surface_statuses(context, protected_surfaces=selected_protected_surfaces)
     selected_status = next(item["status"] for item in statuses if item["surface"] == selected_surface)
     action_scope = f"cursor:{selected_surface}:{action}"
     return {
@@ -233,17 +250,24 @@ def _cursor_surface(surface: str | None) -> str:
     raise ValueError(f"Unsupported Cursor surface: {surface}")
 
 
-def _cursor_surface_statuses(context: HarnessContext, *, protected: bool) -> list[dict[str, str]]:
+def _cursor_surface_statuses(
+    context: HarnessContext,
+    *,
+    protected_surfaces: tuple[str, ...],
+) -> list[dict[str, str]]:
     editor_detected = any(path.exists() for path in _cursor_editor_config_paths(context))
-    cli_detected = get_adapter("cursor").resolved_executable(context) is not None
+    cli_detected = _cursor_cli_detected(context)
+    protected = set(protected_surfaces)
+    editor_protected = "editor" in protected or _cursor_editor_protected(context)
+    cli_protected = "cli" in protected or _cursor_cli_protected(context)
     return [
         {
             "surface": "editor",
-            "status": _cursor_status(editor_detected, protected=protected),
+            "status": _cursor_status(editor_detected, protected=editor_protected),
         },
         {
             "surface": "cli",
-            "status": _cursor_status(cli_detected, protected=protected),
+            "status": _cursor_status(cli_detected, protected=cli_protected),
         },
     ]
 
@@ -271,6 +295,66 @@ def _cursor_editor_config_paths(context: HarnessContext) -> tuple[Path, ...]:
         paths.append(context.workspace_dir / ".cursor" / "mcp.json")
     paths.append(context.home_dir / ".cursor" / "mcp.json")
     return tuple(paths)
+
+
+def _cursor_cli_detected(context: HarnessContext) -> bool:
+    if get_adapter("cursor").resolved_executable(context) is not None:
+        return True
+    return (context.guard_home / "bin" / "guard-cursor-agent").exists()
+
+
+def _cursor_editor_protected(context: HarnessContext) -> bool:
+    for config_path in _cursor_editor_config_paths(context):
+        try:
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        mcp_servers = payload.get("mcpServers")
+        if not isinstance(mcp_servers, dict):
+            continue
+        for server_config in mcp_servers.values():
+            if not isinstance(server_config, dict):
+                continue
+            command = server_config.get("command")
+            args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
+            if is_guard_proxy_command(command if isinstance(command, str) else None, args):
+                return True
+    return False
+
+
+def _cursor_cli_protected(context: HarnessContext) -> bool:
+    return (context.guard_home / "bin" / "guard-cursor-agent").exists()
+
+
+def _cursor_protected_surfaces(managed_installs: list[dict[str, object]]) -> tuple[str, ...]:
+    surfaces: list[str] = []
+    for managed_install in managed_installs:
+        surface = managed_install.get("surface")
+        if surface in {"editor", "cli"} and surface not in surfaces:
+            surfaces.append(surface)
+            continue
+        manifest = managed_install.get("manifest")
+        if not isinstance(manifest, dict):
+            continue
+        manifest_surface = manifest.get("surface")
+        if manifest_surface in {"editor", "cli"} and manifest_surface not in surfaces:
+            surfaces.append(manifest_surface)
+    return tuple(surfaces)
+
+
+def _cursor_protected_surfaces_from_store(
+    harness: str,
+    store: GuardStore | None,
+    detection: dict[str, object],
+) -> tuple[str, ...]:
+    if not bool(detection["installed"]):
+        return ()
+    managed = store.get_managed_install(harness) if store is not None else None
+    if not isinstance(managed, dict):
+        return ("editor", "cli")
+    return _cursor_protected_surfaces([_managed_install_payload(managed)])
 
 
 def uninstall_confirmation_token(harness: str) -> str:
