@@ -1049,6 +1049,13 @@ class CopilotMcpGuardProxy(ElicitationMcpGuardProxy):
         super().__init__(harness="copilot", **kwargs)
 
 
+class CursorMcpGuardProxy(ElicitationMcpGuardProxy):
+    """Guard-managed runtime MCP proxy for Cursor editor MCP clients."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(harness="cursor", **kwargs)
+
+
 class OpenCodeMcpGuardProxy(RuntimeMcpGuardProxy):
     """Guard-managed runtime MCP proxy for OpenCode."""
 
@@ -1177,6 +1184,7 @@ def _now() -> str:
 __all__ = [
     "CodexMcpGuardProxy",
     "CopilotMcpGuardProxy",
+    "CursorMcpGuardProxy",
     "ElicitationMcpGuardProxy",
     "OpenCodeMcpGuardProxy",
     "RuntimeMcpGuardProxy",
