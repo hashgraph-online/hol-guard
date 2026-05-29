@@ -706,12 +706,54 @@ function queuePath(basePath: string, params: URLSearchParams): string {
   return query ? `${basePath}?${query}` : basePath;
 }
 
-export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
+const PENDING_QUEUE_PAGE_LIMIT = 200;
+const MAX_PENDING_QUEUE_PAGES = 50;
+
+export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
     return getDemoRequests();
   }
-  const page = await fetchApprovalPage();
-  return page.items;
+  const items: GuardApprovalRequest[] = [];
+  let cursor: string | undefined;
+  for (let pageIndex = 0; pageIndex < MAX_PENDING_QUEUE_PAGES; pageIndex += 1) {
+    const page = await fetchApprovalPage({
+      status: "pending",
+      limit: PENDING_QUEUE_PAGE_LIMIT,
+      cursor,
+    });
+    items.push(...page.items);
+    if (!page.next_cursor || page.next_cursor === cursor) {
+      return items;
+    }
+    cursor = page.next_cursor;
+  }
+  return items;
+}
+
+export async function fetchInboxState(input: { activeRequestId?: string } = {}): Promise<{
+  snapshot: GuardRuntimeSnapshot;
+  items: GuardApprovalRequest[];
+}> {
+  if (isGuardDemoMode()) {
+    const snapshot = buildDemoRuntimeSnapshot();
+    return { snapshot, items: snapshot.items };
+  }
+  const params = new URLSearchParams();
+  if (input.activeRequestId) {
+    params.set("active_request_id", input.activeRequestId);
+  }
+  const [snapshotPayload, items] = await Promise.all([
+    readJson<RuntimeSnapshotPayload>(queuePath("/v1/runtime", params)),
+    fetchAllPendingRequests(),
+  ]);
+  return {
+    snapshot: normalizeRuntimeSnapshot(snapshotPayload),
+    items,
+  };
+}
+
+export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
+  return fetchAllPendingRequests();
 }
 
 export async function fetchApprovalPage(input: GuardApprovalPageFilters = {}): Promise<GuardApprovalPage> {
