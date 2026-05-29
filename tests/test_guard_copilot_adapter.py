@@ -351,6 +351,39 @@ def test_copilot_install_and_uninstall_preserve_existing_inline_hook_content(tmp
     }
 
 
+def test_copilot_install_and_uninstall_parse_jsonc_config_comments(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    config_path = context.home_dir / ".copilot" / "config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        "// User settings belong in settings.json.\n"
+        "// This file is managed automatically.\n"
+        '{\n  "trusted_repositories": ["demo"],\n'
+        '  "hooks": {\n'
+        '    "preToolUse": [{"command": "python existing-pre.py"}]\n'
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    adapter.install(context)
+    managed_payload = json.loads(config_path.read_text(encoding="utf-8"))
+    assert managed_payload["trusted_repositories"] == ["demo"]
+    assert len(managed_payload["hooks"]["preToolUse"]) == 2
+
+    uninstall_payload = adapter.uninstall(context)
+    remaining_payload = json.loads(config_path.read_text(encoding="utf-8"))
+
+    assert uninstall_payload["active"] is False
+    assert remaining_payload == {
+        "trusted_repositories": ["demo"],
+        "hooks": {
+            "preToolUse": [{"command": "python existing-pre.py"}],
+        },
+    }
+
+
 def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()

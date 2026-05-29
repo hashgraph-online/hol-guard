@@ -13,6 +13,7 @@ import sys
 from hashlib import sha256
 from pathlib import Path
 
+from ...ecosystems.opencode import _strip_jsonc
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -44,6 +45,27 @@ _LEGACY_MANAGED_HOOK_PATTERNS = (
     re.compile(r'--harness(?:["\s=]+)copilot(["\s]|$)'),
 )
 _INLINE_GUARD_ARGS_PATTERN = re.compile(r"json\.loads\((?P<payload>'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\)")
+
+
+def _parse_copilot_json_text(raw_text: str) -> dict[str, object] | None:
+    for candidate in (raw_text, _strip_jsonc(raw_text)):
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
+def _copilot_json_payload(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    return _parse_copilot_json_text(raw_text) or {}
 
 
 def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> tuple[str, ...]:
@@ -363,14 +385,11 @@ class CopilotHarnessAdapter(HarnessAdapter):
             raw_text = path.read_text(encoding="utf-8")
         except OSError as exc:
             raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}") from exc
-        try:
-            payload = json.loads(raw_text)
-        except json.JSONDecodeError as exc:
+        payload = _parse_copilot_json_text(raw_text)
+        if payload is None:
             if recover_malformed:
                 return {}
-            raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}") from exc
-        if not isinstance(payload, dict):
-            raise RuntimeError(f"Guard refused to overwrite non-object {label} at {path}")
+            raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}")
         return payload
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
@@ -382,7 +401,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
         for config_path in config_candidates:
-            payload = _json_payload(config_path)
+            payload = _copilot_json_payload(config_path)
             if not payload:
                 continue
             found_paths.append(str(config_path))
@@ -396,7 +415,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
             hooks_dir = context.workspace_dir / ".github" / "hooks"
             if hooks_dir.is_dir():
                 for hook_path in sorted(path for path in hooks_dir.glob("*.json") if path.is_file()):
-                    payload = _json_payload(hook_path)
+                    payload = _copilot_json_payload(hook_path)
                     if not payload:
                         continue
                     hook_artifacts = self._hook_artifacts(hook_path, payload, "project")
@@ -446,7 +465,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 + "\n",
                 encoding="utf-8",
             )
-            mcp_payload = _json_payload(target_mcp_path)
+            mcp_payload = _copilot_json_payload(target_mcp_path)
             existing_servers = _mcp_servers_payload(target_mcp_path, mcp_payload)
             normalized_servers = dict(existing_servers) if isinstance(existing_servers, dict) else {}
             for name, server_config in tuple(normalized_servers.items()):
