@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.5";
+  react_production.version = "19.2.6";
   return react_production;
 }
 var hasRequiredReact;
@@ -516,7 +516,7 @@ var hasRequiredScheduler_production;
 function requireScheduler_production() {
   if (hasRequiredScheduler_production) return scheduler_production;
   hasRequiredScheduler_production = 1;
-  (function(exports$1) {
+  (function(exports) {
     function push(heap, node) {
       var index = heap.length;
       heap.push(node);
@@ -550,15 +550,15 @@ function requireScheduler_production() {
       var diff = a.sortIndex - b.sortIndex;
       return 0 !== diff ? diff : a.id - b.id;
     }
-    exports$1.unstable_now = void 0;
+    exports.unstable_now = void 0;
     if ("object" === typeof performance && "function" === typeof performance.now) {
       var localPerformance = performance;
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localPerformance.now();
       };
     } else {
       var localDate = Date, initialTime = localDate.now();
-      exports$1.unstable_now = function() {
+      exports.unstable_now = function() {
         return localDate.now() - initialTime;
       };
     }
@@ -585,12 +585,12 @@ function requireScheduler_production() {
     }
     var isMessageLoopRunning = false, taskTimeoutID = -1, frameInterval = 5, startTime = -1;
     function shouldYieldToHost() {
-      return needsPaint ? true : exports$1.unstable_now() - startTime < frameInterval ? false : true;
+      return needsPaint ? true : exports.unstable_now() - startTime < frameInterval ? false : true;
     }
     function performWorkUntilDeadline() {
       needsPaint = false;
       if (isMessageLoopRunning) {
-        var currentTime = exports$1.unstable_now();
+        var currentTime = exports.unstable_now();
         startTime = currentTime;
         var hasMoreWork = true;
         try {
@@ -610,7 +610,7 @@ function requireScheduler_production() {
                     var continuationCallback = callback(
                       currentTask.expirationTime <= currentTime
                     );
-                    currentTime = exports$1.unstable_now();
+                    currentTime = exports.unstable_now();
                     if ("function" === typeof continuationCallback) {
                       currentTask.callback = continuationCallback;
                       advanceTimers(currentTime);
@@ -660,27 +660,27 @@ function requireScheduler_production() {
       };
     function requestHostTimeout(callback, ms) {
       taskTimeoutID = localSetTimeout(function() {
-        callback(exports$1.unstable_now());
+        callback(exports.unstable_now());
       }, ms);
     }
-    exports$1.unstable_IdlePriority = 5;
-    exports$1.unstable_ImmediatePriority = 1;
-    exports$1.unstable_LowPriority = 4;
-    exports$1.unstable_NormalPriority = 3;
-    exports$1.unstable_Profiling = null;
-    exports$1.unstable_UserBlockingPriority = 2;
-    exports$1.unstable_cancelCallback = function(task) {
+    exports.unstable_IdlePriority = 5;
+    exports.unstable_ImmediatePriority = 1;
+    exports.unstable_LowPriority = 4;
+    exports.unstable_NormalPriority = 3;
+    exports.unstable_Profiling = null;
+    exports.unstable_UserBlockingPriority = 2;
+    exports.unstable_cancelCallback = function(task) {
       task.callback = null;
     };
-    exports$1.unstable_forceFrameRate = function(fps) {
+    exports.unstable_forceFrameRate = function(fps) {
       0 > fps || 125 < fps ? console.error(
         "forceFrameRate takes a positive int between 0 and 125, forcing frame rates higher than 125 fps is not supported"
       ) : frameInterval = 0 < fps ? Math.floor(1e3 / fps) : 5;
     };
-    exports$1.unstable_getCurrentPriorityLevel = function() {
+    exports.unstable_getCurrentPriorityLevel = function() {
       return currentPriorityLevel;
     };
-    exports$1.unstable_next = function(eventHandler) {
+    exports.unstable_next = function(eventHandler) {
       switch (currentPriorityLevel) {
         case 1:
         case 2:
@@ -698,10 +698,10 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_requestPaint = function() {
+    exports.unstable_requestPaint = function() {
       needsPaint = true;
     };
-    exports$1.unstable_runWithPriority = function(priorityLevel, eventHandler) {
+    exports.unstable_runWithPriority = function(priorityLevel, eventHandler) {
       switch (priorityLevel) {
         case 1:
         case 2:
@@ -720,8 +720,8 @@ function requireScheduler_production() {
         currentPriorityLevel = previousPriorityLevel;
       }
     };
-    exports$1.unstable_scheduleCallback = function(priorityLevel, callback, options) {
-      var currentTime = exports$1.unstable_now();
+    exports.unstable_scheduleCallback = function(priorityLevel, callback, options) {
+      var currentTime = exports.unstable_now();
       "object" === typeof options && null !== options ? (options = options.delay, options = "number" === typeof options && 0 < options ? currentTime + options : currentTime) : options = currentTime;
       switch (priorityLevel) {
         case 1:
@@ -751,8 +751,8 @@ function requireScheduler_production() {
       options > currentTime ? (priorityLevel.sortIndex = options, push(timerQueue, priorityLevel), null === peek(taskQueue) && priorityLevel === peek(timerQueue) && (isHostTimeoutScheduled ? (localClearTimeout(taskTimeoutID), taskTimeoutID = -1) : isHostTimeoutScheduled = true, requestHostTimeout(handleTimeout, options - currentTime))) : (priorityLevel.sortIndex = timeout, push(taskQueue, priorityLevel), isHostCallbackScheduled || isPerformingWork || (isHostCallbackScheduled = true, isMessageLoopRunning || (isMessageLoopRunning = true, schedulePerformWorkUntilDeadline())));
       return priorityLevel;
     };
-    exports$1.unstable_shouldYield = shouldYieldToHost;
-    exports$1.unstable_wrapCallback = function(callback) {
+    exports.unstable_shouldYield = shouldYieldToHost;
+    exports.unstable_wrapCallback = function(callback) {
       var parentPriorityLevel = currentPriorityLevel;
       return function() {
         var previousPriorityLevel = currentPriorityLevel;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.5";
+  reactDom_production.version = "19.2.6";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.6" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.5"
+        "19.2.6"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.5",
+    version: "19.2.6",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.5"
+    reconcilerVersion: "19.2.6"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.5";
+  reactDomClient_production.version = "19.2.6";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -13211,6 +13211,46 @@ function queueSearchParams(input) {
 function queuePath(basePath, params) {
   const query = params.toString();
   return query ? `${basePath}?${query}` : basePath;
+}
+const PENDING_QUEUE_PAGE_LIMIT = 200;
+const MAX_PENDING_QUEUE_PAGES = 50;
+async function fetchAllPendingRequests() {
+  if (isGuardDemoMode()) {
+    return getDemoRequests();
+  }
+  const items = [];
+  let cursor;
+  for (let pageIndex = 0; pageIndex < MAX_PENDING_QUEUE_PAGES; pageIndex += 1) {
+    const page = await fetchApprovalPage({
+      status: "pending",
+      limit: PENDING_QUEUE_PAGE_LIMIT,
+      cursor
+    });
+    items.push(...page.items);
+    if (!page.next_cursor || page.next_cursor === cursor) {
+      return items;
+    }
+    cursor = page.next_cursor;
+  }
+  return items;
+}
+async function fetchInboxState(input = {}) {
+  if (isGuardDemoMode()) {
+    const snapshot = buildDemoRuntimeSnapshot();
+    return { snapshot, items: snapshot.items };
+  }
+  const params = new URLSearchParams();
+  if (input.activeRequestId) {
+    params.set("active_request_id", input.activeRequestId);
+  }
+  const [snapshotPayload, items] = await Promise.all([
+    readJson(queuePath("/v1/runtime", params)),
+    fetchAllPendingRequests()
+  ]);
+  return {
+    snapshot: normalizeRuntimeSnapshot(snapshotPayload),
+    items
+  };
 }
 async function fetchApprovalPage(input = {}) {
   if (isGuardDemoMode()) {
@@ -14681,6 +14721,13 @@ function buildCodexResumeUx(resume) {
     };
   }
   if (resume.status === "sent" || resume.status === "already_sent") {
+    if (resume.strategy === "codex-headless-exec" || resume.reason === "headless_resume_started") {
+      return {
+        headline: "Codex resumed in background.",
+        body: resume.message ?? "HOL Guard started a background Codex resume. This open Codex App chat may not visibly continue until Codex remote control is enabled.",
+        showRetry: false
+      };
+    }
     return {
       headline: "Codex chat notified.",
       body: resume.message ?? "HOL Guard sent Codex a continuation message in the original chat.",
@@ -22205,10 +22252,10 @@ function App() {
     let cancelled = false;
     let pollId;
     const loadRuntimeSnapshot = () => {
-      fetchRuntimeSnapshot().then((snapshot) => {
+      fetchInboxState().then(({ snapshot, items }) => {
         if (!cancelled && !resolutionInFlight.current) {
           setRuntime({ kind: "ready", snapshot });
-          setRequests({ kind: "ready", items: snapshot.items });
+          setRequests({ kind: "ready", items });
         }
       }).catch((error) => {
         if (!cancelled && !resolutionInFlight.current) {
@@ -22342,17 +22389,17 @@ function App() {
     }
   }, []);
   const refreshStateAfterAction = reactExports.useCallback(async () => {
-    const [snapshotResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
-      fetchRuntimeSnapshot(),
+    const [inboxResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
+      fetchInboxState(),
       fetchReceipts(),
       fetchPolicies(),
       fetchInventory()
     ]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    if (inboxResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+      setRequests({ kind: "ready", items: inboxResult.value.items });
     } else {
-      const message = snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "Unable to load the local approval queue.";
+      const message = inboxResult.reason instanceof Error ? inboxResult.reason.message : "Unable to load the local approval queue.";
       setRuntime({ kind: "error", message });
       setRequests({ kind: "error", message });
     }
@@ -22388,12 +22435,12 @@ function App() {
     if (clearConfirm === null) return;
     await clearPolicy({ ...clearConfirm, ...credentials });
     setClearConfirm(null);
-    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
+    if (inboxResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+      setRequests({ kind: "ready", items: inboxResult.value.items });
     } else {
-      const message = snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "Unable to load the local approval queue.";
+      const message = inboxResult.reason instanceof Error ? inboxResult.reason.message : "Unable to load the local approval queue.";
       setRuntime({ kind: "error", message });
       setRequests({ kind: "error", message });
     }
@@ -22411,10 +22458,10 @@ function App() {
   }, []);
   const handleClearAppPolicies = reactExports.useCallback(async (harness) => {
     await clearPolicy({ harness });
-    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
+    if (inboxResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+      setRequests({ kind: "ready", items: inboxResult.value.items });
     }
     if (policiesResult.status === "fulfilled") {
       setPolicies({ kind: "ready", items: policiesResult.value });
@@ -22427,10 +22474,10 @@ function App() {
   }, [setRuntime, setRequests, setPolicies]);
   const handleClearPolicy = reactExports.useCallback(async (policy) => {
     await clearPolicy(buildClearPayload(policy));
-    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
+    if (inboxResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+      setRequests({ kind: "ready", items: inboxResult.value.items });
     }
     if (policiesResult.status === "fulfilled") {
       setPolicies({ kind: "ready", items: policiesResult.value });
@@ -22499,9 +22546,9 @@ function App() {
   const handleRetry = reactExports.useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
-    fetchRuntimeSnapshot().then((snapshot) => {
+    fetchInboxState().then(({ snapshot, items }) => {
       setRuntime({ kind: "ready", snapshot });
-      setRequests({ kind: "ready", items: snapshot.items });
+      setRequests({ kind: "ready", items });
     }).catch((error) => {
       const message = error instanceof Error ? error.message : "Unable to load the local approval queue.";
       setRuntime({ kind: "error", message });
@@ -22511,9 +22558,9 @@ function App() {
   const handleRepair = reactExports.useCallback(async () => {
     await repairApprovalCenter();
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    fetchRuntimeSnapshot().then((snapshot) => {
+    fetchInboxState().then(({ snapshot, items }) => {
       setRuntime({ kind: "ready", snapshot });
-      setRequests({ kind: "ready", items: snapshot.items });
+      setRequests({ kind: "ready", items });
     }).catch((error) => {
       const message = error instanceof Error ? error.message : "Unable to reconnect to Guard daemon.";
       setRuntime({ kind: "error", message });
@@ -22669,83 +22716,83 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  fetchApprovalPage as $,
+  enrollApprovalGateTotp as $,
   ActionButton as A,
   Badge as B,
-  getDefaultExportFromCjs as C,
-  fetchSettings as D,
+  CATEGORIES as C,
+  HiMiniMagnifyingGlass as D,
   EmptyState as E,
-  fetchRuntimeSnapshot as F,
-  GuardHero as G,
-  HiMiniShieldCheck as H,
-  revokeApprovalGateCooldown as I,
-  enrollApprovalGateTotp as J,
-  verifyApprovalGateTotp as K,
-  disableApprovalGateTotp as L,
-  updateSettings as M,
-  clearPolicy as N,
-  clearReviewQueue as O,
-  ProofStrip as P,
-  clearEvidence as Q,
-  exportDiagnostics as R,
+  HiMiniMinusCircle as F,
+  GuardHarnessActionError as G,
+  HiMiniAdjustmentsHorizontal as H,
+  HiMiniQuestionMarkCircle as I,
+  HiMiniRocketLaunch as J,
+  HiMiniShieldCheck as K,
+  HiMiniSignal as L,
+  HiMiniSparkles as M,
+  HiMiniTrash as N,
+  HiMiniWrenchScrewdriver as O,
+  HiMiniXCircle as P,
+  HiMiniXMark as Q,
+  ProofStrip as R,
   SectionLabel as S,
   Tag as T,
-  repairApprovalCenter as U,
-  setupDesktopNotifications as V,
-  HiMiniMagnifyingGlass as W,
-  HiMiniLockClosed as X,
-  HiMiniCog6Tooth as Y,
-  HiMiniBellAlert as Z,
-  approvalGateCooldownLabel as _,
-  HiMiniExclamationTriangle as a,
-  fetchPolicy as a0,
-  HiMiniArrowLeft as a1,
-  HiMiniHome as a2,
-  HiMiniAdjustmentsHorizontal as a3,
-  detectCategory as a4,
-  CATEGORIES as a5,
-  policyIdentityKey as a6,
-  HiMiniChartBar as a7,
-  runHarnessAction as a8,
-  GuardHarnessActionError as a9,
-  HiMiniRocketLaunch as aa,
-  HiMiniArrowPath as ab,
-  HiMiniTrash as ac,
-  clearLabelForScope as ad,
-  formatHarnessCommand as ae,
-  HiMiniCommandLine as af,
-  HiMiniArrowTopRightOnSquare as ag,
-  HiMiniBeaker as ah,
-  fetchPackageFirewallStatus as ai,
-  runPackageFirewallAction as aj,
-  runPackageAudit as ak,
+  approvalGateCooldownLabel as U,
+  clearEvidence as V,
+  clearLabelForScope as W,
+  clearPolicy as X,
+  clearReviewQueue as Y,
+  detectCategory as Z,
+  disableApprovalGateTotp as _,
+  GuardHero as a,
+  exportDiagnostics as a0,
+  fetchApprovalPage as a1,
+  fetchPackageFirewallStatus as a2,
+  fetchPolicy as a3,
+  fetchRuntimeSnapshot as a4,
+  fetchSettings as a5,
+  formatHarnessCommand as a6,
+  formatNumber as a7,
+  formatRelativeTime as a8,
+  getDefaultExportFromCjs as a9,
+  harnessDisplayName as aa,
+  isDisplayableHarness as ab,
+  jsxRuntimeExports as ac,
+  policyIdentityKey as ad,
+  reactExports as ae,
+  repairApprovalCenter as af,
+  requireReact as ag,
+  revokeApprovalGateCooldown as ah,
+  runHarnessAction as ai,
+  runPackageAudit as aj,
+  runPackageFirewallAction as ak,
   runPackageSync as al,
-  HiMiniBugAnt as am,
-  HiMiniSignal as an,
-  HiMiniClock as ao,
-  HiMiniInformationCircle as b,
-  HiMiniArrowRight as c,
-  HiMiniChevronUp as d,
-  HiMiniChevronDown as e,
-  formatRelativeTime as f,
-  HiMiniCheckCircle as g,
-  HiMiniXCircle as h,
-  harnessDisplayName as i,
-  jsxRuntimeExports as j,
-  isDisplayableHarness as k,
-  formatNumber as l,
-  HiMiniSparkles as m,
-  HiMiniXMark as n,
-  HiMiniCloud as o,
-  HiMiniQuestionMarkCircle as p,
-  HiMiniBolt as q,
-  reactExports as r,
-  HiMiniChevronRight as s,
-  HiMiniMinusCircle as t,
-  HiMiniEye as u,
-  HiMiniWrenchScrewdriver as v,
-  HiMiniExclamationCircle as w,
-  HiMiniClipboardDocumentCheck as x,
-  HiMiniClipboard as y,
-  requireReact as z
+  setupDesktopNotifications as am,
+  updateSettings as an,
+  verifyApprovalGateTotp as ao,
+  HiMiniArrowLeft as b,
+  HiMiniArrowPath as c,
+  HiMiniArrowRight as d,
+  HiMiniArrowTopRightOnSquare as e,
+  HiMiniBeaker as f,
+  HiMiniBellAlert as g,
+  HiMiniBolt as h,
+  HiMiniBugAnt as i,
+  HiMiniChartBar as j,
+  HiMiniCheckCircle as k,
+  HiMiniChevronDown as l,
+  HiMiniChevronRight as m,
+  HiMiniChevronUp as n,
+  HiMiniClipboard as o,
+  HiMiniClipboardDocumentCheck as p,
+  HiMiniClock as q,
+  HiMiniCloud as r,
+  HiMiniCog6Tooth as s,
+  HiMiniCommandLine as t,
+  HiMiniExclamationCircle as u,
+  HiMiniExclamationTriangle as v,
+  HiMiniEye as w,
+  HiMiniHome as x,
+  HiMiniInformationCircle as y,
+  HiMiniLockClosed as z
 };
