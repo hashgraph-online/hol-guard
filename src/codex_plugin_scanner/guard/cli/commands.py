@@ -121,6 +121,7 @@ from ..protect import build_protect_payload
 from ..proxy import (
     CodexMcpGuardProxy,
     CopilotMcpGuardProxy,
+    CursorMcpGuardProxy,
     OpenCodeMcpGuardProxy,
     RemoteGuardProxy,
     StdioGuardProxy,
@@ -1050,6 +1051,17 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     copilot_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
     copilot_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
 
+    cursor_proxy_parser = guard_subparsers.add_parser("cursor-mcp-proxy", help=argparse.SUPPRESS)
+    _add_guard_common_args(cursor_proxy_parser)
+    cursor_proxy_parser.add_argument("--server-name", required=True)
+    cursor_proxy_parser.add_argument("--server-id")
+    cursor_proxy_parser.add_argument("--source-scope", default="project")
+    cursor_proxy_parser.add_argument("--config-path", required=True)
+    cursor_proxy_parser.add_argument("--transport", default="stdio")
+    cursor_proxy_parser.add_argument("--command", dest="server_command", required=True)
+    cursor_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    cursor_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
+
     hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(hermes_mcp_proxy_parser)
     hermes_mcp_proxy_parser.add_argument("--server", required=True)
@@ -1061,6 +1073,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         "codex-mcp-proxy",
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
+        "cursor-mcp-proxy",
         "hermes-mcp-proxy",
     }
     guard_subparsers._choices_actions = [
@@ -1435,7 +1448,11 @@ def _run_apps_command(
                 "error": "confirmation_required",
                 "harness": canonical_harness,
                 "confirmation_phrase": expected_confirmation,
-                "confirm_command": f"hol-guard apps disconnect {canonical_harness} --confirm {expected_confirmation}",
+                "confirm_command": _apps_disconnect_confirm_command(
+                    canonical_harness,
+                    expected_confirmation,
+                    surface=getattr(args, "surface", None),
+                ),
             }
             _emit("apps", payload, getattr(args, "json", False))
             return 2
@@ -1450,6 +1467,7 @@ def _run_apps_command(
             store,
             workspace,
             _now(),
+            surface=getattr(args, "surface", None),
         )
     except ValueError as error:
         print(str(error), file=sys.stderr)
@@ -1475,6 +1493,11 @@ def _run_apps_command(
             )
     _emit("apps", payload, getattr(args, "json", False))
     return 0
+
+
+def _apps_disconnect_confirm_command(harness: str, confirmation_phrase: str, *, surface: str | None) -> str:
+    surface_args = f" --surface {surface}" if surface in {"editor", "cli"} else ""
+    return f"hol-guard apps disconnect {harness}{surface_args} --confirm {confirmation_phrase}"
 
 
 def _open_guard_cloud_app(
@@ -1789,6 +1812,21 @@ def run_guard_command(
 
     if args.guard_command == "codex-mcp-proxy":
         proxy = CodexMcpGuardProxy(
+            server_name=args.server_name,
+            command=[args.server_command, *list(args.server_args)],
+            context=context,
+            store=store,
+            config=config,
+            source_scope=args.source_scope,
+            config_path=args.config_path,
+            transport=args.transport,
+            server_id=args.server_id,
+            server_env_keys=tuple(args.server_env_keys),
+        )
+        return proxy.serve()
+
+    if args.guard_command == "cursor-mcp-proxy":
+        proxy = CursorMcpGuardProxy(
             server_name=args.server_name,
             command=[args.server_command, *list(args.server_args)],
             context=context,

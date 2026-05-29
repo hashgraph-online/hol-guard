@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -47,7 +49,7 @@ def test_cursor_local_actions_preserve_editor_and_cli_surfaces(
 
     assert connect["cursor_action"]["surface_statuses"] == [
         {"surface": "editor", "status": "protected"},
-        {"surface": "cli", "status": "not_detected"},
+        {"surface": "cli", "status": "protected"},
     ]
     assert repair["cursor_action"] == cursor_local_action_payload(
         action="repair",
@@ -130,3 +132,102 @@ def test_cursor_editor_detection_uses_global_config(
         {"surface": "cli", "status": "not_detected"},
     ]
     assert payload["evidence"]["redactedPath"] == "$HOME/.cursor/mcp.json"
+
+
+def test_cursor_editor_install_wraps_workspace_config_and_remove_restores(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config_path = context.workspace_dir / ".cursor" / "mcp.json"
+    original_payload = {
+        "mcpServers": {
+            "filesystem": {
+                "command": "node",
+                "args": ["server.js"],
+                "env": {"SAFE_FLAG": "1"},
+            }
+        }
+    }
+    config_path.write_text(json.dumps(original_payload, indent=2) + "\n", encoding="utf-8")
+
+    install_payload = apply_managed_install(
+        "install",
+        "cursor",
+        False,
+        context,
+        store,
+        str(context.workspace_dir),
+        "2026-05-29T12:00:00Z",
+        surface="editor",
+    )
+    managed_install = install_payload["managed_install"]
+    assert managed_install["surface"] == "editor"
+    assert install_payload["cursor_action"]["surface"] == "editor"
+    assert install_payload["cursor_action"]["status"] == "protected"
+
+    protected_payload = json.loads(config_path.read_text(encoding="utf-8"))
+    server = protected_payload["mcpServers"]["filesystem"]
+    assert server["command"] == sys.executable
+    assert "cursor-mcp-proxy" in server["args"]
+    assert "--command" in server["args"]
+    assert "node" in server["args"]
+    assert "--arg=server.js" in server["args"]
+    assert server["env"]["SAFE_FLAG"] == "1"
+
+    remove_payload = apply_managed_install(
+        "uninstall",
+        "cursor",
+        False,
+        context,
+        store,
+        str(context.workspace_dir),
+        "2026-05-29T12:01:00Z",
+        surface="editor",
+    )
+
+    assert remove_payload["cursor_action"]["surface"] == "editor"
+    assert json.loads(config_path.read_text(encoding="utf-8")) == original_payload
+
+
+def test_cursor_cli_install_uses_cursor_agent_shim_without_editor_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    context = _context(tmp_path, workspace_cursor=False)
+    store = GuardStore(context.guard_home)
+
+    install_payload = apply_managed_install(
+        "install",
+        "cursor",
+        False,
+        context,
+        store,
+        str(context.workspace_dir),
+        "2026-05-29T12:00:00Z",
+        surface="cli",
+    )
+
+    managed_install = install_payload["managed_install"]
+    assert managed_install["surface"] == "cli"
+    assert managed_install["shim_command"] == "guard-cursor-agent"
+    assert Path(managed_install["shim_path"]).exists()
+    assert install_payload["cursor_action"]["surface"] == "cli"
+    assert not (context.workspace_dir / ".cursor" / "mcp.json").exists()
+
+    remove_payload = apply_managed_install(
+        "uninstall",
+        "cursor",
+        False,
+        context,
+        store,
+        str(context.workspace_dir),
+        "2026-05-29T12:01:00Z",
+        surface="cli",
+    )
+
+    assert remove_payload["managed_install"]["surface"] == "cli"
+    assert not Path(managed_install["shim_path"]).exists()
