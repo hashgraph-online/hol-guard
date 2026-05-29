@@ -437,6 +437,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         app_parser.add_argument("harness")
         _add_guard_common_args(app_parser, suppress_defaults=True)
         app_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+        app_parser.add_argument("--surface", choices=("editor", "cli"))
         if app_command in {"connect", "repair"}:
             app_parser.add_argument("--dry-run", action="store_true")
         if app_command == "disconnect":
@@ -1400,7 +1401,7 @@ def _run_apps_command(
         return 2
     if apps_command == "test":
         try:
-            payload = build_harness_verification(harness, context, store)
+            payload = build_harness_verification(harness, context, store, surface=getattr(args, "surface", None))
         except ValueError as error:
             print(str(error), file=sys.stderr)
             return 2
@@ -1409,7 +1410,13 @@ def _run_apps_command(
 
     if apps_command in {"connect", "repair"} and bool(getattr(args, "dry_run", False)):
         try:
-            payload = build_harness_setup_plan(apps_command, harness, context, dry_run=True)
+            payload = build_harness_setup_plan(
+                apps_command,
+                harness,
+                context,
+                dry_run=True,
+                surface=getattr(args, "surface", None),
+            )
         except ValueError as error:
             print(str(error), file=sys.stderr)
             return 2
