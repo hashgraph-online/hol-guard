@@ -42,6 +42,10 @@ class HarnessProtectionContract:
     resume_support: bool
     known_blind_spots: str
     smoke_command: str
+    surface_capabilities: tuple[str, ...] = ()
+    supported_actions: tuple[str, ...] = ()
+    docs_path: str | None = None
+    icon_label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,9 +101,13 @@ class HarnessSetupContract:
     verify_steps: tuple[HarnessSetupStep, ...]
     repair_steps: tuple[HarnessSetupStep, ...]
     coverage: HarnessCoverageSummary
+    surface_capabilities: tuple[str, ...] = ()
+    supported_actions: tuple[str, ...] = ()
+    docs_path: str | None = None
+    icon_label: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "harness": self.harness,
             "display_name": self.display_name,
             "install_aliases": list(self.install_aliases),
@@ -108,6 +116,15 @@ class HarnessSetupContract:
             "repair_steps": [step.to_dict() for step in self.repair_steps],
             "coverage": self.coverage.to_dict(),
         }
+        if self.surface_capabilities:
+            payload["surface_capabilities"] = list(self.surface_capabilities)
+        if self.supported_actions:
+            payload["supported_actions"] = list(self.supported_actions)
+        if self.docs_path is not None:
+            payload["docs_path"] = self.docs_path
+        if self.icon_label is not None:
+            payload["icon_label"] = self.icon_label
+        return payload
 
 
 _DISPLAY_NAMES = {
@@ -188,6 +205,19 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "Shell commands issued through Cursor's built-in terminal bypass Guard. Prompt content is not surfaced."
         ),
         smoke_command="hol-guard install cursor --dry-run",
+        surface_capabilities=("editor", "cli"),
+        supported_actions=(
+            "connect:editor",
+            "connect:cli",
+            "test:editor",
+            "test:cli",
+            "repair:editor",
+            "repair:cli",
+            "disconnect:editor",
+            "disconnect:cli",
+        ),
+        docs_path="docs/guard/cursor-local-cloud-contract.md",
+        icon_label="Cursor",
     ),
     HarnessProtectionContract(
         harness="gemini",
@@ -316,6 +346,10 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
         verify_steps=verify_steps,
         repair_steps=repair_steps,
         coverage=coverage,
+        surface_capabilities=contract.surface_capabilities,
+        supported_actions=contract.supported_actions,
+        docs_path=contract.docs_path,
+        icon_label=contract.icon_label,
     )
 
 
