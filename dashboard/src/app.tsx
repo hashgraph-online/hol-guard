@@ -9,7 +9,7 @@ import {
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
-  fetchRuntimeSnapshot,
+  fetchInboxState,
   fetchSettings,
   guardAwareHref,
   repairApprovalCenter,
@@ -234,11 +234,11 @@ export function App() {
     let cancelled = false;
     let pollId: number | undefined;
     const loadRuntimeSnapshot = () => {
-      fetchRuntimeSnapshot()
-        .then((snapshot) => {
+      fetchInboxState()
+        .then(({ snapshot, items }) => {
           if (!cancelled && !resolutionInFlight.current) {
             setRuntime({ kind: "ready", snapshot });
-            setRequests({ kind: "ready", items: snapshot.items });
+            setRequests({ kind: "ready", items });
           }
         })
         .catch((error: unknown) => {
@@ -386,18 +386,18 @@ export function App() {
   }, []);
 
   const refreshStateAfterAction = useCallback(async () => {
-    const [snapshotResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
-      fetchRuntimeSnapshot(),
+    const [inboxResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
+      fetchInboxState(),
       fetchReceipts(),
       fetchPolicies(),
       fetchInventory(),
     ]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    if (inboxResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+      setRequests({ kind: "ready", items: inboxResult.value.items });
     } else {
       const message =
-        snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "Unable to load the local approval queue.";
+        inboxResult.reason instanceof Error ? inboxResult.reason.message : "Unable to load the local approval queue.";
       setRuntime({ kind: "error", message });
       setRequests({ kind: "error", message });
     }
@@ -435,13 +435,13 @@ export function App() {
     if (clearConfirm === null) return;
     await clearPolicy({ ...clearConfirm, ...credentials });
     setClearConfirm(null);
-    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
+    if (inboxResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+      setRequests({ kind: "ready", items: inboxResult.value.items });
     } else {
       const message =
-        snapshotResult.reason instanceof Error ? snapshotResult.reason.message : "Unable to load the local approval queue.";
+        inboxResult.reason instanceof Error ? inboxResult.reason.message : "Unable to load the local approval queue.";
       setRuntime({ kind: "error", message });
       setRequests({ kind: "error", message });
     }
@@ -461,10 +461,10 @@ export function App() {
 
   const handleClearAppPolicies = useCallback(async (harness: string) => {
     await clearPolicy({ harness });
-    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
+    if (inboxResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+      setRequests({ kind: "ready", items: inboxResult.value.items });
     }
     if (policiesResult.status === "fulfilled") {
       setPolicies({ kind: "ready", items: policiesResult.value });
@@ -478,10 +478,10 @@ export function App() {
 
   const handleClearPolicy = useCallback(async (policy: GuardPolicyDecision) => {
     await clearPolicy(buildClearPayload(policy));
-    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    const [inboxResult, policiesResult] = await Promise.allSettled([fetchInboxState(), fetchPolicies()]);
+    if (inboxResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: inboxResult.value.snapshot });
+      setRequests({ kind: "ready", items: inboxResult.value.items });
     }
     if (policiesResult.status === "fulfilled") {
       setPolicies({ kind: "ready", items: policiesResult.value });
@@ -571,10 +571,10 @@ export function App() {
   const handleRetry = useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
-    fetchRuntimeSnapshot()
-      .then((snapshot) => {
+    fetchInboxState()
+      .then(({ snapshot, items }) => {
         setRuntime({ kind: "ready", snapshot });
-        setRequests({ kind: "ready", items: snapshot.items });
+        setRequests({ kind: "ready", items });
       })
       .catch((error: unknown) => {
         const message =
@@ -587,10 +587,10 @@ export function App() {
   const handleRepair = useCallback(async () => {
     await repairApprovalCenter();
     await new Promise<void>((resolve) => setTimeout(resolve, 1200));
-    fetchRuntimeSnapshot()
-      .then((snapshot) => {
+    fetchInboxState()
+      .then(({ snapshot, items }) => {
         setRuntime({ kind: "ready", snapshot });
-        setRequests({ kind: "ready", items: snapshot.items });
+        setRequests({ kind: "ready", items });
       })
       .catch((error: unknown) => {
         const message =

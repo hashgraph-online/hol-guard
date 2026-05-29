@@ -1,6 +1,7 @@
 import {
   buildDemoRuntimeSnapshot,
   clearReviewQueue,
+  fetchAllPendingRequests,
   fetchApprovalPage,
   fetchQueueSummary,
   fetchResumeStatus,
@@ -608,6 +609,61 @@ assert(approvalPage.items[0].decision_v2_json?.user_title === "Wants to read a c
 assert(approvalPage.next_cursor === "cursor-two", "L078: fetchApprovalPage returns next cursor");
 assert(approvalPage.total_pending_count === 3, "L078: fetchApprovalPage returns pending total");
 assert(approvalPage.total_count === 7, "L078: fetchApprovalPage returns filtered total");
+
+installGuardWindow("?guard-token=token-pending-pages&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const codexPageItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-codex-page",
+  harness: "codex",
+};
+const claudePageItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-claude-page",
+  harness: "claude-code",
+};
+const pendingPageCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  pendingPageCalls.push({ url, init });
+  const parsed = new URL(url, "http://127.0.0.1:4174");
+  if (parsed.pathname !== "/v1/requests") {
+    return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+  }
+  const cursor = parsed.searchParams.get("cursor");
+  if (cursor === null) {
+    return new Response(
+      JSON.stringify({
+        items: [codexPageItem],
+        next_cursor: "cursor-page-2",
+        total_pending_count: 2,
+        total_count: 2,
+        status: "pending",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  if (cursor === "cursor-page-2") {
+    return new Response(
+      JSON.stringify({
+        items: [claudePageItem],
+        next_cursor: null,
+        total_pending_count: 2,
+        total_count: 2,
+        status: "pending",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  return new Response(JSON.stringify({ error: "invalid_cursor" }), { status: 400 });
+};
+
+const pendingItems = await fetchAllPendingRequests();
+assert(pendingItems.length === 2, "L078b: fetchAllPendingRequests aggregates pending pages");
+assert(
+  pendingItems.some((item) => item.harness === "claude-code"),
+  "L078b: fetchAllPendingRequests includes later-page harnesses"
+);
+assert(pendingPageCalls.length === 2, "L078b: fetchAllPendingRequests follows next_cursor");
 
 installGuardWindow("?guard-token=token-runtime&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchQueueCalls = installFetchStub({

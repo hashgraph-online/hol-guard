@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, B as Badge, S as SectionLabel, W as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, a as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton } from "../guard-dashboard.js";
+import { ae as reactExports, ac as jsxRuntimeExports, B as Badge, S as SectionLabel, D as HiMiniMagnifyingGlass, E as EmptyState, k as HiMiniCheckCircle, P as HiMiniXCircle, v as HiMiniExclamationTriangle, aa as harnessDisplayName, a8 as formatRelativeTime, m as HiMiniChevronRight, A as ActionButton } from "../guard-dashboard.js";
 function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
