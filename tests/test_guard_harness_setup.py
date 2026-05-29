@@ -114,6 +114,24 @@ def test_daemon_lists_harness_setup_contracts(tmp_path: Path) -> None:
     assert codex["repair_steps"]
     assert codex["coverage"]["browser_fallback"] is True
 
+    cursor = next(item for item in items if isinstance(item, dict) and item["harness"] == "cursor")
+    assert cursor["display_name"] == "Cursor"
+    assert cursor["docs_path"] == "docs/guard/cursor-local-cloud-contract.md"
+    assert cursor["icon_label"] == "Cursor"
+    assert cursor["surface_capabilities"] == ["editor", "cli"]
+    assert cursor["supported_actions"] == [
+        "connect:editor",
+        "connect:cli",
+        "test:editor",
+        "test:cli",
+        "repair:editor",
+        "repair:cli",
+        "disconnect:editor",
+        "disconnect:cli",
+    ]
+    assert "npx" not in json.dumps(cursor)
+    assert "fake" not in json.dumps(cursor).lower()
+
 
 def test_daemon_install_endpoint_defaults_to_dry_run(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
