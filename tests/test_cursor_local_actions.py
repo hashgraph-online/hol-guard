@@ -49,7 +49,7 @@ def test_cursor_local_actions_preserve_editor_and_cli_surfaces(
 
     assert connect["cursor_action"]["surface_statuses"] == [
         {"surface": "editor", "status": "protected"},
-        {"surface": "cli", "status": "not_detected"},
+        {"surface": "cli", "status": "protected"},
     ]
     assert repair["cursor_action"] == cursor_local_action_payload(
         action="repair",

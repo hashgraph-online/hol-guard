@@ -40,7 +40,7 @@ def apply_managed_install(
         adapter = get_adapter(harness)
         canonical_harness = adapter.harness
         if isinstance(adapter, CursorHarnessAdapter):
-            selected_surface = _cursor_surface(surface)
+            selected_surface = _cursor_install_surface(surface)
             manifest = (
                 adapter.install(context, surface=selected_surface)
                 if active
@@ -82,7 +82,7 @@ def _managed_install_payload(managed_install: dict[str, object]) -> dict[str, ob
         payload["primary_integration"] = "native_hooks" if protection_contract.native_approval else "browser_fallback"
     manifest = payload.get("manifest")
     if isinstance(manifest, dict):
-        for key in ("config_path", "managed_config_path", "shim_path", "shim_command", "mode", "surface"):
+        for key in ("config_path", "managed_config_path", "shim_path", "shim_command", "mode", "surface", "surfaces"):
             value = manifest.get(key)
             if value is not None:
                 payload[key] = value
@@ -250,6 +250,12 @@ def _cursor_surface(surface: str | None) -> str:
     raise ValueError(f"Unsupported Cursor surface: {surface}")
 
 
+def _cursor_install_surface(surface: str | None) -> str:
+    if surface is None:
+        return "all"
+    return _cursor_surface(surface)
+
+
 def _cursor_surface_statuses(
     context: HarnessContext,
     *,
@@ -338,9 +344,18 @@ def _cursor_protected_surfaces(managed_installs: list[dict[str, object]]) -> tup
         manifest = managed_install.get("manifest")
         if not isinstance(manifest, dict):
             continue
+        manifest_surfaces = manifest.get("surfaces")
+        if isinstance(manifest_surfaces, list):
+            for value in manifest_surfaces:
+                if value in {"editor", "cli"} and value not in surfaces:
+                    surfaces.append(value)
         manifest_surface = manifest.get("surface")
         if manifest_surface in {"editor", "cli"} and manifest_surface not in surfaces:
             surfaces.append(manifest_surface)
+        elif manifest_surface == "all":
+            for value in ("editor", "cli"):
+                if value not in surfaces:
+                    surfaces.append(value)
     return tuple(surfaces)
 
 

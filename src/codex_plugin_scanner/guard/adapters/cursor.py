@@ -26,6 +26,8 @@ class CursorHarnessAdapter(HarnessAdapter):
 
     harness = "cursor"
     executable = "cursor-agent"
+    launcher_name = "cursor-agent"
+    legacy_launcher_names = ("cursor",)
     approval_tier = "native-harness"
     approval_summary = (
         "Cursor already owns tool approval, so Guard focuses on artifact trust, provenance, and preflight review."
@@ -48,9 +50,9 @@ class CursorHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _editor_config_paths(context: HarnessContext) -> tuple[Path, ...]:
         paths: list[Path] = []
+        paths.append(context.home_dir / ".cursor" / "mcp.json")
         if context.workspace_dir is not None:
             paths.append(context.workspace_dir / ".cursor" / "mcp.json")
-        paths.append(context.home_dir / ".cursor" / "mcp.json")
         return tuple(paths)
 
     @staticmethod
@@ -118,6 +120,8 @@ class CursorHarnessAdapter(HarnessAdapter):
     def install(self, context: HarnessContext, *, surface: str = "editor") -> dict[str, object]:
         if surface == "cli":
             return self._install_cli(context)
+        if surface == "all":
+            return self._install_all(context)
         if surface != "editor":
             raise ValueError(f"Unsupported Cursor surface: {surface}")
         return self._install_editor(context)
@@ -125,9 +129,46 @@ class CursorHarnessAdapter(HarnessAdapter):
     def uninstall(self, context: HarnessContext, *, surface: str = "editor") -> dict[str, object]:
         if surface == "cli":
             return self._uninstall_cli(context)
+        if surface == "all":
+            return self._uninstall_all(context)
         if surface != "editor":
             raise ValueError(f"Unsupported Cursor surface: {surface}")
         return self._uninstall_editor(context)
+
+    def _install_all(self, context: HarnessContext) -> dict[str, object]:
+        editor_manifest = self._install_editor(context)
+        cli_manifest = self._install_cli(context)
+        return {
+            "harness": self.harness,
+            "active": True,
+            "surface": "all",
+            "surfaces": ["editor", "cli"],
+            "editor": editor_manifest,
+            "cli": cli_manifest,
+            "managed_config_path": editor_manifest.get("managed_config_path"),
+            "backup_path": editor_manifest.get("backup_path"),
+            "state_path": editor_manifest.get("state_path"),
+            "shim_path": cli_manifest.get("shim_path"),
+            "shim_command": cli_manifest.get("shim_command"),
+        }
+
+    def _uninstall_all(self, context: HarnessContext) -> dict[str, object]:
+        cli_manifest = self._uninstall_cli(context)
+        editor_manifest = self._uninstall_editor(context)
+        return {
+            "harness": self.harness,
+            "active": False,
+            "surface": "all",
+            "surfaces": ["editor", "cli"],
+            "editor": editor_manifest,
+            "cli": cli_manifest,
+            "managed_config_path": editor_manifest.get("managed_config_path"),
+            "backup_path": editor_manifest.get("backup_path"),
+            "state_path": editor_manifest.get("state_path"),
+            "shim_path": cli_manifest.get("shim_path"),
+            "removed": cli_manifest.get("removed"),
+            "restored": editor_manifest.get("restored"),
+        }
 
     def _install_editor(self, context: HarnessContext) -> dict[str, object]:
         detection = self.detect(context)
