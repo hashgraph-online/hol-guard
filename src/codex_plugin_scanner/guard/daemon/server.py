@@ -1103,10 +1103,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 operation=operation,
                 error_code="unknown_harness",
             )
+        try:
+            surface = self._cursor_headless_surface(payload) if adapter.harness == "cursor" else None
+        except ValueError:
+            error_payload = _headless_error_payload(
+                code="invalid_cursor_surface",
+                message="Choose Cursor editor or CLI before retrying this local action.",
+                retryable=False,
+            )
+            error = error_payload["error"]
+            if isinstance(error, dict):
+                error["app_id"] = "cursor"
+                error["surface"] = self._optional_string(payload.get("surface")) or ""
+            return 400, error_payload
         context = self._harness_context(payload)
         try:
             if harness_action == "verify":
-                result = build_harness_verification(adapter.harness, context, self.server.store)  # type: ignore[attr-defined]
+                verification_action = "status" if action_path == "status" else "test"
+                result = build_harness_verification(
+                    adapter.harness,
+                    context,
+                    self.server.store,  # type: ignore[attr-defined]
+                    surface=surface,
+                    action=verification_action,
+                )
             else:
                 result = self._run_headless_managed_action(adapter.harness, harness_action, payload, context)
         except ValueError as error:
@@ -1124,8 +1144,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result=result,
             location_id=location_id,
             workspace_id=self._optional_string(payload.get("workspace_id")),
+            cloud_sync={"status": "pending"},
         )
         cloud_sync = _queue_headless_cloud_sync(store=self.server.store)  # type: ignore[attr-defined]
+        receipt["cloud_sync"] = cloud_sync
         return 200, {
             "cloud_sync": cloud_sync,
             "harness": adapter.harness,
@@ -1638,6 +1660,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload: dict[str, object],
         context: HarnessContext,
     ) -> dict[str, object]:
+        surface = self._cursor_headless_surface(payload) if harness == "cursor" else None
         if action == "uninstall":
             expected_confirmation = uninstall_confirmation_token(harness)
             confirmation = self._optional_string(payload.get("confirmation_phrase")) or self._optional_string(
@@ -1654,6 +1677,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self.server.store,  # type: ignore[attr-defined]
             self._optional_string(payload.get("workspace_id")),
             _now(),
+            surface=surface,
         )
 
     def _handle_headless_policy_sync(self, payload: dict[str, object]) -> None:
@@ -1911,45 +1935,123 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload: dict[str, object],
         result: dict[str, object],
         workspace_id: str | None,
+        cloud_sync: dict[str, object] | None = None,
     ) -> dict[str, object]:
+        cursor_receipt_context = self._cursor_receipt_context(
+            harness=harness,
+            operation=operation,
+            payload=payload,
+            result=result,
+            cloud_sync=cloud_sync,
+        )
         material = json.dumps(
             {
                 "harness": harness,
                 "location_id": location_id,
                 "operation": operation,
                 "result_keys": sorted(result.keys()),
+                "cursor": cursor_receipt_context,
                 "workspace_id": workspace_id,
             },
             sort_keys=True,
         )
         artifact_hash = hashlib.sha256(material.encode("utf-8")).hexdigest()
         changed_capabilities = [] if operation in {"status", "scan"} else [operation]
+        artifact_id = f"headless:{harness}:{operation}"
+        artifact_name = f"Headless {operation}"
+        capabilities_summary = f"Guard local daemon completed headless {operation}."
+        source_scope = "local-daemon"
+        scanner_evidence: dict[str, object] = {
+            "operation": operation,
+            "location_id": location_id,
+            "workspace_id": workspace_id,
+            "status": "completed",
+        }
+        if cursor_receipt_context is not None:
+            artifact_id = str(cursor_receipt_context["action_scope"])
+            artifact_name = str(cursor_receipt_context["artifact_name"])
+            capabilities_summary = str(cursor_receipt_context["capabilities_summary"])
+            source_scope = str(cursor_receipt_context["source_scope"])
+            changed_capabilities = [str(cursor_receipt_context["changed_capability"])]
+            scanner_evidence.update(cursor_receipt_context["scanner_evidence"])
         receipt = build_receipt(
             harness=harness,
-            artifact_id=f"headless:{harness}:{operation}",
+            artifact_id=artifact_id,
             artifact_hash=artifact_hash,
             policy_decision="allow",
-            capabilities_summary=f"Guard local daemon completed headless {operation}.",
+            capabilities_summary=capabilities_summary,
             changed_capabilities=changed_capabilities,
             provenance_summary="Guard Cloud local daemon API",
-            artifact_name=f"Headless {operation}",
-            source_scope="local-daemon",
-            scanner_evidence=(
-                {
-                    "operation": operation,
-                    "location_id": location_id,
-                    "workspace_id": workspace_id,
-                    "status": "completed",
-                },
-            ),
+            artifact_name=artifact_name,
+            source_scope=source_scope,
+            scanner_evidence=(scanner_evidence,),
             approval_source="guard-cloud-headless",
         )
         self.server.store.add_receipt(receipt)  # type: ignore[attr-defined]
-        return {
+        summary = {
             "id": receipt.receipt_id,
             "operation": operation,
             "status": "completed",
             "timestamp": receipt.timestamp,
+        }
+        if cursor_receipt_context is not None:
+            summary.update(cursor_receipt_context["summary"])
+        return summary
+
+    def _cursor_headless_surface(self, payload: dict[str, object]) -> str | None:
+        surface = self._optional_string(payload.get("surface")) or self._optional_string(payload.get("editor_or_cli"))
+        if surface is None:
+            return None
+        if surface not in {"editor", "cli"}:
+            raise ValueError("invalid_cursor_surface")
+        return surface
+
+    def _cursor_receipt_context(
+        self,
+        *,
+        harness: str,
+        operation: str,
+        payload: dict[str, object],
+        result: dict[str, object],
+        cloud_sync: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        if harness != "cursor":
+            return None
+        action_payload = result.get("cursor_action")
+        action_dict = action_payload if isinstance(action_payload, dict) else {}
+        surface = (
+            self._optional_string(action_dict.get("surface"))
+            or self._optional_string(payload.get("surface"))
+            or self._optional_string(payload.get("editor_or_cli"))
+            or "editor"
+        )
+        action = self._optional_string(action_dict.get("action")) or operation
+        evidence = action_dict.get("evidence")
+        evidence_dict = evidence if isinstance(evidence, dict) else {}
+        action_scope = self._optional_string(evidence_dict.get("actionScope")) or f"cursor:{surface}:{action}"
+        cloud_sync_status = "pending"
+        if isinstance(cloud_sync, dict):
+            cloud_sync_status = self._optional_string(cloud_sync.get("status")) or cloud_sync_status
+        surface_label = "CLI" if surface == "cli" else "editor"
+        scanner_evidence = {
+            "action_scope": action_scope,
+            "cloud_sync_status": cloud_sync_status,
+            "cursor_status": self._optional_string(action_dict.get("status")) or "unknown",
+            "editor_or_cli": surface,
+            "error_reason": self._optional_string(payload.get("error_reason")),
+        }
+        return {
+            "action_scope": action_scope,
+            "artifact_name": f"Cursor {surface_label} {action}",
+            "capabilities_summary": f"Guard local daemon completed Cursor {surface_label} {action}.",
+            "changed_capability": f"{surface}:{action}",
+            "scanner_evidence": scanner_evidence,
+            "source_scope": f"cursor:{surface}",
+            "summary": {
+                "action_scope": action_scope,
+                "cloud_sync": dict(cloud_sync) if isinstance(cloud_sync, dict) else {"status": cloud_sync_status},
+                "editor_or_cli": surface,
+            },
         }
 
     def _handle_policy_clear(self, payload: dict[str, object]) -> None:

@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     build_harness_verification,
     cursor_local_action_payload,
 )
+from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -231,3 +232,75 @@ def test_cursor_cli_install_uses_cursor_agent_shim_without_editor_config(
 
     assert remove_payload["managed_install"]["surface"] == "cli"
     assert not Path(managed_install["shim_path"]).exists()
+
+
+def test_cursor_local_action_receipts_include_surface_scope_and_sync_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    handler = object.__new__(_GuardDaemonHandler)
+    handler.server = type("Server", (), {"store": store})()
+    action_payload = cursor_local_action_payload(
+        action="repair",
+        surface="cli",
+        context=context,
+        protected=True,
+    )
+
+    receipt_summary = _GuardDaemonHandler._record_headless_receipt(
+        handler,
+        harness="cursor",
+        operation="repair",
+        payload={"surface": "cli", "workspace_id": "workspace-123"},
+        result={"cursor_action": action_payload},
+        workspace_id="workspace-123",
+        cloud_sync={"status": "not_configured"},
+    )
+    receipt = store.get_receipt(str(receipt_summary["id"]))
+
+    assert receipt is not None
+    assert receipt["artifact_id"] == "cursor:cli:repair"
+    assert receipt["artifact_name"] == "Cursor CLI repair"
+    assert receipt_summary["action_scope"] == "cursor:cli:repair"
+    assert receipt_summary["editor_or_cli"] == "cli"
+    assert receipt_summary["cloud_sync"]["status"] == "not_configured"
+    evidence = receipt["scanner_evidence"][0]
+    assert evidence["action_scope"] == "cursor:cli:repair"
+    assert evidence["editor_or_cli"] == "cli"
+    assert evidence["cloud_sync_status"] == "not_configured"
+    assert evidence["workspace_id"] == "workspace-123"
+
+
+def test_cursor_status_and_test_actions_keep_distinct_receipt_scopes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+
+    status_payload = build_harness_verification("cursor", context, store, surface="editor", action="status")
+    test_payload = build_harness_verification("cursor", context, store, surface="editor", action="test")
+
+    assert status_payload["cursor_action"]["evidence"]["actionScope"] == "cursor:editor:status"
+    assert test_payload["cursor_action"]["evidence"]["actionScope"] == "cursor:editor:test"
+
+
+def test_cursor_headless_action_error_includes_surface_scope(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    handler = object.__new__(_GuardDaemonHandler)
+    handler.server = type("Server", (), {"store": store})()
+
+    status, payload = _GuardDaemonHandler._headless_app_action_payload(
+        handler,
+        action_path="connect",
+        payload={"harness": "cursor", "surface": "browser"},
+    )
+
+    assert status == 400
+    assert payload["error"]["code"] == "invalid_cursor_surface"
+    assert payload["error"]["surface"] == "browser"
+    assert payload["error"]["app_id"] == "cursor"
