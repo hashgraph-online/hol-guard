@@ -49,9 +49,7 @@ def apply_managed_install(
         skill_scan = scan_workspace_skills(context.workspace_dir, store, now)
         if skill_scan:
             payload["skill_scan"] = skill_scan
-    if len(managed_installs) == 1 and (
-        requested_harness == "cursor" or managed_installs[0].get("harness") == "cursor"
-    ):
+    if len(managed_installs) == 1 and (requested_harness == "cursor" or managed_installs[0].get("harness") == "cursor"):
         payload["cursor_action"] = cursor_local_action_payload(
             action=command,
             surface=None,
