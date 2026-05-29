@@ -35,6 +35,7 @@ Current Guard support in this repo:
   - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
   - leaves native Cursor tool approval in place and focuses Guard on artifact trust
   - managed MCP package-manager tool calls are routed through the supply-chain decision engine before Cursor receives the tool result
+  - uses the Cursor local/cloud contract in `docs/guard/cursor-local-cloud-contract.md` to keep editor and CLI status, repair, receipts, and Cloud sync distinct under one Cursor app
 - `antigravity`
   - detects Antigravity user settings, installed extension profiles, and Antigravity-owned MCP and skill roots
   - supports wrapper-mode management state
