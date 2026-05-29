@@ -3,7 +3,7 @@
 
 @layer components;
 
-/*! tailwindcss v4.2.2 | MIT License | https://tailwindcss.com */
+/*! tailwindcss v4.3.0 | MIT License | https://tailwindcss.com */
 
 @layer properties {
   @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
@@ -473,14 +473,6 @@
 
   .inset-y-0 {
     inset-block: calc(var(--spacing) * 0);
-  }
-
-  .start {
-    inset-inline-start: var(--spacing);
-  }
-
-  .end {
-    inset-inline-end: var(--spacing);
   }
 
   .-top-6 {
@@ -1232,6 +1224,10 @@
 
   .cursor-pointer {
     cursor: pointer;
+  }
+
+  .\[scrollbar-gutter\:stable\] {
+    scrollbar-gutter: stable;
   }
 
   .list-none {
@@ -3884,10 +3880,6 @@
   .select-none {
     -webkit-user-select: none;
     user-select: none;
-  }
-
-  .\[scrollbar-gutter\:stable\] {
-    scrollbar-gutter: stable;
   }
 
   .group-open\:rotate-90:is(:where(.group):is([open], :popover-open, :open) *) {
