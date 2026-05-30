@@ -16,7 +16,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
 from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
-from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -122,7 +122,6 @@ _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE = "HOL Guard checking Codex approval req
 _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE = "HOL Guard checking tool result"
 _MANAGED_HOOK_TIMEOUT_SECONDS = 30
 _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
-_MANAGED_POST_TOOL_HOOK_TIMEOUT_SECONDS = MAX_APPROVAL_WAIT_TIMEOUT_SECONDS + _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
@@ -217,6 +216,20 @@ def _permission_request_hook_group(context: HarnessContext) -> dict[str, object]
     }
 
 
+def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
+    configured_wait_timeout = load_guard_config(
+        context.guard_home,
+        context.workspace_dir,
+    ).approval_wait_timeout_seconds
+    return (
+        min(
+            max(configured_wait_timeout, 0),
+            MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+        )
+        + _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
+    )
+
+
 def _post_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
         "matcher": "Bash",
@@ -224,7 +237,7 @@ def _post_tool_hook_group(context: HarnessContext) -> dict[str, object]:
             _managed_hook_entry(
                 context,
                 _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
-                timeout_seconds=_MANAGED_POST_TOOL_HOOK_TIMEOUT_SECONDS,
+                timeout_seconds=_post_tool_hook_timeout_seconds(context),
             )
         ],
     }
