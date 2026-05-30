@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.codex_config import dump_toml
-from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -749,10 +749,12 @@ def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, ca
     assert len(config_payload["hooks"]["UserPromptSubmit"]) == 1
 
 
-def test_guard_install_codex_post_tool_use_hook_timeout_covers_default_browser_wait(tmp_path, capsys):
+def test_guard_install_codex_post_tool_use_hook_timeout_tracks_configured_browser_wait(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
+    guard_home = home_dir / ".hol-guard"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(guard_home / "config.toml", "approval_wait_timeout_seconds = 45\n")
 
     install_rc = main(
         [
@@ -763,19 +765,49 @@ def test_guard_install_codex_post_tool_use_hook_timeout_covers_default_browser_w
             str(home_dir),
             "--workspace",
             str(workspace_dir),
+            "--guard-home",
+            str(guard_home),
             "--json",
         ]
     )
     json.loads(capsys.readouterr().out)
     config_payload = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
     hook_timeout = config_payload["hooks"]["PostToolUse"][0]["hooks"][0]["timeout"]
-    default_wait_timeout = GuardConfig(
-        guard_home=home_dir / ".hol-guard",
-        workspace=workspace_dir,
-    ).approval_wait_timeout_seconds
 
     assert install_rc == 0
-    assert hook_timeout >= default_wait_timeout
+    assert hook_timeout == 45 + codex_adapter._MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
+
+
+def test_guard_install_codex_post_tool_use_hook_timeout_covers_max_browser_wait(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = home_dir / ".hol-guard"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        guard_home / "config.toml",
+        f"approval_wait_timeout_seconds = {MAX_APPROVAL_WAIT_TIMEOUT_SECONDS}\n",
+    )
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--guard-home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    config_payload = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    hook_timeout = config_payload["hooks"]["PostToolUse"][0]["hooks"][0]["timeout"]
+
+    assert install_rc == 0
+    assert hook_timeout == MAX_APPROVAL_WAIT_TIMEOUT_SECONDS + codex_adapter._MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
 
 
 def test_guard_install_codex_migrates_stale_python_c_managed_hooks(tmp_path, capsys):
