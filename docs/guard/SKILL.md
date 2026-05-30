@@ -23,15 +23,15 @@ Cursor has two protection surfaces. **Cursor editor** covers MCP servers in `.cu
    - `hol-guard apps connect cursor --surface editor`
 2. Connect Cursor CLI protection:
    - `hol-guard apps connect cursor --surface cli`
-3. Check a Cursor surface without changing config:
-   - `hol-guard apps status cursor --surface editor`
-   - `hol-guard apps status cursor --surface cli`
+3. Test a Cursor surface without changing config:
+   - `hol-guard apps test cursor --surface editor`
+   - `hol-guard apps test cursor --surface cli`
 4. Repair only the stale surface named by Guard Cloud:
    - `hol-guard apps repair cursor --surface editor`
    - `hol-guard apps repair cursor --surface cli`
 5. Remove protection only after confirmation:
-   - `hol-guard apps disconnect cursor --surface editor`
-   - `hol-guard apps disconnect cursor --surface cli`
+   - `hol-guard apps disconnect cursor --surface editor --confirm disconnect-cursor`
+   - `hol-guard apps disconnect cursor --surface cli --confirm disconnect-cursor`
 
 Guard owns trust checks, drift repair, redacted receipts, and Cloud sync. Cursor owns its native editor and CLI behavior. If a surface is missing, unsupported, or unavailable, report that state instead of inventing an install URL or fallback command.
 

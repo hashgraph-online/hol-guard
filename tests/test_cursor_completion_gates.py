@@ -16,6 +16,8 @@ from codex_plugin_scanner.guard.cli.install_commands import (
 from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.store import GuardStore
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 def _context(tmp_path: Path, *, workspace_cursor: bool = False) -> HarnessContext:
     home = tmp_path / "home"
@@ -121,18 +123,20 @@ def test_cursor_completion_gate_rejects_unsupported_surface_without_noop_repair(
 
 
 def test_cursor_public_skill_guidance_names_editor_and_cli_without_fake_commands() -> None:
-    text = Path("docs/guard/SKILL.md").read_text(encoding="utf-8")
+    text = (REPO_ROOT / "docs/guard/SKILL.md").read_text(encoding="utf-8")
 
     assert "Cursor editor" in text
     assert "Cursor CLI" in text
     assert "hol-guard apps connect cursor --surface editor" in text
     assert "hol-guard apps connect cursor --surface cli" in text
+    assert "hol-guard apps test cursor --surface editor" in text
+    assert "hol-guard apps test cursor --surface cli" in text
     assert "get.holguard.dev" not in text
     assert "curl -fsSL" not in text
 
 
 def test_cursor_contract_documents_unsupported_state() -> None:
-    text = Path("docs/guard/cursor-local-cloud-contract.md").read_text(encoding="utf-8")
+    text = (REPO_ROOT / "docs/guard/cursor-local-cloud-contract.md").read_text(encoding="utf-8")
 
     assert "unavailable" in text
     assert "unsupported" in text
