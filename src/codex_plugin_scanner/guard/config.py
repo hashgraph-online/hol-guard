@@ -32,6 +32,7 @@ NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
 GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
 GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
+MAX_APPROVAL_WAIT_TIMEOUT_SECONDS = 600
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
 VALID_SECURITY_LEVELS = {"relaxed", "gentle", "balanced", "strict", "paranoid", "custom"}
@@ -447,9 +448,9 @@ def _coerce_editable_setting(key: str, value: object) -> object:
             return value
         raise ValueError("Invalid approval surface policy.")
     if key == "approval_wait_timeout_seconds":
-        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 600:
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_APPROVAL_WAIT_TIMEOUT_SECONDS:
             return value
-        raise ValueError("Approval wait timeout must be between 0 and 600 seconds.")
+        raise ValueError(f"Approval wait timeout must be between 0 and {MAX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds.")
     if key in {"desktop_notifications", "telemetry", "sync", "billing"}:
         if isinstance(value, bool):
             return value
