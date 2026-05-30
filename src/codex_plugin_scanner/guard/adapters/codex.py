@@ -16,6 +16,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
 from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
+from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -119,6 +120,8 @@ _MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking tool action"
 _MANAGED_PROMPT_HOOK_STATUS_MESSAGE = "HOL Guard checking prompt"
 _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE = "HOL Guard checking Codex approval request"
 _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE = "HOL Guard checking tool result"
+_MANAGED_HOOK_TIMEOUT_SECONDS = 30
+_MANAGED_HOOK_TIMEOUT_GRACE_SECONDS = 5
 _CODEX_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _CODEX_GUARD_PERMISSION_MATCHER = "Bash|Read|Write|Edit|MultiEdit|^apply_patch$|mcp__.*"
 _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
@@ -178,11 +181,16 @@ def _hook_command(context: HarnessContext) -> str:
     return shlex.join(_hook_command_parts(context))
 
 
-def _managed_hook_entry(context: HarnessContext, status_message: str) -> dict[str, object]:
+def _managed_hook_entry(
+    context: HarnessContext,
+    status_message: str,
+    *,
+    timeout_seconds: int = _MANAGED_HOOK_TIMEOUT_SECONDS,
+) -> dict[str, object]:
     return {
         "type": "command",
         "command": _hook_command(context),
-        "timeout": 30,
+        "timeout": timeout_seconds,
         "statusMessage": status_message,
         "env": merge_guard_launcher_env(pin_package=True),
     }
@@ -208,10 +216,30 @@ def _permission_request_hook_group(context: HarnessContext) -> dict[str, object]
     }
 
 
+def _post_tool_hook_timeout_seconds(context: HarnessContext) -> int:
+    configured_wait_timeout = load_guard_config(
+        context.guard_home,
+        context.workspace_dir,
+    ).approval_wait_timeout_seconds
+    return (
+        min(
+            max(configured_wait_timeout, 0),
+            MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+        )
+        + _MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
+    )
+
+
 def _post_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
         "matcher": "Bash",
-        "hooks": [_managed_hook_entry(context, _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE)],
+        "hooks": [
+            _managed_hook_entry(
+                context,
+                _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
+                timeout_seconds=_post_tool_hook_timeout_seconds(context),
+            )
+        ],
     }
 
 
