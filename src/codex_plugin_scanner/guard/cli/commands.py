@@ -2782,6 +2782,7 @@ def run_guard_command(
                             event_name="PermissionRequest",
                             policy_action=policy_action,
                             config=config,
+                            payload=payload,
                         ),
                         "command_text": _hook_command_text(payload),
                         "workspace": str(runtime_workspace) if runtime_workspace else None,
@@ -3257,6 +3258,7 @@ def run_guard_command(
                                     event_name=event_name,
                                     policy_action=policy_action,
                                     config=config,
+                                    payload=payload,
                                 ),
                                 "command_text": _hook_command_text(payload),
                                 "workspace": str(workspace) if workspace else None,
@@ -3661,6 +3663,8 @@ def _codex_browser_approval_decision(
 ) -> str | None:
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return None
+    if event_name == "PreToolUse" and not _codex_pretooluse_live_wait_candidate(response_payload):
+        return None
     approval_requests = response_payload.get("approval_requests")
     if not isinstance(approval_requests, list):
         return None
@@ -3710,10 +3714,13 @@ def _codex_hook_waits_for_browser_approval(
     *,
     event_name: str,
     policy_action: str,
+    payload: Mapping[str, object] | None = None,
 ) -> bool:
-    return (
-        _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action)
-    )
+    if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
+        return False
+    if event_name == "PreToolUse":
+        return _codex_pretooluse_live_wait_candidate(payload)
+    return True
 
 
 def _codex_browser_wait_metadata(
@@ -3722,11 +3729,13 @@ def _codex_browser_wait_metadata(
     event_name: str,
     policy_action: str,
     config: GuardConfig,
+    payload: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     waits_for_browser = _codex_hook_waits_for_browser_approval(
         args=args,
         event_name=event_name,
         policy_action=policy_action,
+        payload=payload,
     )
     if not waits_for_browser:
         return {"codex_hook_waits_for_browser_approval": False}
@@ -3741,6 +3750,39 @@ def _codex_browser_wait_metadata(
         "codex_browser_wait_deadline_at": deadline_at.isoformat(),
         "codex_browser_wait_timeout_seconds": wait_timeout_seconds,
     }
+
+
+def _codex_pretooluse_live_wait_candidate(payload: Mapping[str, object] | None) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    command_text = _hook_command_text(payload)
+    if not command_text:
+        tool_input = payload.get("tool_input")
+        if isinstance(tool_input, Mapping):
+            command_text = str(
+                tool_input.get("command")
+                or tool_input.get("cmd")
+                or tool_input.get("shell_command")
+                or tool_input.get("shellCommand")
+                or ""
+            )
+    if not command_text:
+        text_parts = [
+            str(payload.get("artifact_name", "")),
+            str(payload.get("risk_summary", "")),
+            str(payload.get("risk_headline", "")),
+            str(payload.get("trigger_summary", "")),
+            " ".join(str(item) for item in payload.get("risk_signals", []) if isinstance(item, str))
+            if isinstance(payload.get("risk_signals"), list)
+            else "",
+        ]
+        command_text = " ".join(text_parts)
+    lowered = command_text.lower()
+    return bool(
+        re.search(r"\b(?:npm|pnpm|yarn|bun|pip|pip3|python(?:3(?:\.\d+)?)?\s+-m\s+pip)\s+install\b", lowered)
+        or "package install request" in lowered
+        or "before install" in lowered
+    )
 
 
 def _update_codex_browser_operation_status(
