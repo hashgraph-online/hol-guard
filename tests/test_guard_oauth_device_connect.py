@@ -1,4 +1,5 @@
 import json
+import urllib.error
 import urllib.parse
 from pathlib import Path
 
@@ -180,3 +181,39 @@ def test_connect_headless_emits_device_code_payload_without_pairing_secret(tmp_p
     assert "guardPairSecret" not in captured.out
     assert "guardPairRequest" not in captured.out
     assert "guard_live_" not in captured.out
+
+
+def test_connect_headless_reports_device_authorization_network_error(tmp_path: Path, capsys, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    args = _HeadlessConnectArgs()
+    args.guard_home = str(guard_home)
+
+    def failing_headless_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+        raise urllib.error.URLError("network unavailable")
+
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", failing_headless_flow)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "Guard Device Code authorization failed" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_connect_headless_reports_malformed_device_authorization_response(tmp_path: Path, capsys, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    args = _HeadlessConnectArgs()
+    args.guard_home = str(guard_home)
+
+    def failing_headless_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+        raise json.JSONDecodeError("invalid json", "not-json", 0)
+
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", failing_headless_flow)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "Guard Device Code authorization failed" in captured.err
+    assert "Traceback" not in captured.err
