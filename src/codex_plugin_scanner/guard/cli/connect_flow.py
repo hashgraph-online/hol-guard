@@ -450,7 +450,7 @@ def build_connect_status_payload(
     }
     if action in {"repair", "re-pair"}:
         payload["repair_action"] = "rerun_connect"
-        payload["repair_message"] = "Run hol-guard connect to create a fresh pairing request and first sync."
+        payload["repair_message"] = "Run hol-guard connect to start OAuth Device Code approval."
     return payload
 
 

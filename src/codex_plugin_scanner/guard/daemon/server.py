@@ -707,7 +707,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
-        if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if parsed.path in {"/v1/connect/requests", "/v1/connect/complete"}:
+            self._write_legacy_pairing_disabled()
+            return
+        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         payload, body_error = self._load_request_body()
@@ -760,12 +763,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/operations/start":
             self._handle_operation_start(payload)
-            return
-        if parsed.path == "/v1/connect/requests":
-            self._handle_connect_request_create(payload)
-            return
-        if parsed.path == "/v1/connect/complete":
-            self._handle_connect_complete(payload)
             return
         if parsed.path == "/v1/connect/result":
             self._handle_connect_result_update(payload)
@@ -2734,6 +2731,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             lifetime_seconds=lifetime_seconds,
         )
         self._write_json(request)
+
+    def _write_legacy_pairing_disabled(self) -> None:
+        self._write_json(
+            {
+                "error": "legacy_pairing_disabled",
+                "message": "Use OAuth Device Code through hol-guard connect.",
+            },
+            status=410,
+        )
 
     def _handle_connect_complete(self, payload: dict[str, object]) -> None:
         origin = self._normalize_origin(self.headers.get("Origin"))
