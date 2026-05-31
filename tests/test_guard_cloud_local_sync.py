@@ -475,31 +475,48 @@ def test_runtime_snapshot_exposes_local_device_without_cloud_pairing(tmp_path: P
 
 def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    connect_request = store.create_guard_connect_request(
-        sync_url="https://hol.org/api/guard/receipts/sync",
-        allowed_origin="https://hol.org",
-        now="2026-04-24T00:00:00+00:00",
-    )
-    request_id = str(connect_request["request_id"])
-    store.complete_guard_connect_request(
-        request_id=request_id,
-        pairing_secret=str(connect_request["pairing_secret"]),
-        token="secret-browser-session-token",
-        now="2026-04-24T00:01:00+00:00",
-    )
-    store.record_guard_connect_result(
-        request_id=request_id,
-        status="connected",
-        milestone="first_sync_succeeded",
-        now="2026-04-24T00:02:00+00:00",
-        sync_payload={
-            "synced_at": "2026-04-24T00:02:00+00:00",
-            "receipts_stored": 3,
-            "inventory_tracked": 5,
-            "runtime_session_id": "runtime-session-1",
-            "runtime_session_synced_at": "2026-04-24T00:01:30+00:00",
-        },
-    )
+    request_id = "connect-imported-state"
+    with store._connect() as connection:
+        connection.execute(
+            """
+            insert into guard_connect_states (
+              request_id,
+              sync_url,
+              allowed_origin,
+              status,
+              milestone,
+              reason,
+              created_at,
+              updated_at,
+              expires_at,
+              completed_at,
+              proof_json
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                request_id,
+                "https://hol.org/api/guard/receipts/sync",
+                "https://hol.org",
+                "connected",
+                "first_sync_succeeded",
+                None,
+                "2026-04-24T00:00:00+00:00",
+                "2026-04-24T00:02:00+00:00",
+                "2026-04-24T00:05:00+00:00",
+                "2026-04-24T00:01:00+00:00",
+                json.dumps(
+                    {
+                        "pairing_completed_at": "2026-04-24T00:01:00+00:00",
+                        "first_synced_at": "2026-04-24T00:02:00+00:00",
+                        "receipts_stored": 3,
+                        "inventory_items": 5,
+                        "runtime_session_id": "runtime-session-1",
+                        "runtime_session_synced_at": "2026-04-24T00:01:30+00:00",
+                    }
+                ),
+            ),
+        )
 
     snapshot = build_runtime_snapshot(
         store=store,
