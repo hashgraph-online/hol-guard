@@ -200,7 +200,9 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert apis_by_method[("POST", "/v1/initialize")].auth_required is False
     assert apis_by_method[("GET", "/v1/connect/state")].writes_state is False
     assert apis_by_method[("POST", "/v1/connect/requests")].auth_required is True
+    assert apis_by_method[("POST", "/v1/connect/requests")].writes_state is False
     assert apis_by_method[("POST", "/v1/connect/complete")].auth_required is False
+    assert apis_by_method[("POST", "/v1/connect/complete")].writes_state is False
     assert apis_by_method[("POST", "/v1/connect/result")].writes_state is True
     assert apis_by_method[("GET", "/v1/runtime")].writes_state is False
     assert apis_by_method[("GET", "/v1/harnesses")].writes_state is False
