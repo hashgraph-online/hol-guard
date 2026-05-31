@@ -14318,7 +14318,7 @@ function resolveEnvelopeDisplayText(envelope) {
   if (envelope.action_type === "shell_command" && envelope.command !== null) {
     return envelope.command;
   }
-  if (envelope.action_type === "prompt" && envelope.prompt_excerpt !== null) {
+  if (envelope.action_type === "prompt" && (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)) {
     return envelope.prompt_text ?? envelope.prompt_excerpt;
   }
   if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
