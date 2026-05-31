@@ -82,6 +82,7 @@ export type GuardActionEnvelope = {
   tool_name: string | null;
   command: string | null;
   prompt_excerpt: string | null;
+  prompt_text?: string | null;
   target_paths: string[];
   network_hosts: string[];
   mcp_server: string | null;
