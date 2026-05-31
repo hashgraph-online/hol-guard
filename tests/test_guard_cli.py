@@ -34,7 +34,6 @@ from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -6318,243 +6317,114 @@ url = http://127.0.0.1:8787/guard-canary
         assert "artifactHash" in first_receipt
         assert "recommendation" in first_receipt
 
-    def test_guard_connect_pairs_browser_session_and_syncs(self, tmp_path, capsys, monkeypatch):
+    def test_guard_connect_opens_device_code_approval_without_pairing(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
-        _SyncRequestHandler.response_payload = {
-            "syncedAt": "2026-04-09T00:00:00Z",
-            "receiptsStored": 1,
-            "advisories": [
-                {
-                    "id": "adv-001",
-                    "publisher": "hashgraph-online",
-                    "severity": "high",
-                    "headline": "Publisher rotated to a new remote domain.",
-                }
-            ],
-            "policy": {
-                "mode": "enforce",
-                "defaultAction": "warn",
-                "unknownPublisherAction": "review",
-                "changedHashAction": "allow",
-                "newNetworkDomainAction": "warn",
-                "subprocessAction": "block",
-                "telemetryEnabled": False,
-                "syncEnabled": True,
-                "updatedAt": "2026-04-09T00:00:00Z",
-            },
-            "alertPreferences": {
-                "emailEnabled": True,
-                "digestMode": "daily",
-                "watchlistEnabled": True,
-                "advisoriesEnabled": True,
-                "repeatedWarningsEnabled": True,
-                "teamAlertsEnabled": True,
-                "updatedAt": "2026-04-09T00:00:00Z",
-            },
-            "teamPolicyPack": {
-                "name": "Security team default",
-                "sharedHarnessDefaults": {"codex": "enforce"},
-                "allowedPublishers": ["hashgraph-online"],
-                "blockedArtifacts": [],
-                "alertChannel": "email",
-                "updatedAt": "2026-04-09T00:00:00Z",
-                "auditTrail": [],
-            },
-        }
-
-        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-
         store = GuardStore(home_dir)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-        monkeypatch.setattr(
-            guard_commands_module,
-            "ensure_guard_daemon",
-            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
-        )
-
         opened_urls: list[str] = []
 
         def open_browser(url: str) -> bool:
             opened_urls.append(url)
-            parsed = urllib.parse.urlparse(url)
-            query = urllib.parse.parse_qs(parsed.query)
-            fragment = urllib.parse.parse_qs(parsed.fragment)
-            request_id = query["guardPairRequest"][-1]
-            daemon_url = query["guardDaemon"][-1]
-            pairing_secret = fragment["guardPairSecret"][-1]
-
-            def complete_pairing() -> None:
-                request = urllib.request.Request(
-                    f"{daemon_url}/v1/connect/complete",
-                    data=urllib.parse.urlencode(
-                        {
-                            "request_id": request_id,
-                            "pairing_secret": pairing_secret,
-                            "token": "session-token-123",
-                        }
-                    ).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "Origin": "https://hol.org",
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(request, timeout=5):
-                    pass
-
-            threading.Thread(target=complete_pairing, daemon=True).start()
             return True
 
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
-        try:
-            run_rc = main(
-                [
-                    "guard",
-                    "run",
-                    "codex",
-                    "--home",
-                    str(home_dir),
-                    "--workspace",
-                    str(workspace_dir),
-                    "--dry-run",
-                    "--default-action",
-                    "allow",
-                    "--json",
-                ]
-            )
-            json.loads(capsys.readouterr().out)
+        def fake_device_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+            assert connect_url == "https://hol.org/guard/connect"
+            return {
+                "status": "waiting_for_approval",
+                "connect_mode": "device_code",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "next_action": {
+                    "command": "open",
+                    "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                },
+            }
 
-            connect_rc = main(
-                [
-                    "guard",
-                    "connect",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--connect-url",
-                    "https://hol.org/guard/connect",
-                    "--json",
-                ]
-            )
-            connect_output = json.loads(capsys.readouterr().out)
-        finally:
-            daemon.stop()
-            server.shutdown()
-            thread.join(timeout=5)
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
+        run_rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--dry-run",
+                "--default-action",
+                "allow",
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+        connect_rc = main(
+            [
+                "guard",
+                "connect",
+                "--home",
+                str(home_dir),
+                "--connect-url",
+                "https://hol.org/guard/connect",
+                "--json",
+            ]
+        )
+        connect_output = json.loads(capsys.readouterr().out)
 
         assert run_rc == 0
         assert connect_rc == 0
-        assert connect_output["connected"] is True
-        assert connect_output["status"] == "connected"
-        assert connect_output["milestone"] == "first_sync_succeeded"
-        assert connect_output["sync"]["receipts_stored"] == 1
-        assert connect_output["sync"]["inventory_tracked"] >= 1
+        assert connect_output["status"] == "waiting_for_approval"
+        assert connect_output["connect_mode"] == "device_code"
+        assert connect_output["user_code"] == "ABCD-EFGH"
         assert connect_output["browser_opened"] is True
-        assert opened_urls and opened_urls[0].startswith("https://hol.org/guard/connect?")
-        assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer session-token-123"
-        assert _SyncRequestHandler.captured_headers["user-agent"].startswith("hol-guard/")
-        assert store.get_sync_credentials() == {
-            "sync_url": f"http://127.0.0.1:{server.server_port}/receipts",
-            "token": "session-token-123",
-        }
+        assert opened_urls == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
+        assert "guardPairSecret" not in json.dumps(connect_output)
+        assert "guardPairRequest" not in json.dumps(connect_output)
+        assert store.get_sync_credentials() is None
 
-    def test_guard_login_without_manual_credentials_runs_browser_pairing(self, tmp_path, capsys, monkeypatch):
+    def test_guard_login_without_manual_credentials_redirects_to_device_code(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
-        _SyncRequestHandler.response_payload = {
-            "syncedAt": "2026-04-09T00:00:00Z",
-            "receiptsStored": 1,
-        }
-
-        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-
         store = GuardStore(home_dir)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-        monkeypatch.setattr(
-            guard_commands_module,
-            "ensure_guard_daemon",
-            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
-        )
-
         opened_urls: list[str] = []
 
         def open_browser(url: str) -> bool:
             opened_urls.append(url)
-            parsed = urllib.parse.urlparse(url)
-            query = urllib.parse.parse_qs(parsed.query)
-            fragment = urllib.parse.parse_qs(parsed.fragment)
-            request_id = query["guardPairRequest"][-1]
-            daemon_url = query["guardDaemon"][-1]
-            pairing_secret = fragment["guardPairSecret"][-1]
-
-            def complete_pairing() -> None:
-                request = urllib.request.Request(
-                    f"{daemon_url}/v1/connect/complete",
-                    data=urllib.parse.urlencode(
-                        {
-                            "request_id": request_id,
-                            "pairing_secret": pairing_secret,
-                            "token": "session-token-compat",
-                        }
-                    ).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "Origin": "https://hol.org",
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(request, timeout=5):
-                    pass
-
-            threading.Thread(target=complete_pairing, daemon=True).start()
             return True
 
+        def fake_device_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+            return {
+                "status": "waiting_for_approval",
+                "connect_mode": "device_code",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "next_action": {
+                    "command": "open",
+                    "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                },
+            }
+
         monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
-        try:
-            login_rc = main(
-                [
-                    "guard",
-                    "login",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--connect-url",
-                    "https://hol.org/guard/connect",
-                    "--json",
-                ]
-            )
-            login_output = json.loads(capsys.readouterr().out)
-            sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
-            sync_output = json.loads(capsys.readouterr().out)
-        finally:
-            daemon.stop()
-            server.shutdown()
-            thread.join(timeout=5)
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
+        login_rc = main(
+            [
+                "guard",
+                "login",
+                "--home",
+                str(home_dir),
+                "--connect-url",
+                "https://hol.org/guard/connect",
+                "--json",
+            ]
+        )
+        login_output = json.loads(capsys.readouterr().out)
 
         assert login_rc == 0
-        assert login_output["connected"] is True
-        assert login_output["status"] == "connected"
-        assert opened_urls and opened_urls[0].startswith("https://hol.org/guard/connect?")
-        assert sync_rc == 0
-        assert sync_output["receipts_stored"] == 1
-        assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer session-token-compat"
-        assert store.get_sync_credentials() == {
-            "sync_url": f"http://127.0.0.1:{server.server_port}/receipts",
-            "token": "session-token-compat",
-        }
+        assert login_output["status"] == "waiting_for_approval"
+        assert login_output["connect_mode"] == "device_code"
+        assert opened_urls == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
+        assert store.get_sync_credentials() is None
 
     def test_guard_login_manual_mode_requires_sync_url_and_token(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -6834,182 +6704,73 @@ url = http://127.0.0.1:8787/guard-canary
         assert payload["receipts"]["receipts_stored"] == 2
         assert payload["connection"]["sync_url"] == "https://hol.org/api/guard/receipts/sync"
 
-    def test_guard_connect_preserves_pairing_when_first_sync_fails(self, tmp_path, capsys, monkeypatch):
+    def test_guard_connect_reports_device_authorization_errors_cleanly(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-
         store = GuardStore(home_dir)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-        monkeypatch.setattr(
-            guard_commands_module,
-            "ensure_guard_daemon",
-            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+
+        def failing_device_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+            raise RuntimeError("device_authorization_unreachable")
+
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", failing_device_flow)
+        connect_rc = main(
+            [
+                "guard",
+                "connect",
+                "--home",
+                str(home_dir),
+                "--connect-url",
+                "https://hol.org/guard/connect",
+                "--json",
+            ]
         )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
-            lambda current_store: (_ for _ in ()).throw(RuntimeError("sync_unreachable")),
-        )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
-            lambda current_store, *, session: {
-                "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
-                "runtime_session_synced_at": "2026-04-15T00:00:01Z",
-                "runtime_sessions_visible": 1,
-            },
-        )
-
-        def open_browser(url: str) -> bool:
-            parsed = urllib.parse.urlparse(url)
-            query = urllib.parse.parse_qs(parsed.query)
-            fragment = urllib.parse.parse_qs(parsed.fragment)
-            request_id = query["guardPairRequest"][-1]
-            daemon_url = query["guardDaemon"][-1]
-            pairing_secret = fragment["guardPairSecret"][-1]
-
-            def complete_pairing() -> None:
-                request = urllib.request.Request(
-                    f"{daemon_url}/v1/connect/complete",
-                    data=urllib.parse.urlencode(
-                        {
-                            "request_id": request_id,
-                            "pairing_secret": pairing_secret,
-                            "token": "session-token-123",
-                        }
-                    ).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "Origin": "https://hol.org",
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(request, timeout=5):
-                    pass
-
-            threading.Thread(target=complete_pairing, daemon=True).start()
-            return True
-
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
-        try:
-            connect_rc = main(
-                [
-                    "guard",
-                    "connect",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    "https://hol.org/registry/api/v1",
-                    "--connect-url",
-                    "https://hol.org/guard/connect",
-                    "--json",
-                ]
-            )
-            connect_output = json.loads(capsys.readouterr().out)
-        finally:
-            daemon.stop()
+        captured = capsys.readouterr()
 
         assert connect_rc == 1
-        assert connect_output["connected"] is False
-        assert connect_output["status"] == "retry_required"
-        assert connect_output["milestone"] == "first_sync_failed"
-        assert connect_output["reason"] == "sync_unreachable"
-        assert connect_output["sync_message"] == "sync_unreachable"
+        assert "Guard Device Code authorization failed: device_authorization_unreachable" in captured.err
+        assert "Traceback" not in captured.err
+        assert store.get_sync_credentials() is None
 
-    def test_guard_connect_surfaces_remote_sync_errors_cleanly(self, tmp_path, capsys, monkeypatch):
+    def test_guard_connect_never_opens_legacy_pairing_url(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        _SyncRequestHandler.response_code = 403
-        _SyncRequestHandler.response_payload = {
-            "error": "Guard sync requires a Pro or Team plan.",
-        }
-
-        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-
-        store = GuardStore(home_dir)
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
-        monkeypatch.setattr(
-            guard_commands_module,
-            "ensure_guard_daemon",
-            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
-        )
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
-            lambda current_store, *, session: {
-                "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
-                "runtime_session_synced_at": "2026-04-15T00:00:01Z",
-                "runtime_sessions_visible": 1,
-            },
-        )
+        opened_urls: list[str] = []
 
         def open_browser(url: str) -> bool:
-            parsed = urllib.parse.urlparse(url)
-            query = urllib.parse.parse_qs(parsed.query)
-            fragment = urllib.parse.parse_qs(parsed.fragment)
-            request_id = query["guardPairRequest"][-1]
-            daemon_url = query["guardDaemon"][-1]
-            pairing_secret = fragment["guardPairSecret"][-1]
-
-            def complete_pairing() -> None:
-                request = urllib.request.Request(
-                    f"{daemon_url}/v1/connect/complete",
-                    data=urllib.parse.urlencode(
-                        {
-                            "request_id": request_id,
-                            "pairing_secret": pairing_secret,
-                            "token": "session-token-123",
-                        }
-                    ).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "Origin": "https://hol.org",
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(request, timeout=5):
-                    pass
-
-            threading.Thread(target=complete_pairing, daemon=True).start()
+            opened_urls.append(url)
             return True
 
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
-        try:
-            connect_rc = main(
-                [
-                    "guard",
-                    "connect",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--connect-url",
-                    "https://hol.org/guard/connect",
-                    "--json",
-                ]
-            )
-            connect_output = json.loads(capsys.readouterr().out)
-        finally:
-            daemon.stop()
-            server.shutdown()
-            thread.join(timeout=5)
-            _SyncRequestHandler.response_code = 200
-            _SyncRequestHandler.response_payload = {
-                "syncedAt": "2026-04-09T00:00:00Z",
-                "receiptsStored": 1,
+        def fake_device_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+            return {
+                "status": "waiting_for_approval",
+                "connect_mode": "device_code",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "next_action": {
+                    "command": "open",
+                    "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                },
             }
 
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
+        connect_rc = main(
+            [
+                "guard",
+                "connect",
+                "--home",
+                str(home_dir),
+                "--connect-url",
+                "https://hol.org/guard/connect",
+                "--json",
+            ]
+        )
+        connect_output = json.loads(capsys.readouterr().out)
+        rendered = json.dumps(connect_output, sort_keys=True)
+
         assert connect_rc == 0
-        assert connect_output["connected"] is True
-        assert connect_output["sync_available"] is False
-        assert connect_output["status"] == "connected"
-        assert connect_output["milestone"] == "sync_not_available"
-        assert connect_output["reason"] == "Local Guard is connected. Shared cloud sync needs a paid Guard plan."
-        assert connect_output["sync_message"] == "Local Guard is connected. Shared cloud sync needs a paid Guard plan."
-        assert connect_output["sync"]["sync_not_available_reason"] == "Guard sync requires a Pro or Team plan."
+        assert opened_urls == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
+        assert "guardPairSecret" not in rendered
+        assert "guardPairRequest" not in rendered
+        assert "guardDaemon" not in rendered
 
     def test_guard_dashboard_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -7063,7 +6824,7 @@ url = http://127.0.0.1:8787/guard-canary
         )
         monkeypatch.setattr(
             guard_commands_module,
-            "_run_guard_connect_flow",
+            "_run_guard_device_connect_flow",
             lambda **_kwargs: pytest.fail("cloud connect should wait for approval"),
         )
         monkeypatch.setattr(
@@ -7138,7 +6899,7 @@ url = http://127.0.0.1:8787/guard-canary
         monkeypatch.setattr(guard_commands_module, "apply_managed_install", fake_install)
         monkeypatch.setattr(
             guard_commands_module,
-            "_run_guard_connect_flow",
+            "_run_guard_device_connect_flow",
             lambda **_kwargs: {
                 "connected": False,
                 "status": "waiting_for_browser",
@@ -7206,7 +6967,7 @@ url = http://127.0.0.1:8787/guard-canary
         )
         monkeypatch.setattr(
             guard_commands_module,
-            "_run_guard_connect_flow",
+            "_run_guard_device_connect_flow",
             lambda **_kwargs: {"connected": False, "status": "waiting_for_browser"},
         )
         monkeypatch.setattr(
@@ -7272,7 +7033,7 @@ url = http://127.0.0.1:8787/guard-canary
         monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", fake_daemon)
         monkeypatch.setattr(guard_commands_module, "_open_approval_center", fake_open)
         monkeypatch.setattr(guard_commands_module, "apply_managed_install", fake_install)
-        monkeypatch.setattr(guard_commands_module, "_run_guard_connect_flow", fake_connect)
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_connect)
         monkeypatch.setattr(
             guard_commands_module,
             "ensure_desktop_notification_setup",
@@ -7319,7 +7080,7 @@ url = http://127.0.0.1:8787/guard-canary
         )
         monkeypatch.setattr(
             guard_commands_module,
-            "_run_guard_connect_flow",
+            "_run_guard_device_connect_flow",
             lambda **_kwargs: {"connected": False, "status": "waiting_for_browser"},
         )
         monkeypatch.setattr(
@@ -7369,7 +7130,7 @@ url = http://127.0.0.1:8787/guard-canary
         )
         monkeypatch.setattr(
             guard_commands_module,
-            "_run_guard_connect_flow",
+            "_run_guard_device_connect_flow",
             lambda **_kwargs: pytest.fail("cloud connect should be skipped"),
         )
 
@@ -7439,7 +7200,7 @@ url = http://127.0.0.1:8787/guard-canary
         )
         monkeypatch.setattr(
             guard_commands_module,
-            "_run_guard_connect_flow",
+            "_run_guard_device_connect_flow",
             lambda **_kwargs: events.append("run:cloud") or {"connected": True, "status": "connected"},
         )
 
@@ -7503,7 +7264,7 @@ url = http://127.0.0.1:8787/guard-canary
         )
         monkeypatch.setattr(
             guard_commands_module,
-            "_run_guard_connect_flow",
+            "_run_guard_device_connect_flow",
             lambda **_kwargs: pytest.fail("cloud connect should be skipped"),
         )
         monkeypatch.setattr(
