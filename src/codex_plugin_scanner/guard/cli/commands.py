@@ -3678,6 +3678,10 @@ def _codex_browser_approval_decision(
     wait_timeout_seconds = max(config.approval_wait_timeout_seconds, 0)
     if event_name == "UserPromptSubmit":
         wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_PROMPT_APPROVAL_WAIT_MAX_SECONDS)
+    if wait_timeout_seconds <= 0:
+        return None
+    if event_name == "PreToolUse":
+        _open_codex_live_approval(response_payload)
     wait_result = wait_for_approval_requests(
         store=store,
         request_ids=request_ids,
@@ -3783,6 +3787,23 @@ def _codex_pretooluse_live_wait_candidate(payload: Mapping[str, object] | None) 
         or "package install request" in lowered
         or "before install" in lowered
     )
+
+
+def _open_codex_live_approval(response_payload: Mapping[str, object]) -> None:
+    queued = response_payload.get("approval_requests")
+    review_url = first_approval_url(queued) if isinstance(queued, list) else None
+    if not review_url:
+        approval_center_url = response_payload.get("approval_center_url")
+        review_url = approval_center_url.strip() if isinstance(approval_center_url, str) else None
+    if not review_url:
+        return
+    print(
+        f"HOL Guard is waiting for approval in your browser: {review_url}",
+        file=sys.stderr,
+        flush=True,
+    )
+    with suppress(Exception):
+        webbrowser.open(review_url)
 
 
 def _update_codex_browser_operation_status(
