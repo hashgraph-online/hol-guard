@@ -233,6 +233,11 @@ def test_connect_default_uses_device_code_without_pairing_secret(tmp_path: Path,
     assert not hasattr(guard_commands, "_run_guard_connect_flow")
 
 
+def test_legacy_pairing_helpers_are_not_exported() -> None:
+    assert not hasattr(connect_flow, "run_guard_connect_command")
+    assert not hasattr(connect_flow, "build_guard_connect_browser_url")
+
+
 def test_daemon_rejects_legacy_pairing_request_endpoint(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -254,32 +259,47 @@ def test_daemon_rejects_legacy_pairing_request_endpoint(tmp_path: Path) -> None:
         with urllib.request.urlopen(initialize_request, timeout=5) as response:
             initialize_payload = json.loads(response.read().decode("utf-8"))
 
-        legacy_request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/connect/requests",
-            data=json.dumps(
-                {
-                    "sync_url": "https://hol.org/api/guard/receipts/sync",
-                    "allowed_origin": "https://hol.org",
-                }
-            ).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "X-Guard-Token": initialize_payload["auth_token"],
-            },
-            method="POST",
-        )
-        try:
-            urllib.request.urlopen(legacy_request, timeout=5)
-        except urllib.error.HTTPError as error:
-            status = error.code
-            payload = json.loads(error.read().decode("utf-8"))
-        else:
-            raise AssertionError("legacy pairing endpoint must not create requests")
+        results: dict[str, tuple[int, dict[str, object]]] = {}
+        for path, method in (
+            ("/v1/connect/requests", "POST"),
+            ("/v1/connect/complete", "POST"),
+            ("/v1/connect/result", "POST"),
+            ("/v1/connect/state?request_id=connect-legacy", "GET"),
+        ):
+            legacy_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}{path}",
+                data=json.dumps(
+                    {
+                        "sync_url": "https://hol.org/api/guard/receipts/sync",
+                        "allowed_origin": "https://hol.org",
+                    }
+                ).encode("utf-8")
+                if method == "POST"
+                else None,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": initialize_payload["auth_token"],
+                },
+                method=method,
+            )
+            try:
+                urllib.request.urlopen(legacy_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                results[path] = (error.code, json.loads(error.read().decode("utf-8")))
+            else:
+                raise AssertionError(f"legacy pairing endpoint must be disabled: {path}")
     finally:
         daemon.stop()
 
-    assert status == 410
-    assert payload["error"] == "legacy_pairing_disabled"
+    assert set(results) == {
+        "/v1/connect/requests",
+        "/v1/connect/complete",
+        "/v1/connect/result",
+        "/v1/connect/state?request_id=connect-legacy",
+    }
+    for status, payload in results.values():
+        assert status == 410
+        assert payload["error"] == "legacy_pairing_disabled"
 
 
 def test_connect_headless_reports_device_authorization_network_error(tmp_path: Path, capsys, monkeypatch) -> None:

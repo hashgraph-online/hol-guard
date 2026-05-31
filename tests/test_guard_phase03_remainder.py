@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import http.client
 import json
-import urllib.parse
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands
-from codex_plugin_scanner.guard.cli.connect_flow import build_guard_connect_browser_url, run_guard_connect_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install, list_harness_setup_items
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -422,45 +420,3 @@ def test_install_native_contract_output_prefers_native_hooks_for_supported_harne
     assert managed_install["native_hooks"] is True
     assert managed_install["primary_integration"] == "native_hooks"
     assert managed_install["manifest"]["mode"] == "codex-mcp-proxy"
-
-
-def test_connect_rejects_invalid_url_before_daemon_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon_calls: list[Path] = []
-
-    def ensure_daemon(guard_home: Path) -> str:
-        daemon_calls.append(guard_home)
-        raise AssertionError("daemon must not start for invalid connect URL")
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.cli.connect_flow.ensure_guard_daemon", ensure_daemon)
-
-    with pytest.raises(ValueError, match="absolute http"):
-        run_guard_connect_command(
-            guard_home=tmp_path / "guard-home",
-            store=store,
-            sync_url="https://hol.org/api/guard/receipts/sync",
-            connect_url="not-a-url",
-            opener=lambda url: True,
-            wait_timeout_seconds=1,
-        )
-
-    assert daemon_calls == []
-
-
-def test_connect_browser_url_keeps_pairing_secret_in_fragment_only() -> None:
-    browser_url = build_guard_connect_browser_url(
-        connect_url="https://hol.org/guard/connect?source=cli",
-        daemon_url="http://127.0.0.1:4781",
-        request_id="connect-123",
-        pairing_secret="pairing-secret",
-    )
-
-    parsed = urllib.parse.urlparse(browser_url)
-    query = urllib.parse.parse_qs(parsed.query)
-    fragment = urllib.parse.parse_qs(parsed.fragment)
-
-    assert query["source"] == ["cli"]
-    assert query["guardPairRequest"] == ["connect-123"]
-    assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
-    assert "pairing-secret" not in parsed.query
-    assert fragment["guardPairSecret"] == ["pairing-secret"]

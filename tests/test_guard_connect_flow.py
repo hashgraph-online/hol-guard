@@ -80,6 +80,11 @@ def test_daemon_rejects_legacy_connect_pairing_endpoints(tmp_path: Path) -> None
             path="/v1/connect/complete",
             token=initialize_payload["auth_token"],
         )
+        result_status, result_payload = _post_legacy_connect_endpoint(
+            daemon=daemon,
+            path="/v1/connect/result",
+            token=initialize_payload["auth_token"],
+        )
     finally:
         daemon.stop()
 
@@ -87,7 +92,9 @@ def test_daemon_rejects_legacy_connect_pairing_endpoints(tmp_path: Path) -> None
     assert request_payload["error"] == "legacy_pairing_disabled"
     assert complete_status == 410
     assert complete_payload["error"] == "legacy_pairing_disabled"
-    assert "guard_live_secret" not in json.dumps([request_payload, complete_payload])
+    assert result_status == 410
+    assert result_payload["error"] == "legacy_pairing_disabled"
+    assert "guard_live_secret" not in json.dumps([request_payload, complete_payload, result_payload])
 
 
 def test_connect_repair_copy_points_to_device_code(tmp_path: Path) -> None:

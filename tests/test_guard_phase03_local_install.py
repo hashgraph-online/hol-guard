@@ -13,10 +13,8 @@ from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_open_command
-from codex_plugin_scanner.guard.cli.connect_flow import run_guard_connect_command
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.runtime import GuardSyncNotAvailableError
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -177,86 +175,6 @@ def test_managed_install_is_idempotent_and_uninstall_tracks_guard_owned_state(tm
     assert second["managed_install"]["config_path"] == first["managed_install"]["config_path"]
     assert removed["managed_install"]["active"] is False
     assert store.get_managed_install("opencode")["active"] is False
-
-
-def test_connect_free_plan_error_keeps_local_pairing_successful(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-
-    class DaemonClient:
-        daemon_url = "http://127.0.0.1:4781"
-
-        def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
-            return {
-                "request_id": "connect-free-plan",
-                "pairing_secret": "pairing-secret",
-                "expires_at": "2026-05-12T00:05:00Z",
-            }
-
-        def report_connect_result(
-            self,
-            *,
-            request_id: str,
-            status: str,
-            milestone: str,
-            reason: str | None = None,
-            sync: dict[str, object] | None = None,
-        ) -> dict[str, object]:
-            return {
-                "request_id": request_id,
-                "status": status,
-                "milestone": milestone,
-                "reason": reason,
-                "completed_at": "2026-05-12T00:00:10Z",
-                "expires_at": "2026-05-12T00:05:00Z",
-                "proof": sync or {},
-            }
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.cli.connect_flow.ensure_guard_daemon", lambda guard_home: "ok")
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.connect_flow.load_guard_surface_daemon_client",
-        lambda guard_home: DaemonClient(),
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.connect_flow.wait_for_connect_transition",
-        lambda **kwargs: {
-            "request_id": "connect-free-plan",
-            "status": "connected",
-            "milestone": "first_sync_pending",
-            "completed_at": "2026-05-12T00:00:10Z",
-            "proof": {},
-        },
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
-        lambda current_store, *, session: {
-            "runtime_session_id": "guard-session-1",
-            "runtime_session_synced_at": "2026-05-12T00:00:11Z",
-            "runtime_sessions_visible": 1,
-        },
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
-        lambda current_store: (_ for _ in ()).throw(GuardSyncNotAvailableError("HTTP Error 403: plan required")),
-    )
-
-    payload = run_guard_connect_command(
-        guard_home=tmp_path / "guard-home",
-        store=store,
-        sync_url="https://hol.org/api/guard/receipts/sync",
-        connect_url="https://hol.org/guard/connect",
-        opener=lambda url: False,
-        wait_timeout_seconds=1,
-    )
-
-    assert payload["connected"] is True
-    assert payload["sync_available"] is False
-    assert payload["status"] == "connected"
-    assert payload["milestone"] == "sync_not_available"
-    assert payload["sync_message"] == "Local Guard is connected. Shared cloud sync needs a paid Guard plan."
-    assert payload["next_action"]["label"] == "Copy pairing URL"
 
 
 def test_approval_open_repairs_stale_local_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

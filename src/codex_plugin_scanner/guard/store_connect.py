@@ -1,12 +1,10 @@
-"""One-time browser pairing persistence helpers for Guard connect."""
+"""Legacy Guard connect-state readers for migration compatibility."""
 
 from __future__ import annotations
 
-import hashlib
 import json
-import secrets
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 CONNECT_STATE_VERSION = "guard-connect-state.v1"
 CONNECT_STATE_STATUS_VALUES = {"waiting", "connected", "retry_required", "expired"}
@@ -51,114 +49,6 @@ def connect_state_schema_statement() -> str:
           proof_json text not null default '{}'
         )
         """
-
-
-def create_connect_request(
-    connection: sqlite3.Connection,
-    *,
-    request_id: str,
-    sync_url: str,
-    allowed_origin: str,
-    pairing_secret_hash: str,
-    created_at: str,
-    expires_at: str,
-) -> None:
-    connection.execute(
-        """
-        insert into guard_connect_requests (
-          request_id,
-          sync_url,
-          allowed_origin,
-          pairing_secret_hash,
-          status,
-          created_at,
-          expires_at,
-          completed_at
-        )
-        values (?, ?, ?, ?, 'pending', ?, ?, null)
-        """,
-        (
-            request_id,
-            sync_url,
-            allowed_origin,
-            pairing_secret_hash,
-            created_at,
-            expires_at,
-        ),
-    )
-
-
-def get_connect_request(
-    connection: sqlite3.Connection,
-    request_id: str,
-) -> dict[str, object] | None:
-    row = connection.execute(
-        """
-        select request_id, sync_url, allowed_origin, status, created_at, expires_at, completed_at
-        from guard_connect_requests
-        where request_id = ?
-        """,
-        (request_id,),
-    ).fetchone()
-    if row is None:
-        return None
-    return {
-        "request_id": str(row["request_id"]),
-        "sync_url": str(row["sync_url"]),
-        "allowed_origin": str(row["allowed_origin"]),
-        "status": str(row["status"]),
-        "created_at": str(row["created_at"]),
-        "expires_at": str(row["expires_at"]),
-        "completed_at": str(row["completed_at"]) if row["completed_at"] is not None else None,
-    }
-
-
-def create_connect_state(
-    connection: sqlite3.Connection,
-    *,
-    request_id: str,
-    sync_url: str,
-    allowed_origin: str,
-    created_at: str,
-    expires_at: str,
-    updated_at: str,
-) -> dict[str, object]:
-    proof = {
-        "pairing_completed_at": None,
-        "first_synced_at": None,
-        "receipts_stored": 0,
-        "inventory_items": 0,
-        "runtime_session_id": None,
-        "runtime_session_synced_at": None,
-    }
-    connection.execute(
-        """
-        insert into guard_connect_states (
-          request_id,
-          sync_url,
-          allowed_origin,
-          status,
-          milestone,
-          reason,
-          created_at,
-          updated_at,
-          expires_at,
-          completed_at,
-          proof_json
-        )
-        values (?, ?, ?, 'waiting', 'waiting_for_browser', 'waiting_for_browser', ?, ?, ?, null, ?)
-        """,
-        (
-            request_id,
-            sync_url,
-            allowed_origin,
-            created_at,
-            updated_at,
-            expires_at,
-            json.dumps(proof),
-        ),
-    )
-    return load_connect_state(connection, request_id, now=updated_at) or {}
 
 
 def load_connect_state(
@@ -234,33 +124,6 @@ def get_latest_connect_state(
     return load_connect_state(connection, str(row["request_id"]), now=now)
 
 
-def mark_connect_pairing_completed(
-    connection: sqlite3.Connection,
-    *,
-    request_id: str,
-    completed_at: str,
-) -> dict[str, object]:
-    state = load_connect_state(connection, request_id, now=completed_at)
-    if state is None:
-        raise ValueError("connect_state_not_found")
-    proof = _coerce_proof(state.get("proof"))
-    proof["pairing_completed_at"] = completed_at
-    connection.execute(
-        """
-        update guard_connect_states
-        set status = 'connected',
-            milestone = 'first_sync_pending',
-            reason = 'waiting_for_first_sync',
-            updated_at = ?,
-            completed_at = ?,
-            proof_json = ?
-        where request_id = ?
-        """,
-        (completed_at, completed_at, json.dumps(proof), request_id),
-    )
-    return load_connect_state(connection, request_id, now=completed_at) or {}
-
-
 def mark_connect_result(
     connection: sqlite3.Connection,
     *,
@@ -314,110 +177,6 @@ def mark_connect_result(
     return load_connect_state(connection, request_id, now=updated_at) or {}
 
 
-get_connect_state = load_connect_state
-
-
-def verify_connect_request_access(
-    connection: sqlite3.Connection,
-    *,
-    request_id: str,
-    pairing_secret: str,
-) -> dict[str, object] | None:
-    row = connection.execute(
-        """
-        select request_id, allowed_origin, pairing_secret_hash
-        from guard_connect_requests
-        where request_id = ?
-        """,
-        (request_id,),
-    ).fetchone()
-    if row is None:
-        return None
-    if not secrets.compare_digest(str(row["pairing_secret_hash"]), _hash_secret(pairing_secret)):
-        return None
-    return {
-        "request_id": str(row["request_id"]),
-        "allowed_origin": str(row["allowed_origin"]),
-    }
-
-
-def complete_connect_request(
-    connection: sqlite3.Connection,
-    *,
-    request_id: str,
-    pairing_secret: str,
-    completed_at: str,
-) -> dict[str, object]:
-    row = connection.execute(
-        """
-        select request_id, sync_url, allowed_origin, pairing_secret_hash, status, created_at, expires_at, completed_at
-        from guard_connect_requests
-        where request_id = ?
-        """,
-        (request_id,),
-    ).fetchone()
-    if row is None:
-        raise ValueError("connect_request_not_found")
-    if str(row["status"]) != "pending":
-        raise ValueError("connect_request_not_pending")
-    expires_at = _parse_timestamp(str(row["expires_at"]))
-    if expires_at <= _parse_timestamp(completed_at):
-        connection.execute(
-            """
-            update guard_connect_requests
-            set status = 'expired'
-            where request_id = ?
-            """,
-            (request_id,),
-        )
-        raise ValueError("connect_request_expired")
-    if not secrets.compare_digest(str(row["pairing_secret_hash"]), _hash_secret(pairing_secret)):
-        raise ValueError("connect_request_invalid_secret")
-    connection.execute(
-        """
-        update guard_connect_requests
-        set status = 'completed',
-            completed_at = ?
-        where request_id = ?
-        """,
-        (completed_at, request_id),
-    )
-    return {
-        "request_id": str(row["request_id"]),
-        "sync_url": str(row["sync_url"]),
-        "allowed_origin": str(row["allowed_origin"]),
-        "status": "completed",
-        "created_at": str(row["created_at"]),
-        "expires_at": str(row["expires_at"]),
-        "completed_at": completed_at,
-    }
-
-
-def build_connect_request(
-    *,
-    request_id: str,
-    sync_url: str,
-    allowed_origin: str,
-    now: str,
-    lifetime_seconds: int = 300,
-) -> tuple[dict[str, object], str]:
-    pairing_secret = secrets.token_urlsafe(24)
-    expires_at = (_parse_timestamp(now) + timedelta(seconds=max(30, lifetime_seconds))).isoformat()
-    payload = {
-        "request_id": request_id,
-        "sync_url": sync_url,
-        "allowed_origin": allowed_origin,
-        "status": "pending",
-        "created_at": now,
-        "expires_at": expires_at,
-    }
-    return payload, pairing_secret
-
-
-def hash_pairing_secret(pairing_secret: str) -> str:
-    return _hash_secret(pairing_secret)
-
-
 def build_connect_state_response(
     payload: dict[str, object],
     *,
@@ -441,10 +200,6 @@ def _coerce_non_negative_int(value: object) -> int:
         except ValueError:
             return 0
     return 0
-
-
-def _hash_secret(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _build_connect_state_payload(row: sqlite3.Row) -> dict[str, object]:
