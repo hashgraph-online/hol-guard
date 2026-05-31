@@ -81,7 +81,7 @@ export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): strin
     return envelope.command;
   }
   if (envelope.action_type === "prompt" && envelope.prompt_excerpt !== null) {
-    return envelope.prompt_excerpt;
+    return envelope.prompt_text ?? envelope.prompt_excerpt;
   }
   if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
     return `${envelope.mcp_server} / ${envelope.mcp_tool}`;

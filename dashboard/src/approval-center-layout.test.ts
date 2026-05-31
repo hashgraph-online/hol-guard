@@ -30,6 +30,7 @@ const BASE_ENVELOPE: GuardActionEnvelope = {
   tool_name: null,
   command: null,
   prompt_excerpt: null,
+  prompt_text: null,
   target_paths: [],
   network_hosts: [],
   mcp_server: null,
@@ -106,6 +107,22 @@ assert(
 assert(
   resolveStoppedCommandText(longCommandRequest).length === 200,
   "T495: 200-char command preserved at full length"
+);
+
+const longPromptText = `${"Review the blocked prompt prefix. ".repeat(8)}DANGEROUS_SUFFIX_EXFILTRATE_SECRET`;
+const longPromptRequest: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  action_envelope_json: {
+    ...BASE_ENVELOPE,
+    action_type: "prompt",
+    prompt_excerpt: longPromptText.slice(0, 80),
+    prompt_text: longPromptText
+  }
+};
+
+assert(
+  resolveStoppedCommandText(longPromptRequest) === longPromptText,
+  "T495: resolveStoppedCommandText prefers full prompt_text over truncated prompt_excerpt"
 );
 
 const harnessStartEnvelope: GuardActionEnvelope = { ...BASE_ENVELOPE, action_type: "harness_start" };

@@ -345,6 +345,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   const toolName = raw["tool_name"];
   const command = raw["command"];
   const promptExcerpt = raw["prompt_excerpt"];
+  const promptText = raw["prompt_text"];
   const targetPaths = raw["target_paths"];
   const networkHosts = raw["network_hosts"];
   const mcpServer = raw["mcp_server"];
@@ -368,6 +369,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     !isStringOrNull(toolName) ||
     !isStringOrNull(command) ||
     !isStringOrNull(promptExcerpt) ||
+    (promptText !== undefined && !isStringOrNull(promptText)) ||
     !isStringOrNull(mcpServer) ||
     !isStringOrNull(mcpTool) ||
     !isStringOrNull(packageManager) ||
@@ -393,6 +395,7 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
     tool_name: toolName,
     command,
     prompt_excerpt: promptExcerpt,
+    prompt_text: isStringOrNull(promptText) ? promptText : null,
     target_paths: targetPaths,
     network_hosts: networkHosts,
     mcp_server: mcpServer,
