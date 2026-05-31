@@ -778,6 +778,35 @@ def test_guard_install_codex_post_tool_use_hook_timeout_tracks_configured_browse
     assert hook_timeout == 45 + codex_adapter._MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
 
 
+def test_guard_install_codex_pre_tool_use_hook_timeout_tracks_configured_browser_wait(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = home_dir / ".hol-guard"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(guard_home / "config.toml", "approval_wait_timeout_seconds = 45\n")
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--guard-home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    config_payload = tomllib.loads((home_dir / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    hook_timeout = config_payload["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"]
+
+    assert install_rc == 0
+    assert hook_timeout == 45 + codex_adapter._MANAGED_HOOK_TIMEOUT_GRACE_SECONDS
+
+
 def test_guard_install_codex_post_tool_use_hook_timeout_covers_max_browser_wait(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

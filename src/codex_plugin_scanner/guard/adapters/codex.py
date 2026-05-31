@@ -199,7 +199,13 @@ def _managed_hook_entry(
 def _pre_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
         "matcher": _CODEX_GUARD_TOOL_MATCHER,
-        "hooks": [_managed_hook_entry(context, _MANAGED_HOOK_STATUS_MESSAGE)],
+        "hooks": [
+            _managed_hook_entry(
+                context,
+                _MANAGED_HOOK_STATUS_MESSAGE,
+                timeout_seconds=_post_tool_hook_timeout_seconds(context),
+            )
+        ],
     }
 
 

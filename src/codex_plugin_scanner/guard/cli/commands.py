@@ -3661,8 +3661,6 @@ def _codex_browser_approval_decision(
 ) -> str | None:
     if not _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action):
         return None
-    if event_name == "PreToolUse":
-        return None
     approval_requests = response_payload.get("approval_requests")
     if not isinstance(approval_requests, list):
         return None
@@ -3715,7 +3713,6 @@ def _codex_hook_waits_for_browser_approval(
 ) -> bool:
     return (
         _codex_can_use_browser_approval(args=args, event_name=event_name, policy_action=policy_action)
-        and event_name != "PreToolUse"
     )
 
 

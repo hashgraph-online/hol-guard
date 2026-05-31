@@ -279,7 +279,7 @@ def test_gr080_codex_permission_request_uses_native_review_message(tmp_path: Pat
     assert "HOL Guard" in str(payload["systemMessage"])
 
 
-def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
+def test_gr081_codex_native_runtime_waits_for_yolo_shell_exfil_approval(
     tmp_path: Path,
     monkeypatch,
     capsys,
@@ -289,10 +289,17 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     guard_home.mkdir(parents=True, exist_ok=True)
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
 
-    def fail_on_wait(**kwargs):
-        raise AssertionError("Codex PreToolUse must return JSON denial without waiting for browser approval")
+    wait_calls: list[dict[str, object]] = []
 
-    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", fail_on_wait)
+    def approve_during_wait(**kwargs):
+        wait_calls.append(kwargs)
+        return {
+            "resolved": True,
+            "pending_request_ids": [],
+            "items": [{"request_id": "req-1", "resolution_action": "allow"}],
+        }
+
+    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", approve_during_wait)
 
     exit_code, output = _run_hook(
         tmp_path,
@@ -306,15 +313,11 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     )
 
     captured = capsys.readouterr()
-    payload = _json_line(output)
-    hook_output = payload["hookSpecificOutput"]
 
     assert exit_code == 0
     assert captured.err == ""
-    assert hook_output["hookEventName"] == "PreToolUse"
-    assert hook_output["permissionDecision"] == "deny"
-    assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
-    assert "retry" in str(hook_output["permissionDecisionReason"]).lower()
+    assert output == ""
+    assert wait_calls
 
 
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
