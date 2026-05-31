@@ -333,6 +333,28 @@ def test_gr081b_codex_package_install_pretooluse_is_live_wait_candidate() -> Non
     )
 
 
+def test_gr081c_codex_live_wait_opens_and_prints_approval_url(monkeypatch, capsys) -> None:
+    opened_urls: list[str] = []
+
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", opened_urls.append)
+
+    guard_commands_module._open_codex_live_approval(
+        {
+            "approval_requests": [
+                {
+                    "request_id": "req-1",
+                    "approval_url": "http://127.0.0.1:5475/approvals/req-1",
+                }
+            ]
+        }
+    )
+
+    captured = capsys.readouterr()
+
+    assert opened_urls == ["http://127.0.0.1:5475/approvals/req-1"]
+    assert "http://127.0.0.1:5475/approvals/req-1" in captured.err
+
+
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
     exit_code, output = _run_hook(
         tmp_path,
