@@ -214,7 +214,7 @@ TOTP uses SHA-1, 6 digits, 30-second steps, and a Base32 `otpauth://totp/HOL%20G
 
 Guard's advisory database updates are optional and pull-only. When you run `hol-guard advisories sync`, Guard fetches a signed advisory list from `advisories.hol.org`. No local file paths, harness configs, receipt data, or workspace identifiers are sent to any server during sync.
 
-Advisory sync requires a HOL Guard Cloud account. If you have not signed in, sync is skipped and Guard continues using the locally bundled advisory database. Run `hol-guard login` to connect a free account.
+Advisory sync requires a HOL Guard Cloud account. If you have not signed in, sync is skipped and Guard continues using the locally bundled advisory database. Run `hol-guard connect` to connect a free account, or `hol-guard connect --headless` on SSH/CI hosts.
 
 ## Scanner Quickstart
 

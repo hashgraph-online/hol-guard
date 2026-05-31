@@ -21,6 +21,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _seed_sync_credentials(home_dir, sync_url: str, token: str = "demo-token") -> None:
+    GuardStore(home_dir).set_sync_credentials(sync_url, token, "2026-04-09T00:00:00Z")
+
+
 class _SyncRequestHandler(BaseHTTPRequestHandler):
     response_payload: ClassVar[dict[str, object]] = {}
 
@@ -973,20 +977,8 @@ class TestGuardProtect:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            login_rc = main(
-                [
-                    "guard",
-                    "login",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
-                ]
-            )
-            json.loads(capsys.readouterr().out)
+            _seed_sync_credentials(home_dir, f"http://127.0.0.1:{server.server_port}/receipts")
+            login_rc = 0
 
             protect_rc = main(
                 [
