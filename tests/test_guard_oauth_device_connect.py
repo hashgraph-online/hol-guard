@@ -47,6 +47,19 @@ class _HeadlessConnectArgs:
     workspace = None
 
 
+class _ConnectArgs:
+    guard_command = "connect"
+    connect_command = None
+    headless = False
+    sync_url = "https://hol.org/api/guard/receipts/sync"
+    connect_url = "https://hol.org/guard/connect"
+    wait_timeout_seconds = 180
+    json = True
+    home = None
+    guard_home = None
+    workspace = None
+
+
 def test_device_authorization_request_uses_oauth_scopes_without_token_material() -> None:
     assert hasattr(connect_flow, "build_device_authorization_request_body")
     encoded = connect_flow.build_device_authorization_request_body(
@@ -180,6 +193,47 @@ def test_connect_headless_emits_device_code_payload_without_pairing_secret(tmp_p
     assert "ABCD-EFGH" in captured.out
     assert "guardPairSecret" not in captured.out
     assert "guardPairRequest" not in captured.out
+    assert "guard_live_" not in captured.out
+
+
+def test_connect_default_uses_device_code_without_pairing_secret(tmp_path: Path, capsys, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    args = _ConnectArgs()
+    args.guard_home = str(guard_home)
+    opened_urls: list[str] = []
+
+    def fake_headless_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+        return {
+            "status": "waiting_for_approval",
+            "connect_mode": "device_code",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "next_action": {
+                "command": "open",
+                "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            },
+        }
+
+    def fake_open(url: str) -> bool:
+        opened_urls.append(url)
+        return True
+
+    def legacy_pairing_flow(**kwargs: object) -> dict[str, object]:
+        raise AssertionError("default connect must not use legacy pairing flow")
+
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_headless_flow)
+    monkeypatch.setattr(guard_commands, "_run_guard_connect_flow", legacy_pairing_flow)
+    monkeypatch.setattr(guard_commands.webbrowser, "open", fake_open)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert opened_urls == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
+    assert "ABCD-EFGH" in captured.out
+    assert "guardPairSecret" not in captured.out
+    assert "guardPairRequest" not in captured.out
+    assert "guardDaemon" not in captured.out
     assert "guard_live_" not in captured.out
 
 

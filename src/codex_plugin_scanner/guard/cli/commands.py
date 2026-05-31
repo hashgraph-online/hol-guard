@@ -1285,12 +1285,9 @@ def _run_init_command(
                     step_payload = {"skipped": False, "error": str(error), "managed_installs": []}
             elif step_id == "cloud":
                 try:
-                    step_payload = _run_guard_connect_flow(
-                        guard_home=context.guard_home,
+                    step_payload = _run_guard_device_connect_flow(
                         store=store,
-                        sync_url=args.sync_url,
                         connect_url=args.connect_url,
-                        wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 0)),
                     )
                     step_payload["skipped"] = False
                 except Exception as error:
@@ -2320,21 +2317,23 @@ def run_guard_command(
                 _emit("login", payload, getattr(args, "json", False))
             return exit_code
         try:
-            payload = _run_guard_connect_flow(
-                guard_home=guard_home,
-                store=store,
-                sync_url=getattr(args, "sync_url", None) or DEFAULT_GUARD_SYNC_URL,
-                connect_url=args.connect_url,
-                wait_timeout_seconds=args.wait_timeout_seconds,
-            )
+            payload = _run_guard_device_connect_flow(store=store, connect_url=args.connect_url)
+        except json.JSONDecodeError as error:
+            print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+            return 1
         except ValueError as error:
             print(str(error), file=sys.stderr)
             return 2
-        except RuntimeError as error:
-            print(str(error), file=sys.stderr)
+        except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
+            print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
             return 1
+        next_action = payload.get("next_action")
+        if isinstance(next_action, dict):
+            target = _optional_string(next_action.get("target"))
+            if target is not None:
+                payload["browser_opened"] = bool(webbrowser.open(target))
         _emit("connect", payload, getattr(args, "json", False))
-        return 0 if bool(payload.get("connected")) else 1
+        return 0
 
     if args.guard_command == "connect":
         connect_subcommand = getattr(args, "connect_command", None)
@@ -2345,6 +2344,25 @@ def run_guard_command(
                 connect_url=args.connect_url,
                 action=str(connect_subcommand),
             )
+            _emit("connect", payload, getattr(args, "json", False))
+            return 0
+        if not bool(getattr(args, "headless", False)):
+            try:
+                payload = _run_guard_device_connect_flow(store=store, connect_url=args.connect_url)
+            except json.JSONDecodeError as error:
+                print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+                return 1
+            except ValueError as error:
+                print(str(error), file=sys.stderr)
+                return 2
+            except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
+                print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+                return 1
+            next_action = payload.get("next_action")
+            if isinstance(next_action, dict):
+                target = _optional_string(next_action.get("target"))
+                if target is not None:
+                    payload["browser_opened"] = bool(webbrowser.open(target))
             _emit("connect", payload, getattr(args, "json", False))
             return 0
         if bool(getattr(args, "headless", False)):
@@ -2361,22 +2379,6 @@ def run_guard_command(
                 return 1
             _emit("connect", payload, getattr(args, "json", False))
             return 0
-        try:
-            payload = _run_guard_connect_flow(
-                guard_home=guard_home,
-                store=store,
-                sync_url=args.sync_url,
-                connect_url=args.connect_url,
-                wait_timeout_seconds=args.wait_timeout_seconds,
-            )
-        except ValueError as error:
-            print(str(error), file=sys.stderr)
-            return 2
-        except RuntimeError as error:
-            print(str(error), file=sys.stderr)
-            return 1
-        _emit("connect", payload, getattr(args, "json", False))
-        return 0 if bool(payload.get("connected")) else 1
 
     if args.guard_command == "bridge":
         poll_interval = getattr(args, "poll_interval", 10) or 10
