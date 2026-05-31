@@ -1,4 +1,4 @@
-import { ac as jsxRuntimeExports, T as Tag, a8 as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, f as formatRelativeTime } from "../guard-dashboard.js";
 function resolveProtectionLevelCopy(level) {
   if (level === "gentle") {
     return "Monitors quietly, asks only for high-risk actions";
@@ -94,7 +94,7 @@ function resolvePackageManagerProtectionCopy(protection) {
 }
 export {
   DeviceProofCard as D,
-  resolvePackageManagerProtectionCopy as a,
-  resolveProtectionLevelCopy as b,
+  resolveProtectionLevelCopy as a,
+  resolvePackageManagerProtectionCopy as b,
   resolveCloudIntelCopy as r
 };
