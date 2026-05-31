@@ -429,7 +429,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if (
             self._is_hosted_dashboard_origin()
             and self._is_hosted_dashboard_api_path(parsed.path, path_parts)
-            and parsed.path != "/v1/connect/state"
             and not self._header_token_is_valid()
         ):
             self._write_json({"error": "unauthorized"}, status=401)
@@ -545,7 +544,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_requests_list(parsed.query)
             return
         if parsed.path == "/v1/connect/state":
-            self._handle_connect_state_read(parsed.query)
+            self._write_legacy_pairing_disabled()
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
@@ -702,7 +701,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
-        if parsed.path in {"/v1/connect/requests", "/v1/connect/complete"}:
+        if parsed.path in {"/v1/connect/requests", "/v1/connect/complete", "/v1/connect/result"}:
             self._write_legacy_pairing_disabled()
             return
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
@@ -758,9 +757,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/operations/start":
             self._handle_operation_start(payload)
-            return
-        if parsed.path == "/v1/connect/result":
-            self._handle_connect_result_update(payload)
             return
         if parsed.path == "/v1/operations/block":
             self._handle_operation_block(payload)
@@ -2231,21 +2227,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         updated["retry_hint"] = copy["body"]
         return updated
 
-    def _handle_connect_request_create(self, payload: dict[str, object]) -> None:
-        sync_url = self._optional_string(payload.get("sync_url"))
-        allowed_origin = self._normalize_origin(self._optional_string(payload.get("allowed_origin")))
-        lifetime_seconds = self._optional_int(payload.get("lifetime_seconds")) or 300
-        if sync_url is None or allowed_origin is None:
-            self._write_json({"error": "missing_required_fields"}, status=400)
-            return
-        request = self.server.store.create_guard_connect_request(  # type: ignore[attr-defined]
-            sync_url=sync_url,
-            allowed_origin=allowed_origin,
-            now=_now(),
-            lifetime_seconds=lifetime_seconds,
-        )
-        self._write_json(request)
-
     def _write_legacy_pairing_disabled(self) -> None:
         self._write_json(
             {
@@ -2263,122 +2244,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             },
             status=410,
         )
-
-    def _handle_connect_complete(self, payload: dict[str, object]) -> None:
-        origin = self._normalize_origin(self.headers.get("Origin"))
-        request_id = self._optional_string(payload.get("request_id"))
-        pairing_secret = self._optional_string(payload.get("pairing_secret"))
-        token = self._optional_string(payload.get("token"))
-        workspace_id = self._optional_string(payload.get("workspace_id")) or self._optional_string(
-            payload.get("workspaceId")
-        )
-        if origin is None or request_id is None or pairing_secret is None or token is None:
-            self._write_json(
-                {"error": "missing_required_fields"},
-                status=400,
-                extra_headers=self._cors_headers(origin) if origin else None,
-            )
-            return
-        request = self.server.store.get_guard_connect_request(request_id)  # type: ignore[attr-defined]
-        if request is None:
-            self._write_json({"error": "not_found"}, status=404, extra_headers=self._cors_headers(origin))
-            return
-        if origin != str(request["allowed_origin"]):
-            self._write_json(
-                {"error": "forbidden_origin"},
-                status=403,
-                extra_headers=self._cors_headers(origin),
-            )
-            return
-        try:
-            completed_request = self.server.store.complete_guard_connect_request(  # type: ignore[attr-defined]
-                request_id=request_id,
-                pairing_secret=pairing_secret,
-                token=token,
-                now=_now(),
-                workspace_id=workspace_id,
-            )
-        except ValueError as error:
-            error_code = str(error)
-            status = 400
-            if error_code == "connect_request_not_found":
-                status = 404
-            self._write_json(
-                {"error": error_code},
-                status=status,
-                extra_headers=self._cors_headers(origin),
-            )
-            return
-        self._write_json(
-            {"completed": True, "request": completed_request},
-            extra_headers=self._cors_headers(origin),
-        )
-
-    def _handle_connect_state_read(self, query: str) -> None:
-        params = parse_qs(query)
-        request_id = self._optional_string(params.get("request_id", [None])[-1])
-        pairing_secret = self._optional_string(params.get("pairing_secret", [None])[-1])
-        origin = self._normalize_origin(self.headers.get("Origin"))
-        if request_id is None:
-            self._write_json({"error": "missing_required_fields"}, status=400)
-            return
-        if self._header_token_is_valid():
-            state = self.server.store.get_guard_connect_state(request_id, now=_now())  # type: ignore[attr-defined]
-            if state is None:
-                self._write_json({"error": "not_found"}, status=404)
-                return
-            self._write_json({"state": state})
-            return
-        if origin is None or pairing_secret is None:
-            self._write_json({"error": "unauthorized"}, status=401)
-            return
-        access = self.server.store.verify_guard_connect_access(  # type: ignore[attr-defined]
-            request_id=request_id,
-            pairing_secret=pairing_secret,
-        )
-        if access is None:
-            self._write_json({"error": "forbidden"}, status=403, extra_headers=self._cors_headers(origin))
-            return
-        if origin != str(access["allowed_origin"]):
-            self._write_json(
-                {"error": "forbidden_origin"},
-                status=403,
-                extra_headers=self._cors_headers(origin),
-            )
-            return
-        state = self.server.store.get_guard_connect_state(request_id, now=_now())  # type: ignore[attr-defined]
-        if state is None:
-            self._write_json({"error": "not_found"}, status=404, extra_headers=self._cors_headers(origin))
-            return
-        self._write_json({"state": state}, extra_headers=self._cors_headers(origin))
-
-    def _handle_connect_result_update(self, payload: dict[str, object]) -> None:
-        request_id = self._optional_string(payload.get("request_id"))
-        status = self._optional_string(payload.get("status"))
-        milestone = self._optional_string(payload.get("milestone"))
-        reason = self._optional_string(payload.get("reason"))
-        sync_payload = payload.get("sync")
-        if request_id is None or status is None or milestone is None:
-            self._write_json({"error": "missing_required_fields"}, status=400)
-            return
-        normalized_sync_payload = dict(sync_payload) if isinstance(sync_payload, dict) else None
-        try:
-            state = self.server.store.record_guard_connect_result(  # type: ignore[attr-defined]
-                request_id=request_id,
-                status=status,
-                milestone=milestone,
-                now=_now(),
-                reason=reason,
-                sync_payload=normalized_sync_payload,
-            )
-        except ValueError as error:
-            error_code = str(error)
-            status_code = 400
-            if error_code == "connect_state_not_found":
-                status_code = 404
-            self._write_json({"error": error_code}, status=status_code)
-            return
-        self._write_json({"state": state})
 
     def _handle_claude_hook(self, payload: dict[str, object], query: str) -> None:
         params = parse_qs(query)

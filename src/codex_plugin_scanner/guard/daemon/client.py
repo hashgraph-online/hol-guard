@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import urllib.error
-import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -133,72 +132,6 @@ class GuardSurfaceDaemonClient:
             },
         )
         return dict(response["operation"]) if isinstance(response.get("operation"), dict) else response
-
-    def create_connect_request(
-        self,
-        *,
-        sync_url: str,
-        allowed_origin: str,
-        lifetime_seconds: int = 300,
-    ) -> dict[str, object]:
-        return self._post(
-            "/v1/connect/requests",
-            {
-                "sync_url": sync_url,
-                "allowed_origin": allowed_origin,
-                "lifetime_seconds": lifetime_seconds,
-            },
-        )
-
-    def get_connect_state(self, *, request_id: str) -> dict[str, object]:
-        query = urllib.parse.urlencode({"request_id": request_id})
-        request = urllib.request.Request(
-            f"{self.daemon_url}/v1/connect/state?{query}",
-            headers={
-                "X-Guard-Token": self.auth_token,
-            },
-            method="GET",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=_STATUS_REQUEST_TIMEOUT_S) as response:
-                payload = self._decode_json_response(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as error:
-            try:
-                payload = self._decode_json_response(error.read().decode("utf-8"))
-                message = payload.get("error", str(error))
-            except (OSError, json.JSONDecodeError):
-                message = str(error)
-            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
-        except GuardDaemonRequestError:
-            raise
-        except (OSError, urllib.error.URLError) as error:
-            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
-        state = payload.get("state")
-        if isinstance(state, dict):
-            return state
-        return payload
-
-    def report_connect_result(
-        self,
-        *,
-        request_id: str,
-        status: str,
-        milestone: str,
-        reason: str | None = None,
-        sync: dict[str, object] | None = None,
-    ) -> dict[str, object]:
-        payload = {
-            "request_id": request_id,
-            "status": status,
-            "milestone": milestone,
-            "reason": reason,
-            "sync": sync or {},
-        }
-        response = self._post("/v1/connect/result", payload)
-        state = response.get("state")
-        if isinstance(state, dict):
-            return state
-        return response
 
     def _post(
         self,
