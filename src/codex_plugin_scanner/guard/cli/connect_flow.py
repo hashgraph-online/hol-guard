@@ -6,6 +6,7 @@ import json
 import time
 import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,13 @@ from ..store import GuardStore
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
+DEFAULT_GUARD_DEVICE_CLIENT_ID = "guard-local-daemon"
+DEFAULT_GUARD_DEVICE_SCOPES = (
+    "guard:runtime.sync",
+    "guard:receipt.write",
+    "guard:runtime.session.write",
+    "guard:offline_access",
+)
 CONNECT_COMMAND = "hol-guard connect"
 CONNECT_STATUS_COMMAND = "hol-guard connect status"
 CONNECT_REPAIR_COMMAND = "hol-guard connect repair"
@@ -219,6 +227,94 @@ def resolve_connect_url(connect_url: str) -> tuple[str, str]:
     normalized_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
     allowed_origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
     return normalized_url, allowed_origin
+
+
+def build_device_authorization_request_body(
+    *,
+    machine_id: str,
+    machine_label: str,
+    runtime_id: str,
+    runtime_label: str,
+    client_id: str = DEFAULT_GUARD_DEVICE_CLIENT_ID,
+    scopes: tuple[str, ...] = DEFAULT_GUARD_DEVICE_SCOPES,
+) -> str:
+    return urllib.parse.urlencode(
+        {
+            "client_id": client_id,
+            "scope": " ".join(scopes),
+            "requested_machine_id": machine_id,
+            "requested_machine_label": machine_label,
+            "requested_runtime_id": runtime_id,
+            "requested_runtime_label": runtime_label,
+        }
+    )
+
+
+def build_device_authorization_copy_payload(response: dict[str, object]) -> dict[str, object]:
+    user_code = str(response.get("user_code") or "").strip()
+    verification_uri = str(response.get("verification_uri") or "").strip()
+    verification_uri_complete = str(response.get("verification_uri_complete") or "").strip()
+    if not user_code or not verification_uri:
+        raise ValueError("Device authorization response is missing approval instructions.")
+    next_target = verification_uri_complete or verification_uri
+    return {
+        "status": "waiting_for_approval",
+        "user_code": user_code,
+        "verification_uri": verification_uri,
+        "verification_uri_complete": verification_uri_complete or None,
+        "expires_in": int(response.get("expires_in") or 0),
+        "interval": int(response.get("interval") or 5),
+        "next_action": {
+            "command": "open",
+            "target": next_target,
+            "message": f"Open {next_target} and enter code {user_code}.",
+        },
+    }
+
+
+def device_authorization_endpoint_from_connect_url(connect_url: str) -> str:
+    _, allowed_origin = resolve_connect_url(connect_url)
+    return f"{allowed_origin}/api/guard/oauth/device/authorize"
+
+
+def request_device_authorization(url: str, body: str) -> dict[str, object]:
+    encoded_body = body.encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=encoded_body,
+        method="POST",
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("Guard Device Code authorization failed: invalid response.")
+    return payload
+
+
+def run_guard_device_connect_command(
+    *,
+    store: GuardStore,
+    connect_url: str,
+    request_device_authorization=request_device_authorization,
+) -> dict[str, object]:
+    device = store.get_device_metadata()
+    request_body = build_device_authorization_request_body(
+        machine_id=str(device["installation_id"]),
+        machine_label=str(device["device_label"]),
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+    )
+    response = request_device_authorization(
+        device_authorization_endpoint_from_connect_url(connect_url),
+        request_body,
+    )
+    payload = build_device_authorization_copy_payload(response)
+    payload["connect_mode"] = "device_code"
+    return payload
 
 
 def build_guard_connect_browser_url(

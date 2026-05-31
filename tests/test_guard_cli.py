@@ -62,6 +62,10 @@ def _read_codex_config(path: Path) -> dict[str, object]:
         return tomllib.load(handle)
 
 
+def _seed_sync_credentials(home_dir: Path, sync_url: str, token: str = "demo-token") -> None:
+    GuardStore(home_dir).set_sync_credentials(sync_url, token, "2026-04-09T00:00:00Z")
+
+
 def _read_codex_hooks(config_path: Path) -> dict[str, object]:
     hooks = _read_codex_config(config_path).get("hooks")
     assert isinstance(hooks, dict)
@@ -6247,20 +6251,12 @@ url = http://127.0.0.1:8787/guard-canary
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            login_rc = main(
-                [
-                    "guard",
-                    "login",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
-                ]
+            _seed_sync_credentials(
+                home_dir,
+                f"http://127.0.0.1:{server.server_port}/receipts",
+                "demo-token",
             )
-            json.loads(capsys.readouterr().out)
+            login_rc = 0
 
             run_rc = main(
                 [
@@ -6575,9 +6571,9 @@ url = http://127.0.0.1:8787/guard-canary
         )
 
         assert login_rc == 2
-        assert "Pass both --sync-url and --token to save credentials manually" in capsys.readouterr().err
+        assert "Raw Guard tokens are no longer accepted" in capsys.readouterr().err
 
-    def test_guard_service_login_stores_hosted_runtime_profile(self, tmp_path, capsys):
+    def test_guard_service_login_rejects_hosted_runtime_token(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
 
         login_rc = main(
@@ -6603,33 +6599,19 @@ url = http://127.0.0.1:8787/guard-canary
         payload = json.loads(capsys.readouterr().out)
         store = GuardStore(home_dir)
 
-        assert login_rc == 0
-        assert payload["logged_in"] is True
+        assert login_rc == 2
+        assert payload["logged_in"] is False
+        assert payload["next_action"]["command"] == "hol-guard connect --headless"
+        assert "guard_live_secretvalue" not in json.dumps(payload)
         assert payload["service"] == {
             "runtime": "hermes",
             "label": "Hermes Telegram agent",
             "workspace": "workspace_ops",
-            "surface": "agent-sdk",
-            "client_name": "hol-guard",
-            "client_title": "Hermes Telegram agent",
-            "client_version": guard_commands_module._GUARD_CLIENT_VERSION,
         }
-        assert store.get_sync_credentials() == {
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "token": "guard_live_secretvalue",
-        }
-        assert store.get_sync_payload("service_runtime_profile") == {
-            "runtime": "hermes",
-            "label": "Hermes Telegram agent",
-            "workspace": "workspace_ops",
-            "surface": "agent-sdk",
-            "client_name": "hol-guard",
-            "client_title": "Hermes Telegram agent",
-            "client_version": guard_commands_module._GUARD_CLIENT_VERSION,
-        }
-        assert store.get_device_metadata()["device_label"] == "Hermes Telegram agent"
+        assert store.get_sync_credentials() is None
+        assert store.get_sync_payload("service_runtime_profile") is None
 
-    def test_guard_service_login_trims_sync_url(self, tmp_path, capsys):
+    def test_guard_service_login_without_token_points_to_headless_connect(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
 
         login_rc = main(
@@ -6645,22 +6627,15 @@ url = http://127.0.0.1:8787/guard-canary
                 "Hermes Telegram agent",
                 "--workspace",
                 "workspace_ops",
-                "--sync-url",
-                "https://hol.org/api/guard/receipts/sync ",
-                "--token",
-                "guard_live_secretvalue",
                 "--json",
             ]
         )
         payload = json.loads(capsys.readouterr().out)
         store = GuardStore(home_dir)
 
-        assert login_rc == 0
-        assert payload["sync_url"] == "https://hol.org/api/guard/receipts/sync"
-        assert store.get_sync_credentials() == {
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "token": "guard_live_secretvalue",
-        }
+        assert login_rc == 2
+        assert payload["next_action"]["command"] == "hol-guard connect --headless"
+        assert store.get_sync_credentials() is None
 
     def test_guard_service_login_rejects_blank_token(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -6689,10 +6664,9 @@ url = http://127.0.0.1:8787/guard-canary
         store = GuardStore(home_dir)
 
         assert login_rc == 2
-        assert payload == {
-            "logged_in": False,
-            "error": "Hosted Guard runtime token cannot be empty.",
-        }
+        assert payload["logged_in"] is False
+        assert payload["error"] == "Raw hosted-runtime Guard tokens are no longer accepted."
+        assert payload["next_action"]["command"] == "hol-guard connect --headless"
         assert store.get_sync_credentials() is None
 
     def test_guard_service_sync_publishes_runtime_session_before_receipts(self, tmp_path, capsys, monkeypatch):
@@ -8288,20 +8262,8 @@ url = http://127.0.0.1:8787/guard-canary
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            login_rc = main(
-                [
-                    "guard",
-                    "login",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
-                ]
-            )
-            json.loads(capsys.readouterr().out)
+            _seed_sync_credentials(home_dir, f"http://127.0.0.1:{server.server_port}/receipts")
+            login_rc = 0
 
             run_rc = main(
                 [
@@ -8374,20 +8336,8 @@ url = http://127.0.0.1:8787/guard-canary
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            login_rc = main(
-                [
-                    "guard",
-                    "login",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
-                ]
-            )
-            json.loads(capsys.readouterr().out)
+            _seed_sync_credentials(home_dir, f"http://127.0.0.1:{server.server_port}/receipts")
+            login_rc = 0
 
             sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
             json.loads(capsys.readouterr().out)
@@ -8430,20 +8380,8 @@ url = http://127.0.0.1:8787/guard-canary
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            login_rc = main(
-                [
-                    "guard",
-                    "login",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
-                ]
-            )
-            json.loads(capsys.readouterr().out)
+            _seed_sync_credentials(home_dir, f"http://127.0.0.1:{server.server_port}/receipts")
+            login_rc = 0
 
             first_sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
             json.loads(capsys.readouterr().out)
@@ -8522,20 +8460,8 @@ url = http://127.0.0.1:8787/guard-canary
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            login_rc = main(
-                [
-                    "guard",
-                    "login",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
-                ]
-            )
-            json.loads(capsys.readouterr().out)
+            _seed_sync_credentials(home_dir, f"http://127.0.0.1:{server.server_port}/receipts")
+            login_rc = 0
 
             run_rc = main(
                 [
@@ -8674,20 +8600,8 @@ url = http://127.0.0.1:8787/guard-canary
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            login_rc = main(
-                [
-                    "guard",
-                    "login",
-                    "--home",
-                    str(home_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
-                ]
-            )
-            json.loads(capsys.readouterr().out)
+            _seed_sync_credentials(home_dir, f"http://127.0.0.1:{server.server_port}/receipts")
+            login_rc = 0
 
             sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
             sync_output = json.loads(capsys.readouterr().out)
@@ -8709,20 +8623,7 @@ url = http://127.0.0.1:8787/guard-canary
 
     def test_guard_sync_reports_non_string_url_errors_in_json_mode(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        main(
-            [
-                "guard",
-                "login",
-                "--home",
-                str(home_dir),
-                "--sync-url",
-                "https://hol.org/api/guard/receipts/sync",
-                "--token",
-                "demo-token",
-                "--json",
-            ]
-        )
-        json.loads(capsys.readouterr().out)
+        _seed_sync_credentials(home_dir, "https://hol.org/api/guard/receipts/sync")
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen",
             lambda *args, **kwargs: (_ for _ in ()).throw(
