@@ -4683,7 +4683,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert "destructive shell command" in output["hookSpecificOutput"]["permissionDecisionReason"]
         assert "Approve it in HOL Guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"]
 
-    def test_guard_codex_pretooluse_returns_without_browser_wait(self, tmp_path, monkeypatch, capsys):
+    def test_guard_codex_pretooluse_returns_without_browser_wait_for_secret_exfil(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         payload_path = workspace_dir / "hook-event.json"
@@ -4694,7 +4694,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         )
 
         def fail_on_wait(**kwargs):
-            raise AssertionError("Codex PreToolUse retry flow must not wait for browser approval")
+            raise AssertionError("Codex secret exfiltration retry flow must not wait for browser approval")
 
         monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", fail_on_wait)
 
