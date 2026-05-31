@@ -192,6 +192,7 @@ from .connect_flow import (
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
     run_guard_connect_command,
+    run_guard_device_connect_command,
 )
 from .docs import build_install_connect_docs_payload
 from .install_commands import (
@@ -848,6 +849,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     connect_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
     connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
     connect_parser.add_argument("--wait-timeout-seconds", type=int, default=180)
+    connect_parser.add_argument("--headless", action="store_true")
     connect_parser.add_argument("--json", action="store_true")
 
     sync_parser = guard_subparsers.add_parser("sync", help="Sync receipts to the configured Guard endpoint")
@@ -934,8 +936,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _add_guard_common_args(service_login_parser)
     service_login_parser.add_argument("--runtime", choices=_SERVICE_RUNTIME_CHOICES, required=True)
     service_login_parser.add_argument("--label", required=True)
-    service_login_parser.add_argument("--sync-url", required=True, type=_guard_http_url)
-    service_login_parser.add_argument("--token", required=True)
+    service_login_parser.add_argument("--sync-url", type=_guard_http_url)
+    service_login_parser.add_argument("--token")
     service_login_parser.add_argument("--json", action="store_true")
 
     service_sync_parser = service_subparsers.add_parser(
@@ -2342,6 +2344,17 @@ def run_guard_command(
                 connect_url=args.connect_url,
                 action=str(connect_subcommand),
             )
+            _emit("connect", payload, getattr(args, "json", False))
+            return 0
+        if bool(getattr(args, "headless", False)):
+            try:
+                payload = _run_guard_device_connect_flow(store=store, connect_url=args.connect_url)
+            except ValueError as error:
+                print(str(error), file=sys.stderr)
+                return 2
+            except RuntimeError as error:
+                print(str(error), file=sys.stderr)
+                return 1
             _emit("connect", payload, getattr(args, "json", False))
             return 0
         try:
@@ -8708,6 +8721,14 @@ def _run_guard_connect_flow(
     )
 
 
+def _run_guard_device_connect_flow(
+    *,
+    store: GuardStore,
+    connect_url: str,
+) -> dict[str, object]:
+    return run_guard_device_connect_command(store=store, connect_url=connect_url)
+
+
 def _manual_guard_login_payload(
     *,
     args: argparse.Namespace,
@@ -8716,17 +8737,11 @@ def _manual_guard_login_payload(
     manual_token = _optional_string(getattr(args, "token", None))
     if manual_token is None:
         return None
-    manual_sync_url = _optional_string(getattr(args, "sync_url", None))
-    if manual_sync_url is None:
-        print(
-            "Pass both --sync-url and --token to save credentials manually, "
-            "or run `hol-guard login` with no token to open browser sign-in.",
-            file=sys.stderr,
-        )
-        return None, 2
-    store.set_sync_credentials(manual_sync_url, manual_token, _now())
-    store.add_event("sign_in", {"sync_url": manual_sync_url, "source": "local-cli"}, _now())
-    return {"logged_in": True, "sync_url": manual_sync_url}, 0
+    print(
+        "Raw Guard tokens are no longer accepted. Run `hol-guard connect` to sign in with OAuth Device Code.",
+        file=sys.stderr,
+    )
+    return None, 2
 
 
 def _guard_service_runtime_profile(
@@ -8766,52 +8781,41 @@ def _guard_service_login_payload(
     args: argparse.Namespace,
     store: GuardStore,
 ) -> tuple[dict[str, object], int]:
-    now = _now()
+    runtime = str(args.runtime)
     label = str(args.label).strip()
     workspace = _optional_string(args.workspace) or ""
-    sync_url = str(args.sync_url).strip()
-    token = str(args.token).strip()
-    if not token:
+    if getattr(args, "token", None) is not None:
         return {
             "logged_in": False,
-            "error": "Hosted Guard runtime token cannot be empty.",
+            "error": "Raw hosted-runtime Guard tokens are no longer accepted.",
+            "next_action": {
+                "command": "hol-guard connect --headless",
+                "message": "Use OAuth Device Code to connect headless or hosted runtimes.",
+            },
+            "service": {
+                "runtime": runtime,
+                "label": label,
+                "workspace": workspace or None,
+            },
         }, 2
-    runtime = str(args.runtime)
-    service_profile = {
-        "runtime": runtime,
-        "label": label,
-        "workspace": workspace,
-        "surface": _SERVICE_RUNTIME_SURFACE,
-        "client_name": "hol-guard",
-        "client_title": label,
-        "client_version": _GUARD_CLIENT_VERSION,
-    }
-    store.set_sync_credentials(sync_url, token, now, workspace_id=workspace or None)
-    store.set_sync_payload(_SERVICE_RUNTIME_PROFILE_STATE_KEY, service_profile, now)
-    device = store.set_device_label(label, now)
-    store.add_event(
-        "service_sign_in",
-        {
+    return {
+        "logged_in": False,
+        "next_action": {
+            "command": "hol-guard connect --headless",
+            "message": "Use OAuth Device Code to connect headless or hosted runtimes.",
+        },
+        "service": {
             "runtime": runtime,
             "label": label,
             "workspace": workspace or None,
-            "sync_url": sync_url,
-            "source": "hosted-runtime-cli",
         },
-        now,
-    )
-    return {
-        "logged_in": True,
-        "sync_url": sync_url,
-        "service": service_profile,
-        "device": device,
-    }, 0
+    }, 2
 
 
 def _guard_service_sync_prerequisite_message() -> str:
     return (
-        "Hosted Guard runtime is not configured yet. Run `hol-guard service login --runtime <runtime> "
-        '--label "<label>" --sync-url "<url>" --token "<token>"` first.'
+        "Hosted Guard runtime is not configured yet. Run `hol-guard connect --headless` "
+        "to approve this runtime with OAuth Device Code first."
     )
 
 
