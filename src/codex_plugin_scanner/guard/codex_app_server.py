@@ -25,6 +25,7 @@ class _OperationStore(Protocol):
 _DEFAULT_PROXY_TIMEOUT_SECONDS = 5.0
 _DEFAULT_COMPLETION_TIMEOUT_SECONDS = 90.0
 _DEFAULT_SOCKET_PATH = Path.home() / ".codex" / "app-server-control" / "app-server-control.sock"
+_MAX_WEBSOCKET_FRAME_BYTES = 1_000_000
 _WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 _THREAD_ID_KEYS = (
     "codex_thread_id",
@@ -480,6 +481,8 @@ def _read_websocket_frame(client: socket.socket, pending: bytearray) -> tuple[in
         length = struct.unpack("!H", _recv_exact(client, 2, pending))[0]
     elif length == 127:
         length = struct.unpack("!Q", _recv_exact(client, 8, pending))[0]
+    if length > _MAX_WEBSOCKET_FRAME_BYTES:
+        raise ValueError("websocket_frame_too_large")
     mask = _recv_exact(client, 4, pending) if second & 0x80 else None
     payload = _recv_exact(client, length, pending) if length else b""
     if mask is not None:
