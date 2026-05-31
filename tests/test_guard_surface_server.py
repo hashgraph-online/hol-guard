@@ -1587,7 +1587,7 @@ class TestGuardSurfaceServer:
         assert f"{opened_url.scheme}://{opened_url.netloc}{opened_url.path}" == f"http://127.0.0.1:{daemon.port}"
         assert opened_fragment["guard-token"] == [initialize_payload["auth_token"]]
 
-    def test_guard_daemon_completes_browser_connect_pairing_for_allowed_origin(self, tmp_path) -> None:
+    def test_guard_daemon_rejects_legacy_browser_connect_pairing_endpoint(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -1608,7 +1608,7 @@ class TestGuardSurfaceServer:
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
                 initialize_payload = json.loads(response.read().decode("utf-8"))
 
-            create_request = urllib.request.Request(
+            legacy_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/connect/requests",
                 data=json.dumps(
                     {
@@ -1622,38 +1622,19 @@ class TestGuardSurfaceServer:
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(create_request, timeout=5) as response:
-                created_payload = json.loads(response.read().decode("utf-8"))
-
-            complete_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/connect/complete",
-                data=urllib.parse.urlencode(
-                    {
-                        "request_id": created_payload["request_id"],
-                        "pairing_secret": created_payload["pairing_secret"],
-                        "token": "session-token-123",
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Origin": "https://hol.org",
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(complete_request, timeout=5) as response:
-                completed_payload = json.loads(response.read().decode("utf-8"))
-                allowed_origin = response.headers.get("Access-Control-Allow-Origin")
+            error = None
+            try:
+                urllib.request.urlopen(legacy_request, timeout=5)
+            except urllib.error.HTTPError as request_error:
+                error = request_error
+                payload = json.loads(request_error.read().decode("utf-8"))
         finally:
             daemon.stop()
 
-        assert created_payload["status"] == "pending"
-        assert completed_payload["completed"] is True
-        assert completed_payload["request"]["status"] == "completed"
-        assert allowed_origin == "https://hol.org"
-        assert store.get_sync_credentials() == {
-            "sync_url": "https://hol.org/registry/api/v1",
-            "token": "session-token-123",
-        }
+        assert error is not None
+        assert error.code == 410
+        assert payload["error"] == "legacy_pairing_disabled"
+        assert store.get_sync_credentials() is None
 
     def test_guard_daemon_allows_private_network_preflight_for_hosted_dashboard(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -1681,50 +1662,18 @@ class TestGuardSurfaceServer:
         assert allow_origin == "https://hol.org"
         assert allow_private_network == "true"
 
-    def test_guard_daemon_rejects_browser_connect_pairing_for_wrong_origin(self, tmp_path) -> None:
+    def test_guard_daemon_rejects_legacy_browser_connect_complete_endpoint(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
         try:
-            initialize_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/initialize",
-                data=json.dumps(
-                    {
-                        "client_name": "hol-guard-cli",
-                        "surface": "cli",
-                        "supported_protocol_versions": ["1.1"],
-                    }
-                ).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
-
-            create_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/connect/requests",
-                data=json.dumps(
-                    {
-                        "sync_url": "https://hol.org/registry/api/v1",
-                        "allowed_origin": "https://hol.org",
-                    }
-                ).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(create_request, timeout=5) as response:
-                created_payload = json.loads(response.read().decode("utf-8"))
-
-            complete_request = urllib.request.Request(
+            legacy_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/connect/complete",
                 data=urllib.parse.urlencode(
                     {
-                        "request_id": created_payload["request_id"],
-                        "pairing_secret": created_payload["pairing_secret"],
+                        "request_id": "connect-123",
+                        "pairing_secret": "pair-secret",
                         "token": "session-token-123",
                     }
                 ).encode("utf-8"),
@@ -1737,14 +1686,16 @@ class TestGuardSurfaceServer:
 
             error = None
             try:
-                urllib.request.urlopen(complete_request, timeout=5)
+                urllib.request.urlopen(legacy_request, timeout=5)
             except urllib.error.HTTPError as request_error:
                 error = request_error
+                payload = json.loads(request_error.read().decode("utf-8"))
         finally:
             daemon.stop()
 
         assert error is not None
-        assert error.code == 403
+        assert error.code == 410
+        assert payload["error"] == "legacy_pairing_disabled"
         assert store.get_sync_credentials() is None
 
     def test_open_approval_center_skips_browser_when_live_surface_is_attached(self, tmp_path, monkeypatch) -> None:

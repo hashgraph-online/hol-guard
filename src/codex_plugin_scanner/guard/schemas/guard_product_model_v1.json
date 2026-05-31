@@ -392,14 +392,14 @@
       "method": "POST",
       "category": "config",
       "auth_required": true,
-      "writes_state": true
+      "writes_state": false
     },
     {
       "path": "/v1/connect/complete",
       "method": "POST",
       "category": "config",
       "auth_required": false,
-      "writes_state": true
+      "writes_state": false
     },
     {
       "path": "/v1/connect/result",
