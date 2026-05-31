@@ -192,7 +192,6 @@ from .connect_flow import (
     DEFAULT_GUARD_CONNECT_URL,
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
-    run_guard_connect_command,
     run_guard_device_connect_command,
 )
 from .docs import build_install_connect_docs_payload
@@ -2316,24 +2315,15 @@ def run_guard_command(
             if payload is not None:
                 _emit("login", payload, getattr(args, "json", False))
             return exit_code
-        try:
-            payload = _run_guard_device_connect_flow(store=store, connect_url=args.connect_url)
-        except json.JSONDecodeError as error:
-            print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
-            return 1
-        except ValueError as error:
-            print(str(error), file=sys.stderr)
-            return 2
-        except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
-            print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
-            return 1
-        next_action = payload.get("next_action")
-        if isinstance(next_action, dict):
-            target = _optional_string(next_action.get("target"))
-            if target is not None:
-                payload["browser_opened"] = bool(webbrowser.open(target))
+        payload, exit_code = _build_guard_device_connect_payload(
+            store=store,
+            connect_url=args.connect_url,
+            open_browser=True,
+        )
+        if payload is None:
+            return exit_code
         _emit("connect", payload, getattr(args, "json", False))
-        return 0
+        return exit_code
 
     if args.guard_command == "connect":
         connect_subcommand = getattr(args, "connect_command", None)
@@ -2347,38 +2337,25 @@ def run_guard_command(
             _emit("connect", payload, getattr(args, "json", False))
             return 0
         if not bool(getattr(args, "headless", False)):
-            try:
-                payload = _run_guard_device_connect_flow(store=store, connect_url=args.connect_url)
-            except json.JSONDecodeError as error:
-                print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
-                return 1
-            except ValueError as error:
-                print(str(error), file=sys.stderr)
-                return 2
-            except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
-                print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
-                return 1
-            next_action = payload.get("next_action")
-            if isinstance(next_action, dict):
-                target = _optional_string(next_action.get("target"))
-                if target is not None:
-                    payload["browser_opened"] = bool(webbrowser.open(target))
+            payload, exit_code = _build_guard_device_connect_payload(
+                store=store,
+                connect_url=args.connect_url,
+                open_browser=True,
+            )
+            if payload is None:
+                return exit_code
             _emit("connect", payload, getattr(args, "json", False))
-            return 0
+            return exit_code
         if bool(getattr(args, "headless", False)):
-            try:
-                payload = _run_guard_device_connect_flow(store=store, connect_url=args.connect_url)
-            except json.JSONDecodeError as error:
-                print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
-                return 1
-            except ValueError as error:
-                print(str(error), file=sys.stderr)
-                return 2
-            except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
-                print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
-                return 1
+            payload, exit_code = _build_guard_device_connect_payload(
+                store=store,
+                connect_url=args.connect_url,
+                open_browser=False,
+            )
+            if payload is None:
+                return exit_code
             _emit("connect", payload, getattr(args, "json", False))
-            return 0
+            return exit_code
 
     if args.guard_command == "bridge":
         poll_interval = getattr(args, "poll_interval", 10) or 10
@@ -8748,30 +8725,43 @@ def _filter_policy_items(items: list[dict[str, object]], *, active_only: bool) -
     return filtered
 
 
-def _run_guard_connect_flow(
-    *,
-    guard_home: Path,
-    store: GuardStore,
-    sync_url: str,
-    connect_url: str,
-    wait_timeout_seconds: int,
-) -> dict[str, object]:
-    return run_guard_connect_command(
-        guard_home=guard_home,
-        store=store,
-        sync_url=sync_url,
-        connect_url=connect_url,
-        opener=webbrowser.open,
-        wait_timeout_seconds=wait_timeout_seconds,
-    )
-
-
 def _run_guard_device_connect_flow(
     *,
     store: GuardStore,
     connect_url: str,
 ) -> dict[str, object]:
     return run_guard_device_connect_command(store=store, connect_url=connect_url)
+
+
+def _build_guard_device_connect_payload(
+    *,
+    store: GuardStore,
+    connect_url: str,
+    open_browser: bool,
+) -> tuple[dict[str, object] | None, int]:
+    try:
+        payload = _run_guard_device_connect_flow(store=store, connect_url=connect_url)
+    except json.JSONDecodeError as error:
+        print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+        return None, 1
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return None, 2
+    except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
+        print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+        return None, 1
+    if open_browser:
+        _open_guard_device_next_action(payload)
+    return payload, 0
+
+
+def _open_guard_device_next_action(payload: dict[str, object]) -> None:
+    next_action = payload.get("next_action")
+    if not isinstance(next_action, dict):
+        return
+    target = _optional_string(next_action.get("target"))
+    if target is not None:
+        payload["browser_opened"] = bool(webbrowser.open(target))
 
 
 def _manual_guard_login_payload(

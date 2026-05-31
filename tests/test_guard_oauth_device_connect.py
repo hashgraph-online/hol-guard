@@ -218,11 +218,7 @@ def test_connect_default_uses_device_code_without_pairing_secret(tmp_path: Path,
         opened_urls.append(url)
         return True
 
-    def legacy_pairing_flow(**kwargs: object) -> dict[str, object]:
-        raise AssertionError("default connect must not use legacy pairing flow")
-
     monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_headless_flow)
-    monkeypatch.setattr(guard_commands, "_run_guard_connect_flow", legacy_pairing_flow)
     monkeypatch.setattr(guard_commands.webbrowser, "open", fake_open)
 
     exit_code = run_guard_command(args)
@@ -233,6 +229,7 @@ def test_connect_default_uses_device_code_without_pairing_secret(tmp_path: Path,
     assert "ABCD-EFGH" in captured.out
     assert "guardPairSecret" not in captured.out
     assert "guardPairRequest" not in captured.out
+    assert not hasattr(guard_commands, "_run_guard_connect_flow")
     assert "guardDaemon" not in captured.out
     assert "guard_live_" not in captured.out
 
