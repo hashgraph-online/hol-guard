@@ -290,7 +290,7 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
 
     def fail_on_wait(**kwargs):
-        raise AssertionError("Codex PreToolUse must return JSON denial without waiting for browser approval")
+        raise AssertionError("Codex secret exfiltration PreToolUse must deny without waiting for approval")
 
     monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", fail_on_wait)
 
@@ -315,6 +315,22 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     assert hook_output["permissionDecision"] == "deny"
     assert "HOL Guard" in str(hook_output["permissionDecisionReason"])
     assert "retry" in str(hook_output["permissionDecisionReason"]).lower()
+
+
+def test_gr081b_codex_package_install_pretooluse_is_live_wait_candidate() -> None:
+    assert guard_commands_module._codex_pretooluse_live_wait_candidate(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "pnpm install minimist@1.2.8"},
+        }
+    )
+    assert guard_commands_module._codex_pretooluse_live_wait_candidate(
+        {
+            "risk_signals": ["invokes a package install request via npm"],
+            "risk_summary": "HOL Guard blocked `minimist@1.2.66` before install.",
+        }
+    )
 
 
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
