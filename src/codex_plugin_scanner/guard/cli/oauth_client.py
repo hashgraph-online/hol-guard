@@ -105,10 +105,8 @@ def generate_dpop_key_pair() -> GuardDpopKeyMaterial:
     private_numbers = private_key.private_numbers()
     public_numbers = private_numbers.public_numbers
     public_jwk = {
-        "alg": "ES256",
         "crv": "P-256",
         "kty": "EC",
-        "use": "sig",
         "x": _base64url_encode(public_numbers.x.to_bytes(32, byteorder="big")),
         "y": _base64url_encode(public_numbers.y.to_bytes(32, byteorder="big")),
     }

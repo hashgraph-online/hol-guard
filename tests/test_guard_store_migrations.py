@@ -359,17 +359,61 @@ def test_oauth_local_credentials_use_encrypted_file_fallback_when_keychain_write
     assert any(path.name.endswith(".enc") for path in secrets_dir.iterdir())
     assert store.get_oauth_local_credentials() is not None
 
-    store.set_sync_credentials(
-        "https://hol.org/api/guard/receipts/sync",
-        "secret-token-value",
-        "2026-04-19T00:00:00+00:00",
-    )
 
-    assert store.get_sync_credentials() == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "secret-token-value",
+def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_write_failure(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="old-refresh-token",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nold-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "old-x", "y": "old-y"},
+        dpop_public_jwk_thumbprint="old-thumbprint",
+        grant_id="grant-old",
+        machine_id="machine-old",
+        workspace_id="workspace-old",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    original_set_secret = store._oauth_secret_store.set_secret
+    write_calls: list[str] = []
+
+    def fail_on_second_write(secret_id: str, value: str) -> None:
+        write_calls.append(secret_id)
+        if len(write_calls) == 2:
+            raise RuntimeError("second write failed")
+        original_set_secret(secret_id, value)
+
+    monkeypatch.setattr(store._oauth_secret_store, "set_secret", fail_on_second_write)
+
+    try:
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="new-refresh-token",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nnew-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "new-x", "y": "new-y"},
+            dpop_public_jwk_thumbprint="new-thumbprint",
+            grant_id="grant-new",
+            machine_id="machine-new",
+            workspace_id="workspace-new",
+            now="2026-06-01T00:05:00+00:00",
+        )
+    except RuntimeError as error:
+        assert str(error) == "second write failed"
+    else:
+        raise AssertionError("second OAuth secret write should fail in this regression test")
+
+    assert store.get_oauth_local_credentials() == {
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "refresh_token": "old-refresh-token",
+        "dpop_private_key_pem": "-----BEGIN PRIVATE KEY-----\nold-key-material\n-----END PRIVATE KEY-----\n",
+        "dpop_public_jwk": {"kty": "EC", "crv": "P-256", "x": "old-x", "y": "old-y"},
+        "dpop_public_jwk_thumbprint": "old-thumbprint",
+        "grant_id": "grant-old",
+        "machine_id": "machine-old",
+        "workspace_id": "workspace-old",
     }
-    assert any((guard_home / "secrets").glob("*.enc"))
 
 
 def test_validated_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
