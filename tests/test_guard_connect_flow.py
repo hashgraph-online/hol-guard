@@ -45,7 +45,7 @@ def _post_legacy_connect_endpoint(
                 "pairing_secret": "pairing-secret",
                 "request_id": "connect-123",
                 "sync_url": "https://hol.org/api/guard/receipts/sync",
-                "token": "guard_live_secret",
+                "token": "legacy-sync-secret",
             }
         ).encode("utf-8"),
         headers={
@@ -94,7 +94,7 @@ def test_daemon_rejects_legacy_connect_pairing_endpoints(tmp_path: Path) -> None
     assert complete_payload["error"] == "legacy_pairing_disabled"
     assert result_status == 410
     assert result_payload["error"] == "legacy_pairing_disabled"
-    assert "guard_live_secret" not in json.dumps([request_payload, complete_payload, result_payload])
+    assert "legacy-sync-secret" not in json.dumps([request_payload, complete_payload, result_payload])
 
 
 def test_connect_repair_copy_points_to_device_code(tmp_path: Path) -> None:

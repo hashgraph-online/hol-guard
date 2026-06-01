@@ -48,7 +48,7 @@ def _seed_cloud_profile(context: HarnessContext, runtime: str = "hermes") -> Non
             "agent_id": "agent_123",
             "principal_id": "principal_123",
             "sync_url": "https://hol.org/api/guard/receipts/sync",
-            "token": "guard_live_secret",
+            "token": "oauth_access_token_fixture",
         },
         "2026-05-05T00:00:00.000Z",
     )
@@ -99,12 +99,12 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
         (
             "mcp_servers:\n"
             "  docs:\n"
-            '    command: "/usr/bin/node --token guard_live_secret '
-            'HTTPS://user:pass@example.com/mcp?auth=guard_live_secret '
+            '    command: "/usr/bin/node --token ghp_secretvalue '
+            'HTTPS://user:pass@example.com/mcp?auth=ghp_secretvalue '
             'ws://user:pass@example.com/socket"\n'
-            '    url: "https://user:pass@example.com/mcp?token=guard_live_secret&mode=safe"\n'
+            '    url: "https://user:pass@example.com/mcp?token=ghp_secretvalue&mode=safe"\n'
             "    headers:\n"
-            '      Authorization: "Bearer guard_live_secret"\n'
+            '      Authorization: "Bearer ghp_secretvalue"\n'
         ),
     )
     context = _ctx(tmp_path)
@@ -118,9 +118,9 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
     assert {item["item_kind"] for item in payload["items"]} >= {"skill", "mcp_server"}
     assert all(item["metadata"]["has_env_secrets"] is False for item in mcp_items)
     assert all(item["metadata"]["has_auth_headers"] is True for item in mcp_items)
-    assert "guard_live_secret" not in encoded
-    assert "Bearer guard_live_secret" not in encoded
-    assert "--token guard_live_secret" not in encoded
+    assert "ghp_secretvalue" not in encoded
+    assert "Bearer ghp_secretvalue" not in encoded
+    assert "--token ghp_secretvalue" not in encoded
     assert "user:pass" not in encoded
     assert str(tmp_path) not in encoded
 

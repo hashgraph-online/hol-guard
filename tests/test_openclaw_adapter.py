@@ -45,7 +45,7 @@ def _seed_cloud_profile(context: HarnessContext, runtime: str = "openclaw") -> N
             "client_version": "2.0.95",
             "agent_id": "agent_456",
             "principal_id": "principal_456",
-            "token": "guard_live_secret",
+            "token": "oauth_access_token_fixture",
             "sync_url": "https://hol.org/api/guard/receipts/sync",
         },
         "2026-05-05T00:00:00.000Z",
@@ -135,8 +135,8 @@ def test_inventory_snapshot_redacts_openclaw_channels_mcp_and_skills(tmp_path: P
                 "mcp": {
                     "servers": {
                         "docs": {
-                            "url": "https://user:pass@example.com/mcp?token=guard_live_secret",
-                            "headers": {"Authorization": "Bearer guard_live_secret"},
+                            "url": "https://user:pass@example.com/mcp?token=ghp_secretvalue",
+                            "headers": {"Authorization": "Bearer ghp_secretvalue"},
                         }
                     }
                 },
@@ -151,7 +151,7 @@ def test_inventory_snapshot_redacts_openclaw_channels_mcp_and_skills(tmp_path: P
 
     assert payload["agent_type"] == "openclaw"
     assert {item["item_kind"] for item in payload["items"]} >= {"channel", "mcp_server", "skill"}
-    assert "guard_live_secret" not in encoded
+    assert "ghp_secretvalue" not in encoded
     assert str(context.home_dir) not in encoded
     assert str(context.workspace_dir) not in encoded
 

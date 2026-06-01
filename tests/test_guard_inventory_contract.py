@@ -435,8 +435,8 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
         rule_id="CISCO-SKILL-PROMPT-INJECTION",
         severity=Severity.HIGH,
         category="skill-security",
-        title="Prompt injection guard_live_secret",
-        description=f"Unsafe instruction in {skill_path} with token=guard_live_secret",
+        title="Prompt injection ghp_secretvalue",
+        description=f"Unsafe instruction in {skill_path} with token=ghp_secretvalue",
         file_path=str(skill_path),
         line_number=7,
         source="cisco-skill-scanner",
@@ -444,7 +444,7 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
     cisco_run = CiscoInventoryRun(
         source="cisco-skill-scanner",
         status="enabled",
-        message="Cisco skill scanner found guard_live_secret",
+        message="Cisco skill scanner found ghp_secretvalue",
         findings=(finding, finding),
         duration_ms=42,
         metadata={"totalFindings": 2},
@@ -467,5 +467,5 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
     assert payload["findings"][0]["evidence"]["durationMs"] == 42
     assert payload["findings"][0]["evidence"]["riskComponent"]["scoreDelta"] == -25
     assert payload["sources"][-1]["source_type"] == "scanner"
-    assert "guard_live_secret" not in encoded
+    assert "ghp_secretvalue" not in encoded
     assert str(tmp_path) not in encoded
