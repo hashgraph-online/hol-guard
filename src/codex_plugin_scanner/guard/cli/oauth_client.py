@@ -17,9 +17,7 @@ PRODUCTION_GUARD_ISSUER = "https://hol.org"
 STAGING_GUARD_ISSUER = "https://staging.hol.org"
 LOCAL_GUARD_ISSUER = "http://127.0.0.1:3000"
 
-_PKCE_ALLOWED_CHARACTERS = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
-)
+_PKCE_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
 
 
 @dataclass(frozen=True)
