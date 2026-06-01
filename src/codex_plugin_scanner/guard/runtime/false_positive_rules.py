@@ -586,7 +586,7 @@ def _curl_http_fetch_uses_auth(command: str) -> bool:
             return True
         if token.startswith("-") and not token.startswith("--"):
             cluster = token[1:]
-            if "u" in cluster or "n" in cluster:
+            if "u" in cluster or "U" in cluster or "n" in cluster:
                 return True
     return False
 
