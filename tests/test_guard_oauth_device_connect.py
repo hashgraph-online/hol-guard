@@ -68,6 +68,7 @@ def test_device_authorization_request_uses_oauth_scopes_without_token_material()
         machine_label="Michaels MacBook",
         runtime_id="hol-guard",
         runtime_label="HOL Guard CLI",
+        client_id="guard-local-daemon",
     )
     parsed = urllib.parse.parse_qs(encoded)
 
@@ -135,6 +136,34 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
     assert payload["user_code"] == "ABCD-EFGH"
     assert "device-secret-value" not in rendered
     assert store.get_sync_credentials() is None
+
+
+def test_headless_connect_uses_staging_client_defaults(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_device_label("CI Runner", "2026-05-31T00:00:00Z")
+    requests: list[tuple[str, str]] = []
+
+    def fake_request(url: str, body: str) -> dict[str, object]:
+        requests.append((url, body))
+        return {
+            "device_code": "device-secret-value",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://staging.hol.org/guard/oauth/device",
+            "verification_uri_complete": "https://staging.hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            "expires_in": 600,
+            "interval": 5,
+        }
+
+    connect_flow.run_guard_device_connect_command(
+        store=store,
+        connect_url="https://staging.hol.org/guard/connect",
+        request_device_authorization=fake_request,
+    )
+    parsed = urllib.parse.parse_qs(requests[0][1])
+
+    assert requests[0][0] == "https://staging.hol.org/api/guard/oauth/device/authorize"
+    assert parsed["client_id"] == ["guard-local-daemon-staging"]
 
 
 def test_login_token_alias_rejects_raw_token_without_persisting_credentials(tmp_path: Path, capsys) -> None:
