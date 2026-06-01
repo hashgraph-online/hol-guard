@@ -16081,6 +16081,25 @@ def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_se
     assert artifact is None
 
 
+def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Path) -> None:
+    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
+    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
+    outside_dir = tmp_path / "CascadeProjects" / "outside"
+    _write_text(workspace_dir / "src" / "inside.ts", "export const token_label = 'field name only';\n")
+    _write_text(outside_dir / "src" / "outside.ts", "export const token_label = 'field name only';\n")
+
+    command = (
+        f"cd {shlex.quote(str(workspace_dir / '..' / '..' / '..' / '..' / 'outside'))} && "
+        "rg -n token_label src | sed -n '1,40p'"
+    )
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=repo_root,
+        home_dir=tmp_path,
+    )
+
+
 def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_path: Path) -> None:
     repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
     workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-default-surfaces"

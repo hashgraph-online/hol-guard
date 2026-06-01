@@ -6916,6 +6916,7 @@ def _codex_safe_source_cd_cwd(command_text: str, *, cwd: Path | None, home_dir: 
     target = _codex_resolve_source_like_path(parts[1], cwd=cwd, home_dir=home_dir)
     if target is None or not target.exists() or not target.is_dir():
         return None
+    target = target.resolve()
     try:
         target.relative_to(base_dir)
     except ValueError:
