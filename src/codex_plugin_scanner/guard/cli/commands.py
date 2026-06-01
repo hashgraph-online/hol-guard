@@ -151,6 +151,7 @@ from ..runtime.false_positive_rules import (
 )
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.runner import (
+    GuardSyncAuthorizationExpiredError,
     GuardSyncNotConfiguredError,
     extract_prompt_requests,
     guard_run,
@@ -2141,10 +2142,15 @@ def run_guard_command(
         if adv_sub == "sync":
             try:
                 payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
-            except GuardSyncNotConfiguredError:
+            except GuardSyncNotConfiguredError as error:
+                status = (
+                    "auth_expired"
+                    if isinstance(error, GuardSyncAuthorizationExpiredError)
+                    else "no_cloud_sync_configured"
+                )
                 _emit(
                     "advisories_sync",
-                    {"generated_at": _now(), "status": "no_cloud_sync_configured"},
+                    {"generated_at": _now(), "status": status, "error": _guard_sync_failure_message(error)},
                     getattr(args, "json", False),
                 )
             except RuntimeError as error:
@@ -2387,8 +2393,8 @@ def run_guard_command(
     if args.guard_command == "sync":
         try:
             payload = sync_receipts(store)
-        except GuardSyncNotConfiguredError:
-            message = _guard_sync_prerequisite_message()
+        except GuardSyncNotConfiguredError as error:
+            message = _guard_sync_failure_message(error)
             if getattr(args, "json", False):
                 _emit("sync", {"synced": False, "error": message}, True)
             else:
@@ -2408,8 +2414,8 @@ def run_guard_command(
         if cloud_command == "sync-intel":
             try:
                 payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
-            except GuardSyncNotConfiguredError:
-                message = _guard_sync_prerequisite_message()
+            except GuardSyncNotConfiguredError as error:
+                message = _guard_sync_failure_message(error)
                 if getattr(args, "json", False):
                     _emit("cloud-sync-intel", {"synced": False, "error": message}, True)
                 else:
@@ -2461,8 +2467,8 @@ def run_guard_command(
         if supply_chain_command == "sync":
             try:
                 payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
-            except GuardSyncNotConfiguredError:
-                message = _guard_sync_prerequisite_message()
+            except GuardSyncNotConfiguredError as error:
+                message = _guard_sync_failure_message(error)
                 if getattr(args, "json", False):
                     _emit("supply-chain-sync", {"synced": False, "error": message}, True)
                 else:
@@ -2500,7 +2506,7 @@ def run_guard_command(
                 payload = _guard_service_sync_payload(store)
             except (GuardSyncNotConfiguredError, RuntimeError) as error:
                 message = (
-                    _guard_service_sync_prerequisite_message()
+                    _guard_service_sync_failure_message(error)
                     if isinstance(error, GuardSyncNotConfiguredError)
                     else str(error)
                 )
@@ -8901,6 +8907,12 @@ def _guard_service_sync_prerequisite_message() -> str:
     )
 
 
+def _guard_service_sync_failure_message(error: GuardSyncNotConfiguredError) -> str:
+    if isinstance(error, GuardSyncAuthorizationExpiredError):
+        return str(error)
+    return _guard_service_sync_prerequisite_message()
+
+
 def _guard_service_status_payload(store: GuardStore) -> dict[str, object]:
     credentials = store.get_sync_credentials()
     service_profile = _guard_service_runtime_profile(store)
@@ -8963,6 +8975,12 @@ def _guard_sync_prerequisite_message() -> str:
         "Guard Cloud is not connected yet. Run `hol-guard connect` to sign in and pair this machine, "
         "or use `hol-guard login` as a compatibility alias for the same browser flow."
     )
+
+
+def _guard_sync_failure_message(error: GuardSyncNotConfiguredError) -> str:
+    if isinstance(error, GuardSyncAuthorizationExpiredError):
+        return str(error)
+    return _guard_sync_prerequisite_message()
 
 
 def _build_abom_payload(store: GuardStore) -> dict[str, object]:
