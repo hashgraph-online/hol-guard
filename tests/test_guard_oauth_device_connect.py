@@ -311,6 +311,23 @@ def test_loopback_callback_listener_rejects_state_mismatch() -> None:
         listener.close()
 
 
+def test_loopback_callback_listener_surfaces_oauth_denial_without_timeout() -> None:
+    listener = connect_flow.start_guard_loopback_callback_listener(expected_state="state-123")
+    try:
+        denied_url = f"{listener.redirect_uri}?state=state-123&error=access_denied&error_description=User+denied+access"
+        with urllib.request.urlopen(denied_url, timeout=5) as response:
+            assert response.status == 200
+
+        try:
+            listener.wait_for_callback(timeout_seconds=0.05)
+        except RuntimeError as error:
+            assert "User denied access" in str(error)
+        else:
+            raise AssertionError("denied callback must surface a runtime error")
+    finally:
+        listener.close()
+
+
 def test_exchange_authorization_code_posts_pkce_and_dpop_binding() -> None:
     assert hasattr(connect_flow, "exchange_guard_authorization_code")
 
