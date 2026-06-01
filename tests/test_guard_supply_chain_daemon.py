@@ -116,3 +116,33 @@ def test_daemon_bundle_refresh_reports_auth_expired(
     assert isinstance(summary, dict)
     assert summary["status"] == "auth_expired"
     assert "hol-guard connect" in str(summary["message"])
+
+
+def test_daemon_bundle_refresh_reports_retryable_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    def _fail_sync(_store: GuardStore) -> dict[str, object]:
+        raise RuntimeError("Guard OAuth token refresh failed: oauth upstream down")
+
+    monkeypatch.setattr(guard_daemon_module, "sync_supply_chain_bundle", _fail_sync)
+    daemon = guard_daemon_module.GuardDaemonServer(
+        store,
+        host="127.0.0.1",
+        port=0,
+        idle_timeout_seconds=60,
+        bundle_refresh_interval_seconds=0.05,
+        bundle_refresh_backoff_seconds=0.05,
+    )
+    daemon.start()
+    try:
+        time.sleep(0.12)
+    finally:
+        daemon.stop()
+
+    summary = store.get_sync_payload("supply_chain_bundle_daemon")
+    assert isinstance(summary, dict)
+    assert summary["status"] == "error"
+    assert "oauth upstream down" in str(summary["error"])
