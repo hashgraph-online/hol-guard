@@ -78,9 +78,10 @@ class GuardOAuthBrowserSession:
             raise TimeoutError("Guard OAuth browser callback timed out.")
         if not self._callback_ready.wait(timeout_seconds):
             raise TimeoutError("Guard OAuth browser callback timed out.")
-        if self._callback is None:
+        callback = self._callback or getattr(self._server, "guard_callback", None)
+        if callback is None:
             raise TimeoutError("Guard OAuth browser callback timed out.")
-        return self._callback
+        return callback
 
     def close(self) -> None:
         self._server.shutdown()

@@ -8789,13 +8789,13 @@ def _build_guard_device_connect_payload(
             else _run_guard_device_connect_flow(store=store, connect_url=connect_url)
         )
     except json.JSONDecodeError as error:
-        print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+        print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return None, 2
     except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
-        print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+        print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
     if open_browser and str(payload.get("connect_mode") or "") == "device_code":
         _open_guard_device_next_action(payload)
