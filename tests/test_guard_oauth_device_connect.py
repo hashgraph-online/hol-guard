@@ -310,8 +310,9 @@ def test_loopback_callback_listener_rejects_state_mismatch() -> None:
     finally:
         listener.close()
 
-    def test_exchange_authorization_code_posts_pkce_and_dpop_binding() -> None:
-        assert hasattr(connect_flow, "exchange_guard_authorization_code")
+
+def test_exchange_authorization_code_posts_pkce_and_dpop_binding() -> None:
+    assert hasattr(connect_flow, "exchange_guard_authorization_code")
 
     dpop = generate_dpop_key_pair()
     captured: dict[str, object] = {}
@@ -532,7 +533,7 @@ def test_connect_headless_reports_device_authorization_network_error(tmp_path: P
     captured = capsys.readouterr()
 
     assert exit_code == 1
-    assert "Guard Device Code authorization failed" in captured.err
+    assert "Guard authorization failed" in captured.err
     assert "Traceback" not in captured.err
 
 
@@ -550,5 +551,5 @@ def test_connect_headless_reports_malformed_device_authorization_response(tmp_pa
     captured = capsys.readouterr()
 
     assert exit_code == 1
-    assert "Guard Device Code authorization failed" in captured.err
+    assert "Guard authorization failed" in captured.err
     assert "Traceback" not in captured.err
