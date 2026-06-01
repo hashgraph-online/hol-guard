@@ -7,6 +7,7 @@ import http.server
 import json
 import secrets
 import threading
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -37,6 +38,11 @@ DEFAULT_GUARD_DEVICE_SCOPES = (
 CONNECT_COMMAND = "hol-guard connect"
 CONNECT_STATUS_COMMAND = "hol-guard connect status"
 CONNECT_REPAIR_COMMAND = "hol-guard connect repair"
+HEADLESS_CONNECT_COMMAND = "hol-guard connect --headless"
+DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
+DEVICE_CODE_SLOW_DOWN_SECONDS = 5
+HEADLESS_RUNTIME_ID = "hol-guard"
+HEADLESS_RUNTIME_LABEL = "HOL Guard CLI"
 _LOOPBACK_REDIRECT_PATH = "/oauth/callback"
 _LOOPBACK_HOSTS = ("127.0.0.1", "::1")
 _LOOPBACK_PORT_MIN = 49152
@@ -330,6 +336,31 @@ def build_device_authorization_request_body(
     )
 
 
+def _require_string(payload: dict[str, object], key: str) -> str:
+    value = str(payload.get(key) or "").strip()
+    if not value:
+        raise RuntimeError(f"Guard OAuth token exchange failed: missing {key}.")
+    return value
+
+
+def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAuthTokenExchangeResult:
+    access_token = _require_string(payload, "access_token")
+    token_type = _require_string(payload, "token_type")
+    if token_type.lower() != "bearer":
+        raise RuntimeError("Guard OAuth token exchange failed: missing access token.")
+    claims = _decode_access_token_claims(access_token)
+    return GuardOAuthTokenExchangeResult(
+        access_token=access_token,
+        refresh_token=str(payload.get("refresh_token") or "").strip() or None,
+        expires_in=int(payload.get("expires_in") or 0),
+        scope=str(payload.get("scope") or "").strip(),
+        token_type=token_type,
+        grant_id=_read_nested_string(claims, "grant", "grantId"),
+        machine_id=_read_nested_string(claims, "machine", "machineId"),
+        workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
+    )
+
+
 def build_device_authorization_copy_payload(response: dict[str, object]) -> dict[str, object]:
     user_code = str(response.get("user_code") or "").strip()
     verification_uri = str(response.get("verification_uri") or "").strip()
@@ -350,6 +381,30 @@ def build_device_authorization_copy_payload(response: dict[str, object]) -> dict
             "message": f"Open {next_target} and enter code {user_code}.",
         },
     }
+
+
+def _device_token_request_body(*, client_id: str, device_code: str) -> bytes:
+    return urllib.parse.urlencode(
+        {
+            "grant_type": DEVICE_CODE_GRANT_TYPE,
+            "client_id": client_id,
+            "device_code": device_code,
+        }
+    ).encode("utf-8")
+
+
+def _load_error_payload(error: urllib.error.HTTPError) -> dict[str, object] | None:
+    try:
+        raw_body = error.read().decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    if not raw_body.strip():
+        return None
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def device_authorization_endpoint_from_connect_url(connect_url: str) -> str:
@@ -373,6 +428,75 @@ def request_device_authorization(url: str, body: str) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise RuntimeError("Guard Device Code authorization failed: invalid response.")
     return payload
+
+
+def exchange_guard_device_code(
+    *,
+    token_endpoint: str,
+    client_id: str,
+    device_code: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+    interval_seconds: int,
+    expires_in_seconds: int,
+    urlopen=urllib.request.urlopen,
+    sleep=time.sleep,
+    now: datetime | None = None,
+) -> GuardOAuthTokenExchangeResult:
+    deadline = time.monotonic() + max(expires_in_seconds, 1)
+    current_interval = max(interval_seconds, 1)
+    while True:
+        request = urllib.request.Request(
+            token_endpoint,
+            data=_device_token_request_body(client_id=client_id, device_code=device_code),
+            method="POST",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "DPoP": _sign_dpop_proof(
+                    token_endpoint=token_endpoint,
+                    dpop_key_material=dpop_key_material,
+                    now=now or datetime.now(timezone.utc),
+                ),
+            },
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            payload = _load_error_payload(error)
+            oauth_error = str(payload.get("error") or "").strip() if isinstance(payload, dict) else ""
+            if oauth_error == "authorization_pending":
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        "Guard OAuth approval timed out. Retry `hol-guard connect --headless` to request a new code."
+                    ) from error
+                sleep(float(current_interval))
+                continue
+            if oauth_error == "slow_down":
+                current_interval = max(current_interval + DEVICE_CODE_SLOW_DOWN_SECONDS, 1)
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        "Guard OAuth approval timed out. Retry `hol-guard connect --headless` to request a new code."
+                    ) from error
+                sleep(float(current_interval))
+                continue
+            if oauth_error == "expired_token":
+                raise RuntimeError(
+                    "Guard OAuth device approval expired. Retry `hol-guard connect --headless` to request a new code."
+                ) from error
+            if oauth_error in {"access_denied", "authorization_declined"}:
+                raise RuntimeError(
+                    "Guard OAuth approval was denied. Retry `hol-guard connect --headless` to request a new code."
+                ) from error
+            message = (
+                str(payload.get("error_description") or oauth_error or error.reason)
+                if isinstance(payload, dict)
+                else str(error.reason)
+            )
+            raise RuntimeError(f"Guard OAuth token exchange failed: {message}") from error
+        if not isinstance(payload, dict):
+            raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
+        return _parse_guard_token_exchange_payload(payload)
 
 
 def exchange_guard_authorization_code(
@@ -413,21 +537,7 @@ def exchange_guard_authorization_code(
         payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, dict):
         raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
-    access_token = str(payload.get("access_token") or "").strip()
-    token_type = str(payload.get("token_type") or "").strip()
-    if not access_token or token_type.lower() != "bearer":
-        raise RuntimeError("Guard OAuth token exchange failed: missing access token.")
-    claims = _decode_access_token_claims(access_token)
-    return GuardOAuthTokenExchangeResult(
-        access_token=access_token,
-        refresh_token=str(payload.get("refresh_token") or "").strip() or None,
-        expires_in=int(payload.get("expires_in") or 0),
-        scope=str(payload.get("scope") or "").strip(),
-        token_type=token_type,
-        grant_id=_read_nested_string(claims, "grant", "grantId"),
-        machine_id=_read_nested_string(claims, "machine", "machineId"),
-        workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
-    )
+    return _parse_guard_token_exchange_payload(payload)
 
 
 def run_guard_device_connect_command(
@@ -435,15 +545,20 @@ def run_guard_device_connect_command(
     store: GuardStore,
     connect_url: str,
     request_device_authorization=request_device_authorization,
+    token_urlopen=urllib.request.urlopen,
+    sleep=time.sleep,
+    now: str | None = None,
+    announce_copy=None,
 ) -> dict[str, object]:
     device = store.get_device_metadata()
     _, allowed_origin = resolve_connect_url(connect_url)
     oauth_client = resolve_guard_oauth_client_config(allowed_origin)
+    dpop_key_material = generate_dpop_key_pair()
     request_body = build_device_authorization_request_body(
         machine_id=str(device["installation_id"]),
         machine_label=str(device["device_label"]),
-        runtime_id="hol-guard",
-        runtime_label="HOL Guard CLI",
+        runtime_id=HEADLESS_RUNTIME_ID,
+        runtime_label=HEADLESS_RUNTIME_LABEL,
         client_id=oauth_client.client_id,
     )
     response = request_device_authorization(
@@ -452,6 +567,50 @@ def run_guard_device_connect_command(
     )
     payload = build_device_authorization_copy_payload(response)
     payload["connect_mode"] = "device_code"
+    if announce_copy is not None:
+        announce_copy(payload)
+    device_code = str(response.get("device_code") or "").strip()
+    if not device_code:
+        raise ValueError("Device authorization response is missing device_code.")
+    token_result = exchange_guard_device_code(
+        token_endpoint=oauth_client.token_endpoint,
+        client_id=oauth_client.client_id,
+        device_code=device_code,
+        dpop_key_material=dpop_key_material,
+        interval_seconds=int(response.get("interval") or 5),
+        expires_in_seconds=int(response.get("expires_in") or 0),
+        urlopen=token_urlopen,
+        sleep=sleep,
+        now=datetime.fromisoformat(now) if now else None,
+    )
+    if token_result.refresh_token is None:
+        raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
+    timestamp = now or datetime.now(timezone.utc).isoformat()
+    store.set_oauth_local_credentials(
+        issuer=oauth_client.issuer,
+        client_id=oauth_client.client_id,
+        refresh_token=token_result.refresh_token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id=token_result.grant_id,
+        machine_id=token_result.machine_id,
+        workspace_id=token_result.workspace_id,
+        runtime_id=HEADLESS_RUNTIME_ID,
+        runtime_label=HEADLESS_RUNTIME_LABEL,
+        now=timestamp,
+    )
+    payload.update(
+        {
+            "status": "connected",
+            "grant_id": token_result.grant_id,
+            "machine_id": token_result.machine_id,
+            "workspace_id": token_result.workspace_id,
+            "connect_command": CONNECT_COMMAND,
+            "connect_status_command": CONNECT_STATUS_COMMAND,
+            "connect_repair_command": CONNECT_REPAIR_COMMAND,
+        }
+    )
     return payload
 
 
@@ -500,6 +659,8 @@ def run_guard_browser_connect_command(
         grant_id=token_result.grant_id,
         machine_id=token_result.machine_id,
         workspace_id=token_result.workspace_id,
+        runtime_id=HEADLESS_RUNTIME_ID,
+        runtime_label=HEADLESS_RUNTIME_LABEL,
         now=timestamp,
     )
     return {
