@@ -15,7 +15,8 @@ def test_guard_live_fixtures_are_rejection_only() -> None:
     offenders = sorted(
         str(path.relative_to(tests_root))
         for path in tests_root.rglob("test_*.py")
-        if path.name not in allowed_files and legacy_prefix in path.read_text(encoding="utf-8")
+        if str(path.relative_to(tests_root)) not in allowed_files
+        and legacy_prefix in path.read_text(encoding="utf-8")
     )
 
     assert offenders == []
