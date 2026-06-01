@@ -318,6 +318,13 @@ _HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
     r"|--trace(?:-ascii|-ids|-time)?(?:[=\s]|$)|--stderr(?:[=\s]|$)|--cookie-jar(?:[=\s]|$)|-c(?:\S|\s|$))",
     re.IGNORECASE,
 )
+_HTTP_FETCH_AUTH_PATTERN = re.compile(
+    r"(?:^|[\s;&|])(?:--oauth2-bearer(?:[=\s]|$)|--user(?:[=\s]|$)|-u(?:\S|\s|$)"
+    r"|--proxy-user(?:[=\s]|$)|--netrc(?:-file|-optional)?(?:[=\s]|$)|--anyauth(?:[=\s]|$)"
+    r"|--basic(?:[=\s]|$)|--digest(?:[=\s]|$)|--negotiate(?:[=\s]|$)|--aws-sigv4(?:[=\s]|$)"
+    r"|--service-name(?:[=\s]|$)|--delegation(?:[=\s]|$))",
+    re.IGNORECASE,
+)
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
     r"\b(?:readFileSync|open|createReadStream)\s*\(|"
     r"\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:read_text|read_bytes|open)\s*\(|"
@@ -327,6 +334,14 @@ _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
 _LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN = re.compile(
     r"\b(?:writeFileSync|appendFileSync|createWriteStream)\s*\(|"
     r"\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:write_text|write_bytes)\s*\(",
+    re.IGNORECASE,
+)
+_PROCESS_EXECUTION_IN_HTTP_SCRIPT_PATTERN = re.compile(
+    r"\b(?:require\s*\(\s*['\"]child_process['\"]\s*\)\s*\.\s*"
+    r"(?:exec|execFile|execFileSync|execSync|spawn|spawnSync)"
+    r"|child_process\s*\.\s*(?:exec|execFile|execFileSync|execSync|spawn|spawnSync)"
+    r"|subprocess\s*\.\s*(?:run|Popen|call|check_call|check_output)"
+    r"|os\.system)\s*\(",
     re.IGNORECASE,
 )
 _PIPE_TO_LOCAL_FILE_WRITE_PATTERN = re.compile(
@@ -511,6 +526,8 @@ def classify_read_only_http_fetch(command: str) -> str | None:
         return None
     if _HTTP_FETCH_FILE_WRITE_PATTERN.search(command):
         return None
+    if _HTTP_FETCH_AUTH_PATTERN.search(command):
+        return None
     if _PIPE_TO_EXFIL.search(command):
         return None
     if _pipes_to_execution(command):
@@ -524,6 +541,8 @@ def classify_read_only_http_fetch(command: str) -> str | None:
     if _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN.search(command):
         return None
     if _LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN.search(command):
+        return None
+    if _PROCESS_EXECUTION_IN_HTTP_SCRIPT_PATTERN.search(command):
         return None
     if _PIPE_TO_LOCAL_FILE_WRITE_PATTERN.search(command):
         return None
