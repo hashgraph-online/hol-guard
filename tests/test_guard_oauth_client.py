@@ -1,0 +1,60 @@
+from codex_plugin_scanner.guard.cli.oauth_client import (
+    LOCAL_GUARD_OAUTH_CLIENT_ID,
+    PRODUCTION_GUARD_OAUTH_CLIENT_ID,
+    STAGING_GUARD_OAUTH_CLIENT_ID,
+    build_pkce_s256_challenge,
+    detect_guard_oauth_environment,
+    generate_pkce_verifier,
+    resolve_guard_oauth_client_config,
+)
+
+
+def test_resolve_guard_oauth_client_config_for_production() -> None:
+    config = resolve_guard_oauth_client_config("https://hol.org")
+
+    assert config.issuer == "https://hol.org"
+    assert config.authorize_endpoint == "https://hol.org/api/guard/oauth/authorize"
+    assert config.token_endpoint == "https://hol.org/api/guard/oauth/token"
+    assert config.device_authorization_endpoint == "https://hol.org/api/guard/oauth/device/authorize"
+    assert config.jwks_endpoint == "https://hol.org/api/guard/oauth/jwks"
+    assert config.client_id == PRODUCTION_GUARD_OAUTH_CLIENT_ID
+
+
+def test_resolve_guard_oauth_client_config_for_staging() -> None:
+    config = resolve_guard_oauth_client_config("https://staging.hol.org")
+
+    assert config.client_id == STAGING_GUARD_OAUTH_CLIENT_ID
+    assert config.token_endpoint == "https://staging.hol.org/api/guard/oauth/token"
+    assert detect_guard_oauth_environment(config.issuer) == "staging"
+
+
+def test_resolve_guard_oauth_client_config_for_local_loopback() -> None:
+    config = resolve_guard_oauth_client_config("http://127.0.0.1:3000")
+
+    assert config.client_id == LOCAL_GUARD_OAUTH_CLIENT_ID
+    assert config.authorize_endpoint == "http://127.0.0.1:3000/api/guard/oauth/authorize"
+    assert detect_guard_oauth_environment(config.issuer) == "local"
+
+
+def test_generate_pkce_verifier_uses_rfc7636_charset() -> None:
+    verifier = generate_pkce_verifier(64)
+
+    assert len(verifier) == 64
+    assert all(character.isalnum() or character in "-._~" for character in verifier)
+
+
+def test_generate_pkce_verifier_rejects_out_of_range_length() -> None:
+    try:
+        generate_pkce_verifier(42)
+    except ValueError as error:
+        assert "between 43 and 128" in str(error)
+    else:
+        raise AssertionError("PKCE verifier length below RFC minimum must fail")
+
+
+def test_build_pkce_s256_challenge_matches_known_vector() -> None:
+    verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+
+    challenge = build_pkce_s256_challenge(verifier)
+
+    assert challenge == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"

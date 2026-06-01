@@ -8,10 +8,10 @@ import urllib.request
 from datetime import datetime, timezone
 
 from ..store import GuardStore
+from .oauth_client import resolve_guard_oauth_client_config
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
-DEFAULT_GUARD_DEVICE_CLIENT_ID = "guard-local-daemon"
 DEFAULT_GUARD_DEVICE_SCOPES = (
     "guard:runtime.sync",
     "guard:receipt.write",
@@ -39,7 +39,7 @@ def build_device_authorization_request_body(
     machine_label: str,
     runtime_id: str,
     runtime_label: str,
-    client_id: str = DEFAULT_GUARD_DEVICE_CLIENT_ID,
+    client_id: str,
     scopes: tuple[str, ...] = DEFAULT_GUARD_DEVICE_SCOPES,
 ) -> str:
     return urllib.parse.urlencode(
@@ -78,7 +78,7 @@ def build_device_authorization_copy_payload(response: dict[str, object]) -> dict
 
 def device_authorization_endpoint_from_connect_url(connect_url: str) -> str:
     _, allowed_origin = resolve_connect_url(connect_url)
-    return f"{allowed_origin}/api/guard/oauth/device/authorize"
+    return resolve_guard_oauth_client_config(allowed_origin).device_authorization_endpoint
 
 
 def request_device_authorization(url: str, body: str) -> dict[str, object]:
@@ -106,14 +106,17 @@ def run_guard_device_connect_command(
     request_device_authorization=request_device_authorization,
 ) -> dict[str, object]:
     device = store.get_device_metadata()
+    _, allowed_origin = resolve_connect_url(connect_url)
+    oauth_client = resolve_guard_oauth_client_config(allowed_origin)
     request_body = build_device_authorization_request_body(
         machine_id=str(device["installation_id"]),
         machine_label=str(device["device_label"]),
         runtime_id="hol-guard",
         runtime_label="HOL Guard CLI",
+        client_id=oauth_client.client_id,
     )
     response = request_device_authorization(
-        device_authorization_endpoint_from_connect_url(connect_url),
+        oauth_client.device_authorization_endpoint,
         request_body,
     )
     payload = build_device_authorization_copy_payload(response)
