@@ -435,7 +435,7 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
         rule_id="CISCO-SKILL-PROMPT-INJECTION",
         severity=Severity.HIGH,
         category="skill-security",
-        title="Prompt injection finding",
+        title="Prompt injection token=fixture_secretvalue",
         description=f"Unsafe instruction in {skill_path} with token=fixture_secretvalue",
         file_path=str(skill_path),
         line_number=7,
@@ -444,7 +444,7 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
     cisco_run = CiscoInventoryRun(
         source="cisco-skill-scanner",
         status="enabled",
-        message="Cisco skill scanner found unsafe instruction",
+        message="Cisco skill scanner found token=fixture_secretvalue",
         findings=(finding, finding),
         duration_ms=42,
         metadata={"totalFindings": 2},
