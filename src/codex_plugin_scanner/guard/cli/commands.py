@@ -192,6 +192,7 @@ from .connect_flow import (
     DEFAULT_GUARD_CONNECT_URL,
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
+    run_guard_browser_connect_command,
     run_guard_device_connect_command,
 )
 from .docs import build_install_connect_docs_payload
@@ -2319,6 +2320,7 @@ def run_guard_command(
             store=store,
             connect_url=args.connect_url,
             open_browser=True,
+            wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
         )
         if payload is None:
             return exit_code
@@ -2341,6 +2343,7 @@ def run_guard_command(
                 store=store,
                 connect_url=args.connect_url,
                 open_browser=True,
+                wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
             )
             if payload is None:
                 return exit_code
@@ -2351,6 +2354,7 @@ def run_guard_command(
                 store=store,
                 connect_url=args.connect_url,
                 open_browser=False,
+                wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
             )
             if payload is None:
                 return exit_code
@@ -8754,24 +8758,46 @@ def _run_guard_device_connect_flow(
     return run_guard_device_connect_command(store=store, connect_url=connect_url)
 
 
+def _run_guard_browser_connect_flow(
+    *,
+    store: GuardStore,
+    connect_url: str,
+    wait_timeout_seconds: int,
+) -> dict[str, object]:
+    return run_guard_browser_connect_command(
+        store=store,
+        connect_url=connect_url,
+        wait_timeout_seconds=wait_timeout_seconds,
+    )
+
+
 def _build_guard_device_connect_payload(
     *,
     store: GuardStore,
     connect_url: str,
     open_browser: bool,
+    wait_timeout_seconds: int = 180,
 ) -> tuple[dict[str, object] | None, int]:
     try:
-        payload = _run_guard_device_connect_flow(store=store, connect_url=connect_url)
+        payload = (
+            _run_guard_browser_connect_flow(
+                store=store,
+                connect_url=connect_url,
+                wait_timeout_seconds=wait_timeout_seconds,
+            )
+            if open_browser
+            else _run_guard_device_connect_flow(store=store, connect_url=connect_url)
+        )
     except json.JSONDecodeError as error:
-        print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+        print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return None, 2
-    except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
-        print(f"Guard Device Code authorization failed: {error}", file=sys.stderr)
+    except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
+        print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
-    if open_browser:
+    if open_browser and str(payload.get("connect_mode") or "") == "device_code":
         _open_guard_device_next_action(payload)
     return payload, 0
 
