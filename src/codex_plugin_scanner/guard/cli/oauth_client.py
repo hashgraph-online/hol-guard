@@ -7,6 +7,7 @@ import hashlib
 import secrets
 import urllib.parse
 from dataclasses import dataclass
+from functools import lru_cache
 
 PRODUCTION_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon"
 STAGING_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon-staging"
@@ -31,6 +32,7 @@ class GuardOAuthClientConfig:
     client_id: str
 
 
+@lru_cache(maxsize=64)
 def _issuer_origin(issuer: str) -> str:
     parsed = urllib.parse.urlparse(issuer)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -76,13 +78,7 @@ def _base64url_encode(data: bytes) -> str:
 def generate_pkce_verifier(length: int = 64) -> str:
     if length < 43 or length > 128:
         raise ValueError("PKCE verifier length must be between 43 and 128 characters.")
-    chunks: list[str] = []
-    while len("".join(chunks)) < length:
-        token = _base64url_encode(secrets.token_bytes(length))
-        chunks.append(token)
-    verifier = "".join(chunks)[:length]
-    if not set(verifier).issubset(_PKCE_ALLOWED_CHARACTERS):
-        raise RuntimeError("Generated PKCE verifier contains unsupported characters.")
+    verifier = _base64url_encode(secrets.token_bytes(length))[:length]
     return verifier
 
 
