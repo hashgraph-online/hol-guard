@@ -570,3 +570,36 @@ def test_connect_headless_reports_malformed_device_authorization_response(tmp_pa
     assert exit_code == 1
     assert "Guard authorization failed" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_connect_browser_reports_loopback_timeout_without_traceback(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+
+    def failing_browser_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        wait_timeout_seconds: float,
+    ) -> dict[str, object]:
+        raise TimeoutError("Guard OAuth browser callback timed out.")
+
+    monkeypatch.setattr(guard_commands, "_run_guard_browser_connect_flow", failing_browser_flow)
+
+    payload, exit_code = guard_commands._build_guard_device_connect_payload(
+        store=store,
+        connect_url="https://hol.org/guard/connect",
+        open_browser=True,
+        wait_timeout_seconds=30,
+    )
+    captured = capsys.readouterr()
+
+    assert payload is None
+    assert exit_code == 1
+    assert "Guard authorization failed" in captured.err
+    assert "timed out" in captured.err
+    assert "Traceback" not in captured.err

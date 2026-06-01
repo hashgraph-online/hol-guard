@@ -8794,7 +8794,7 @@ def _build_guard_device_connect_payload(
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return None, 2
-    except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
+    except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
     if open_browser and str(payload.get("connect_mode") or "") == "device_code":
