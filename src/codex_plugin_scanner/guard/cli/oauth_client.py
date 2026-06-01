@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
 import urllib.parse
 from dataclasses import dataclass
 from functools import lru_cache
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 
 PRODUCTION_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon"
 STAGING_GUARD_OAUTH_CLIENT_ID = "guard-local-daemon-staging"
@@ -28,6 +32,14 @@ class GuardOAuthClientConfig:
     device_authorization_endpoint: str
     jwks_endpoint: str
     client_id: str
+
+
+@dataclass(frozen=True)
+class GuardDpopKeyMaterial:
+    algorithm: str
+    private_key_pem: str
+    public_jwk: dict[str, str]
+    public_jwk_thumbprint: str
 
 
 @lru_cache(maxsize=64)
@@ -86,3 +98,36 @@ def build_pkce_s256_challenge(verifier: str) -> str:
     if not set(verifier).issubset(_PKCE_ALLOWED_CHARACTERS):
         raise ValueError("PKCE verifier contains unsupported characters.")
     return _base64url_encode(hashlib.sha256(verifier.encode("ascii")).digest())
+
+
+def generate_dpop_key_pair() -> GuardDpopKeyMaterial:
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    private_numbers = private_key.private_numbers()
+    public_numbers = private_numbers.public_numbers
+    public_jwk = {
+        "crv": "P-256",
+        "kty": "EC",
+        "x": _base64url_encode(public_numbers.x.to_bytes(32, byteorder="big")),
+        "y": _base64url_encode(public_numbers.y.to_bytes(32, byteorder="big")),
+    }
+    thumbprint_payload = {
+        "crv": public_jwk["crv"],
+        "kty": public_jwk["kty"],
+        "x": public_jwk["x"],
+        "y": public_jwk["y"],
+    }
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("ascii")
+    return GuardDpopKeyMaterial(
+        algorithm="ES256",
+        private_key_pem=private_key_pem,
+        public_jwk=public_jwk,
+        public_jwk_thumbprint=_base64url_encode(
+            hashlib.sha256(
+                json.dumps(thumbprint_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).digest()
+        ),
+    )
