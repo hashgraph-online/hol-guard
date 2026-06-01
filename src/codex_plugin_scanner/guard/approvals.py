@@ -389,6 +389,7 @@ def build_runtime_snapshot(
         "generated_at": snapshot_now,
         "approval_center_url": approval_center_url,
         "runtime_state": store.get_runtime_state(),
+        "oauth_storage_health": store.get_oauth_local_credential_health(),
         "device": _build_runtime_device_context(store),
         "latest_connect_state": latest_connect_state,
         "proof_status": _build_runtime_proof_status(latest_connect_state),

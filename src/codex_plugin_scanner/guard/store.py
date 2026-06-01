@@ -421,6 +421,22 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     return fallback_store
 
 
+def _secret_store_backend_name(secret_store: SecretStore) -> str:
+    if isinstance(secret_store, KeychainSecretStore):
+        return "keychain"
+    if isinstance(secret_store, EncryptedFileSecretStore):
+        return "encrypted-file"
+    if isinstance(secret_store, FallbackSecretStore):
+        return _secret_store_backend_name(secret_store.primary)
+    return "unknown"
+
+
+def _secret_store_fallback_backend_name(secret_store: SecretStore) -> str | None:
+    if isinstance(secret_store, FallbackSecretStore):
+        return _secret_store_backend_name(secret_store.fallback)
+    return None
+
+
 _SLOW_QUERY_THRESHOLD_MS: int = 200
 _store_logger = logging.getLogger(__name__)
 
@@ -3000,6 +3016,61 @@ class GuardStore:
         if isinstance(workspace_id, str) and workspace_id:
             result["workspace_id"] = workspace_id
         return result
+
+    def get_oauth_local_credential_health(self) -> dict[str, object]:
+        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        health: dict[str, object] = {
+            "configured": isinstance(payload, dict),
+            "state": "not_configured",
+            "backend": _secret_store_backend_name(self._oauth_secret_store),
+            "fallback_backend": _secret_store_fallback_backend_name(self._oauth_secret_store),
+        }
+        if not isinstance(payload, dict):
+            return health
+
+        refresh_token_ref = payload.get("refresh_token_ref")
+        refresh_token_hash = payload.get("refresh_token_sha256")
+        dpop_private_key_ref = payload.get("dpop_private_key_ref")
+        dpop_private_key_hash = payload.get("dpop_private_key_sha256")
+        if not isinstance(refresh_token_ref, str) or not refresh_token_ref:
+            health["state"] = "degraded"
+            return health
+        if not isinstance(refresh_token_hash, str) or not refresh_token_hash:
+            health["state"] = "degraded"
+            return health
+        if not isinstance(dpop_private_key_ref, str) or not dpop_private_key_ref:
+            health["state"] = "degraded"
+            return health
+        if not isinstance(dpop_private_key_hash, str) or not dpop_private_key_hash:
+            health["state"] = "degraded"
+            return health
+
+        refresh_token_present = any(
+            _token_sha256(candidate) == refresh_token_hash
+            for candidate in self._get_secret_candidates(
+                self._oauth_secret_store,
+                refresh_token_ref,
+                refresh_token_hash,
+            )
+        )
+        dpop_private_key_present = any(
+            _token_sha256(candidate) == dpop_private_key_hash
+            for candidate in self._get_secret_candidates(
+                self._oauth_secret_store,
+                dpop_private_key_ref,
+                dpop_private_key_hash,
+            )
+        )
+        if not refresh_token_present or not dpop_private_key_present:
+            health["state"] = "degraded"
+            return health
+
+        health["state"] = "healthy"
+        for key in ("issuer", "client_id", "grant_id", "machine_id", "workspace_id"):
+            value = payload.get(key)
+            if isinstance(value, str) and value:
+                health[key] = value
+        return health
 
     def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
         with self._connect() as connection:
