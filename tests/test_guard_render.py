@@ -833,6 +833,28 @@ def test_emit_guard_payload_preserves_policy_literals_for_risk_action_keys(capsy
     assert '"local_secret_read": "allow"' in output
 
 
+def test_guard_render_redacts_non_dict_oauth_storage_health_values(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_renderer(_console, payload: dict[str, object]) -> None:
+        captured["payload"] = payload
+
+    monkeypatch.setitem(render._RENDERERS, "status", fake_renderer)
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+
+    emit_guard_payload(
+        "status",
+        {
+            "oauth_storage_health": "Authorization: Bearer super-secret /Users/example/private",
+        },
+        False,
+    )
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["oauth_storage_health"] == "Authorization: ***** ~/private"
+
+
 def test_emit_guard_payload_renders_supply_chain_risks_table(capsys, monkeypatch) -> None:
     monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
     emit_guard_payload(

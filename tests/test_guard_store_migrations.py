@@ -397,6 +397,13 @@ def test_oauth_local_credential_health_reports_backend_and_metadata(tmp_path, mo
         "workspace_id": "workspace-123",
     }
 
+    monkeypatch.setattr(
+        store,
+        "_promote_secret_to_primary",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("health check must not promote secrets")),
+    )
+    assert store.get_oauth_local_credential_health()["state"] == "healthy"
+
 
 def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_write_failure(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")

@@ -3028,14 +3028,46 @@ class GuardStore:
         if not isinstance(payload, dict):
             return health
 
-        credentials = self.get_oauth_local_credentials()
-        if credentials is None:
+        refresh_token_ref = payload.get("refresh_token_ref")
+        refresh_token_hash = payload.get("refresh_token_sha256")
+        dpop_private_key_ref = payload.get("dpop_private_key_ref")
+        dpop_private_key_hash = payload.get("dpop_private_key_sha256")
+        if not isinstance(refresh_token_ref, str) or not refresh_token_ref:
+            health["state"] = "degraded"
+            return health
+        if not isinstance(refresh_token_hash, str) or not refresh_token_hash:
+            health["state"] = "degraded"
+            return health
+        if not isinstance(dpop_private_key_ref, str) or not dpop_private_key_ref:
+            health["state"] = "degraded"
+            return health
+        if not isinstance(dpop_private_key_hash, str) or not dpop_private_key_hash:
+            health["state"] = "degraded"
+            return health
+
+        refresh_token_present = any(
+            _token_sha256(candidate) == refresh_token_hash
+            for candidate in self._get_secret_candidates(
+                self._oauth_secret_store,
+                refresh_token_ref,
+                refresh_token_hash,
+            )
+        )
+        dpop_private_key_present = any(
+            _token_sha256(candidate) == dpop_private_key_hash
+            for candidate in self._get_secret_candidates(
+                self._oauth_secret_store,
+                dpop_private_key_ref,
+                dpop_private_key_hash,
+            )
+        )
+        if not refresh_token_present or not dpop_private_key_present:
             health["state"] = "degraded"
             return health
 
         health["state"] = "healthy"
         for key in ("issuer", "client_id", "grant_id", "machine_id", "workspace_id"):
-            value = credentials.get(key)
+            value = payload.get(key)
             if isinstance(value, str) and value:
                 health[key] = value
         return health
