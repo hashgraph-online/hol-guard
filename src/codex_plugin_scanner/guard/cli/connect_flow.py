@@ -45,8 +45,10 @@ _LOOPBACK_PORT_MAX = 65535
 
 @dataclass(frozen=True)
 class GuardOAuthLoopbackCallback:
-    code: str
+    code: str | None
     state: str
+    error: str | None = None
+    error_description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,9 @@ class GuardOAuthBrowserSession:
         callback = self._callback or getattr(self._server, "guard_callback", None)
         if callback is None:
             raise TimeoutError("Guard OAuth browser callback timed out.")
+        if callback.error is not None:
+            description = callback.error_description or callback.error
+            raise RuntimeError(f"Guard OAuth authorization was denied: {description}")
         return callback
 
     def close(self) -> None:
@@ -200,11 +205,32 @@ def start_guard_loopback_callback_listener(
             params = urllib.parse.parse_qs(parsed.query)
             state = str(params.get("state", [""])[0] or "")
             code = str(params.get("code", [""])[0] or "")
-            if state != expected_state or not code:
+            error = str(params.get("error", [""])[0] or "")
+            error_description = str(params.get("error_description", [""])[0] or "")
+            if state != expected_state:
                 self.send_response(400)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(b"Guard OAuth state mismatch.")
+                return
+            if error:
+                self.server.guard_callback = GuardOAuthLoopbackCallback(  # type: ignore[attr-defined]
+                    code=None,
+                    state=state,
+                    error=error,
+                    error_description=error_description or None,
+                )
+                callback_ready.set()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"HOL Guard authorization was denied. Return to your terminal.")
+                return
+            if not code:
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"Guard OAuth callback is missing the authorization code.")
                 return
             self.server.guard_callback = GuardOAuthLoopbackCallback(code=code, state=state)  # type: ignore[attr-defined]
             callback_ready.set()
