@@ -421,6 +421,22 @@ def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     return fallback_store
 
 
+def _secret_store_backend_name(secret_store: SecretStore) -> str:
+    if isinstance(secret_store, KeychainSecretStore):
+        return "keychain"
+    if isinstance(secret_store, EncryptedFileSecretStore):
+        return "encrypted-file"
+    if isinstance(secret_store, FallbackSecretStore):
+        return _secret_store_backend_name(secret_store.primary)
+    return "unknown"
+
+
+def _secret_store_fallback_backend_name(secret_store: SecretStore) -> str | None:
+    if isinstance(secret_store, FallbackSecretStore):
+        return _secret_store_backend_name(secret_store.fallback)
+    return None
+
+
 _SLOW_QUERY_THRESHOLD_MS: int = 200
 _store_logger = logging.getLogger(__name__)
 
@@ -3000,6 +3016,29 @@ class GuardStore:
         if isinstance(workspace_id, str) and workspace_id:
             result["workspace_id"] = workspace_id
         return result
+
+    def get_oauth_local_credential_health(self) -> dict[str, object]:
+        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        health: dict[str, object] = {
+            "configured": isinstance(payload, dict),
+            "state": "not_configured",
+            "backend": _secret_store_backend_name(self._oauth_secret_store),
+            "fallback_backend": _secret_store_fallback_backend_name(self._oauth_secret_store),
+        }
+        if not isinstance(payload, dict):
+            return health
+
+        credentials = self.get_oauth_local_credentials()
+        if credentials is None:
+            health["state"] = "degraded"
+            return health
+
+        health["state"] = "healthy"
+        for key in ("issuer", "client_id", "grant_id", "machine_id", "workspace_id"):
+            value = credentials.get(key)
+            if isinstance(value, str) and value:
+                health[key] = value
+        return health
 
     def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
         with self._connect() as connection:
