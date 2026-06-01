@@ -116,7 +116,7 @@ def run_guard_device_connect_command(
         client_id=oauth_client.client_id,
     )
     response = request_device_authorization(
-        device_authorization_endpoint_from_connect_url(connect_url),
+        oauth_client.device_authorization_endpoint,
         request_body,
     )
     payload = build_device_authorization_copy_payload(response)
