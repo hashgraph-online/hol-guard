@@ -6461,7 +6461,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "--sync-url",
                 "https://hol.org/api/guard/receipts/sync",
                 "--token",
-                "guard_live_secretvalue",
+                "legacy-bearer-secretvalue",
                 "--json",
             ]
         )
@@ -6471,7 +6471,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert login_rc == 2
         assert payload["logged_in"] is False
         assert payload["next_action"]["command"] == "hol-guard connect --headless"
-        assert "guard_live_secretvalue" not in json.dumps(payload)
+        assert "legacy-bearer-secretvalue" not in json.dumps(payload)
         assert payload["service"] == {
             "runtime": "hermes",
             "label": "Hermes Telegram agent",
@@ -6542,7 +6542,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         now = "2026-05-01T00:00:00Z"
-        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "guard_live_secretvalue", now)
+        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "oauth_access_token_fixture", now)
         store.set_sync_payload(
             "service_runtime_profile",
             {
@@ -6603,7 +6603,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         now = "2026-05-01T00:00:00Z"
-        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "guard_live_secretvalue", now)
+        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "oauth_access_token_fixture", now)
         store.set_sync_payload(
             "service_runtime_profile",
             {
@@ -6653,7 +6653,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
         now = "2026-05-01T00:00:00Z"
-        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "guard_live_secretvalue", now)
+        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "oauth_access_token_fixture", now)
         store.set_sync_payload(
             "service_runtime_profile",
             {
