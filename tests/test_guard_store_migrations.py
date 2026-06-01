@@ -333,6 +333,7 @@ def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path)
         "machine_id": "machine-123",
         "workspace_id": "workspace-123",
     }
+    assert store.get_cloud_workspace_id() == "workspace-123"
 
 
 def test_oauth_local_credentials_use_encrypted_file_fallback_when_keychain_write_fails(tmp_path, monkeypatch):

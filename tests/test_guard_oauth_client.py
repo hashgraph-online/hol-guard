@@ -62,6 +62,15 @@ def test_build_pkce_s256_challenge_matches_known_vector() -> None:
     assert challenge == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 
 
+def test_build_pkce_s256_challenge_rejects_invalid_characters() -> None:
+    try:
+        build_pkce_s256_challenge("invalid verifier with spaces")
+    except ValueError as error:
+        assert "unsupported characters" in str(error)
+    else:
+        raise AssertionError("PKCE challenge builder must reject invalid verifier characters")
+
+
 def test_generate_dpop_key_pair_returns_es256_material() -> None:
     material = generate_dpop_key_pair()
 

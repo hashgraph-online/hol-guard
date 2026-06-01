@@ -3207,12 +3207,21 @@ class GuardStore:
     @staticmethod
     def _cloud_workspace_id_from_connection(connection: sqlite3.Connection) -> str | None:
         row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
-        if row is None:
+        if row is not None:
+            payload = json.loads(str(row["payload_json"]))
+            if isinstance(payload, dict):
+                workspace_id = payload.get("workspace_id")
+                if isinstance(workspace_id, str) and workspace_id.strip():
+                    return workspace_id
+        oauth_row = connection.execute(
+            "select payload_json from sync_state where state_key = 'oauth_local_credentials'"
+        ).fetchone()
+        if oauth_row is None:
             return None
-        payload = json.loads(str(row["payload_json"]))
-        if not isinstance(payload, dict):
+        oauth_payload = json.loads(str(oauth_row["payload_json"]))
+        if not isinstance(oauth_payload, dict):
             return None
-        workspace_id = payload.get("workspace_id")
+        workspace_id = oauth_payload.get("workspace_id")
         if isinstance(workspace_id, str) and workspace_id.strip():
             return workspace_id
         return None
