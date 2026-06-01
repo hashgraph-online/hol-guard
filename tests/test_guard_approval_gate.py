@@ -1244,8 +1244,8 @@ def test_approval_gate_background_remote_policy_sync_fails_closed_without_crashi
         "_guard_device_metadata",
         lambda _store: ("device-1", "MacBook Pro"),
     )
-    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store: 0)
-    monkeypatch.setattr(guard_runner_module, "sync_guard_events", lambda _store: 0)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+    monkeypatch.setattr(guard_runner_module, "sync_guard_events", lambda _store, auth_context=None: 0)
 
     class _Response:
         def __enter__(self):
