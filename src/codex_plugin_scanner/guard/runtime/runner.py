@@ -1663,6 +1663,14 @@ def _encode_jwt_segment(payload: dict[str, object]) -> str:
     return _base64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
 
+def _dpop_access_token_confirmation_claim(access_token: str) -> str:
+    # RFC 9449 requires the DPoP `ath` claim to be the SHA-256 hash of the access token.
+    # codeql[py/weak-sensitive-data-hashing]
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(access_token.encode("ascii"))
+    return _base64url_encode(digest.finalize())
+
+
 def _sign_guard_dpop_proof(
     *,
     request_url: str,
@@ -1684,7 +1692,7 @@ def _sign_guard_dpop_proof(
         "jti": str(uuid4()),
     }
     if isinstance(access_token, str) and access_token:
-        claims["ath"] = _base64url_encode(hashlib.sha256(access_token.encode("ascii")).digest())
+        claims["ath"] = _dpop_access_token_confirmation_claim(access_token)
     signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
     private_key = serialization.load_pem_private_key(
         dpop_key_material.private_key_pem.encode("ascii"),
@@ -1756,9 +1764,12 @@ def _refresh_guard_oauth_access_token(
         with urllib.request.urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
-        raise GuardSyncAuthorizationExpiredError(
-            f"{_guard_oauth_reauthorization_message()} {_oauth_refresh_error_message(error)}"
-        ) from error
+        refresh_error_message = _oauth_refresh_error_message(error)
+        if error.code in {400, 401, 403}:
+            raise GuardSyncAuthorizationExpiredError(
+                f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
+            ) from error
+        raise RuntimeError(f"Guard OAuth token refresh failed: {refresh_error_message}") from error
     except OSError as error:
         raise RuntimeError(_sync_url_error_message(error)) from error
     if not isinstance(payload, dict):

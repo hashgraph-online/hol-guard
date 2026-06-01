@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import builtins
+import hashlib
 import io
 import json
 import os
@@ -13,6 +14,8 @@ import sys
 import threading
 import urllib.error
 import urllib.request
+from base64 import urlsafe_b64decode
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -68,6 +71,12 @@ def _request_header(request: urllib.request.Request, name: str) -> str | None:
         if header_name.lower() == expected:
             return header_value
     return None
+
+
+def _decode_jwt_segment(segment: str) -> dict[str, object]:
+    padding = "=" * (-len(segment) % 4)
+    decoded = urlsafe_b64decode(f"{segment}{padding}".encode("ascii"))
+    return json.loads(decoded.decode("utf-8"))
 
 
 def _isolate_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -15696,6 +15705,25 @@ def test_sync_runtime_session_refreshes_oauth_access_token_and_rotates_refresh_t
     assert credentials["refresh_token"] == "refresh-token-2"
 
 
+def test_sign_guard_dpop_proof_sets_access_token_hash_claim() -> None:
+    dpop_key_material = generate_dpop_key_pair()
+    access_token = "oauth-access-token-1"
+
+    proof = guard_runner_module._sign_guard_dpop_proof(
+        request_url="https://hol.org/api/guard/runtime/sessions/sync",
+        method="POST",
+        dpop_key_material=dpop_key_material,
+        access_token=access_token,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    claims = _decode_jwt_segment(proof.split(".")[1])
+
+    expected_ath = guard_runner_module._base64url_encode(hashlib.sha256(access_token.encode("ascii")).digest())
+
+    assert claims["ath"] == expected_ath
+
+
 def test_sync_receipts_uses_distinct_dpop_proofs_per_batch(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
@@ -15832,6 +15860,67 @@ def test_sync_pain_signals_raises_when_oauth_refresh_is_revoked(tmp_path, monkey
         guard_runner_module.sync_pain_signals(store)
 
     assert "hol-guard connect" in str(error.value)
+
+
+def test_sync_runtime_session_treats_token_endpoint_503_as_retryable_error(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    class _ErrorResponse:
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "error": "temporarily_unavailable",
+                    "error_description": "oauth upstream down",
+                }
+            ).encode("utf-8")
+
+        def close(self) -> None:
+            return None
+
+    def _fake_urlopen(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url,
+            503,
+            "Service Unavailable",
+            hdrs=None,
+            fp=_ErrorResponse(),
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="oauth upstream down") as error:
+        guard_runner_module.sync_runtime_session(
+            store,
+            session={
+                "session_id": "session-oauth",
+                "harness": "codex",
+                "surface": "cli",
+                "status": "active",
+                "client_name": "Codex",
+                "client_title": "Codex CLI",
+                "client_version": "1.0.0",
+                "workspace": "prod",
+                "capabilities": ["chat"],
+                "started_at": "2026-06-01T00:00:00+00:00",
+                "updated_at": "2026-06-01T00:00:00+00:00",
+                "operations": [],
+            },
+        )
+
+    assert not isinstance(error.value, guard_runner_module.GuardSyncAuthorizationExpiredError)
 
 
 def test_codex_read_only_source_inspection_rejects_globbed_targets(tmp_path: Path) -> None:
