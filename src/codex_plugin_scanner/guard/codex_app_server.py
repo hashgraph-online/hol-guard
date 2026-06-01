@@ -25,6 +25,7 @@ class _OperationStore(Protocol):
 _DEFAULT_PROXY_TIMEOUT_SECONDS = 5.0
 _DEFAULT_COMPLETION_TIMEOUT_SECONDS = 90.0
 _DEFAULT_SOCKET_PATH = Path.home() / ".codex" / "app-server-control" / "app-server-control.sock"
+_MAX_WEBSOCKET_HEADER_BYTES = 16_384
 _MAX_WEBSOCKET_FRAME_BYTES = 1_000_000
 _WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 _THREAD_ID_KEYS = (
@@ -444,7 +445,11 @@ def _send_websocket_handshake(client: socket.socket) -> bytes:
         "\r\n"
     )
     client.sendall(request.encode("ascii"))
-    response, leftover = _recv_until(client, b"\r\n\r\n")
+    response, leftover = _recv_until(
+        client,
+        b"\r\n\r\n",
+        max_bytes=_MAX_WEBSOCKET_HEADER_BYTES,
+    )
     header_text = response.decode("iso-8859-1", errors="replace")
     if not header_text.startswith("HTTP/1.1 101"):
         raise ValueError("websocket_upgrade_failed")
@@ -490,12 +495,19 @@ def _read_websocket_frame(client: socket.socket, pending: bytearray) -> tuple[in
     return opcode, payload
 
 
-def _recv_until(client: socket.socket, marker: bytes) -> tuple[bytes, bytes]:
+def _recv_until(
+    client: socket.socket,
+    marker: bytes,
+    *,
+    max_bytes: int | None = None,
+) -> tuple[bytes, bytes]:
     data = b""
     while marker not in data:
         chunk = client.recv(4096)
         if not chunk:
             raise _WebSocketClosedError("socket_closed")
+        if max_bytes is not None and len(data) + len(chunk) > max_bytes:
+            raise ValueError("websocket_headers_too_large")
         data += chunk
     boundary = data.index(marker) + len(marker)
     return data[:boundary], data[boundary:]
