@@ -15385,7 +15385,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
         "_guard_device_metadata",
         lambda _store: metadata_calls.append(True) or ("device-1", "MacBook Pro"),
     )
-    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store: 0)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
 
     sync_payloads = iter(
         [
@@ -15651,7 +15651,7 @@ def test_sync_runtime_session_refreshes_oauth_access_token_and_rotates_refresh_t
                 {
                     "access_token": "oauth-access-token-1",
                     "refresh_token": "refresh-token-2",
-                    "token_type": "Bearer",
+                    "token_type": "DPoP",
                     "expires_in": 3600,
                 }
             )
@@ -15783,10 +15783,55 @@ def test_sync_receipts_uses_distinct_dpop_proofs_per_batch(tmp_path, monkeypatch
 
     payload = guard_runner_module.sync_receipts(store)
 
-    assert len(token_requests) >= 1
+    assert len(token_requests) == 1
     assert len(receipt_dpop_headers) >= 2
     assert receipt_dpop_headers[0] != receipt_dpop_headers[1]
     assert payload["receipts_stored"] == 51
+
+
+def test_sync_pain_signals_raises_when_oauth_refresh_is_revoked(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    class _ErrorResponse:
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "error": "invalid_grant",
+                    "error_description": "refresh token revoked",
+                }
+            ).encode("utf-8")
+
+        def close(self) -> None:
+            return None
+
+    def _fake_urlopen(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "Bad Request",
+            hdrs=None,
+            fp=_ErrorResponse(),
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError) as error:
+        guard_runner_module.sync_pain_signals(store)
+
+    assert "hol-guard connect" in str(error.value)
 
 
 def test_codex_read_only_source_inspection_rejects_globbed_targets(tmp_path: Path) -> None:
