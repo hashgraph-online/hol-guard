@@ -304,7 +304,7 @@ def build_workspace_audit_payload(
                 "message": "No supported manifests or lockfiles found in this workspace.",
                 "supply_chain": posture,
             },
-            0,
+            1,
         )
     evaluation: dict[str, object]
     source = "local"
