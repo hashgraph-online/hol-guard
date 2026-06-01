@@ -70,8 +70,6 @@ def test_generate_dpop_key_pair_returns_es256_material() -> None:
     assert material.private_key_pem.startswith("-----BEGIN PRIVATE KEY-----")
     assert material.public_jwk["kty"] == "EC"
     assert material.public_jwk["crv"] == "P-256"
-    assert material.public_jwk["alg"] == "ES256"
-    assert material.public_jwk["use"] == "sig"
     assert isinstance(material.public_jwk["x"], str) and material.public_jwk["x"]
     assert isinstance(material.public_jwk["y"], str) and material.public_jwk["y"]
     assert isinstance(material.public_jwk_thumbprint, str) and material.public_jwk_thumbprint

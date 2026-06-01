@@ -445,6 +445,10 @@ class GuardStore:
         scoped_hash = sha256(scoped_home.encode("utf-8")).hexdigest()[:16]
         return f"{prefix}:{scoped_hash}"
 
+    @staticmethod
+    def _versioned_secret_ref(base_ref: str, value_hash: str) -> str:
+        return f"{base_ref}:{value_hash[:16]}"
+
     def _promote_secret_to_primary(self, secret_store: SecretStore, secret_id: str, value: str) -> None:
         if isinstance(secret_store, FallbackSecretStore):
             secret_store.promote_secret(secret_id, value)
@@ -2902,12 +2906,14 @@ class GuardStore:
     ) -> None:
         refresh_token_hash = _token_sha256(refresh_token)
         dpop_private_key_hash = _token_sha256(dpop_private_key_pem)
+        refresh_token_ref = self._versioned_secret_ref(self._oauth_refresh_token_ref, refresh_token_hash)
+        dpop_private_key_ref = self._versioned_secret_ref(self._oauth_dpop_private_key_ref, dpop_private_key_hash)
         payload: dict[str, object] = {
             "issuer": issuer,
             "client_id": client_id,
-            "refresh_token_ref": self._oauth_refresh_token_ref,
+            "refresh_token_ref": refresh_token_ref,
             "refresh_token_sha256": refresh_token_hash,
-            "dpop_private_key_ref": self._oauth_dpop_private_key_ref,
+            "dpop_private_key_ref": dpop_private_key_ref,
             "dpop_private_key_sha256": dpop_private_key_hash,
             "dpop_public_jwk": dpop_public_jwk,
             "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
@@ -2918,8 +2924,8 @@ class GuardStore:
             payload["machine_id"] = machine_id
         if workspace_id:
             payload["workspace_id"] = workspace_id
-        self._oauth_secret_store.set_secret(self._oauth_refresh_token_ref, refresh_token)
-        self._oauth_secret_store.set_secret(self._oauth_dpop_private_key_ref, dpop_private_key_pem)
+        self._oauth_secret_store.set_secret(refresh_token_ref, refresh_token)
+        self._oauth_secret_store.set_secret(dpop_private_key_ref, dpop_private_key_pem)
         self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
 
     def get_oauth_local_credentials(self) -> dict[str, object] | None:
