@@ -6649,7 +6649,7 @@ _CODEX_GIT_GLOBAL_VALUE_FLAGS = frozenset(
 )
 _CODEX_SOURCE_SEARCH_PREFIXES = tuple(f"{part}/" for part in sorted(SOURCE_INSPECTION_PARTS))
 _CODEX_SOURCE_SEARCH_EXTENSIONS = SOURCE_INSPECTION_EXTENSIONS
-_CODEX_BENIGN_SOURCE_DOTFILES = SOURCE_INSPECTION_BENIGN_DOTFILES
+_CODEX_BENIGN_SOURCE_DOTFILES = SOURCE_INSPECTION_BENIGN_DOTFILES | frozenset({".worktrees"})
 _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     r"""(?ix)
     \s*
@@ -6876,10 +6876,17 @@ def _codex_command_is_read_only_source_inspection(
         return False
     chained_segments = _split_codex_safe_read_only_chain(command)
     if chained_segments is not None:
-        return all(
-            _codex_command_is_read_only_source_inspection(segment, cwd=cwd, home_dir=home_dir)
-            for segment in chained_segments
-        )
+        current_cwd = cwd
+        saw_source_inspection = False
+        for segment in chained_segments:
+            cd_cwd = _codex_safe_source_cd_cwd(segment, cwd=current_cwd, home_dir=home_dir)
+            if cd_cwd is not None:
+                current_cwd = cd_cwd
+                continue
+            if not _codex_command_is_read_only_source_inspection(segment, cwd=current_cwd, home_dir=home_dir):
+                return False
+            saw_source_inspection = True
+        return saw_source_inspection
     segments = _split_codex_safe_read_only_pipeline(command)
     if segments is None:
         return _codex_command_is_read_only_source_search(
@@ -6896,6 +6903,26 @@ def _codex_command_is_read_only_source_inspection(
     ):
         return False
     return all(_codex_command_is_bounded_read_only_filter(segment) for segment in filter_segments)
+
+
+def _codex_safe_source_cd_cwd(command_text: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return None
+    if len(parts) != 2 or parts[0] != "cd":
+        return None
+    base_dir = (cwd or Path.cwd()).resolve()
+    target = _codex_resolve_source_like_path(parts[1], cwd=cwd, home_dir=home_dir)
+    if target is None or not target.exists() or not target.is_dir():
+        return None
+    try:
+        target.relative_to(base_dir)
+    except ValueError:
+        return None
+    if _path_contains_symlink(target, base_dir=base_dir):
+        return None
+    return target
 
 
 def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
@@ -7970,16 +7997,15 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None, home_d
         return False
     if target_is_known_skill_doc_path(stripped, home_dir=home_dir):
         return True
-    if stripped.startswith("~"):
-        return False
     if any(char in stripped for char in ("*", "?", "{", "}")):
         return False
-    target_path = Path(stripped)
     base_dir = (cwd or Path.cwd()).resolve()
+    target_path = _codex_resolve_source_like_path(stripped, cwd=base_dir, home_dir=home_dir)
+    if target_path is None:
+        return False
     if target_path.is_absolute():
-        unresolved_candidate = target_path
         try:
-            candidate = unresolved_candidate.resolve(strict=False)
+            candidate = target_path.resolve(strict=False)
             relative_candidate = candidate.relative_to(base_dir)
         except (RuntimeError, ValueError):
             return False
@@ -8015,9 +8041,29 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None, home_d
         return True
     if any(normalized.startswith(prefix) for prefix in _CODEX_SOURCE_SEARCH_PREFIXES):
         return True
+    if any(part in SOURCE_INSPECTION_PARTS for part in lowered_parts):
+        return True
     if Path(stripped).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES:
         return True
     return Path(stripped).suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
+
+
+def _codex_resolve_source_like_path(target: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
+    stripped = target.strip().strip("'\"")
+    if not stripped:
+        return None
+    if stripped.startswith("~"):
+        if home_dir is None:
+            return None
+        if stripped == "~":
+            return home_dir.resolve()
+        if not stripped.startswith("~/"):
+            return None
+        return (home_dir / stripped[2:]).resolve(strict=False)
+    target_path = Path(stripped)
+    if target_path.is_absolute():
+        return target_path
+    return (cwd or Path.cwd()).resolve() / target_path
 
 
 def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:
