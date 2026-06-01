@@ -2919,6 +2919,8 @@ class GuardStore:
         grant_id: str | None = None,
         machine_id: str | None = None,
         workspace_id: str | None = None,
+        runtime_id: str | None = None,
+        runtime_label: str | None = None,
     ) -> None:
         refresh_token_hash = _token_sha256(refresh_token)
         dpop_private_key_hash = _token_sha256(dpop_private_key_pem)
@@ -2940,6 +2942,10 @@ class GuardStore:
             payload["machine_id"] = machine_id
         if workspace_id:
             payload["workspace_id"] = workspace_id
+        if runtime_id:
+            payload["runtime_id"] = runtime_id
+        if runtime_label:
+            payload["runtime_label"] = runtime_label
         self._oauth_secret_store.set_secret(refresh_token_ref, refresh_token)
         self._oauth_secret_store.set_secret(dpop_private_key_ref, dpop_private_key_pem)
         self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
@@ -3009,12 +3015,18 @@ class GuardStore:
         grant_id = payload.get("grant_id")
         machine_id = payload.get("machine_id")
         workspace_id = payload.get("workspace_id")
+        runtime_id = payload.get("runtime_id")
+        runtime_label = payload.get("runtime_label")
         if isinstance(grant_id, str) and grant_id:
             result["grant_id"] = grant_id
         if isinstance(machine_id, str) and machine_id:
             result["machine_id"] = machine_id
         if isinstance(workspace_id, str) and workspace_id:
             result["workspace_id"] = workspace_id
+        if isinstance(runtime_id, str) and runtime_id:
+            result["runtime_id"] = runtime_id
+        if isinstance(runtime_label, str) and runtime_label:
+            result["runtime_label"] = runtime_label
         return result
 
     def get_oauth_local_credential_health(self) -> dict[str, object]:

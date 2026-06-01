@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import urllib.error
 import urllib.parse
@@ -6,6 +7,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.cli import commands as guard_commands
 from codex_plugin_scanner.guard.cli import connect_flow
 from codex_plugin_scanner.guard.cli.commands import run_guard_command
@@ -143,19 +145,47 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
             "interval": 5,
         }
 
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": _fake_access_token(
+                        grant_id="grant-123",
+                        machine_id="machine-123",
+                        workspace_id="workspace-123",
+                    ),
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                }
+            ).encode("utf-8")
+
     payload = connect_flow.run_guard_device_connect_command(
         store=store,
         connect_url="https://hol.org/guard/connect",
         request_device_authorization=fake_request,
+        token_urlopen=lambda request, timeout: _Response(),
+        now="2026-06-01T12:00:00+00:00",
     )
     rendered = json.dumps(payload, sort_keys=True)
+    credentials = store.get_oauth_local_credentials()
 
     assert requests
     assert requests[0][0] == "https://hol.org/api/guard/oauth/device/authorize"
     assert "requested_machine_label=CI+Runner" in requests[0][1]
+    assert payload["status"] == "connected"
     assert payload["user_code"] == "ABCD-EFGH"
     assert "device-secret-value" not in rendered
-    assert store.get_sync_credentials() is None
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-123"
+    assert credentials["runtime_label"] == "HOL Guard CLI"
 
 
 def test_headless_connect_uses_staging_client_defaults(tmp_path: Path) -> None:
@@ -175,15 +205,238 @@ def test_headless_connect_uses_staging_client_defaults(tmp_path: Path) -> None:
             "interval": 5,
         }
 
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": _fake_access_token(
+                        grant_id="grant-123",
+                        machine_id="machine-123",
+                        workspace_id="workspace-123",
+                    ),
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                }
+            ).encode("utf-8")
+
     connect_flow.run_guard_device_connect_command(
         store=store,
         connect_url="https://staging.hol.org/guard/connect",
         request_device_authorization=fake_request,
+        token_urlopen=lambda request, timeout: _Response(),
+        now="2026-06-01T12:00:00+00:00",
     )
     parsed = urllib.parse.parse_qs(requests[0][1])
 
     assert requests[0][0] == "https://staging.hol.org/api/guard/oauth/device/authorize"
     assert parsed["client_id"] == ["guard-local-daemon-staging"]
+
+
+def test_headless_connect_polls_until_success_and_persists_oauth_credentials(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_device_label("CI Runner", "2026-05-31T00:00:00Z")
+    sleeps: list[float] = []
+    token_bodies: list[str] = []
+
+    def fake_request(url: str, body: str) -> dict[str, object]:
+        assert url == "https://hol.org/api/guard/oauth/device/authorize"
+        assert "requested_machine_label=CI+Runner" in body
+        return {
+            "device_code": "device-secret-value",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            "expires_in": 600,
+            "interval": 3,
+        }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    attempt = {"count": 0}
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        token_bodies.append(request.data.decode("utf-8") if request.data else "")
+        attempt["count"] += 1
+        if attempt["count"] == 1:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                400,
+                "authorization_pending",
+                hdrs={"Content-Type": "application/json"},
+                fp=io.BytesIO(json.dumps({"error": "authorization_pending"}).encode("utf-8")),
+            )
+        return _Response(
+            {
+                "access_token": _fake_access_token(
+                    grant_id="grant-123",
+                    machine_id="machine-123",
+                    workspace_id="workspace-123",
+                ),
+                "refresh_token": "refresh-123",
+                "expires_in": 3600,
+                "scope": "guard:runtime.sync guard:offline_access",
+                "token_type": "Bearer",
+            }
+        )
+
+    payload = connect_flow.run_guard_device_connect_command(
+        store=store,
+        connect_url="https://hol.org/guard/connect",
+        request_device_authorization=fake_request,
+        token_urlopen=fake_urlopen,
+        sleep=sleeps.append,
+        now="2026-06-01T12:00:00+00:00",
+    )
+    credentials = store.get_oauth_local_credentials()
+    rendered = json.dumps(payload, sort_keys=True)
+
+    assert payload["status"] == "connected"
+    assert payload["connect_mode"] == "device_code"
+    assert payload["grant_id"] == "grant-123"
+    assert payload["machine_id"] == "machine-123"
+    assert payload["workspace_id"] == "workspace-123"
+    assert payload["user_code"] == "ABCD-EFGH"
+    assert payload["verification_uri"] == "https://hol.org/guard/oauth/device"
+    assert "device-secret-value" not in rendered
+    assert "refresh-123" not in rendered
+    assert "access_token" not in rendered
+    assert sleeps == [3]
+    assert len(token_bodies) == 2
+    assert urllib.parse.parse_qs(token_bodies[0])["grant_type"] == ["urn:ietf:params:oauth:grant-type:device_code"]
+    assert credentials is not None
+    assert credentials["grant_id"] == "grant-123"
+    assert credentials["machine_id"] == "machine-123"
+    assert credentials["workspace_id"] == "workspace-123"
+    assert credentials["refresh_token"] == "refresh-123"
+    assert credentials["runtime_label"] == "HOL Guard CLI"
+
+
+def test_headless_connect_slows_down_polling_when_server_requests_it(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    sleeps: list[float] = []
+
+    def fake_request(_url: str, _body: str) -> dict[str, object]:
+        return {
+            "device_code": "device-secret-value",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "expires_in": 600,
+            "interval": 2,
+        }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    attempt = {"count": 0}
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        attempt["count"] += 1
+        if attempt["count"] == 1:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                400,
+                "slow_down",
+                hdrs={"Content-Type": "application/json"},
+                fp=io.BytesIO(json.dumps({"error": "slow_down"}).encode("utf-8")),
+            )
+        return _Response(
+            {
+                "access_token": _fake_access_token(
+                    grant_id="grant-123",
+                    machine_id="machine-123",
+                    workspace_id="workspace-123",
+                ),
+                "refresh_token": "refresh-123",
+                "expires_in": 3600,
+                "scope": "guard:runtime.sync guard:offline_access",
+                "token_type": "Bearer",
+            }
+        )
+
+    payload = connect_flow.run_guard_device_connect_command(
+        store=store,
+        connect_url="https://hol.org/guard/connect",
+        request_device_authorization=fake_request,
+        token_urlopen=fake_urlopen,
+        sleep=sleeps.append,
+        now="2026-06-01T12:00:00+00:00",
+    )
+
+    assert payload["status"] == "connected"
+    assert sleeps == [7]
+
+
+def test_headless_connect_expired_code_surfaces_retry_command(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+
+    def fake_request(_url: str, _body: str) -> dict[str, object]:
+        return {
+            "device_code": "device-secret-value",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "expires_in": 600,
+            "interval": 2,
+        }
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "expired_token",
+            hdrs={"Content-Type": "application/json"},
+            fp=io.BytesIO(json.dumps({"error": "expired_token"}).encode("utf-8")),
+        )
+
+    try:
+        connect_flow.run_guard_device_connect_command(
+            store=store,
+            connect_url="https://hol.org/guard/connect",
+            request_device_authorization=fake_request,
+            token_urlopen=fake_urlopen,
+            now="2026-06-01T12:00:00+00:00",
+        )
+    except RuntimeError as error:
+        message = str(error)
+    else:
+        raise AssertionError("expired device code must raise a retry-safe runtime error")
+
+    assert "hol-guard connect --headless" in message
+    assert "device-secret-value" not in message
+    assert store.get_oauth_local_credentials() is None
 
 
 def test_login_token_alias_rejects_raw_token_without_persisting_credentials(tmp_path: Path, capsys) -> None:
@@ -222,9 +475,17 @@ def test_connect_headless_emits_device_code_payload_without_pairing_secret(tmp_p
     args = _HeadlessConnectArgs()
     args.guard_home = str(guard_home)
 
-    def fake_headless_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+    def fake_headless_flow(*, store: GuardStore, connect_url: str, announce_copy=None) -> dict[str, object]:
+        if announce_copy is not None:
+            announce_copy(
+                {
+                    "user_code": "ABCD-EFGH",
+                    "verification_uri": "https://hol.org/guard/oauth/device",
+                    "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                }
+            )
         return {
-            "status": "waiting_for_approval",
+            "status": "connected",
             "connect_mode": "device_code",
             "user_code": "ABCD-EFGH",
             "verification_uri": "https://hol.org/guard/oauth/device",
@@ -244,6 +505,16 @@ def test_connect_headless_emits_device_code_payload_without_pairing_secret(tmp_p
     assert "guardPairSecret" not in captured.out
     assert "guardPairRequest" not in captured.out
     assert "guard_live_" not in captured.out
+
+
+def test_connect_no_browser_alias_uses_headless_device_code_flow(tmp_path: Path, capsys, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+
+    parser = _build_parser("hol-guard", program_mode="guard")
+    args = parser.parse_args(["connect", "--no-browser", "--home", str(guard_home), "--json"])
+
+    assert args.guard_command == "connect"
+    assert args.headless is True
 
 
 def test_connect_default_uses_browser_oauth_without_pairing_secret(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -541,7 +812,8 @@ def test_connect_headless_reports_device_authorization_network_error(tmp_path: P
     args = _HeadlessConnectArgs()
     args.guard_home = str(guard_home)
 
-    def failing_headless_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+    def failing_headless_flow(*, store: GuardStore, connect_url: str, announce_copy=None) -> dict[str, object]:
+        del announce_copy
         raise urllib.error.URLError("network unavailable")
 
     monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", failing_headless_flow)
@@ -559,7 +831,8 @@ def test_connect_headless_reports_malformed_device_authorization_response(tmp_pa
     args = _HeadlessConnectArgs()
     args.guard_home = str(guard_home)
 
-    def failing_headless_flow(*, store: GuardStore, connect_url: str) -> dict[str, object]:
+    def failing_headless_flow(*, store: GuardStore, connect_url: str, announce_copy=None) -> dict[str, object]:
+        del announce_copy
         raise json.JSONDecodeError("invalid json", "not-json", 0)
 
     monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", failing_headless_flow)
