@@ -426,7 +426,7 @@ def test_guard_supply_chain_scan_uses_manifest_and_lockfile_context(tmp_path: Pa
     assert output["evaluation"]["packages"][0]["name"] == "minimist"
 
 
-def test_guard_supply_chain_scan_without_supported_manifests_returns_zero(tmp_path: Path, capsys) -> None:
+def test_guard_supply_chain_scan_without_supported_manifests_returns_nonzero(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -451,7 +451,7 @@ def test_guard_supply_chain_scan_without_supported_manifests_returns_zero(tmp_pa
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 0
+    assert rc == 1
     assert output["manifest_paths"] == []
     assert output["lockfile_paths"] == []
     assert output["message"] == "No supported manifests or lockfiles found in this workspace."
