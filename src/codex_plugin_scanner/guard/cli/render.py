@@ -78,6 +78,7 @@ _KNOWN_MANAGED_INSTALL_MODES = {
     "codex-mcp-proxy": "Codex MCP proxy",
 }
 _SENSITIVE_KEY_TOKENS = ("key", "token", "auth", "secret", "password", "credential")
+_NON_SECRET_STRUCTURED_KEYS = frozenset({"oauth_storage_health"})
 _SAFE_POLICY_LITERALS = frozenset(
     {"allow", "warn", "review", "block", "require-reapproval", "sandbox-required", "strict", "balanced", "custom"}
 )
@@ -120,7 +121,13 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
 
 
 def _redact_payload(value: object, *, key: str | None = None) -> object:
-    if key is not None and any(token in key.lower() for token in _SENSITIVE_KEY_TOKENS):
+    if key in _NON_SECRET_STRUCTURED_KEYS and isinstance(value, dict):
+        return {item_key: _redact_payload(item_value, key=item_key) for item_key, item_value in value.items()}
+    if (
+        key is not None
+        and key not in _NON_SECRET_STRUCTURED_KEYS
+        and any(token in key.lower() for token in _SENSITIVE_KEY_TOKENS)
+    ):
         if isinstance(value, str) and value.lower() in _SAFE_POLICY_LITERALS:
             return value
         return "*****"

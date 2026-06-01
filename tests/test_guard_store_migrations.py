@@ -360,6 +360,51 @@ def test_oauth_local_credentials_use_encrypted_file_fallback_when_keychain_write
     assert store.get_oauth_local_credentials() is not None
 
 
+def test_oauth_local_credential_health_reports_backend_and_metadata(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
+    store = GuardStore(guard_home)
+
+    assert store.get_oauth_local_credential_health() == {
+        "configured": False,
+        "state": "not_configured",
+        "backend": "encrypted-file",
+        "fallback_backend": None,
+    }
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    assert store.get_oauth_local_credential_health() == {
+        "configured": True,
+        "state": "healthy",
+        "backend": "encrypted-file",
+        "fallback_backend": None,
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "grant_id": "grant-123",
+        "machine_id": "machine-123",
+        "workspace_id": "workspace-123",
+    }
+
+    monkeypatch.setattr(
+        store,
+        "_promote_secret_to_primary",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("health check must not promote secrets")),
+    )
+    assert store.get_oauth_local_credential_health()["state"] == "healthy"
+
+
 def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_write_failure(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     store.set_oauth_local_credentials(
