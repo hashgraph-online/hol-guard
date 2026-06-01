@@ -37,8 +37,10 @@ from .package_manifest_diff import (
     parse_manifest_dependencies,
 )
 from .runner import (
+    GuardSyncNotConfiguredError,
     _guard_sync_headers,
     _normalized_receipts_sync_url,
+    _resolve_guard_sync_auth_context,
     _urlopen_json_with_timeout_retry,
 )
 from .supply_chain import detect_supply_chain_risk
@@ -567,9 +569,11 @@ def _evaluate_with_cloud(
 ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
     if workspace_id is None or workspace_fingerprint is None:
         return None, None
-    sync_credentials = store.get_sync_credentials()
-    if sync_credentials is None:
+    try:
+        auth_context = _resolve_guard_sync_auth_context(store)
+    except GuardSyncNotConfiguredError:
         return None, None
+    evaluate_url = _normalized_supply_chain_evaluate_url(auth_context["sync_url"], workspace_id)
     request_payload = _build_request_payload(
         artifact=artifact,
         targets=targets,
@@ -578,9 +582,9 @@ def _evaluate_with_cloud(
         policy_version=bundle_meta["policy_hash"] if bundle_meta is not None else "local:none",
     )
     request = urllib.request.Request(
-        _normalized_supply_chain_evaluate_url(sync_credentials["sync_url"], workspace_id),
+        evaluate_url,
         data=json.dumps(request_payload).encode("utf-8"),
-        headers=_guard_sync_headers(sync_credentials["token"]),
+        headers=_guard_sync_headers(auth_context, request_url=evaluate_url, method="POST"),
         method="POST",
     )
     fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
