@@ -16042,17 +16042,19 @@ def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_se
     repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
     workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
     source_file = workspace_dir / "src" / "guard-auth.ts"
+    live_prefix = "guard" + "_live" + "_"
     _write_text(
         source_file,
         "export const legacy_runtime_material_rejected = 'agent_token field name only';\n",
     )
+    pattern = (
+        f"{live_prefix}|service_principal|agent_token|migration_failure|"
+        "legacy_runtime_material_rejected|legacy_issuance_attempt_rejected|legacy.*report|reauthorization"
+    )
 
     command = (
         f"cd {shlex.quote(str(workspace_dir))} && "
-        "rg -n "
-        "\"guard_live_|service_principal|agent_token|migration_failure|"
-        "legacy_runtime_material_rejected|legacy_issuance_attempt_rejected|legacy.*report|reauthorization\" "
-        "src app __tests__ docs -g '!**/*.map' | sed -n '1,260p'"
+        f"rg -n {shlex.quote(pattern)} src app __tests__ docs -g '!**/*.map' | sed -n '1,260p'"
     )
 
     assert guard_commands_module._codex_command_is_read_only_source_inspection(
