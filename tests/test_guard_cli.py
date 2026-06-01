@@ -34,7 +34,7 @@ from codex_plugin_scanner.guard.cli import update_commands as guard_update_comma
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store import GuardStore, KeychainSecretStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -6382,6 +6382,48 @@ url = http://127.0.0.1:8787/guard-canary
         assert "guardPairSecret" not in json.dumps(connect_output)
         assert "guardPairRequest" not in json.dumps(connect_output)
         assert store.get_sync_credentials() is None
+
+    def test_guard_status_reports_oauth_key_storage_health(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
+        store = GuardStore(home_dir)
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-secret-value",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "x-value",
+                "y": "y-value",
+                "alg": "ES256",
+                "use": "sig",
+            },
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            workspace_id="workspace-123",
+            now="2026-06-01T00:00:00+00:00",
+        )
+
+        status_rc = main(["guard", "status", "--home", str(home_dir), "--workspace", str(workspace_dir), "--json"])
+        status_output = json.loads(capsys.readouterr().out)
+
+        assert status_rc == 0
+        assert status_output["oauth_storage_health"] == {
+            "configured": True,
+            "state": "healthy",
+            "backend": "encrypted-file",
+            "fallback_backend": None,
+            "issuer": "https://hol.org",
+            "client_id": "guard-local-daemon",
+            "grant_id": "grant-123",
+            "machine_id": "machine-123",
+            "workspace_id": "workspace-123",
+        }
 
     def test_guard_login_without_manual_credentials_redirects_to_device_code(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
