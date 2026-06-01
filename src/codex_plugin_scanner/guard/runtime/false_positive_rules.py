@@ -320,9 +320,9 @@ _HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
 )
 _HTTP_FETCH_AUTH_PATTERN = re.compile(
     r"(?:^|[\s;&|])(?:--oauth2-bearer(?:[=\s]|$)|--user(?:[=\s]|$)|-u(?:\S|\s|$)"
-    r"|--proxy-user(?:[=\s]|$)|--netrc(?:-file|-optional)?(?:[=\s]|$)|--anyauth(?:[=\s]|$)"
-    r"|--basic(?:[=\s]|$)|--digest(?:[=\s]|$)|--negotiate(?:[=\s]|$)|--aws-sigv4(?:[=\s]|$)"
-    r"|--service-name(?:[=\s]|$)|--delegation(?:[=\s]|$))",
+    r"|--proxy-user(?:[=\s]|$)|--netrc(?:-file|-optional)?(?:[=\s]|$)|-n(?:\s|$)"
+    r"|--anyauth(?:[=\s]|$)|--basic(?:[=\s]|$)|--digest(?:[=\s]|$)|--negotiate(?:[=\s]|$)"
+    r"|--ntlm(?:-wb)?(?:[=\s]|$)|--aws-sigv4(?:[=\s]|$))",
     re.IGNORECASE,
 )
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
@@ -338,8 +338,8 @@ _LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN = re.compile(
 )
 _PROCESS_EXECUTION_IN_HTTP_SCRIPT_PATTERN = re.compile(
     r"\b(?:require\s*\(\s*['\"]child_process['\"]\s*\)\s*\.\s*"
-    r"(?:exec|execFile|execFileSync|execSync|spawn|spawnSync)"
-    r"|child_process\s*\.\s*(?:exec|execFile|execFileSync|execSync|spawn|spawnSync)"
+    r"(?:exec|execFile|execFileSync|execSync|fork|spawn|spawnSync)"
+    r"|child_process\s*\.\s*(?:exec|execFile|execFileSync|execSync|fork|spawn|spawnSync)"
     r"|subprocess\s*\.\s*(?:run|Popen|call|check_call|check_output)"
     r"|os\.system)\s*\(",
     re.IGNORECASE,
