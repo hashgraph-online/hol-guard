@@ -852,6 +852,12 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
     connect_parser.add_argument("--wait-timeout-seconds", type=int, default=180)
     connect_parser.add_argument("--headless", action="store_true")
+    connect_parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        dest="headless",
+        help="Alias for --headless. Start Device Code approval without opening a browser.",
+    )
     connect_parser.add_argument("--json", action="store_true")
 
     sync_parser = guard_subparsers.add_parser("sync", help="Sync receipts to the configured Guard endpoint")
@@ -2361,6 +2367,9 @@ def run_guard_command(
                 connect_url=args.connect_url,
                 open_browser=False,
                 wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
+                announce_copy=None
+                if getattr(args, "json", False)
+                else _announce_guard_device_connect_copy,
             )
             if payload is None:
                 return exit_code
@@ -8807,8 +8816,13 @@ def _run_guard_device_connect_flow(
     *,
     store: GuardStore,
     connect_url: str,
+    announce_copy=None,
 ) -> dict[str, object]:
-    return run_guard_device_connect_command(store=store, connect_url=connect_url)
+    return run_guard_device_connect_command(
+        store=store,
+        connect_url=connect_url,
+        announce_copy=announce_copy,
+    )
 
 
 def _run_guard_browser_connect_flow(
@@ -8830,6 +8844,7 @@ def _build_guard_device_connect_payload(
     connect_url: str,
     open_browser: bool,
     wait_timeout_seconds: int = 180,
+    announce_copy=None,
 ) -> tuple[dict[str, object] | None, int]:
     try:
         payload = (
@@ -8839,7 +8854,11 @@ def _build_guard_device_connect_payload(
                 wait_timeout_seconds=wait_timeout_seconds,
             )
             if open_browser
-            else _run_guard_device_connect_flow(store=store, connect_url=connect_url)
+            else _run_guard_device_connect_flow(
+                store=store,
+                connect_url=connect_url,
+                announce_copy=announce_copy,
+            )
         )
     except json.JSONDecodeError as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
@@ -8862,6 +8881,19 @@ def _open_guard_device_next_action(payload: dict[str, object]) -> None:
     target = _optional_string(next_action.get("target"))
     if target is not None:
         payload["browser_opened"] = bool(webbrowser.open(target))
+
+
+def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
+    user_code = _optional_string(payload.get("user_code")) or "unknown"
+    target = _optional_string(payload.get("verification_uri_complete")) or _optional_string(
+        payload.get("verification_uri")
+    )
+    if target is None:
+        return
+    print("HOL Guard headless approval")
+    print(f"1. Open {target}")
+    print(f"2. Enter code {user_code}")
+    print("3. Keep this terminal open while HOL Guard waits for approval.")
 
 
 def _manual_guard_login_payload(
