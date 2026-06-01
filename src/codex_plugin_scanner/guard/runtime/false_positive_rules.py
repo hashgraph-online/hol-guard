@@ -318,12 +318,22 @@ _HTTP_FETCH_FILE_WRITE_PATTERN = re.compile(
     r"|--trace(?:-ascii|-ids|-time)?(?:[=\s]|$)|--stderr(?:[=\s]|$)|--cookie-jar(?:[=\s]|$)|-c(?:\S|\s|$))",
     re.IGNORECASE,
 )
-_HTTP_FETCH_AUTH_PATTERN = re.compile(
-    r"(?:^|[\s;&|])(?:--oauth2-bearer(?:[=\s]|$)|--user(?:[=\s]|$)|-u(?:\S|\s|$)"
-    r"|--proxy-user(?:[=\s]|$)|--netrc(?:-file|-optional)?(?:[=\s]|$)|-n(?:\s|$)"
-    r"|--anyauth(?:[=\s]|$)|--basic(?:[=\s]|$)|--digest(?:[=\s]|$)|--negotiate(?:[=\s]|$)"
-    r"|--ntlm(?:-wb)?(?:[=\s]|$)|--aws-sigv4(?:[=\s]|$))",
-    re.IGNORECASE,
+_CURL_LONG_AUTH_FLAGS = frozenset(
+    {
+        "--anyauth",
+        "--aws-sigv4",
+        "--basic",
+        "--digest",
+        "--negotiate",
+        "--netrc",
+        "--netrc-file",
+        "--netrc-optional",
+        "--ntlm",
+        "--ntlm-wb",
+        "--oauth2-bearer",
+        "--proxy-user",
+        "--user",
+    }
 )
 _LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN = re.compile(
     r"\b(?:readFileSync|open|createReadStream)\s*\(|"
@@ -520,13 +530,14 @@ def classify_read_only_http_fetch(command: str) -> str | None:
             break
     if match is None:
         return None
+    tool = match.group("tool").lower()
     if _MUTATING_HTTP_FETCH_PATTERN.search(command):
         return None
     if _has_shell_chaining(command):
         return None
     if _HTTP_FETCH_FILE_WRITE_PATTERN.search(command):
         return None
-    if _HTTP_FETCH_AUTH_PATTERN.search(command):
+    if tool in {"curl.exe", "curl"} and _curl_http_fetch_uses_auth(command):
         return None
     if _PIPE_TO_EXFIL.search(command):
         return None
@@ -546,12 +557,38 @@ def classify_read_only_http_fetch(command: str) -> str | None:
         return None
     if _PIPE_TO_LOCAL_FILE_WRITE_PATTERN.search(command):
         return None
-    tool = match.group("tool").lower()
     if tool in {"curl.exe", "curl"}:
         return "curl"
     if tool in {"python3", "python"}:
         return "python"
     return tool
+
+
+def _curl_http_fetch_uses_auth(command: str) -> bool:
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+
+    saw_curl = False
+    for token in tokens:
+        base = _strip_path_prefix(token).lower()
+        if not saw_curl:
+            if base in {"curl", "curl.exe"}:
+                saw_curl = True
+            continue
+        if token == "--":
+            break
+        lower = token.lower()
+        if lower in _CURL_LONG_AUTH_FLAGS:
+            return True
+        if any(lower.startswith(f"{flag}=") for flag in _CURL_LONG_AUTH_FLAGS):
+            return True
+        if token.startswith("-") and not token.startswith("--"):
+            cluster = token[1:]
+            if "u" in cluster or "n" in cluster:
+                return True
+    return False
 
 
 def classify_docs_example_source(source_hint: str) -> bool:
