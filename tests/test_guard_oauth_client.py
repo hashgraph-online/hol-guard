@@ -2,8 +2,10 @@ from codex_plugin_scanner.guard.cli.oauth_client import (
     LOCAL_GUARD_OAUTH_CLIENT_ID,
     PRODUCTION_GUARD_OAUTH_CLIENT_ID,
     STAGING_GUARD_OAUTH_CLIENT_ID,
+    GuardDpopKeyMaterial,
     build_pkce_s256_challenge,
     detect_guard_oauth_environment,
+    generate_dpop_key_pair,
     generate_pkce_verifier,
     resolve_guard_oauth_client_config,
 )
@@ -58,3 +60,18 @@ def test_build_pkce_s256_challenge_matches_known_vector() -> None:
     challenge = build_pkce_s256_challenge(verifier)
 
     assert challenge == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+
+def test_generate_dpop_key_pair_returns_es256_material() -> None:
+    material = generate_dpop_key_pair()
+
+    assert isinstance(material, GuardDpopKeyMaterial)
+    assert material.algorithm == "ES256"
+    assert material.private_key_pem.startswith("-----BEGIN PRIVATE KEY-----")
+    assert material.public_jwk["kty"] == "EC"
+    assert material.public_jwk["crv"] == "P-256"
+    assert material.public_jwk["alg"] == "ES256"
+    assert material.public_jwk["use"] == "sig"
+    assert isinstance(material.public_jwk["x"], str) and material.public_jwk["x"]
+    assert isinstance(material.public_jwk["y"], str) and material.public_jwk["y"]
+    assert isinstance(material.public_jwk_thumbprint, str) and material.public_jwk_thumbprint

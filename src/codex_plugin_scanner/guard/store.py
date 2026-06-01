@@ -131,7 +131,10 @@ from .store_threat_intel import (
 from .types import CapabilitySet
 
 _SYNC_TOKEN_REF = "guard-cloud-token"
+_OAUTH_REFRESH_TOKEN_REF = "guard-oauth-refresh-token"
+_OAUTH_DPOP_PRIVATE_KEY_REF = "guard-oauth-dpop-private-key"
 _SYNC_TOKEN_HASH_KEY = "token_sha256"
+_OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
 _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
@@ -408,6 +411,16 @@ def _build_secret_store(guard_home: Path) -> SecretStore:
     return fallback_store
 
 
+def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
+    fallback_store = EncryptedFileSecretStore(guard_home)
+    if KeychainSecretStore._is_available():
+        return FallbackSecretStore(
+            KeychainSecretStore(service_name="hol-guard.oauth"),
+            fallback_store,
+        )
+    return fallback_store
+
+
 _SLOW_QUERY_THRESHOLD_MS: int = 200
 _store_logger = logging.getLogger(__name__)
 
@@ -419,19 +432,22 @@ class GuardStore:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
         self._secret_store = _build_secret_store(self.guard_home)
-        self._sync_token_ref = self._build_sync_token_ref()
+        self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
+        self._sync_token_ref = self._build_scoped_secret_ref(_SYNC_TOKEN_REF)
+        self._oauth_refresh_token_ref = self._build_scoped_secret_ref(_OAUTH_REFRESH_TOKEN_REF)
+        self._oauth_dpop_private_key_ref = self._build_scoped_secret_ref(_OAUTH_DPOP_PRIVATE_KEY_REF)
         self._guard_event_queue_limit = max(1, guard_event_queue_limit)
         self.path = self.guard_home / "guard.db"
         self._initialize()
 
-    def _build_sync_token_ref(self) -> str:
+    def _build_scoped_secret_ref(self, prefix: str) -> str:
         scoped_home = str(self.guard_home.expanduser().resolve())
         scoped_hash = sha256(scoped_home.encode("utf-8")).hexdigest()[:16]
-        return f"{_SYNC_TOKEN_REF}:{scoped_hash}"
+        return f"{prefix}:{scoped_hash}"
 
-    def _promote_secret_to_primary(self, secret_id: str, value: str) -> None:
-        if isinstance(self._secret_store, FallbackSecretStore):
-            self._secret_store.promote_secret(secret_id, value)
+    def _promote_secret_to_primary(self, secret_store: SecretStore, secret_id: str, value: str) -> None:
+        if isinstance(secret_store, FallbackSecretStore):
+            secret_store.promote_secret(secret_id, value)
 
     def _get_secret_from_store(self, store: SecretStore, secret_id: str) -> str | None:
         try:
@@ -439,21 +455,26 @@ class GuardStore:
         except Exception:
             return None
 
-    def _get_secret_candidates(self, secret_id: str, expected_hash_value: str | None) -> list[str]:
-        if isinstance(self._secret_store, FallbackSecretStore):
-            primary_token = self._get_secret_from_store(self._secret_store.primary, secret_id)
+    def _get_secret_candidates(
+        self,
+        secret_store: SecretStore,
+        secret_id: str,
+        expected_hash_value: str | None,
+    ) -> list[str]:
+        if isinstance(secret_store, FallbackSecretStore):
+            primary_token = self._get_secret_from_store(secret_store.primary, secret_id)
             if primary_token is not None:
                 if expected_hash_value is None or _token_sha256(primary_token) == expected_hash_value:
                     return [primary_token]
-                fallback_token = self._get_secret_from_store(self._secret_store.fallback, secret_id)
+                fallback_token = self._get_secret_from_store(secret_store.fallback, secret_id)
                 if fallback_token is None or fallback_token == primary_token:
                     return [primary_token]
                 return [primary_token, fallback_token]
-            fallback_token = self._get_secret_from_store(self._secret_store.fallback, secret_id)
+            fallback_token = self._get_secret_from_store(secret_store.fallback, secret_id)
             if fallback_token is None:
                 return []
             return [fallback_token]
-        token = self._secret_store.get_secret(secret_id)
+        token = secret_store.get_secret(secret_id)
         if token is None:
             return []
         return [token]
@@ -2834,7 +2855,7 @@ class GuardStore:
                 reference_candidates.append(token_reference)
 
             for secret_ref in reference_candidates:
-                for token in self._get_secret_candidates(secret_ref, expected_hash_value):
+                for token in self._get_secret_candidates(self._secret_store, secret_ref, expected_hash_value):
                     if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
                         continue
                     if token_reference != self._sync_token_ref:
@@ -2848,7 +2869,7 @@ class GuardStore:
                                 workspace_id=normalized_workspace_id,
                             )
                     else:
-                        self._promote_secret_to_primary(secret_ref, token)
+                        self._promote_secret_to_primary(self._secret_store, secret_ref, token)
                     return {"sync_url": sync_url, "token": token}
             return None
         legacy_token = payload.get("token")
@@ -2864,6 +2885,115 @@ class GuardStore:
                 )
             return {"sync_url": sync_url, "token": legacy_token}
         return None
+
+    def set_oauth_local_credentials(
+        self,
+        *,
+        issuer: str,
+        client_id: str,
+        refresh_token: str,
+        dpop_private_key_pem: str,
+        dpop_public_jwk: dict[str, str],
+        dpop_public_jwk_thumbprint: str,
+        now: str,
+        grant_id: str | None = None,
+        machine_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> None:
+        refresh_token_hash = _token_sha256(refresh_token)
+        dpop_private_key_hash = _token_sha256(dpop_private_key_pem)
+        payload: dict[str, object] = {
+            "issuer": issuer,
+            "client_id": client_id,
+            "refresh_token_ref": self._oauth_refresh_token_ref,
+            "refresh_token_sha256": refresh_token_hash,
+            "dpop_private_key_ref": self._oauth_dpop_private_key_ref,
+            "dpop_private_key_sha256": dpop_private_key_hash,
+            "dpop_public_jwk": dpop_public_jwk,
+            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
+        }
+        if grant_id:
+            payload["grant_id"] = grant_id
+        if machine_id:
+            payload["machine_id"] = machine_id
+        if workspace_id:
+            payload["workspace_id"] = workspace_id
+        self._oauth_secret_store.set_secret(self._oauth_refresh_token_ref, refresh_token)
+        self._oauth_secret_store.set_secret(self._oauth_dpop_private_key_ref, dpop_private_key_pem)
+        self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
+
+    def get_oauth_local_credentials(self) -> dict[str, object] | None:
+        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        if not isinstance(payload, dict):
+            return None
+        issuer = payload.get("issuer")
+        client_id = payload.get("client_id")
+        refresh_token_ref = payload.get("refresh_token_ref")
+        refresh_token_hash = payload.get("refresh_token_sha256")
+        dpop_private_key_ref = payload.get("dpop_private_key_ref")
+        dpop_private_key_hash = payload.get("dpop_private_key_sha256")
+        dpop_public_jwk = payload.get("dpop_public_jwk")
+        dpop_public_jwk_thumbprint = payload.get("dpop_public_jwk_thumbprint")
+        if not isinstance(issuer, str) or not issuer:
+            return None
+        if not isinstance(client_id, str) or not client_id:
+            return None
+        if not isinstance(refresh_token_ref, str) or not refresh_token_ref:
+            return None
+        if not isinstance(dpop_private_key_ref, str) or not dpop_private_key_ref:
+            return None
+        if not isinstance(refresh_token_hash, str) or not refresh_token_hash:
+            return None
+        if not isinstance(dpop_private_key_hash, str) or not dpop_private_key_hash:
+            return None
+        if not isinstance(dpop_public_jwk, dict):
+            return None
+        if not isinstance(dpop_public_jwk_thumbprint, str) or not dpop_public_jwk_thumbprint:
+            return None
+        refresh_token: str | None = None
+        for candidate in self._get_secret_candidates(
+            self._oauth_secret_store,
+            refresh_token_ref,
+            refresh_token_hash,
+        ):
+            if _token_sha256(candidate) != refresh_token_hash:
+                continue
+            refresh_token = candidate
+            self._promote_secret_to_primary(self._oauth_secret_store, refresh_token_ref, candidate)
+            break
+        if refresh_token is None:
+            return None
+        dpop_private_key_pem: str | None = None
+        for candidate in self._get_secret_candidates(
+            self._oauth_secret_store,
+            dpop_private_key_ref,
+            dpop_private_key_hash,
+        ):
+            if _token_sha256(candidate) != dpop_private_key_hash:
+                continue
+            dpop_private_key_pem = candidate
+            self._promote_secret_to_primary(self._oauth_secret_store, dpop_private_key_ref, candidate)
+            break
+        if dpop_private_key_pem is None:
+            return None
+        result: dict[str, object] = {
+            "issuer": issuer,
+            "client_id": client_id,
+            "refresh_token": refresh_token,
+            "dpop_private_key_pem": dpop_private_key_pem,
+            "dpop_public_jwk": dpop_public_jwk,
+            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
+        }
+        grant_id = payload.get("grant_id")
+        machine_id = payload.get("machine_id")
+        workspace_id = payload.get("workspace_id")
+        if isinstance(grant_id, str) and grant_id:
+            result["grant_id"] = grant_id
+        if isinstance(machine_id, str) and machine_id:
+            result["machine_id"] = machine_id
+        if isinstance(workspace_id, str) and workspace_id:
+            result["workspace_id"] = workspace_id
+        return result
 
     def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
         with self._connect() as connection:
