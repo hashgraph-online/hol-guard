@@ -81,6 +81,7 @@ from ..local_supply_chain import build_local_supply_chain_posture
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
+    GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
     sync_receipts,
@@ -346,6 +347,11 @@ def _run_headless_cloud_sync(
             "status": "synced",
             "synced_at": sync_payload.get("synced_at"),
             "receipts_stored": sync_payload.get("receipts_stored", 0),
+        }
+    except GuardSyncAuthorizationExpiredError as error:
+        summary = {
+            "status": "auth_expired",
+            "message": str(error),
         }
     except GuardSyncNotConfiguredError as error:
         summary = {
@@ -1032,6 +1038,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         cloud_sync_status = self._optional_string(cloud_sync.get("status")) or "unknown"
         if cloud_sync_status in {"queued", "in_progress"}:
             reconciliation_status = cloud_sync_status
+        elif cloud_sync_status == "auth_expired":
+            reconciliation_status = "auth_expired"
         elif cloud_sync_status == "not_configured":
             reconciliation_status = "not_configured"
         elif cloud_sync_status == "synced":
@@ -3049,6 +3057,17 @@ class GuardDaemonServer:
                     refreshed_at,
                 )
                 wait_seconds = interval_seconds
+            except GuardSyncAuthorizationExpiredError as error:
+                self._server.store.set_sync_payload(
+                    "supply_chain_bundle_daemon",
+                    {
+                        "status": "auth_expired",
+                        "refreshed_at": refreshed_at,
+                        "message": str(error),
+                    },
+                    refreshed_at,
+                )
+                wait_seconds = backoff_seconds
             except GuardSyncNotConfiguredError:
                 self._server.store.set_sync_payload(
                     "supply_chain_bundle_daemon",

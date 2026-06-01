@@ -7904,6 +7904,25 @@ url = http://127.0.0.1:8787/guard-canary
         assert "Guard Cloud is not connected yet." in stderr
         assert "Run `hol-guard connect`" in stderr
 
+    def test_guard_sync_surfaces_auth_expired_reauth_message(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+
+        def _fail_sync(_store: GuardStore) -> dict[str, object]:
+            raise guard_commands_module.GuardSyncAuthorizationExpiredError(
+                "Guard authorization expired. Run `hol-guard connect` to sign in again."
+            )
+
+        monkeypatch.setattr(guard_commands_module, "sync_receipts", _fail_sync)
+
+        rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output == {
+            "synced": False,
+            "error": "Guard authorization expired. Run `hol-guard connect` to sign in again.",
+        }
+
     def test_guard_sync_reports_remote_sync_errors_in_json_mode(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         _SyncRequestHandler.response_code = 403
