@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -16035,6 +16036,127 @@ def test_codex_read_only_source_inspection_preserves_pipelines_in_safe_chains(tm
         command,
         cwd=workspace_dir,
     )
+
+
+def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_search(tmp_path: Path) -> None:
+    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
+    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
+    source_file = workspace_dir / "src" / "guard-auth.ts"
+    live_prefix = "guard" + "_live" + "_"
+    _write_text(
+        source_file,
+        "export const legacy_runtime_material_rejected = 'agent_token field name only';\n",
+    )
+    pattern = (
+        f"{live_prefix}|service_principal|agent_token|migration_failure|"
+        "legacy_runtime_material_rejected|legacy_issuance_attempt_rejected|legacy.*report|reauthorization"
+    )
+
+    command = (
+        f"cd {shlex.quote(str(workspace_dir))} && "
+        f"rg -n {shlex.quote(pattern)} src app __tests__ docs -g '!**/*.map' | sed -n '1,260p'"
+    )
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=repo_root,
+        home_dir=tmp_path,
+    )
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {
+                "stdout": (
+                    "src/guard-auth.ts:1:"
+                    "export const legacy_runtime_material_rejected = 'agent_token field name only';\n"
+                )
+            },
+        },
+        config_path=str(repo_root / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=repo_root,
+        home_dir=tmp_path,
+    )
+    assert artifact is None
+
+
+def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Path) -> None:
+    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
+    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
+    outside_dir = tmp_path / "CascadeProjects" / "outside"
+    _write_text(workspace_dir / "src" / "inside.ts", "export const token_label = 'field name only';\n")
+    _write_text(outside_dir / "src" / "outside.ts", "export const token_label = 'field name only';\n")
+
+    command = (
+        f"cd {shlex.quote(str(workspace_dir / '..' / '..' / '..' / '..' / 'outside'))} && "
+        "rg -n token_label src | sed -n '1,40p'"
+    )
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=repo_root,
+        home_dir=tmp_path,
+    )
+
+
+def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_path: Path) -> None:
+    repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
+    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-default-surfaces"
+    _write_text(
+        workspace_dir / "app" / "agent-token-detail.tsx",
+        "export type AgentTokenDetail = { tokenId: string };\n",
+    )
+    _write_text(workspace_dir / "__tests__" / "agent-token-detail.test.ts", "expect(onRotated).toHaveBeenCalled();\n")
+
+    command = (
+        "rg -n \"onRotated=|onRotated:|onRotated\\)|AgentTokenDetail\" "
+        "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/app "
+        "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/__tests__"
+    )
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=repo_root,
+        home_dir=tmp_path,
+    )
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {
+                "stdout": (
+                    "app/agent-token-detail.tsx:1:export type AgentTokenDetail = { tokenId: string };\n"
+                    "__tests__/agent-token-detail.test.ts:1:expect(onRotated).toHaveBeenCalled();\n"
+                )
+            },
+        },
+        config_path=str(repo_root / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=repo_root,
+        home_dir=tmp_path,
+    )
+    assert artifact is None
+
+
+def test_codex_read_only_source_inspection_still_blocks_value_like_secret_output(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / "src" / "config.ts", "export const label = 'token';\n")
+    command = "rg -n \"token\" src | sed -n '1,40p'"
+
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {
+                "stdout": "src/config.ts:1:export const token = 'ghp_123456789012345678901234567890123456';\n"
+            },
+        },
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=workspace_dir,
+    )
+    assert artifact is not None
 
 
 def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(
