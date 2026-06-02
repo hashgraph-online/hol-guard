@@ -8963,6 +8963,11 @@ def _guard_service_login_payload(
                 "Hosted runtime token login is retired. "
                 f"Run `{headless_command}` or `{browser_command}` instead."
             ),
+            "service": {
+                "runtime": runtime,
+                "label": label,
+                "workspace": workspace or None,
+            },
         }, 2
     return {
         "logged_in": False,
