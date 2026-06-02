@@ -31,7 +31,7 @@ dependencies = [
     "cryptography>=47.0.0",
     "packaging>=24.0",
     "tomli>=2.0; python_version < '3.11'",
-    "cisco-ai-skill-scanner~=2.0.9",
+    "cisco-ai-skill-scanner~=2.0.11",
 ]
 
 [project.optional-dependencies]
