@@ -939,7 +939,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
 
     service_login_parser = service_subparsers.add_parser(
         "login",
-        help="Save a hosted-runtime Guard Cloud token and runtime profile",
+        help="Redirect to `hol-guard connect`; pasted hosted-runtime tokens are retired",
     )
     _add_guard_common_args(service_login_parser)
     service_login_parser.add_argument("--runtime", choices=_SERVICE_RUNTIME_CHOICES, required=True)
@@ -8905,7 +8905,7 @@ def _manual_guard_login_payload(
     if manual_token is None:
         return None
     print(
-        "Raw Guard tokens are no longer accepted. Run `hol-guard connect` to sign in with OAuth Device Code.",
+        "Manual token login is retired. Run `hol-guard connect` to sign in with OAuth Device Code.",
         file=sys.stderr,
     )
     return None, 2
@@ -8950,15 +8950,14 @@ def _guard_service_login_payload(
 ) -> tuple[dict[str, object], int]:
     runtime = str(args.runtime)
     label = str(args.label).strip()
-    workspace = _optional_string(args.workspace) or ""
+    workspace = _optional_string(getattr(args, "workspace", None)) or ""
     if getattr(args, "token", None) is not None:
         return {
             "logged_in": False,
-            "error": "Raw hosted-runtime Guard tokens are no longer accepted.",
-            "next_action": {
-                "command": "hol-guard connect --headless",
-                "message": "Use OAuth Device Code to connect headless or hosted runtimes.",
-            },
+            "error": (
+                "Hosted runtime token login is retired. "
+                "Run `hol-guard connect --headless` or `hol-guard connect` instead."
+            ),
             "service": {
                 "runtime": runtime,
                 "label": label,
@@ -8980,10 +8979,7 @@ def _guard_service_login_payload(
 
 
 def _guard_service_sync_prerequisite_message() -> str:
-    return (
-        "Hosted Guard runtime is not configured yet. Run `hol-guard connect --headless` "
-        "to approve this runtime with OAuth Device Code first."
-    )
+    return "Hosted Guard runtime is not configured yet. Run `hol-guard connect` first."
 
 
 def _guard_service_sync_failure_message(error: GuardSyncNotConfiguredError) -> str:
