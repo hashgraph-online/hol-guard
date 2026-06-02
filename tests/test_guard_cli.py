@@ -6534,8 +6534,7 @@ url = http://127.0.0.1:8787/guard-canary
             "logged_in": False,
             "error": (
                 "Hosted runtime token login is retired. "
-                "Run `hol-guard connect --headless --workspace workspace_ops` "
-                "or `hol-guard connect --workspace workspace_ops` instead."
+                "Run `hol-guard connect --headless` or `hol-guard connect` instead."
             ),
             "service": {
                 "runtime": "hermes",
@@ -6604,8 +6603,7 @@ url = http://127.0.0.1:8787/guard-canary
             "logged_in": False,
             "error": (
                 "Hosted runtime token login is retired. "
-                "Run `hol-guard connect --headless --workspace workspace_ops` "
-                "or `hol-guard connect --workspace workspace_ops` instead."
+                "Run `hol-guard connect --headless` or `hol-guard connect` instead."
             ),
             "service": {
                 "runtime": "hermes",
