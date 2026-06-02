@@ -2863,47 +2863,19 @@ class GuardStore:
         sync_url = payload.get("sync_url")
         if not isinstance(sync_url, str):
             return None
-        workspace_id = payload.get("workspace_id")
-        normalized_workspace_id = workspace_id if isinstance(workspace_id, str) and workspace_id.strip() else None
         token_reference = payload.get("token_ref")
         if isinstance(token_reference, str) and token_reference:
+            if token_reference != self._sync_token_ref:
+                return None
             expected_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
             expected_hash_value = expected_hash if isinstance(expected_hash, str) and expected_hash else None
 
-            reference_candidates = [self._sync_token_ref]
-            if token_reference != self._sync_token_ref:
-                reference_candidates.append(token_reference)
-
-            for secret_ref in reference_candidates:
-                for token in self._get_secret_candidates(self._secret_store, secret_ref, expected_hash_value):
-                    if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
-                        continue
-                    if token_reference != self._sync_token_ref:
-                        now = _now()
-                        with self._connect() as connection:
-                            self._set_sync_credentials_in_connection(
-                                connection,
-                                sync_url,
-                                token,
-                                now,
-                                workspace_id=normalized_workspace_id,
-                            )
-                    else:
-                        self._promote_secret_to_primary(self._secret_store, secret_ref, token)
-                    return {"sync_url": sync_url, "token": token}
+            for token in self._get_secret_candidates(self._secret_store, self._sync_token_ref, expected_hash_value):
+                if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
+                    continue
+                self._promote_secret_to_primary(self._secret_store, self._sync_token_ref, token)
+                return {"sync_url": sync_url, "token": token}
             return None
-        legacy_token = payload.get("token")
-        if isinstance(legacy_token, str) and legacy_token:
-            now = _now()
-            with self._connect() as connection:
-                self._set_sync_credentials_in_connection(
-                    connection,
-                    sync_url,
-                    legacy_token,
-                    now,
-                    workspace_id=normalized_workspace_id,
-                )
-            return {"sync_url": sync_url, "token": legacy_token}
         return None
 
     def set_oauth_local_credentials(
