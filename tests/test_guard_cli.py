@@ -6546,7 +6546,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert store.get_sync_payload("service_runtime_profile") is None
         assert store.get_device_metadata() == original_device_metadata
 
-    def test_guard_service_login_without_token_points_to_headless_connect(self, tmp_path, capsys):
+    def test_guard_service_login_without_token_points_to_ci_safe_headless_connect(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
 
         login_rc = main(
@@ -6569,7 +6569,10 @@ url = http://127.0.0.1:8787/guard-canary
         store = GuardStore(home_dir)
 
         assert login_rc == 2
-        assert payload["next_action"]["command"] == "hol-guard connect --headless"
+        assert (
+            payload["next_action"]["command"]
+            == "hol-guard connect --headless --ci-safe --workspace workspace_ops --label 'Hermes Telegram agent'"
+        )
         assert store.get_sync_credentials() is None
 
     def test_guard_service_login_rejects_blank_token(self, tmp_path, capsys):
