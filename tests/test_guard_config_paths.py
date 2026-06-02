@@ -363,7 +363,7 @@ def test_migrate_guard_home_state_copies_guard_db_with_sqlite_backup(tmp_path):
     assert row == ("legacy",)
 
 
-def test_resolve_guard_home_migrates_legacy_credentials_into_canonical_database(tmp_path, monkeypatch):
+def test_resolve_guard_home_leaves_legacy_credentials_inert_in_canonical_database(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"
     legacy_home = home_dir / ".ai-plugin-scanner-guard"
@@ -376,10 +376,7 @@ def test_resolve_guard_home_migrates_legacy_credentials_into_canonical_database(
 
     assert resolved_home == canonical_home
     canonical_store = GuardStore(canonical_home)
-    assert canonical_store.get_sync_credentials() == {
-        "token": "legacy-token",
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-    }
+    assert canonical_store.get_sync_credentials() is None
 
 
 def test_migrate_guard_home_state_merges_nested_legacy_directories(tmp_path):
