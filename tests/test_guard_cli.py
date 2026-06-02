@@ -6478,8 +6478,9 @@ url = http://127.0.0.1:8787/guard-canary
         assert login_output["workspace_id"] == "workspace-456"
         assert store.get_sync_credentials() is None
 
-    def test_guard_login_manual_mode_requires_sync_url_and_token(self, tmp_path, capsys):
+    def test_guard_login_rejects_manual_token_mode_and_redirects_to_connect(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
 
         login_rc = main(
             [
@@ -6487,16 +6488,24 @@ url = http://127.0.0.1:8787/guard-canary
                 "login",
                 "--home",
                 str(home_dir),
+                "--sync-url",
+                "https://hol.org/api/guard/receipts/sync",
                 "--token",
                 "demo-token",
             ]
         )
+        stderr = capsys.readouterr().err
 
         assert login_rc == 2
-        assert "Raw Guard tokens are no longer accepted" in capsys.readouterr().err
+        assert "Manual token login is retired." in stderr
+        assert "Run `hol-guard connect`" in stderr
+        assert store.get_sync_credentials() is None
+        assert store.list_events(event_name="sign_in") == []
 
-    def test_guard_service_login_rejects_hosted_runtime_token(self, tmp_path, capsys):
+    def test_guard_service_login_rejects_pasted_token_and_redirects_to_connect(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        original_device_metadata = store.get_device_metadata()
 
         login_rc = main(
             [
@@ -6514,24 +6523,28 @@ url = http://127.0.0.1:8787/guard-canary
                 "--sync-url",
                 "https://hol.org/api/guard/receipts/sync",
                 "--token",
-                "legacy-bearer-secretvalue",
+                "guard_live_secretvalue",
                 "--json",
             ]
         )
         payload = json.loads(capsys.readouterr().out)
-        store = GuardStore(home_dir)
 
         assert login_rc == 2
-        assert payload["logged_in"] is False
-        assert payload["next_action"]["command"] == "hol-guard connect --headless"
-        assert "legacy-bearer-secretvalue" not in json.dumps(payload)
-        assert payload["service"] == {
-            "runtime": "hermes",
-            "label": "Hermes Telegram agent",
-            "workspace": "workspace_ops",
+        assert payload == {
+            "logged_in": False,
+            "error": (
+                "Hosted runtime token login is retired. "
+                "Run `hol-guard connect --headless` or `hol-guard connect` instead."
+            ),
+            "service": {
+                "runtime": "hermes",
+                "label": "Hermes Telegram agent",
+                "workspace": "workspace_ops",
+            },
         }
         assert store.get_sync_credentials() is None
         assert store.get_sync_payload("service_runtime_profile") is None
+        assert store.get_device_metadata() == original_device_metadata
 
     def test_guard_service_login_without_token_points_to_headless_connect(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -6586,10 +6599,40 @@ url = http://127.0.0.1:8787/guard-canary
         store = GuardStore(home_dir)
 
         assert login_rc == 2
-        assert payload["logged_in"] is False
-        assert payload["error"] == "Raw hosted-runtime Guard tokens are no longer accepted."
-        assert payload["next_action"]["command"] == "hol-guard connect --headless"
+        assert payload == {
+            "logged_in": False,
+            "error": (
+                "Hosted runtime token login is retired. "
+                "Run `hol-guard connect --headless` or `hol-guard connect` instead."
+            ),
+            "service": {
+                "runtime": "hermes",
+                "label": "Hermes Telegram agent",
+                "workspace": "workspace_ops",
+            },
+        }
         assert store.get_sync_credentials() is None
+
+    def test_guard_service_sync_prerequisite_points_to_guard_connect(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        sync_rc = main(
+            [
+                "guard",
+                "service",
+                "sync",
+                "--home",
+                str(home_dir),
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert sync_rc == 1
+        assert payload == {
+            "synced": False,
+            "error": "Hosted Guard runtime is not configured yet. Run `hol-guard connect` first.",
+        }
 
     def test_guard_service_sync_publishes_runtime_session_before_receipts(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -6755,6 +6798,42 @@ url = http://127.0.0.1:8787/guard-canary
         assert payload["runtime"]["runtime_session_id"] == "runtime-session-1"
         assert payload["receipts"]["receipts_stored"] == 2
         assert payload["connection"]["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+
+    def test_guard_service_status_ignores_inline_legacy_sync_token(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        now = "2026-05-01T00:00:00Z"
+        store.set_sync_payload(
+            "credentials",
+            {
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "token": "guard_live_secretvalue",
+            },
+            now,
+        )
+        store.set_sync_payload(
+            "service_runtime_profile",
+            {
+                "runtime": "hermes",
+                "label": "Hermes Telegram agent",
+                "workspace": "workspace_ops",
+                "surface": "agent-sdk",
+                "client_name": "hol-guard",
+                "client_title": "Hermes Telegram agent",
+                "client_version": "2.0.0",
+            },
+            now,
+        )
+
+        status_rc = main(["guard", "service", "status", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert status_rc == 0
+        assert payload["configured"] is False
+        assert payload["connection"] == {
+            "configured": False,
+            "sync_url": None,
+        }
 
     def test_guard_connect_reports_browser_authorization_errors_cleanly(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
