@@ -6791,6 +6791,42 @@ url = http://127.0.0.1:8787/guard-canary
         assert payload["receipts"]["receipts_stored"] == 2
         assert payload["connection"]["sync_url"] == "https://hol.org/api/guard/receipts/sync"
 
+    def test_guard_service_status_ignores_inline_legacy_sync_token(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        now = "2026-05-01T00:00:00Z"
+        store.set_sync_payload(
+            "credentials",
+            {
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "token": "guard_live_secretvalue",
+            },
+            now,
+        )
+        store.set_sync_payload(
+            "service_runtime_profile",
+            {
+                "runtime": "hermes",
+                "label": "Hermes Telegram agent",
+                "workspace": "workspace_ops",
+                "surface": "agent-sdk",
+                "client_name": "hol-guard",
+                "client_title": "Hermes Telegram agent",
+                "client_version": "2.0.0",
+            },
+            now,
+        )
+
+        status_rc = main(["guard", "service", "status", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert status_rc == 0
+        assert payload["configured"] is False
+        assert payload["connection"] == {
+            "configured": False,
+            "sync_url": None,
+        }
+
     def test_guard_connect_reports_browser_authorization_errors_cleanly(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
