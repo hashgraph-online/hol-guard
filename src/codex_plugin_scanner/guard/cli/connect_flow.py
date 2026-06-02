@@ -549,6 +549,7 @@ def run_guard_device_connect_command(
     sleep=time.sleep,
     now: str | None = None,
     announce_copy=None,
+    open_browser=None,
 ) -> dict[str, object]:
     device = store.get_device_metadata()
     _, allowed_origin = resolve_connect_url(connect_url)
@@ -567,6 +568,13 @@ def run_guard_device_connect_command(
     )
     payload = build_device_authorization_copy_payload(response)
     payload["connect_mode"] = "device_code"
+    if open_browser is not None:
+        next_action = payload.get("next_action")
+        target = next_action.get("target") if isinstance(next_action, dict) else None
+        opened = False
+        if isinstance(target, str) and target:
+            opened = bool(open_browser(target))
+        payload["browser_opened"] = opened
     if announce_copy is not None:
         announce_copy(payload)
     device_code = str(response.get("device_code") or "").strip()
