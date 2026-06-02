@@ -6537,6 +6537,11 @@ url = http://127.0.0.1:8787/guard-canary
                 "Run `hol-guard connect --headless --workspace workspace_ops` "
                 "or `hol-guard connect --workspace workspace_ops` instead."
             ),
+            "service": {
+                "runtime": "hermes",
+                "label": "Hermes Telegram agent",
+                "workspace": "workspace_ops",
+            },
         }
         assert store.get_sync_credentials() is None
         assert store.get_sync_payload("service_runtime_profile") is None
@@ -6602,6 +6607,11 @@ url = http://127.0.0.1:8787/guard-canary
                 "Run `hol-guard connect --headless --workspace workspace_ops` "
                 "or `hol-guard connect --workspace workspace_ops` instead."
             ),
+            "service": {
+                "runtime": "hermes",
+                "label": "Hermes Telegram agent",
+                "workspace": "workspace_ops",
+            },
         }
         assert store.get_sync_credentials() is None
 
