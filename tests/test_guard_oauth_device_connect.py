@@ -107,6 +107,22 @@ def test_device_authorization_request_uses_oauth_scopes_without_token_material()
     assert "secret" not in encoded
 
 
+def test_ci_safe_device_authorization_request_uses_restricted_scopes() -> None:
+    encoded = connect_flow.build_device_authorization_request_body(
+        machine_id="machine-123",
+        machine_label="CI Runner",
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        client_id="guard-local-daemon",
+        scopes=connect_flow.CI_SAFE_GUARD_DEVICE_SCOPES,
+    )
+    parsed = urllib.parse.parse_qs(encoded)
+
+    assert parsed["scope"] == ["guard:runtime.sync guard:offline_access"]
+    assert "guard:receipt.write" not in encoded
+    assert "guard:runtime.session.write" not in encoded
+
+
 def test_device_authorization_copy_payload_hides_device_code_secret() -> None:
     assert hasattr(connect_flow, "build_device_authorization_copy_payload")
     payload = connect_flow.build_device_authorization_copy_payload(
@@ -243,6 +259,61 @@ def test_headless_connect_uses_staging_client_defaults(tmp_path: Path) -> None:
 
     assert requests[0][0] == "https://staging.hol.org/api/guard/oauth/device/authorize"
     assert parsed["client_id"] == ["guard-local-daemon-staging"]
+
+
+def test_headless_connect_ci_safe_uses_explicit_label_and_restricted_scopes(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_device_label("Local Laptop", "2026-05-31T00:00:00Z")
+    requests: list[tuple[str, str]] = []
+
+    def fake_request(url: str, body: str) -> dict[str, object]:
+        requests.append((url, body))
+        return {
+            "device_code": "device-secret-value",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            "expires_in": 600,
+            "interval": 5,
+        }
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": _fake_access_token(
+                        grant_id="grant-123",
+                        machine_id="machine-123",
+                        workspace_id="workspace-123",
+                    ),
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                }
+            ).encode("utf-8")
+
+    payload = connect_flow.run_guard_device_connect_command(
+        store=store,
+        connect_url="https://hol.org/guard/connect",
+        request_device_authorization=fake_request,
+        token_urlopen=lambda request, timeout: _Response(),
+        now="2026-06-01T12:00:00+00:00",
+        ci_safe=True,
+        machine_label="CI Runner",
+    )
+    parsed = urllib.parse.parse_qs(requests[0][1])
+
+    assert payload["status"] == "connected"
+    assert parsed["requested_machine_label"] == ["CI Runner"]
+    assert parsed["scope"] == ["guard:runtime.sync guard:offline_access"]
 
 
 def test_headless_connect_polls_until_success_and_persists_oauth_credentials(tmp_path: Path) -> None:
@@ -475,12 +546,41 @@ def test_service_login_rejects_raw_token_without_persisting_credentials(tmp_path
     assert store.get_sync_credentials() is None
 
 
+def test_service_login_without_token_points_to_ci_safe_connect(tmp_path: Path, capsys) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    args = _ServiceLoginArgs()
+    args.guard_home = str(guard_home)
+    args.token = None
+    args.workspace = str(workspace)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 2
+    assert "hol-guard connect --headless --ci-safe" in payload["next_action"]["command"]
+    assert "--workspace" in payload["next_action"]["command"]
+    assert str(workspace) in payload["next_action"]["command"]
+    assert "--label" in payload["next_action"]["command"]
+    assert "Hosted Codex" in payload["next_action"]["command"]
+
+
 def test_connect_headless_emits_device_code_payload_without_pairing_secret(tmp_path: Path, capsys, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     args = _HeadlessConnectArgs()
     args.guard_home = str(guard_home)
 
-    def fake_headless_flow(*, store: GuardStore, connect_url: str, announce_copy=None) -> dict[str, object]:
+    def fake_headless_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        announce_copy=None,
+        ci_safe: bool = False,
+        machine_label: str | None = None,
+    ) -> dict[str, object]:
+        del ci_safe, machine_label
         if announce_copy is not None:
             announce_copy(
                 {
@@ -522,6 +622,89 @@ def test_connect_no_browser_alias_uses_headless_device_code_flow(tmp_path: Path,
     assert args.headless is True
 
 
+def test_connect_ci_safe_requires_explicit_workspace(tmp_path: Path, capsys) -> None:
+    guard_home = tmp_path / "guard-home"
+    parser = _build_parser("hol-guard", program_mode="guard")
+    args = parser.parse_args(
+        [
+            "connect",
+            "--headless",
+            "--ci-safe",
+            "--label",
+            "CI Runner",
+            "--home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "--workspace" in captured.err
+
+
+def test_connect_ci_safe_requires_headless_mode(tmp_path: Path, capsys, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    parser = _build_parser("hol-guard", program_mode="guard")
+    args = parser.parse_args(
+        [
+            "connect",
+            "--ci-safe",
+            "--workspace",
+            str(workspace),
+            "--label",
+            "CI Runner",
+            "--home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+    browser_called = {"value": False}
+
+    def fake_browser_flow(*, store: GuardStore, connect_url: str, wait_timeout_seconds: int) -> dict[str, object]:
+        del store, connect_url, wait_timeout_seconds
+        browser_called["value"] = True
+        return {"status": "connected", "connect_mode": "browser_oauth"}
+
+    monkeypatch.setattr(guard_commands, "_run_guard_browser_connect_flow", fake_browser_flow)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "--headless" in captured.err
+    assert browser_called["value"] is False
+
+
+def test_connect_ci_safe_requires_explicit_label(tmp_path: Path, capsys) -> None:
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    parser = _build_parser("hol-guard", program_mode="guard")
+    args = parser.parse_args(
+        [
+            "connect",
+            "--headless",
+            "--ci-safe",
+            "--workspace",
+            str(workspace),
+            "--home",
+            str(guard_home),
+            "--json",
+        ]
+    )
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "--label" in captured.err
+
+
 def test_connect_headless_open_browser_opens_device_approval_before_polling(
     tmp_path: Path,
     capsys,
@@ -539,7 +722,10 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
         connect_url: str,
         announce_copy=None,
         open_browser=None,
+        ci_safe: bool = False,
+        machine_label: str | None = None,
     ) -> dict[str, object]:
+        del ci_safe, machine_label
         assert connect_url == "https://hol.org/guard/connect"
         assert open_browser is not None
         if announce_copy is not None:
@@ -876,7 +1062,15 @@ def test_connect_headless_reports_device_authorization_network_error(tmp_path: P
     args = _HeadlessConnectArgs()
     args.guard_home = str(guard_home)
 
-    def failing_headless_flow(*, store: GuardStore, connect_url: str, announce_copy=None) -> dict[str, object]:
+    def failing_headless_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        announce_copy=None,
+        ci_safe: bool = False,
+        machine_label: str | None = None,
+    ) -> dict[str, object]:
+        del ci_safe, machine_label
         del announce_copy
         raise urllib.error.URLError("network unavailable")
 
@@ -895,7 +1089,15 @@ def test_connect_headless_reports_malformed_device_authorization_response(tmp_pa
     args = _HeadlessConnectArgs()
     args.guard_home = str(guard_home)
 
-    def failing_headless_flow(*, store: GuardStore, connect_url: str, announce_copy=None) -> dict[str, object]:
+    def failing_headless_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        announce_copy=None,
+        ci_safe: bool = False,
+        machine_label: str | None = None,
+    ) -> dict[str, object]:
+        del ci_safe, machine_label
         del announce_copy
         raise json.JSONDecodeError("invalid json", "not-json", 0)
 
