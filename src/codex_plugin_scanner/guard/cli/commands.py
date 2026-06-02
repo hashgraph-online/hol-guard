@@ -2367,6 +2367,11 @@ def run_guard_command(
             )
             _emit("connect", payload, getattr(args, "json", False))
             return 0
+        try:
+            ci_safe, machine_label = _guard_ci_safe_connect_options(args)
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
         if not bool(getattr(args, "headless", False)):
             payload, exit_code = _build_guard_device_connect_payload(
                 store=store,
@@ -2379,11 +2384,6 @@ def run_guard_command(
             _emit("connect", payload, getattr(args, "json", False))
             return exit_code
         if bool(getattr(args, "headless", False)):
-            try:
-                ci_safe, machine_label = _guard_ci_safe_connect_options(args)
-            except ValueError as error:
-                print(str(error), file=sys.stderr)
-                return 2
             payload, exit_code = _build_guard_device_connect_payload(
                 store=store,
                 connect_url=args.connect_url,
@@ -8888,26 +8888,22 @@ def _build_guard_device_connect_payload(
                 wait_timeout_seconds=wait_timeout_seconds,
             )
         elif open_device_browser:
-            headless_kwargs: dict[str, object] = {
-                "store": store,
-                "connect_url": connect_url,
-                "announce_copy": announce_copy,
-                "open_browser": webbrowser.open,
-            }
-            if ci_safe or machine_label is not None:
-                headless_kwargs["ci_safe"] = ci_safe
-                headless_kwargs["machine_label"] = machine_label
-            payload = _run_guard_device_connect_flow(**headless_kwargs)
+            payload = _run_guard_device_connect_flow(
+                store=store,
+                connect_url=connect_url,
+                announce_copy=announce_copy,
+                open_browser=webbrowser.open,
+                ci_safe=ci_safe,
+                machine_label=machine_label,
+            )
         else:
-            headless_kwargs = {
-                "store": store,
-                "connect_url": connect_url,
-                "announce_copy": announce_copy,
-            }
-            if ci_safe or machine_label is not None:
-                headless_kwargs["ci_safe"] = ci_safe
-                headless_kwargs["machine_label"] = machine_label
-            payload = _run_guard_device_connect_flow(**headless_kwargs)
+            payload = _run_guard_device_connect_flow(
+                store=store,
+                connect_url=connect_url,
+                announce_copy=announce_copy,
+                ci_safe=ci_safe,
+                machine_label=machine_label,
+            )
     except json.JSONDecodeError as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
