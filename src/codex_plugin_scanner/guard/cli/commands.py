@@ -19,7 +19,7 @@ import sys
 import urllib.error
 import urllib.parse
 import webbrowser
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -852,6 +852,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
     connect_parser.add_argument("--wait-timeout-seconds", type=int, default=180)
     connect_parser.add_argument("--headless", action="store_true")
+    connect_parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="With --headless, open the Device Code approval page before waiting for approval.",
+    )
     connect_parser.add_argument(
         "--no-browser",
         action="store_true",
@@ -2331,7 +2336,7 @@ def run_guard_command(
         payload, exit_code = _build_guard_device_connect_payload(
             store=store,
             connect_url=args.connect_url,
-            open_browser=True,
+            use_browser_oauth=True,
             wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
         )
         if payload is None:
@@ -2354,7 +2359,7 @@ def run_guard_command(
             payload, exit_code = _build_guard_device_connect_payload(
                 store=store,
                 connect_url=args.connect_url,
-                open_browser=True,
+                use_browser_oauth=True,
                 wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
             )
             if payload is None:
@@ -2365,7 +2370,8 @@ def run_guard_command(
             payload, exit_code = _build_guard_device_connect_payload(
                 store=store,
                 connect_url=args.connect_url,
-                open_browser=False,
+                use_browser_oauth=False,
+                open_device_browser=bool(getattr(args, "open_browser", False)),
                 wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
                 announce_copy=None
                 if getattr(args, "json", False)
@@ -8817,11 +8823,13 @@ def _run_guard_device_connect_flow(
     store: GuardStore,
     connect_url: str,
     announce_copy=None,
+    open_browser: Callable[[str], bool] | None = None,
 ) -> dict[str, object]:
     return run_guard_device_connect_command(
         store=store,
         connect_url=connect_url,
         announce_copy=announce_copy,
+        open_browser=open_browser,
     )
 
 
@@ -8842,24 +8850,31 @@ def _build_guard_device_connect_payload(
     *,
     store: GuardStore,
     connect_url: str,
-    open_browser: bool,
+    use_browser_oauth: bool,
+    open_device_browser: bool = False,
     wait_timeout_seconds: int = 180,
     announce_copy=None,
 ) -> tuple[dict[str, object] | None, int]:
     try:
-        payload = (
-            _run_guard_browser_connect_flow(
+        if use_browser_oauth:
+            payload = _run_guard_browser_connect_flow(
                 store=store,
                 connect_url=connect_url,
                 wait_timeout_seconds=wait_timeout_seconds,
             )
-            if open_browser
-            else _run_guard_device_connect_flow(
+        elif open_device_browser:
+            payload = _run_guard_device_connect_flow(
+                store=store,
+                connect_url=connect_url,
+                announce_copy=announce_copy,
+                open_browser=webbrowser.open,
+            )
+        else:
+            payload = _run_guard_device_connect_flow(
                 store=store,
                 connect_url=connect_url,
                 announce_copy=announce_copy,
             )
-        )
     except json.JSONDecodeError as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
@@ -8869,18 +8884,7 @@ def _build_guard_device_connect_payload(
     except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
-    if open_browser and str(payload.get("connect_mode") or "") == "device_code":
-        _open_guard_device_next_action(payload)
     return payload, 0
-
-
-def _open_guard_device_next_action(payload: dict[str, object]) -> None:
-    next_action = payload.get("next_action")
-    if not isinstance(next_action, dict):
-        return
-    target = _optional_string(next_action.get("target"))
-    if target is not None:
-        payload["browser_opened"] = bool(webbrowser.open(target))
 
 
 def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
