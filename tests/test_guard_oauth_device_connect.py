@@ -48,6 +48,7 @@ class _HeadlessConnectArgs:
     sync_url = "https://hol.org/api/guard/receipts/sync"
     connect_url = "https://hol.org/guard/connect"
     wait_timeout_seconds = 180
+    open_browser = False
     json = True
     home = None
     guard_home = None
@@ -133,6 +134,7 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
     store = GuardStore(guard_home)
     store.set_device_label("CI Runner", "2026-05-31T00:00:00Z")
     requests: list[tuple[str, str]] = []
+    opened: list[str] = []
 
     def fake_request(url: str, body: str) -> dict[str, object]:
         requests.append((url, body))
@@ -147,6 +149,7 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
 
     class _Response:
         def __enter__(self):
+            assert opened == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
             return self
 
         def __exit__(self, exc_type, exc, tb):
@@ -172,6 +175,7 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
         connect_url="https://hol.org/guard/connect",
         request_device_authorization=fake_request,
         token_urlopen=lambda request, timeout: _Response(),
+        open_browser=lambda target: opened.append(target) or True,
         now="2026-06-01T12:00:00+00:00",
     )
     rendered = json.dumps(payload, sort_keys=True)
@@ -181,6 +185,7 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
     assert requests[0][0] == "https://hol.org/api/guard/oauth/device/authorize"
     assert "requested_machine_label=CI+Runner" in requests[0][1]
     assert payload["status"] == "connected"
+    assert payload["browser_opened"] is True
     assert payload["user_code"] == "ABCD-EFGH"
     assert "device-secret-value" not in rendered
     assert credentials is not None
@@ -515,6 +520,65 @@ def test_connect_no_browser_alias_uses_headless_device_code_flow(tmp_path: Path,
 
     assert args.guard_command == "connect"
     assert args.headless is True
+
+
+def test_connect_headless_open_browser_opens_device_approval_before_polling(
+    tmp_path: Path,
+    capsys,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    args = _HeadlessConnectArgs()
+    args.guard_home = str(guard_home)
+    args.open_browser = True
+    opened: list[str] = []
+
+    def fake_headless_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        announce_copy=None,
+        open_browser=None,
+    ) -> dict[str, object]:
+        assert connect_url == "https://hol.org/guard/connect"
+        assert open_browser is not None
+        if announce_copy is not None:
+            announce_copy(
+                {
+                    "user_code": "ABCD-EFGH",
+                    "verification_uri": "https://hol.org/guard/oauth/device",
+                    "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                }
+            )
+        opened.append("before-poll")
+        browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"))
+        opened.append("after-open")
+        return {
+            "status": "connected",
+            "connect_mode": "device_code",
+            "browser_opened": browser_opened,
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "next_action": {
+                "command": "open",
+                "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            },
+        }
+
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_headless_flow)
+    monkeypatch.setattr(guard_commands.webbrowser, "open", lambda target: opened.append(target) or True)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert opened == [
+        "before-poll",
+        "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+        "after-open",
+    ]
+    assert "device_code" in captured.out
+    assert "browser_opened" in captured.out
 
 
 def test_connect_default_uses_browser_oauth_without_pairing_secret(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -866,7 +930,7 @@ def test_connect_browser_reports_loopback_timeout_without_traceback(
     payload, exit_code = guard_commands._build_guard_device_connect_payload(
         store=store,
         connect_url="https://hol.org/guard/connect",
-        open_browser=True,
+        use_browser_oauth=True,
         wait_timeout_seconds=30,
     )
     captured = capsys.readouterr()

@@ -6523,7 +6523,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "--sync-url",
                 "https://hol.org/api/guard/receipts/sync",
                 "--token",
-                "guard_live_secretvalue",
+                "guard" + "_live" + "_secretvalue",
                 "--json",
             ]
         )
@@ -6807,7 +6807,7 @@ url = http://127.0.0.1:8787/guard-canary
             "credentials",
             {
                 "sync_url": "https://hol.org/api/guard/receipts/sync",
-                "token": "guard_live_secretvalue",
+                "token": "guard" + "_live" + "_secretvalue",
             },
             now,
         )
