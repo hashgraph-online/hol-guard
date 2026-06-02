@@ -8950,18 +8950,13 @@ def _guard_service_login_payload(
 ) -> tuple[dict[str, object], int]:
     runtime = str(args.runtime)
     label = str(args.label).strip()
-    workspace = _optional_string(args.workspace) or ""
+    workspace = _optional_string(getattr(args, "workspace", None)) or ""
     if getattr(args, "token", None) is not None:
-        headless_command = "hol-guard connect --headless"
-        browser_command = "hol-guard connect"
-        if workspace:
-            headless_command = f"{headless_command} --workspace {workspace}"
-            browser_command = f"{browser_command} --workspace {workspace}"
         return {
             "logged_in": False,
             "error": (
                 "Hosted runtime token login is retired. "
-                f"Run `{headless_command}` or `{browser_command}` instead."
+                "Run `hol-guard connect --headless` or `hol-guard connect` instead."
             ),
             "service": {
                 "runtime": runtime,
