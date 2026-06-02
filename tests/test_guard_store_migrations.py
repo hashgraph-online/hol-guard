@@ -42,7 +42,7 @@ def test_sync_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
     }
 
 
-def test_legacy_plaintext_sync_payload_is_migrated_on_read(tmp_path):
+def test_legacy_plaintext_sync_payload_is_rejected_on_read(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
     with sqlite3.connect(store.path) as connection:
         connection.execute(
@@ -63,19 +63,18 @@ def test_legacy_plaintext_sync_payload_is_migrated_on_read(tmp_path):
         )
 
     credentials = store.get_sync_credentials()
-    assert credentials == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": "legacy-token",
-    }
+    assert credentials is None
 
     with sqlite3.connect(store.path) as connection:
         row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
 
     payload = json.loads(str(row[0])) if row is not None else {}
-    assert "token" not in payload
-    assert isinstance(payload.get("token_ref"), str)
-    assert str(payload["token_ref"]).startswith("guard-cloud-token:")
-    assert isinstance(payload.get("token_sha256"), str)
+    assert payload == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "legacy-token",
+    }
+    assert "token_ref" not in payload
+    assert "token_sha256" not in payload
 
 
 def test_sync_credentials_are_scoped_per_guard_home(tmp_path):
@@ -105,7 +104,7 @@ def test_sync_credentials_are_scoped_per_guard_home(tmp_path):
     }
 
 
-def test_legacy_token_reference_is_migrated_to_scoped_reference(tmp_path):
+def test_legacy_token_reference_is_rejected_on_read(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
     legacy_token = "legacy-token-ref"
     legacy_ref = "guard-cloud-token"
@@ -130,16 +129,13 @@ def test_legacy_token_reference_is_migrated_to_scoped_reference(tmp_path):
         )
 
     credentials = store.get_sync_credentials()
-    assert credentials == {
-        "sync_url": "https://hol.org/api/guard/receipts/sync",
-        "token": legacy_token,
-    }
-    assert store._secret_store.get_secret(store._sync_token_ref) == legacy_token
+    assert credentials is None
+    assert store._secret_store.get_secret(store._sync_token_ref) is None
 
     with sqlite3.connect(store.path) as connection:
         row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
     payload = json.loads(str(row[0])) if row is not None else {}
-    assert payload["token_ref"] == store._sync_token_ref
+    assert payload["token_ref"] == legacy_ref
 
 
 def test_sync_token_rotation_with_same_url_clears_cloud_sync_payloads(tmp_path):
