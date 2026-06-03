@@ -9,10 +9,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DEGRADED_DAEMON_MESSAGE = (
     "HOL Guard could not reach the local daemon ({reason}), so it is using Claude's native "
     "approval prompt as a temporary safety fallback."
@@ -45,18 +46,11 @@ def main(
     data = body.strip() or "{}"
     try:
         endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
+        _assert_loopback_http_url(endpoint)
+        response_body = _post_to_loopback_daemon(endpoint, data)
     except ValueError as error:
         sys.stdout.write(_run_local_fallback(str(error), data, fallback_command))
         return 0
-    request = urllib.request.Request(
-        endpoint,
-        data=data.encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            response_body = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
         reason = f"daemon returned HTTP {error.code}"
@@ -77,6 +71,45 @@ def main(
     return 0
 
 
+def _build_loopback_opener() -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _LoopbackOnlyRedirectHandler(),
+    )
+
+
+class _LoopbackOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _assert_loopback_http_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _assert_loopback_http_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme != "http":
+        raise ValueError(f"daemon URL must use http, not {parsed.scheme!r}")
+    host = (parsed.hostname or "").lower()
+    if host not in _LOOPBACK_HOSTS:
+        raise ValueError(f"daemon URL must target loopback, not {host!r}")
+    if parsed.port is None:
+        raise ValueError("daemon URL must include an explicit port")
+
+
+def _post_to_loopback_daemon(endpoint: str, data: str) -> str:
+    request = urllib.request.Request(
+        endpoint,
+        data=data.encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    opener = _build_loopback_opener()
+    with opener.open(request, timeout=30) as response:
+        final_url = response.geturl()
+        if final_url:
+            _assert_loopback_http_url(final_url)
+        return response.read().decode("utf-8", errors="replace")
+
+
 def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
     path = Path(state_path)
     try:
@@ -87,7 +120,9 @@ def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
                 return f"http://127.0.0.1:{port}/"
     except (OSError, ValueError):
         pass
-    return fallback_daemon_url.rstrip("/") + "/"
+    normalized = fallback_daemon_url.rstrip("/") + "/"
+    _assert_loopback_http_url(normalized)
+    return normalized
 
 
 def _event_name(data: str) -> str:
