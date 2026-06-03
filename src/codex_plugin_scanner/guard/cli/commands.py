@@ -2348,8 +2348,11 @@ def run_guard_command(
         payload, exit_code = _build_guard_device_connect_payload(
             store=store,
             connect_url=args.connect_url,
-            use_browser_oauth=True,
-            wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
+            use_browser_oauth=False,
+            open_device_browser=True,
+            announce_copy=None
+            if getattr(args, "json", False)
+            else _announce_guard_device_connect_copy,
         )
         if payload is None:
             return exit_code
@@ -2376,8 +2379,11 @@ def run_guard_command(
             payload, exit_code = _build_guard_device_connect_payload(
                 store=store,
                 connect_url=args.connect_url,
-                use_browser_oauth=True,
-                wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
+                use_browser_oauth=False,
+                open_device_browser=True,
+                announce_copy=None
+                if getattr(args, "json", False)
+                else _announce_guard_device_connect_copy,
             )
             if payload is None:
                 return exit_code

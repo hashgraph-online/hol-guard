@@ -767,31 +767,62 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
     assert "browser_opened" in captured.out
 
 
-def test_connect_default_uses_browser_oauth_without_pairing_secret(tmp_path: Path, capsys, monkeypatch) -> None:
+def test_connect_default_uses_device_code_flow_with_browser_open(tmp_path: Path, capsys, monkeypatch) -> None:
     guard_home = tmp_path / "guard-home"
     args = _ConnectArgs()
     args.guard_home = str(guard_home)
     args.wait_timeout_seconds = 5
+    opened: list[str] = []
 
-    def fake_browser_flow(*, store: GuardStore, connect_url: str, wait_timeout_seconds: int) -> dict[str, object]:
-        assert wait_timeout_seconds == 5
+    def fail_browser_flow(*, store: GuardStore, connect_url: str, wait_timeout_seconds: int) -> dict[str, object]:
+        raise AssertionError("default connect should not use browser oauth")
+
+    def fake_device_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        announce_copy=None,
+        open_browser=None,
+        ci_safe: bool = False,
+        machine_label: str | None = None,
+    ) -> dict[str, object]:
+        del store, ci_safe, machine_label
+        assert connect_url == "https://hol.org/guard/connect"
+        assert open_browser is not None
+        if announce_copy is not None:
+            announce_copy(
+                {
+                    "user_code": "ABCD-EFGH",
+                    "verification_uri": "https://hol.org/guard/oauth/device",
+                    "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                }
+            )
+        browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"))
         return {
             "status": "connected",
-            "connect_mode": "browser_oauth",
-            "authorize_url": "https://hol.org/api/guard/oauth/authorize?client_id=guard-local-daemon",
-            "redirect_uri": "http://127.0.0.1:61234/oauth/callback",
+            "connect_mode": "device_code",
+            "browser_opened": browser_opened,
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "next_action": {
+                "command": "open",
+                "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            },
         }
 
-    monkeypatch.setattr(guard_commands, "_run_guard_browser_connect_flow", fake_browser_flow)
+    monkeypatch.setattr(guard_commands, "_run_guard_browser_connect_flow", fail_browser_flow)
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_device_flow)
+    monkeypatch.setattr(guard_commands.webbrowser, "open", lambda target: opened.append(target) or True)
 
     exit_code = run_guard_command(args)
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert "browser_oauth" in captured.out
-    assert '"authorize_url": "*****"' in captured.out
-    assert "ABCD-EFGH" not in captured.out
-    assert "verification_uri" not in captured.out
+    assert opened == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
+    assert "device_code" in captured.out
+    assert "browser_opened" in captured.out
+    assert "ABCD-EFGH" in captured.out
+    assert "verification_uri" in captured.out
     assert "guardPairSecret" not in captured.out
     assert "guardPairRequest" not in captured.out
     assert not hasattr(guard_commands, "_run_guard_connect_flow")
