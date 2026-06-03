@@ -84,6 +84,48 @@ def _fake_access_token(*, grant_id: str, machine_id: str, workspace_id: str) -> 
     return f"{header}.{claims}.signature"
 
 
+def test_request_device_authorization_sets_hol_guard_user_agent(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "device_code": "device-secret-value",
+                    "user_code": "ABCD-EFGH",
+                    "verification_uri": "https://hol.org/guard/oauth/device",
+                    "expires_in": 600,
+                    "interval": 5,
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        captured["user_agent"] = request.get_header("User-agent") or ""
+        return _Response()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    connect_flow.request_device_authorization(
+        "https://hol.org/api/guard/oauth/device/authorize",
+        connect_flow.build_device_authorization_request_body(
+            machine_id="machine-123",
+            machine_label="Test Machine",
+            runtime_id=connect_flow.HEADLESS_RUNTIME_ID,
+            runtime_label=connect_flow.HEADLESS_RUNTIME_LABEL,
+            client_id="guard-local-daemon",
+        ),
+    )
+
+    assert captured["user_agent"].startswith("hol-guard/")
+
+
 def test_device_authorization_request_uses_oauth_scopes_without_token_material() -> None:
     assert hasattr(connect_flow, "build_device_authorization_request_body")
     encoded = connect_flow.build_device_authorization_request_body(
