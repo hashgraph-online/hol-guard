@@ -56,7 +56,7 @@ def main(
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            response_body = response.read().decode("utf-8")
+            response_body = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
         reason = f"daemon returned HTTP {error.code}"
@@ -68,6 +68,9 @@ def main(
         reason = str(error.reason or error)
         sys.stdout.write(_run_local_fallback(reason, data, fallback_command))
         return 0
+    except Exception as error:
+        sys.stdout.write(_run_local_fallback(str(error), data, fallback_command))
+        return 0
     if _should_suppress_output(data, response_body):
         return 0
     sys.stdout.write(response_body if response_body.strip() else "{}")
@@ -78,11 +81,12 @@ def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
     path = Path(state_path)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return fallback_daemon_url.rstrip("/") + "/"
-    port = payload.get("port")
-    if isinstance(port, int):
-        return f"http://127.0.0.1:{port}/"
+        if isinstance(payload, dict):
+            port = payload.get("port")
+            if isinstance(port, int):
+                return f"http://127.0.0.1:{port}/"
+    except (OSError, ValueError):
+        pass
     return fallback_daemon_url.rstrip("/") + "/"
 
 
@@ -134,8 +138,7 @@ def _degraded(reason: str, data: str) -> str:
         return json.dumps(
             {
                 "systemMessage": (
-                    "HOL Guard could not reach the local daemon, so it cannot render the full HOL Guard "
-                    "approval flow."
+                    "HOL Guard could not reach the local daemon, so it cannot render the full HOL Guard approval flow."
                 ),
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
@@ -162,6 +165,7 @@ def _run_local_fallback(reason: str, data: str, fallback_command: tuple[str, ...
             input=data,
             capture_output=True,
             text=True,
+            errors="replace",
             timeout=30,
             check=False,
         )
@@ -188,12 +192,13 @@ def _bridge_config_from_argv(argv: list[str]) -> dict[str, Any]:
     fallback_command = payload.get("fallback_command")
     if not isinstance(fallback_command, list) or not fallback_command:
         raise SystemExit("claude_daemon_hook_bridge config missing fallback_command")
-    return {
-        "state_path": str(payload["state_path"]),
-        "fallback_daemon_url": str(payload["fallback_daemon_url"]),
-        "fallback_command": tuple(str(item) for item in fallback_command),
-        "query": str(payload["query"]),
-    }
+    config: dict[str, Any] = {}
+    for required_key in ("state_path", "fallback_daemon_url", "query"):
+        if required_key not in payload:
+            raise SystemExit(f"claude_daemon_hook_bridge config missing {required_key!r}")
+        config[required_key] = str(payload[required_key])
+    config["fallback_command"] = tuple(str(item) for item in fallback_command)
+    return config
 
 
 if __name__ == "__main__":
