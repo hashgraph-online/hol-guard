@@ -9667,6 +9667,8 @@ def test_guard_hook_emits_claude_permission_request_terminal_notice_stderr(
     capsys,
     monkeypatch,
 ):
+    import io
+    import sys
     from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,

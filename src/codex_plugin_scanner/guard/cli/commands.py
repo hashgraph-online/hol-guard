@@ -4650,7 +4650,7 @@ def _claude_permission_request_terminal_notice(
     payload: dict[str, object],
     native_reason: str,
 ) -> str:
-    tool_name = _claude_notification_tool_name(payload)
+    tool_name = _claude_notification_tool_display_name(payload)
     if tool_name is not None:
         return (
             f"HOL Guard: reviewing Claude approval for {tool_name}. "
@@ -4664,7 +4664,7 @@ def _claude_permission_request_system_message(
     payload: dict[str, object],
     native_reason: str,
 ) -> str:
-    tool_name = _claude_notification_tool_name(payload)
+    tool_name = _claude_notification_tool_display_name(payload)
     if tool_name is not None:
         return (
             f"HOL Guard is reviewing Claude's approval prompt for {tool_name}. "
@@ -4784,6 +4784,13 @@ def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
         match = re.search(r"\buse\s+([A-Za-z][A-Za-z0-9_]*)\b", value)
         if match is not None:
             return match.group(1)
+    return None
+
+
+def _claude_notification_tool_display_name(payload: dict[str, object]) -> str | None:
+    tool_name = _claude_notification_tool_name(payload)
+    if tool_name and tool_name.strip():
+        return tool_name.strip()
     return None
 
 

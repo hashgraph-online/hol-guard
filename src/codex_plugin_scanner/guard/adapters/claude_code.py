@@ -561,7 +561,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter;"
             f"ensure_guard_daemon(Path({str(context.guard_home)!r}));"
             f"ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(home_dir=Path({str(context.home_dir)!r}), "
-            f"workspace_dir={f'Path({str(context.workspace_dir)!r})' if context.workspace_dir is not None else 'None'}, "
+            f"workspace_dir={(
+                f"Path({str(context.workspace_dir)!r})"
+                if context.workspace_dir is not None
+                else "None"
+            )}, "
             f"guard_home=Path({str(context.guard_home)!r}));"
             "print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', "
             "'additionalContext': 'HOL Guard protection is active for this workspace.'}}, "
@@ -600,6 +604,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             display_name="claude",
         )
         settings_path = _claude_managed_settings_path(context)
+        _ensure_path_within_root(context.home_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
         hook_command = self._daemon_hook_command(context)
@@ -641,6 +646,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             legacy_launcher_names=("claude-code",),
         )
         settings_path = _claude_managed_settings_path(context)
+        _ensure_path_within_root(context.home_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
