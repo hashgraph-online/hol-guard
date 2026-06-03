@@ -9085,8 +9085,8 @@ def _build_guard_device_connect_payload(
 
 def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
     user_code = _optional_string(payload.get("user_code")) or "unknown"
-    target = _optional_string(payload.get("verification_uri_complete")) or _optional_string(
-        payload.get("verification_uri")
+    target = _optional_string(payload.get("verification_uri")) or _optional_string(
+        payload.get("verification_uri_complete")
     )
     if target is None:
         return
