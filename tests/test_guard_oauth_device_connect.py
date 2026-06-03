@@ -182,7 +182,7 @@ def test_device_authorization_copy_payload_hides_device_code_secret() -> None:
     assert payload["status"] == "waiting_for_approval"
     assert payload["user_code"] == "ABCD-EFGH"
     assert payload["verification_uri"] == "https://hol.org/guard/oauth/device"
-    assert payload["next_action"]["target"] == "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"
+    assert payload["next_action"]["target"] == "https://hol.org/guard/oauth/device"
     assert "device-secret-value" not in rendered
     assert "device_code" not in rendered
 
@@ -207,7 +207,7 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
 
     class _Response:
         def __enter__(self):
-            assert opened == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
+            assert opened == ["https://hol.org/guard/oauth/device"]
             return self
 
         def __exit__(self, exc_type, exc, tb):
@@ -690,7 +690,7 @@ def test_connect_headless_emits_device_code_payload_without_pairing_secret(tmp_p
             "verification_uri": "https://hol.org/guard/oauth/device",
             "next_action": {
                 "command": "open",
-                "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                "target": "https://hol.org/guard/oauth/device",
             },
         }
 
@@ -832,7 +832,7 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
                 }
             )
         opened.append("before-poll")
-        browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"))
+        browser_opened = bool(open_browser("https://hol.org/guard/oauth/device"))
         opened.append("after-open")
         return {
             "status": "connected",
@@ -842,7 +842,7 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
             "verification_uri": "https://hol.org/guard/oauth/device",
             "next_action": {
                 "command": "open",
-                "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                "target": "https://hol.org/guard/oauth/device",
             },
         }
 
@@ -855,7 +855,7 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
     assert exit_code == 0
     assert opened == [
         "before-poll",
-        "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+        "https://hol.org/guard/oauth/device",
         "after-open",
     ]
     assert "device_code" in captured.out
@@ -894,7 +894,7 @@ def test_connect_default_uses_device_code_flow_with_browser_open(tmp_path: Path,
                     "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
                 }
             )
-        browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"))
+        browser_opened = bool(open_browser("https://hol.org/guard/oauth/device"))
         return {
             "status": "connected",
             "connect_mode": "device_code",
@@ -903,7 +903,7 @@ def test_connect_default_uses_device_code_flow_with_browser_open(tmp_path: Path,
             "verification_uri": "https://hol.org/guard/oauth/device",
             "next_action": {
                 "command": "open",
-                "target": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+                "target": "https://hol.org/guard/oauth/device",
             },
         }
 
@@ -915,7 +915,7 @@ def test_connect_default_uses_device_code_flow_with_browser_open(tmp_path: Path,
     captured = capsys.readouterr()
 
     assert exit_code == 0
-    assert opened == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
+    assert opened == ["https://hol.org/guard/oauth/device"]
     assert "device_code" in captured.out
     assert "browser_opened" in captured.out
     assert "ABCD-EFGH" in captured.out
