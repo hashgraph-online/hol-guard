@@ -2657,7 +2657,10 @@ args = ["workspace-skill.js", "--changed"]
         assert install_output["managed_install"]["manifest"]["shim_command"] == "guard-claude"
         assert settings_path.exists()
         assert len(install_settings_payload["hooks"]["SessionStart"]) == 4
-        assert len(install_settings_payload["hooks"]["PreToolUse"]) == 1
+        pretool_entries = install_settings_payload["hooks"]["PreToolUse"]
+        assert len(pretool_entries) == 2
+        assert pretool_entries[0] == {"command": "python guard-pre.py"}
+        guard_pretool_entry = pretool_entries[1]
         assert install_output["managed_install"]["manifest"]["notes"][0]
         expected_session_start_command = ClaudeCodeHarnessAdapter._session_start_command(
             HarnessContext(
@@ -2667,7 +2670,7 @@ args = ["workspace-skill.js", "--changed"]
             )
         )
         assert (
-            install_settings_payload["hooks"]["PreToolUse"][0]["matcher"]
+            guard_pretool_entry["matcher"]
             == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
         )
         assert (
@@ -2681,9 +2684,9 @@ args = ["workspace-skill.js", "--changed"]
                 guard_home=home_dir,
             )
         )
-        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "command"
-        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == expected_hook_command
-        assert "url" not in install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]
+        assert guard_pretool_entry["hooks"][0]["type"] == "command"
+        assert guard_pretool_entry["hooks"][0]["command"] == expected_hook_command
+        assert "url" not in guard_pretool_entry["hooks"][0]
         assert install_settings_payload["hooks"].get("UserPromptSubmit", []) == []
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
         assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
@@ -2693,7 +2696,7 @@ args = ["workspace-skill.js", "--changed"]
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["SessionStart"] == []
-        assert settings_payload["hooks"]["PreToolUse"] == []
+        assert settings_payload["hooks"]["PreToolUse"] == [{"command": "python guard-pre.py"}]
         assert settings_payload["hooks"]["Notification"] == []
         assert settings_payload["hooks"]["Stop"] == []
 
@@ -2848,7 +2851,7 @@ args = ["workspace-skill.js", "--changed"]
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        settings_local = workspace_dir / ".claude" / "settings.local.json"
+        settings_path = home_dir / ".claude" / "settings.json"
         legacy_command = ClaudeCodeHarnessAdapter._hook_command(
             HarnessContext(
                 home_dir=home_dir,
@@ -2857,7 +2860,7 @@ args = ["workspace-skill.js", "--changed"]
             )
         )
         _write_json(
-            settings_local,
+            settings_path,
             {
                 "hooks": {
                     "SessionStart": [
@@ -2906,7 +2909,7 @@ args = ["workspace-skill.js", "--changed"]
             ]
         )
         output = json.loads(capsys.readouterr().out)
-        payload = json.loads(settings_local.read_text(encoding="utf-8"))
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
 
         assert rc == 0
         assert output["managed_install"]["active"] is True
