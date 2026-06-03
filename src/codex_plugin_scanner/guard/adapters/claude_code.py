@@ -552,11 +552,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _session_start_command_parts(context: HarnessContext) -> tuple[str, ...]:
         package_root = Path(__file__).resolve().parents[3]
-        workspace_dir_literal = (
-            f"Path({str(context.workspace_dir)!r})"
-            if context.workspace_dir is not None
-            else "None"
-        )
+        workspace_dir_literal = f"Path({str(context.workspace_dir)!r})" if context.workspace_dir is not None else "None"
         code = (
             "import sys;"
             f"sys.path.insert(0, {str(package_root)!r});"
