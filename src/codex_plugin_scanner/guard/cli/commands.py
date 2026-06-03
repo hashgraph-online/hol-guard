@@ -2917,6 +2917,13 @@ def run_guard_command(
                 return 0
             if native_reason is None or not native_reason.strip():
                 native_reason = "HOL Guard is reviewing this Claude approval prompt."
+            if not getattr(args, "json", False):
+                _emit_native_hook_notification_stderr(
+                    _claude_permission_request_terminal_notice(
+                        payload=payload,
+                        native_reason=native_reason,
+                    )
+                )
             if policy_action in {"block", "sandbox-required"}:
                 _emit_native_hook_response(
                     harness=args.harness,
@@ -4638,12 +4645,26 @@ def _resolve_claude_permission_request_policy_action(
     return policy_action, stub
 
 
+def _claude_permission_request_terminal_notice(
+    *,
+    payload: dict[str, object],
+    native_reason: str,
+) -> str:
+    tool_name = _claude_notification_tool_display_name(payload)
+    if tool_name is not None:
+        return (
+            f"HOL Guard: reviewing Claude approval for {tool_name}. "
+            f"{_ensure_terminal_punctuation(native_reason)}"
+        )
+    return f"HOL Guard: reviewing this Claude approval prompt. {_ensure_terminal_punctuation(native_reason)}"
+
+
 def _claude_permission_request_system_message(
     *,
     payload: dict[str, object],
     native_reason: str,
 ) -> str:
-    tool_name = _claude_notification_tool_name(payload)
+    tool_name = _claude_notification_tool_display_name(payload)
     if tool_name is not None:
         return (
             f"HOL Guard is reviewing Claude's approval prompt for {tool_name}. "
@@ -4763,6 +4784,13 @@ def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
         match = re.search(r"\buse\s+([A-Za-z][A-Za-z0-9_]*)\b", value)
         if match is not None:
             return match.group(1)
+    return None
+
+
+def _claude_notification_tool_display_name(payload: dict[str, object]) -> str | None:
+    tool_name = _claude_notification_tool_name(payload)
+    if tool_name and tool_name.strip():
+        return tool_name.strip()
     return None
 
 
