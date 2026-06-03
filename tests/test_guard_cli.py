@@ -2634,8 +2634,8 @@ args = ["workspace-skill.js", "--changed"]
             ]
         )
         install_output = json.loads(capsys.readouterr().out)
-        settings_local = workspace_dir / ".claude" / "settings.local.json"
-        install_settings_payload = json.loads(settings_local.read_text(encoding="utf-8"))
+        settings_path = home_dir / ".claude" / "settings.json"
+        install_settings_payload = json.loads(settings_path.read_text(encoding="utf-8"))
 
         uninstall_rc = main(
             [
@@ -2650,12 +2650,12 @@ args = ["workspace-skill.js", "--changed"]
             ]
         )
         uninstall_output = json.loads(capsys.readouterr().out)
-        settings_payload = json.loads(settings_local.read_text(encoding="utf-8"))
+        settings_payload = json.loads(settings_path.read_text(encoding="utf-8"))
 
         assert install_rc == 0
         assert install_output["managed_install"]["active"] is True
         assert install_output["managed_install"]["manifest"]["shim_command"] == "guard-claude"
-        assert settings_local.exists()
+        assert settings_path.exists()
         assert len(install_settings_payload["hooks"]["SessionStart"]) == 4
         assert len(install_settings_payload["hooks"]["PreToolUse"]) == 1
         assert install_output["managed_install"]["manifest"]["notes"][0]
@@ -2701,7 +2701,7 @@ args = ["workspace-skill.js", "--changed"]
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        settings_local = workspace_dir / ".claude" / "settings.local.json"
+        settings_path = home_dir / ".claude" / "settings.json"
         expected_hook_command = ClaudeCodeHarnessAdapter._hook_command(
             HarnessContext(
                 home_dir=home_dir,
@@ -2710,7 +2710,7 @@ args = ["workspace-skill.js", "--changed"]
             )
         )
         _write_json(
-            settings_local,
+            settings_path,
             {
                 "hooks": {
                     "PreToolUse": ["unexpected-entry", {"command": expected_hook_command}],
@@ -2732,7 +2732,7 @@ args = ["workspace-skill.js", "--changed"]
             ]
         )
         output = json.loads(capsys.readouterr().out)
-        payload = json.loads(settings_local.read_text(encoding="utf-8"))
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
 
         assert rc == 0
         assert output["managed_install"]["active"] is False
@@ -2742,7 +2742,7 @@ args = ["workspace-skill.js", "--changed"]
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        settings_local = workspace_dir / ".claude" / "settings.local.json"
+        settings_path = home_dir / ".claude" / "settings.json"
 
         install_rc = main(
             [
@@ -2776,12 +2776,12 @@ args = ["workspace-skill.js", "--changed"]
             ]
         )
         output = json.loads(capsys.readouterr().out)
-        payload = json.loads(settings_local.read_text(encoding="utf-8"))
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
 
         assert install_rc == 0
         assert uninstall_rc == 0
         assert output["managed_install"]["active"] is False
-        assert payload["hooks"]["PreToolUse"] == []
+        assert payload["hooks"]["PreToolUse"] == [{"command": "python guard-pre.py"}]
         assert payload["hooks"].get("UserPromptSubmit", []) == []
         assert payload["hooks"]["Notification"] == []
         assert payload["hooks"]["Stop"] == []

@@ -42,6 +42,10 @@ def _guard_command_handler(
     return handler
 
 
+def _claude_managed_settings_path(context: HarnessContext) -> Path:
+    return context.home_dir / ".claude" / "settings.json"
+
+
 def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
     is_windows = os.name == "nt" if windows is None else windows
     if is_windows:
@@ -557,7 +561,8 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter;"
             f"ensure_guard_daemon(Path({str(context.guard_home)!r}));"
             f"ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(home_dir=Path({str(context.home_dir)!r}), "
-            f"workspace_dir=Path({str(context.workspace_dir)!r}), guard_home=Path({str(context.guard_home)!r}));"
+            f"workspace_dir={f'Path({str(context.workspace_dir)!r})' if context.workspace_dir is not None else 'None'}, "
+            f"guard_home=Path({str(context.guard_home)!r}));"
             "print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', "
             "'additionalContext': 'HOL Guard protection is active for this workspace.'}}, "
             "separators=(',', ':')))"
@@ -571,9 +576,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         )
 
     def refresh_runtime_hook_urls(self, context: HarnessContext) -> None:
-        if context.workspace_dir is None:
-            return
-        settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+        settings_path = _claude_managed_settings_path(context)
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if not isinstance(hooks, dict):
@@ -596,15 +599,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             launcher_name="claude",
             display_name="claude",
         )
-        if context.workspace_dir is None:
-            return {
-                "harness": self.harness,
-                "active": True,
-                "config_path": shim_manifest["shim_path"],
-                **shim_manifest,
-            }
-        settings_path = context.workspace_dir / ".claude" / "settings.local.json"
-        _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
+        settings_path = _claude_managed_settings_path(context)
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
         hook_command = self._daemon_hook_command(context)
@@ -632,7 +627,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "config_path": str(settings_path),
             **shim_manifest,
             "notes": [
-                "Guard hook entries added to .claude/settings.local.json",
+                "Guard hook entries added to ~/.claude/settings.json",
                 *[str(note) for note in shim_manifest.get("notes", [])],
             ],
         }
@@ -645,15 +640,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             display_name="claude",
             legacy_launcher_names=("claude-code",),
         )
-        if context.workspace_dir is None:
-            return {
-                "harness": self.harness,
-                "active": False,
-                "config_path": shim_manifest["shim_path"],
-                **shim_manifest,
-            }
-        settings_path = context.workspace_dir / ".claude" / "settings.local.json"
-        _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
+        settings_path = _claude_managed_settings_path(context)
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
@@ -677,7 +664,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "config_path": str(settings_path),
             **shim_manifest,
             "notes": [
-                "Guard hook entries removed from .claude/settings.local.json",
+                "Guard hook entries removed from ~/.claude/settings.json",
                 *[str(note) for note in shim_manifest.get("notes", [])],
             ],
         }
