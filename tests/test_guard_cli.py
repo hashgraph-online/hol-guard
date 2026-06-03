@@ -6341,7 +6341,7 @@ url = http://127.0.0.1:8787/guard-canary
             assert wait_timeout_seconds == 180
             assert connect_url == "https://hol.org/guard/connect"
             assert open_browser is not None
-            browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"))
+            browser_opened = bool(open_browser("https://hol.org/guard/oauth/device"))
             return {
                 "status": "connected",
                 "connect_mode": "device_code",
@@ -6387,7 +6387,7 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert run_rc == 0
         assert connect_rc == 0
-        assert opened == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
+        assert opened == ["https://hol.org/guard/oauth/device"]
         assert connect_output["status"] == "connected"
         assert connect_output["connect_mode"] == "device_code"
         assert connect_output["browser_opened"] is True
@@ -6462,7 +6462,7 @@ url = http://127.0.0.1:8787/guard-canary
             assert wait_timeout_seconds == 180
             assert connect_url == "https://hol.org/guard/connect"
             assert open_browser is not None
-            browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ZXCV-BNMQ"))
+            browser_opened = bool(open_browser("https://hol.org/guard/oauth/device"))
             return {
                 "status": "connected",
                 "connect_mode": "device_code",
@@ -6491,7 +6491,7 @@ url = http://127.0.0.1:8787/guard-canary
         login_output = json.loads(capsys.readouterr().out)
 
         assert login_rc == 0
-        assert opened == ["https://hol.org/guard/oauth/device?user_code=ZXCV-BNMQ"]
+        assert opened == ["https://hol.org/guard/oauth/device"]
         assert login_output["status"] == "connected"
         assert login_output["connect_mode"] == "device_code"
         assert login_output["browser_opened"] is True

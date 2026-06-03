@@ -390,7 +390,6 @@ def build_device_authorization_copy_payload(response: dict[str, object]) -> dict
     verification_uri_complete = str(response.get("verification_uri_complete") or "").strip()
     if not user_code or not verification_uri:
         raise ValueError("Device authorization response is missing approval instructions.")
-    next_target = verification_uri_complete or verification_uri
     return {
         "status": "waiting_for_approval",
         "user_code": user_code,
@@ -400,8 +399,8 @@ def build_device_authorization_copy_payload(response: dict[str, object]) -> dict
         "interval": int(response.get("interval") or 5),
         "next_action": {
             "command": "open",
-            "target": next_target,
-            "message": f"Open {next_target} and enter code {user_code}.",
+            "target": verification_uri,
+            "message": f"Open {verification_uri} and enter code {user_code}.",
         },
     }
 
