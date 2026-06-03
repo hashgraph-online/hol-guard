@@ -552,6 +552,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _session_start_command_parts(context: HarnessContext) -> tuple[str, ...]:
         package_root = Path(__file__).resolve().parents[3]
+        workspace_dir_literal = (
+            f"Path({str(context.workspace_dir)!r})"
+            if context.workspace_dir is not None
+            else "None"
+        )
         code = (
             "import sys;"
             f"sys.path.insert(0, {str(package_root)!r});"
@@ -561,11 +566,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter;"
             f"ensure_guard_daemon(Path({str(context.guard_home)!r}));"
             f"ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(home_dir=Path({str(context.home_dir)!r}), "
-            f"workspace_dir={(
-                f"Path({str(context.workspace_dir)!r})"
-                if context.workspace_dir is not None
-                else "None"
-            )}, "
+            f"workspace_dir={workspace_dir_literal}, "
             f"guard_home=Path({str(context.guard_home)!r}));"
             "print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', "
             "'additionalContext': 'HOL Guard protection is active for this workspace.'}}, "
