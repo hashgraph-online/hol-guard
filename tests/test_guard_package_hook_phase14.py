@@ -6,6 +6,7 @@ import base64
 import hashlib
 import io
 import json
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
@@ -398,3 +400,46 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert "Reason:" in decision["harness_message"]
     assert "Fix: install `npm install minimist@1.2.9` or choose a team exception." in decision["harness_message"]
     assert "Review evidence: https://hol.org/guard/inbox." in decision["harness_message"]
+
+
+def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(tmp_path: Path) -> None:
+    """Claude hooks must not depend on a Node binary for supply-chain enforcement."""
+    from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    context = HarnessContext(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        guard_home=guard_home,
+    )
+    _seed_review_bundle(guard_home, harness_selector="claude-code")
+    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    (guard_home / "daemon-state.json").write_text('{"port":59998}', encoding="utf-8")
+
+    adapter = ClaudeCodeHarnessAdapter()
+    command = adapter._daemon_hook_command(context)
+    event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm install minimist@1.2.8"},
+        "cwd": str(workspace_dir),
+    }
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps(event),
+        text=True,
+        capture_output=True,
+        timeout=40,
+        check=False,
+    )
+    payload = json.loads(result.stdout)
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert "minimist@1.2.8" in result.stdout
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "policy-review-1" in payload["hookSpecificOutput"]["permissionDecisionReason"]

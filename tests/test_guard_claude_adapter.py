@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -353,6 +354,16 @@ def test_claude_shell_command_uses_list2cmdline_on_windows():
     command = ("node", "-e", "console.log('hello')")
 
     assert _shell_command(command, windows=True) == subprocess.list2cmdline(list(command))
+
+
+def test_claude_daemon_hook_command_uses_python_not_node(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    command_parts = adapter._daemon_hook_command_parts(context)
+
+    assert command_parts[0] == sys.executable
+    assert command_parts[0] != "node"
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command_parts[2]
 
 
 def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
