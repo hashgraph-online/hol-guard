@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
+from ...version import __version__
 from ..store import GuardStore
 from .oauth_client import (
     GuardDpopKeyMaterial,
@@ -47,7 +48,21 @@ DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEVICE_CODE_SLOW_DOWN_SECONDS = 5
 HEADLESS_RUNTIME_ID = "hol-guard"
 HEADLESS_RUNTIME_LABEL = "HOL Guard CLI"
+_GUARD_OAUTH_USER_AGENT = f"hol-guard/{__version__}"
 _LOOPBACK_REDIRECT_PATH = "/oauth/callback"
+
+
+def _guard_oauth_request_headers(*, dpop: str | None = None) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "User-Agent": _GUARD_OAUTH_USER_AGENT,
+    }
+    if dpop is not None:
+        headers["DPoP"] = dpop
+    return headers
+
+
 _LOOPBACK_HOSTS = ("127.0.0.1", "::1")
 _LOOPBACK_PORT_MIN = 49152
 _LOOPBACK_PORT_MAX = 65535
@@ -426,10 +441,7 @@ def request_device_authorization(url: str, body: str) -> dict[str, object]:
         url,
         data=encoded_body,
         method="POST",
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-        },
+        headers=_guard_oauth_request_headers(),
     )
     with urllib.request.urlopen(request, timeout=20) as response:
         payload = json.loads(response.read().decode("utf-8"))
@@ -461,15 +473,13 @@ def exchange_guard_device_code(
             token_endpoint,
             data=_device_token_request_body(client_id=client_id, device_code=device_code),
             method="POST",
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-                "DPoP": _sign_dpop_proof(
+            headers=_guard_oauth_request_headers(
+                dpop=_sign_dpop_proof(
                     token_endpoint=token_endpoint,
                     dpop_key_material=dpop_key_material,
                     now=now or datetime.now(timezone.utc),
                 ),
-            },
+            ),
         )
         try:
             with urlopen(request, timeout=20) as response:
@@ -535,15 +545,13 @@ def exchange_guard_authorization_code(
         token_endpoint,
         data=request_body,
         method="POST",
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "DPoP": _sign_dpop_proof(
+        headers=_guard_oauth_request_headers(
+            dpop=_sign_dpop_proof(
                 token_endpoint=token_endpoint,
                 dpop_key_material=dpop_key_material,
                 now=now or datetime.now(timezone.utc),
             ),
-        },
+        ),
     )
     with urlopen(request, timeout=20) as response:
         payload = json.loads(response.read().decode("utf-8"))
