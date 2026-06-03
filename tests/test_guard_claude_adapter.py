@@ -158,10 +158,12 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pre_tool_use[0]["hooks"][0]["command"]
     assert "url" not in pre_tool_use[0]["hooks"][0]
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
+    assert pre_tool_use[0]["hooks"][0]["statusMessage"] == "HOL Guard is checking this tool use"
     assert len(permission_request) == 1
     assert permission_request[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
     assert permission_request[0]["hooks"][0]["type"] == "command"
     assert permission_request[0]["hooks"][0]["timeout"] == 10
+    assert permission_request[0]["hooks"][0]["statusMessage"] == "HOL Guard is reviewing this approval prompt"
     assert len(post_tool_use) == 1
     assert post_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
     assert post_tool_use[0]["hooks"][0]["type"] == "command"

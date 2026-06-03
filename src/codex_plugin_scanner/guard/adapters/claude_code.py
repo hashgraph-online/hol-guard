@@ -30,8 +30,16 @@ CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 
 
-def _guard_command_handler(command: str, *, timeout: int) -> dict[str, object]:
-    return {"type": "command", "command": command, "timeout": timeout}
+def _guard_command_handler(
+    command: str,
+    *,
+    timeout: int,
+    status_message: str | None = None,
+) -> dict[str, object]:
+    handler: dict[str, object] = {"type": "command", "command": command, "timeout": timeout}
+    if status_message is not None:
+        handler["statusMessage"] = status_message
+    return handler
 
 
 def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
@@ -42,18 +50,28 @@ def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> 
 
 
 def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> None:
-    for key, matcher, timeout in (
-        ("PreToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
-        ("PermissionRequest", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
-        ("PostToolUse", CLAUDE_GUARD_POST_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
-        ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
-        ("Stop", None, CLAUDE_GUARD_STOP_TIMEOUT_SECONDS),
+    for key, matcher, timeout, status_message in (
+        (
+            "PreToolUse",
+            CLAUDE_GUARD_TOOL_MATCHER,
+            CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS,
+            "HOL Guard is checking this tool use",
+        ),
+        (
+            "PermissionRequest",
+            CLAUDE_GUARD_TOOL_MATCHER,
+            CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS,
+            "HOL Guard is reviewing this approval prompt",
+        ),
+        ("PostToolUse", CLAUDE_GUARD_POST_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS, None),
+        ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS, None),
+        ("Stop", None, CLAUDE_GUARD_STOP_TIMEOUT_SECONDS, None),
     ):
         existing_entries = hooks.get(key)
         hooks[key] = _merge_hook_group(
             _prune_guard_hook_entries(existing_entries if isinstance(existing_entries, list) else []),
             matcher,
-            _guard_command_handler(hook_command, timeout=timeout),
+            _guard_command_handler(hook_command, timeout=timeout, status_message=status_message),
         )
 
 
