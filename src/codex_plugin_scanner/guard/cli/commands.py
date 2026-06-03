@@ -2883,17 +2883,64 @@ def run_guard_command(
         )
         if _is_claude_permission_request(args, payload):
             notice = _peek_claude_permission_notice(store, payload)
-            if notice is None:
+            if notice is not None and _claude_permission_notice_prefers_ask_user_question(notice):
+                _mark_claude_pending_permission_prompt_seen(store=store, payload=payload, notice=notice)
+                _emit_native_hook_response(
+                    harness=args.harness,
+                    policy_action="block",
+                    event_name="PermissionRequest",
+                    reason="HOL Guard is routing this approval through AskUserQuestion.",
+                    system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
+                    additional_context=_claude_guard_approval_question_message(notice),
+                    output_stream=output_stream,
+                )
+                return 0
+            native_reason: str | None = None
+            policy_action: str | None = None
+            if notice is not None:
+                policy_action = "require-reapproval"
+                native_reason = _optional_string(notice.get("reason"))
+            elif runtime_artifact is not None:
+                policy_action, reason_stub = _resolve_claude_permission_request_policy_action(
+                    config=config,
+                    store=store,
+                    args=args,
+                    runtime_artifact=runtime_artifact,
+                    runtime_workspace=runtime_workspace,
+                )
+                if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+                    _emit_claude_permission_request_passthrough(output_stream=output_stream)
+                    return 0
+                native_reason = _runtime_artifact_native_reason(runtime_artifact, reason_stub)
+            else:
                 _emit_claude_permission_request_passthrough(output_stream=output_stream)
                 return 0
-            _mark_claude_pending_permission_prompt_seen(store=store, payload=payload, notice=notice)
+            if native_reason is None or not native_reason.strip():
+                native_reason = "HOL Guard is reviewing this Claude approval prompt."
+            if policy_action in {"block", "sandbox-required"}:
+                _emit_native_hook_response(
+                    harness=args.harness,
+                    policy_action=policy_action,
+                    event_name="PermissionRequest",
+                    reason=native_reason,
+                    system_message=_claude_permission_request_system_message(
+                        payload=payload,
+                        native_reason=native_reason,
+                    ),
+                    additional_context=_claude_permission_request_additional_context(native_reason),
+                    output_stream=output_stream,
+                )
+                return 0
             _emit_native_hook_response(
                 harness=args.harness,
-                policy_action="block",
+                policy_action="require-reapproval",
                 event_name="PermissionRequest",
-                reason="HOL Guard is routing this approval through AskUserQuestion.",
-                system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
-                additional_context=_claude_guard_approval_question_message(notice),
+                reason=native_reason,
+                system_message=_claude_permission_request_system_message(
+                    payload=payload,
+                    native_reason=native_reason,
+                ),
+                additional_context=_claude_permission_request_additional_context(native_reason),
                 output_stream=output_stream,
             )
             return 0
@@ -4552,6 +4599,72 @@ def _is_claude_permission_request(args: argparse.Namespace, payload: dict[str, o
     return _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "PermissionRequest"
 
 
+def _claude_permission_notice_prefers_ask_user_question(notice: dict[str, object]) -> bool:
+    artifact_type = _optional_string(notice.get("artifact_type"))
+    return artifact_type != "package_request"
+
+
+def _resolve_claude_permission_request_policy_action(
+    *,
+    config: GuardConfig,
+    store: GuardStore,
+    args: argparse.Namespace,
+    runtime_artifact: GuardArtifact,
+    runtime_workspace: Path | None,
+) -> tuple[str, dict[str, object]]:
+    policy_action = _runtime_artifact_policy_action(config, runtime_artifact, args.harness)
+    package_evaluation = None
+    if runtime_artifact.artifact_type == "package_request":
+        package_evaluation = evaluate_package_request_artifact(
+            artifact=runtime_artifact,
+            store=store,
+            workspace_dir=runtime_workspace,
+        )
+        if guard_action_severity(package_evaluation.policy_action) > guard_action_severity(policy_action):
+            policy_action = package_evaluation.policy_action
+    stub: dict[str, object] = {
+        "harness": _canonical_harness_name(args.harness),
+        "policy_action": policy_action,
+        "risk_summary": (
+            package_evaluation.risk_summary
+            if package_evaluation is not None
+            else artifact_risk_summary(runtime_artifact)
+        ),
+    }
+    if package_evaluation is not None:
+        stub["decision_v2_json"] = {
+            "harness_message": package_evaluation.user_copy.harness_message,
+        }
+    return policy_action, stub
+
+
+def _claude_permission_request_system_message(
+    *,
+    payload: dict[str, object],
+    native_reason: str,
+) -> str:
+    tool_name = _claude_notification_tool_name(payload)
+    if tool_name is not None:
+        return (
+            f"HOL Guard is reviewing Claude's approval prompt for {tool_name}. "
+            "Claude's risk warnings above are separate from HOL Guard. "
+            f"{_ensure_terminal_punctuation(native_reason)}"
+        )
+    return (
+        "HOL Guard is reviewing this Claude approval prompt. "
+        "Claude's risk warnings above are separate from HOL Guard. "
+        f"{_ensure_terminal_punctuation(native_reason)}"
+    )
+
+
+def _claude_permission_request_additional_context(native_reason: str) -> str:
+    return (
+        "This review came from HOL Guard, not from Claude alone. "
+        f"{_ensure_terminal_punctuation(native_reason)} "
+        "Use Claude's normal Allow / deny controls unless HOL Guard opened a separate approval question."
+    )
+
+
 def _claude_permission_prompt_system_message(
     *,
     payload: dict[str, object],
@@ -5520,6 +5633,20 @@ def _emit_native_hook_response(
                     "HOL Guard is reviewing this Codex approval request. Codex will show its normal approval prompt; "
                     "choose allow only if you trust the exact tool action."
                 )
+            if payload:
+                _write_json_line(payload, output_stream=output_stream)
+            return
+        if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "claude-code":
+            message = system_message or reason
+            if message:
+                payload["systemMessage"] = message
+            if additional_context:
+                payload["hookSpecificOutput"] = {
+                    "hookEventName": event_name,
+                    "additionalContext": additional_context,
+                }
+            elif message:
+                payload["hookSpecificOutput"] = {"hookEventName": event_name}
             if payload:
                 _write_json_line(payload, output_stream=output_stream)
             return
