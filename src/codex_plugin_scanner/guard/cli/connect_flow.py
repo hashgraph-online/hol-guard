@@ -61,6 +61,8 @@ def _guard_oauth_request_headers(*, dpop: str | None = None) -> dict[str, str]:
     if dpop is not None:
         headers["DPoP"] = dpop
     return headers
+
+
 _LOOPBACK_HOSTS = ("127.0.0.1", "::1")
 _LOOPBACK_PORT_MIN = 49152
 _LOOPBACK_PORT_MAX = 65535
