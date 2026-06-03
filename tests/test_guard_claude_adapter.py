@@ -446,7 +446,7 @@ def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
     initial_context = _build_context(tmp_path)
     changed_context = HarnessContext(
-        home_dir=tmp_path / "different-home",
+        home_dir=initial_context.home_dir,
         workspace_dir=initial_context.workspace_dir,
         guard_home=tmp_path / "different-guard-home",
     )
