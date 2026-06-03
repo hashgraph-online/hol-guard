@@ -6319,34 +6319,43 @@ url = http://127.0.0.1:8787/guard-canary
         assert "artifactHash" in first_receipt
         assert "recommendation" in first_receipt
 
-    def test_guard_connect_opens_browser_oauth_without_pairing(self, tmp_path, capsys, monkeypatch):
+    def test_guard_connect_opens_device_code_browser_flow_without_pairing(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
         store = GuardStore(home_dir)
-        authorize_url = "https://hol.org/api/guard/oauth/authorize?client_id=guard-local-daemon"
+        opened: list[str] = []
 
-        def fake_browser_flow(
+        def fake_device_flow(
             *,
             store: GuardStore,
             connect_url: str,
-            wait_timeout_seconds: int,
+            wait_timeout_seconds: int = 180,
+            announce_copy=None,
+            open_browser=None,
+            ci_safe: bool = False,
+            machine_label: str | None = None,
         ) -> dict[str, object]:
-            assert connect_url == "https://hol.org/guard/connect"
+            del store, announce_copy, ci_safe, machine_label
             assert wait_timeout_seconds == 180
+            assert connect_url == "https://hol.org/guard/connect"
+            assert open_browser is not None
+            browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"))
             return {
                 "status": "connected",
-                "connect_mode": "browser_oauth",
-                "browser_opened": True,
-                "authorize_url": authorize_url,
-                "redirect_uri": "http://127.0.0.1:61234/oauth/callback",
+                "connect_mode": "device_code",
+                "browser_opened": browser_opened,
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
                 "grant_id": "grant-123",
                 "machine_id": "machine-123",
                 "workspace_id": "workspace-123",
             }
 
-        monkeypatch.setattr(guard_commands_module, "_run_guard_browser_connect_flow", fake_browser_flow)
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda target: opened.append(target) or True)
         run_rc = main(
             [
                 "guard",
@@ -6378,11 +6387,13 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert run_rc == 0
         assert connect_rc == 0
+        assert opened == ["https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"]
         assert connect_output["status"] == "connected"
-        assert connect_output["connect_mode"] == "browser_oauth"
+        assert connect_output["connect_mode"] == "device_code"
         assert connect_output["browser_opened"] is True
-        assert connect_output["authorize_url"] == "*****"
-        assert connect_output["redirect_uri"] == "http://127.0.0.1:61234/oauth/callback"
+        assert connect_output["user_code"] == "ABCD-EFGH"
+        assert connect_output["verification_uri"] == "https://hol.org/guard/oauth/device"
+        assert connect_output["verification_uri_complete"] == "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"
         assert connect_output["grant_id"] == "grant-123"
         assert connect_output["machine_id"] == "machine-123"
         assert connect_output["workspace_id"] == "workspace-123"
@@ -6432,31 +6443,40 @@ url = http://127.0.0.1:8787/guard-canary
             "workspace_id": "workspace-123",
         }
 
-    def test_guard_login_without_manual_credentials_uses_browser_oauth(self, tmp_path, capsys, monkeypatch):
+    def test_guard_login_without_manual_credentials_uses_device_code_browser_flow(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
-        authorize_url = "https://hol.org/api/guard/oauth/authorize?client_id=guard-local-daemon"
+        opened: list[str] = []
 
-        def fake_browser_flow(
+        def fake_device_flow(
             *,
             store: GuardStore,
             connect_url: str,
-            wait_timeout_seconds: int,
+            wait_timeout_seconds: int = 180,
+            announce_copy=None,
+            open_browser=None,
+            ci_safe: bool = False,
+            machine_label: str | None = None,
         ) -> dict[str, object]:
-            assert connect_url == "https://hol.org/guard/connect"
+            del store, announce_copy, ci_safe, machine_label
             assert wait_timeout_seconds == 180
+            assert connect_url == "https://hol.org/guard/connect"
+            assert open_browser is not None
+            browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ZXCV-BNMQ"))
             return {
                 "status": "connected",
-                "connect_mode": "browser_oauth",
-                "browser_opened": True,
-                "authorize_url": authorize_url,
-                "redirect_uri": "http://127.0.0.1:61234/oauth/callback",
+                "connect_mode": "device_code",
+                "browser_opened": browser_opened,
+                "user_code": "ZXCV-BNMQ",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ZXCV-BNMQ",
                 "grant_id": "grant-456",
                 "machine_id": "machine-456",
                 "workspace_id": "workspace-456",
             }
 
-        monkeypatch.setattr(guard_commands_module, "_run_guard_browser_connect_flow", fake_browser_flow)
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda target: opened.append(target) or True)
         login_rc = main(
             [
                 "guard",
@@ -6471,11 +6491,13 @@ url = http://127.0.0.1:8787/guard-canary
         login_output = json.loads(capsys.readouterr().out)
 
         assert login_rc == 0
+        assert opened == ["https://hol.org/guard/oauth/device?user_code=ZXCV-BNMQ"]
         assert login_output["status"] == "connected"
-        assert login_output["connect_mode"] == "browser_oauth"
+        assert login_output["connect_mode"] == "device_code"
         assert login_output["browser_opened"] is True
-        assert login_output["authorize_url"] == "*****"
-        assert login_output["redirect_uri"] == "http://127.0.0.1:61234/oauth/callback"
+        assert login_output["user_code"] == "ZXCV-BNMQ"
+        assert login_output["verification_uri"] == "https://hol.org/guard/oauth/device"
+        assert login_output["verification_uri_complete"] == "https://hol.org/guard/oauth/device?user_code=ZXCV-BNMQ"
         assert login_output["grant_id"] == "grant-456"
         assert login_output["machine_id"] == "machine-456"
         assert login_output["workspace_id"] == "workspace-456"
@@ -6841,19 +6863,25 @@ url = http://127.0.0.1:8787/guard-canary
             "sync_url": None,
         }
 
-    def test_guard_connect_reports_browser_authorization_errors_cleanly(self, tmp_path, capsys, monkeypatch):
+    def test_guard_connect_reports_device_authorization_errors_cleanly(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
 
-        def failing_browser_flow(
+        def failing_device_flow(
             *,
             store: GuardStore,
             connect_url: str,
-            wait_timeout_seconds: int,
+            wait_timeout_seconds: int = 180,
+            announce_copy=None,
+            open_browser=None,
+            ci_safe: bool = False,
+            machine_label: str | None = None,
         ) -> dict[str, object]:
-            raise RuntimeError("browser_oauth_unreachable")
+            del store, connect_url, wait_timeout_seconds, announce_copy, open_browser, ci_safe, machine_label
+            raise RuntimeError("device_code_unreachable")
 
-        monkeypatch.setattr(guard_commands_module, "_run_guard_browser_connect_flow", failing_browser_flow)
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", failing_device_flow)
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _target: True)
         connect_rc = main(
             [
                 "guard",
@@ -6868,29 +6896,36 @@ url = http://127.0.0.1:8787/guard-canary
         captured = capsys.readouterr()
 
         assert connect_rc == 1
-        assert "Guard authorization failed: browser_oauth_unreachable" in captured.err
+        assert "Guard authorization failed: device_code_unreachable" in captured.err
         assert "Traceback" not in captured.err
         assert store.get_sync_credentials() is None
 
-    def test_guard_connect_never_opens_legacy_pairing_url(self, tmp_path, capsys, monkeypatch):
+    def test_guard_connect_never_exposes_legacy_pairing_fields(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
-        authorize_url = "https://hol.org/api/guard/oauth/authorize?client_id=guard-local-daemon"
 
-        def fake_browser_flow(
+        def fake_device_flow(
             *,
             store: GuardStore,
             connect_url: str,
-            wait_timeout_seconds: int,
+            wait_timeout_seconds: int = 180,
+            announce_copy=None,
+            open_browser=None,
+            ci_safe: bool = False,
+            machine_label: str | None = None,
         ) -> dict[str, object]:
+            del store, announce_copy, open_browser, ci_safe, machine_label
+            assert wait_timeout_seconds == 180
             return {
                 "status": "connected",
-                "connect_mode": "browser_oauth",
+                "connect_mode": "device_code",
                 "browser_opened": True,
-                "authorize_url": authorize_url,
-                "redirect_uri": "http://127.0.0.1:61234/oauth/callback",
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
             }
 
-        monkeypatch.setattr(guard_commands_module, "_run_guard_browser_connect_flow", fake_browser_flow)
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _target: True)
         connect_rc = main(
             [
                 "guard",
@@ -6906,8 +6941,7 @@ url = http://127.0.0.1:8787/guard-canary
         rendered = json.dumps(connect_output, sort_keys=True)
 
         assert connect_rc == 0
-        assert connect_output["connect_mode"] == "browser_oauth"
-        assert connect_output["authorize_url"] == "*****"
+        assert connect_output["connect_mode"] == "device_code"
         assert "guardPairSecret" not in rendered
         assert "guardPairRequest" not in rendered
         assert "guardDaemon" not in rendered
