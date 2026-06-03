@@ -119,7 +119,7 @@ def test_claude_install_bakes_current_source_root_into_session_start_command(tmp
 
     install_output = adapter.install(context)
 
-    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    settings_path = context.home_dir / ".claude" / "settings.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     hook_command = str(payload["hooks"]["SessionStart"][0]["hooks"][0]["command"])
     expected_source_root = str(Path(__file__).resolve().parents[1] / "src")
@@ -141,7 +141,7 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     adapter.install(context)
     adapter.install(context)
 
-    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    settings_path = context.home_dir / ".claude" / "settings.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     session_start = payload["hooks"]["SessionStart"]
     pre_tool_use = payload["hooks"]["PreToolUse"]
@@ -158,10 +158,12 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pre_tool_use[0]["hooks"][0]["command"]
     assert "url" not in pre_tool_use[0]["hooks"][0]
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
+    assert pre_tool_use[0]["hooks"][0]["statusMessage"] == "HOL Guard is checking this tool use"
     assert len(permission_request) == 1
     assert permission_request[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
     assert permission_request[0]["hooks"][0]["type"] == "command"
     assert permission_request[0]["hooks"][0]["timeout"] == 10
+    assert permission_request[0]["hooks"][0]["statusMessage"] == "HOL Guard is reviewing this approval prompt"
     assert len(post_tool_use) == 1
     assert post_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
@@ -186,7 +188,7 @@ def test_get_adapter_accepts_claude_alias():
 def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
-    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    settings_path = context.home_dir / ".claude" / "settings.json"
     _write_json(
         settings_path,
         {
@@ -262,7 +264,7 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
 def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
-    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    settings_path = context.home_dir / ".claude" / "settings.json"
     _write_json(
         settings_path,
         {
@@ -310,7 +312,7 @@ def test_claude_install_rejects_symlinked_settings_file(tmp_path):
     adapter = ClaudeCodeHarnessAdapter()
     outside_settings = tmp_path / "outside-settings.json"
     outside_settings.write_text("{}", encoding="utf-8")
-    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    settings_path = context.home_dir / ".claude" / "settings.json"
     _symlink_or_skip(settings_path, outside_settings)
 
     with pytest.raises(ValueError, match="settings path"):
@@ -444,7 +446,7 @@ def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
     initial_context = _build_context(tmp_path)
     changed_context = HarnessContext(
-        home_dir=tmp_path / "different-home",
+        home_dir=initial_context.home_dir,
         workspace_dir=initial_context.workspace_dir,
         guard_home=tmp_path / "different-guard-home",
     )
@@ -453,7 +455,7 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
     adapter.install(initial_context)
     adapter.install(changed_context)
 
-    settings_path = initial_context.workspace_dir / ".claude" / "settings.local.json"
+    settings_path = initial_context.home_dir / ".claude" / "settings.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     session_start = payload["hooks"]["SessionStart"]
     hook_commands = [entry["hooks"][0]["command"] for entry in session_start]
@@ -473,7 +475,7 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
-    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    settings_path = context.home_dir / ".claude" / "settings.json"
     _write_json(
         settings_path,
         {
@@ -510,7 +512,7 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
 def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
-    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    settings_path = context.home_dir / ".claude" / "settings.json"
     legacy_command = adapter._hook_command(context)
     _write_json(
         settings_path,

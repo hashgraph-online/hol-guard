@@ -30,8 +30,20 @@ CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 
 
-def _guard_command_handler(command: str, *, timeout: int) -> dict[str, object]:
-    return {"type": "command", "command": command, "timeout": timeout}
+def _guard_command_handler(
+    command: str,
+    *,
+    timeout: int,
+    status_message: str | None = None,
+) -> dict[str, object]:
+    handler: dict[str, object] = {"type": "command", "command": command, "timeout": timeout}
+    if status_message is not None:
+        handler["statusMessage"] = status_message
+    return handler
+
+
+def _claude_managed_settings_path(context: HarnessContext) -> Path:
+    return context.home_dir / ".claude" / "settings.json"
 
 
 def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
@@ -42,18 +54,28 @@ def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> 
 
 
 def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> None:
-    for key, matcher, timeout in (
-        ("PreToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
-        ("PermissionRequest", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
-        ("PostToolUse", CLAUDE_GUARD_POST_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
-        ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
-        ("Stop", None, CLAUDE_GUARD_STOP_TIMEOUT_SECONDS),
+    for key, matcher, timeout, status_message in (
+        (
+            "PreToolUse",
+            CLAUDE_GUARD_TOOL_MATCHER,
+            CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS,
+            "HOL Guard is checking this tool use",
+        ),
+        (
+            "PermissionRequest",
+            CLAUDE_GUARD_TOOL_MATCHER,
+            CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS,
+            "HOL Guard is reviewing this approval prompt",
+        ),
+        ("PostToolUse", CLAUDE_GUARD_POST_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS, None),
+        ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS, None),
+        ("Stop", None, CLAUDE_GUARD_STOP_TIMEOUT_SECONDS, None),
     ):
         existing_entries = hooks.get(key)
         hooks[key] = _merge_hook_group(
             _prune_guard_hook_entries(existing_entries if isinstance(existing_entries, list) else []),
             matcher,
-            _guard_command_handler(hook_command, timeout=timeout),
+            _guard_command_handler(hook_command, timeout=timeout, status_message=status_message),
         )
 
 
@@ -530,6 +552,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _session_start_command_parts(context: HarnessContext) -> tuple[str, ...]:
         package_root = Path(__file__).resolve().parents[3]
+        workspace_dir_literal = f"Path({str(context.workspace_dir)!r})" if context.workspace_dir is not None else "None"
         code = (
             "import sys;"
             f"sys.path.insert(0, {str(package_root)!r});"
@@ -539,7 +562,8 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter;"
             f"ensure_guard_daemon(Path({str(context.guard_home)!r}));"
             f"ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(home_dir=Path({str(context.home_dir)!r}), "
-            f"workspace_dir=Path({str(context.workspace_dir)!r}), guard_home=Path({str(context.guard_home)!r}));"
+            f"workspace_dir={workspace_dir_literal}, "
+            f"guard_home=Path({str(context.guard_home)!r}));"
             "print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', "
             "'additionalContext': 'HOL Guard protection is active for this workspace.'}}, "
             "separators=(',', ':')))"
@@ -553,9 +577,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         )
 
     def refresh_runtime_hook_urls(self, context: HarnessContext) -> None:
-        if context.workspace_dir is None:
-            return
-        settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+        settings_path = _claude_managed_settings_path(context)
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if not isinstance(hooks, dict):
@@ -578,15 +600,8 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             launcher_name="claude",
             display_name="claude",
         )
-        if context.workspace_dir is None:
-            return {
-                "harness": self.harness,
-                "active": True,
-                "config_path": shim_manifest["shim_path"],
-                **shim_manifest,
-            }
-        settings_path = context.workspace_dir / ".claude" / "settings.local.json"
-        _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
+        settings_path = _claude_managed_settings_path(context)
+        _ensure_path_within_root(context.home_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
         hook_command = self._daemon_hook_command(context)
@@ -614,7 +629,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "config_path": str(settings_path),
             **shim_manifest,
             "notes": [
-                "Guard hook entries added to .claude/settings.local.json",
+                "Guard hook entries added to ~/.claude/settings.json",
                 *[str(note) for note in shim_manifest.get("notes", [])],
             ],
         }
@@ -627,15 +642,8 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             display_name="claude",
             legacy_launcher_names=("claude-code",),
         )
-        if context.workspace_dir is None:
-            return {
-                "harness": self.harness,
-                "active": False,
-                "config_path": shim_manifest["shim_path"],
-                **shim_manifest,
-            }
-        settings_path = context.workspace_dir / ".claude" / "settings.local.json"
-        _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
+        settings_path = _claude_managed_settings_path(context)
+        _ensure_path_within_root(context.home_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
@@ -659,7 +667,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "config_path": str(settings_path),
             **shim_manifest,
             "notes": [
-                "Guard hook entries removed from .claude/settings.local.json",
+                "Guard hook entries removed from ~/.claude/settings.json",
                 *[str(note) for note in shim_manifest.get("notes", [])],
             ],
         }
