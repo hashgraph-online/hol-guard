@@ -407,6 +407,57 @@ def test_headless_connect_polls_until_success_and_persists_oauth_credentials(tmp
     assert credentials["runtime_label"] == "HOL Guard CLI"
 
 
+def test_headless_connect_respects_client_wait_timeout(tmp_path: Path, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    sleeps: list[float] = []
+    clock = {"value": 0.0}
+
+    def fake_request(_url: str, _body: str) -> dict[str, object]:
+        return {
+            "device_code": "device-secret-value",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            "expires_in": 600,
+            "interval": 5,
+        }
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "authorization_pending",
+            hdrs={"Content-Type": "application/json"},
+            fp=io.BytesIO(json.dumps({"error": "authorization_pending"}).encode("utf-8")),
+        )
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock["value"] += seconds
+
+    monkeypatch.setattr(connect_flow.time, "monotonic", lambda: clock["value"])
+
+    try:
+        connect_flow.run_guard_device_connect_command(
+            store=store,
+            connect_url="https://hol.org/guard/connect",
+            request_device_authorization=fake_request,
+            token_urlopen=fake_urlopen,
+            sleep=fake_sleep,
+            now="2026-06-01T12:00:00+00:00",
+            wait_timeout_seconds=2,
+        )
+    except RuntimeError as error:
+        message = str(error)
+    else:
+        raise AssertionError("client wait timeout must stop device-code polling")
+
+    assert "timed out" in message
+    assert sleeps == [5]
+
+
 def test_headless_connect_slows_down_polling_when_server_requests_it(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
@@ -576,6 +627,7 @@ def test_connect_headless_emits_device_code_payload_without_pairing_secret(tmp_p
         *,
         store: GuardStore,
         connect_url: str,
+        wait_timeout_seconds: int = 180,
         announce_copy=None,
         ci_safe: bool = False,
         machine_label: str | None = None,
@@ -720,6 +772,7 @@ def test_connect_headless_open_browser_opens_device_approval_before_polling(
         *,
         store: GuardStore,
         connect_url: str,
+        wait_timeout_seconds: int = 180,
         announce_copy=None,
         open_browser=None,
         ci_safe: bool = False,
@@ -781,6 +834,7 @@ def test_connect_default_uses_device_code_flow_with_browser_open(tmp_path: Path,
         *,
         store: GuardStore,
         connect_url: str,
+        wait_timeout_seconds: int = 180,
         announce_copy=None,
         open_browser=None,
         ci_safe: bool = False,
@@ -788,6 +842,7 @@ def test_connect_default_uses_device_code_flow_with_browser_open(tmp_path: Path,
     ) -> dict[str, object]:
         del store, ci_safe, machine_label
         assert connect_url == "https://hol.org/guard/connect"
+        assert wait_timeout_seconds == 5
         assert open_browser is not None
         if announce_copy is not None:
             announce_copy(
@@ -826,6 +881,87 @@ def test_connect_default_uses_device_code_flow_with_browser_open(tmp_path: Path,
     assert "guardPairSecret" not in captured.out
     assert "guardPairRequest" not in captured.out
     assert not hasattr(guard_commands, "_run_guard_connect_flow")
+
+
+def test_connect_default_device_flow_respects_wait_timeout_seconds(tmp_path: Path, capsys, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    args = _ConnectArgs()
+    args.guard_home = str(guard_home)
+    args.wait_timeout_seconds = 7
+
+    def fake_device_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        wait_timeout_seconds: int = 180,
+        announce_copy=None,
+        open_browser=None,
+        ci_safe: bool = False,
+        machine_label: str | None = None,
+    ) -> dict[str, object]:
+        del store, announce_copy, open_browser, ci_safe, machine_label
+        assert connect_url == "https://hol.org/guard/connect"
+        assert wait_timeout_seconds == 7
+        return {
+            "status": "connected",
+            "connect_mode": "device_code",
+            "browser_opened": False,
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+        }
+
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_device_flow)
+    monkeypatch.setattr(guard_commands.webbrowser, "open", lambda _target: True)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "device_code" in captured.out
+
+
+def test_connect_default_non_json_announces_device_copy_on_stderr(tmp_path: Path, capsys, monkeypatch) -> None:
+    guard_home = tmp_path / "guard-home"
+    args = _ConnectArgs()
+    args.guard_home = str(guard_home)
+    args.json = False
+
+    def fake_device_flow(
+        *,
+        store: GuardStore,
+        connect_url: str,
+        wait_timeout_seconds: int = 180,
+        announce_copy=None,
+        open_browser=None,
+        ci_safe: bool = False,
+        machine_label: str | None = None,
+    ) -> dict[str, object]:
+        del store, connect_url, open_browser, ci_safe, machine_label
+        assert announce_copy is not None
+        announce_copy(
+            {
+                "user_code": "ABCD-EFGH",
+                "verification_uri": "https://hol.org/guard/oauth/device",
+                "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            }
+        )
+        return {
+            "status": "connected",
+            "connect_mode": "device_code",
+            "browser_opened": False,
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+        }
+
+    monkeypatch.setattr(guard_commands, "_run_guard_device_connect_flow", fake_device_flow)
+    monkeypatch.setattr(guard_commands.webbrowser, "open", lambda _target: True)
+
+    exit_code = run_guard_command(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "HOL Guard headless approval" in captured.err
+    assert "HOL Guard headless approval" not in captured.out
 
 
 def test_loopback_callback_listener_uses_random_high_port_and_loopback_path() -> None:
@@ -1097,6 +1233,7 @@ def test_connect_headless_reports_device_authorization_network_error(tmp_path: P
         *,
         store: GuardStore,
         connect_url: str,
+        wait_timeout_seconds: int = 180,
         announce_copy=None,
         ci_safe: bool = False,
         machine_label: str | None = None,
@@ -1124,6 +1261,7 @@ def test_connect_headless_reports_malformed_device_authorization_response(tmp_pa
         *,
         store: GuardStore,
         connect_url: str,
+        wait_timeout_seconds: int = 180,
         announce_copy=None,
         ci_safe: bool = False,
         machine_label: str | None = None,

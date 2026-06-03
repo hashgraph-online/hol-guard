@@ -6331,12 +6331,14 @@ url = http://127.0.0.1:8787/guard-canary
             *,
             store: GuardStore,
             connect_url: str,
+            wait_timeout_seconds: int = 180,
             announce_copy=None,
             open_browser=None,
             ci_safe: bool = False,
             machine_label: str | None = None,
         ) -> dict[str, object]:
             del store, announce_copy, ci_safe, machine_label
+            assert wait_timeout_seconds == 180
             assert connect_url == "https://hol.org/guard/connect"
             assert open_browser is not None
             browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ABCD-EFGH"))
@@ -6450,12 +6452,14 @@ url = http://127.0.0.1:8787/guard-canary
             *,
             store: GuardStore,
             connect_url: str,
+            wait_timeout_seconds: int = 180,
             announce_copy=None,
             open_browser=None,
             ci_safe: bool = False,
             machine_label: str | None = None,
         ) -> dict[str, object]:
             del store, announce_copy, ci_safe, machine_label
+            assert wait_timeout_seconds == 180
             assert connect_url == "https://hol.org/guard/connect"
             assert open_browser is not None
             browser_opened = bool(open_browser("https://hol.org/guard/oauth/device?user_code=ZXCV-BNMQ"))
@@ -6867,11 +6871,13 @@ url = http://127.0.0.1:8787/guard-canary
             *,
             store: GuardStore,
             connect_url: str,
+            wait_timeout_seconds: int = 180,
             announce_copy=None,
             open_browser=None,
             ci_safe: bool = False,
             machine_label: str | None = None,
         ) -> dict[str, object]:
+            del store, connect_url, wait_timeout_seconds, announce_copy, open_browser, ci_safe, machine_label
             raise RuntimeError("device_code_unreachable")
 
         monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", failing_device_flow)
@@ -6901,12 +6907,14 @@ url = http://127.0.0.1:8787/guard-canary
             *,
             store: GuardStore,
             connect_url: str,
+            wait_timeout_seconds: int = 180,
             announce_copy=None,
             open_browser=None,
             ci_safe: bool = False,
             machine_label: str | None = None,
         ) -> dict[str, object]:
             del store, announce_copy, open_browser, ci_safe, machine_label
+            assert wait_timeout_seconds == 180
             return {
                 "status": "connected",
                 "connect_mode": "device_code",

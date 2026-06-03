@@ -2350,6 +2350,7 @@ def run_guard_command(
             connect_url=args.connect_url,
             use_browser_oauth=False,
             open_device_browser=True,
+            wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
             announce_copy=None
             if getattr(args, "json", False)
             else _announce_guard_device_connect_copy,
@@ -2381,6 +2382,7 @@ def run_guard_command(
                 connect_url=args.connect_url,
                 use_browser_oauth=False,
                 open_device_browser=True,
+                wait_timeout_seconds=int(getattr(args, "wait_timeout_seconds", 180) or 180),
                 announce_copy=None
                 if getattr(args, "json", False)
                 else _announce_guard_device_connect_copy,
@@ -9002,6 +9004,7 @@ def _run_guard_device_connect_flow(
     *,
     store: GuardStore,
     connect_url: str,
+    wait_timeout_seconds: int = 180,
     announce_copy=None,
     open_browser: Callable[[str], bool] | None = None,
     ci_safe: bool = False,
@@ -9010,6 +9013,7 @@ def _run_guard_device_connect_flow(
     return run_guard_device_connect_command(
         store=store,
         connect_url=connect_url,
+        wait_timeout_seconds=wait_timeout_seconds,
         announce_copy=announce_copy,
         open_browser=open_browser,
         ci_safe=ci_safe,
@@ -9052,6 +9056,7 @@ def _build_guard_device_connect_payload(
             payload = _run_guard_device_connect_flow(
                 store=store,
                 connect_url=connect_url,
+                wait_timeout_seconds=wait_timeout_seconds,
                 announce_copy=announce_copy,
                 open_browser=webbrowser.open,
                 ci_safe=ci_safe,
@@ -9061,6 +9066,7 @@ def _build_guard_device_connect_payload(
             payload = _run_guard_device_connect_flow(
                 store=store,
                 connect_url=connect_url,
+                wait_timeout_seconds=wait_timeout_seconds,
                 announce_copy=announce_copy,
                 ci_safe=ci_safe,
                 machine_label=machine_label,
@@ -9084,10 +9090,10 @@ def _announce_guard_device_connect_copy(payload: dict[str, object]) -> None:
     )
     if target is None:
         return
-    print("HOL Guard headless approval")
-    print(f"1. Open {target}")
-    print(f"2. Enter code {user_code}")
-    print("3. Keep this terminal open while HOL Guard waits for approval.")
+    print("HOL Guard headless approval", file=sys.stderr)
+    print(f"1. Open {target}", file=sys.stderr)
+    print(f"2. Enter code {user_code}", file=sys.stderr)
+    print("3. Keep this terminal open while HOL Guard waits for approval.", file=sys.stderr)
 
 
 def _guard_ci_safe_connect_options(args: argparse.Namespace) -> tuple[bool, str | None]:
