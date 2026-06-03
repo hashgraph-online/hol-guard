@@ -446,11 +446,15 @@ def exchange_guard_device_code(
     dpop_key_material: GuardDpopKeyMaterial,
     interval_seconds: int,
     expires_in_seconds: int,
+    wait_timeout_seconds: float | None = None,
     urlopen=urllib.request.urlopen,
     sleep=time.sleep,
     now: datetime | None = None,
 ) -> GuardOAuthTokenExchangeResult:
-    deadline = time.monotonic() + max(expires_in_seconds, 1)
+    wait_window_seconds = max(expires_in_seconds, 1)
+    if wait_timeout_seconds is not None:
+        wait_window_seconds = min(wait_window_seconds, max(wait_timeout_seconds, 0))
+    deadline = time.monotonic() + wait_window_seconds
     current_interval = max(interval_seconds, 1)
     while True:
         request = urllib.request.Request(
@@ -556,6 +560,7 @@ def run_guard_device_connect_command(
     token_urlopen=urllib.request.urlopen,
     sleep=time.sleep,
     now: str | None = None,
+    wait_timeout_seconds: float | None = None,
     announce_copy=None,
     open_browser=None,
     ci_safe: bool = False,
@@ -599,6 +604,7 @@ def run_guard_device_connect_command(
         dpop_key_material=dpop_key_material,
         interval_seconds=int(response.get("interval") or 5),
         expires_in_seconds=int(response.get("expires_in") or 0),
+        wait_timeout_seconds=wait_timeout_seconds,
         urlopen=token_urlopen,
         sleep=sleep,
         now=datetime.fromisoformat(now) if now else None,
