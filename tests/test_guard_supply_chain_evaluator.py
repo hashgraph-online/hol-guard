@@ -427,6 +427,7 @@ def test_evaluate_package_request_artifact_uses_cached_eval_before_network(
     assert result.user_copy.next_step == "npm install minimist@1.2.9"
     assert result.user_copy.dashboard_url is None
     assert "guard/inbox" not in result.user_copy.harness_message
+    assert "Review evidence:" not in result.user_copy.harness_message
     assert "Review this request in HOL Guard, then retry." in result.user_copy.harness_message
 
 

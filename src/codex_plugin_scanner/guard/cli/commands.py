@@ -4902,23 +4902,45 @@ def _localize_decision_v2_review_copy(decision_v2: dict[str, object], review_con
 
 
 def _approval_center_routed_message(message: str, review_context: str) -> str:
-    normalized = re.sub(r"https?://[^\s]+/guard/inbox/?\.?", "", message).strip()
+    normalized = _strip_cloud_inbox_urls(message)
     normalized = normalized.replace("Review this request in HOL Guard, then retry.", "").strip()
-    normalized = re.sub(
-        (
-            r"Open HOL Guard to approve or keep this blocked: https?://\S+\.\s+"
-            r"After you choose, retry the same [^.]+ action\."
-        ),
-        "",
-        normalized,
-        flags=re.IGNORECASE,
-    ).strip()
+    normalized = _strip_legacy_approval_center_sentence(normalized)
     normalized = re.sub(r"\s{2,}", " ", normalized).strip()
-    if normalized.endswith("Review evidence:"):
-        normalized = normalized[: -len("Review evidence:")].rstrip()
+    normalized = re.sub(r"\bReview evidence:\s*\.?\s*$", "", normalized).strip()
     if not normalized:
         return review_context
     return f"{_ensure_terminal_punctuation(normalized)} {review_context}"
+
+
+def _strip_legacy_approval_center_sentence(message: str) -> str:
+    lower_message = message.lower()
+    start = lower_message.find("open hol guard to approve or keep this blocked:")
+    if start == -1:
+        return message.strip()
+    retry_start = lower_message.find("after you choose, retry the same ", start)
+    if retry_start == -1:
+        return message[:start].strip()
+    end = lower_message.find(" action.", retry_start)
+    if end == -1:
+        return message[:start].strip()
+    end += len(" action.")
+    return f"{message[:start]} {message[end:]}".strip()
+
+
+def _strip_cloud_inbox_urls(message: str) -> str:
+    kept_tokens: list[str] = []
+    for token in message.split():
+        candidate = token.strip("([{<'\"")
+        candidate = candidate.rstrip(")]}>'\".,;:!?")
+        if _is_cloud_inbox_url(candidate):
+            continue
+        kept_tokens.append(token)
+    return " ".join(kept_tokens).strip()
+
+
+def _is_cloud_inbox_url(value: str) -> bool:
+    parsed = urllib.parse.urlparse(value)
+    return parsed.scheme in {"http", "https"} and parsed.path.rstrip("/") == "/guard/inbox"
 
 
 def _runtime_stored_policy_action(

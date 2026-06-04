@@ -745,8 +745,7 @@ def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_actio
         dashboard_url = None
     harness_message = _CLOUD_INBOX_URL_RE.sub("", user_copy.harness_message or "").strip()
     harness_message = re.sub(r"\s{2,}", " ", harness_message).strip()
-    if harness_message.endswith("Review evidence:"):
-        harness_message = harness_message[: -len("Review evidence:")].rstrip()
+    harness_message = re.sub(r"\bReview evidence:\s*\.?\s*$", "", harness_message).strip()
     needs_local_review = policy_action in {"require-reapproval", "block"}
     if needs_local_review and _LOCAL_REVIEW_INSTRUCTION.lower() not in harness_message.lower():
         harness_message = f"{harness_message} {_LOCAL_REVIEW_INSTRUCTION}".strip()
