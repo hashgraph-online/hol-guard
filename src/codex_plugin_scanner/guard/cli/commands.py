@@ -1420,7 +1420,6 @@ def _normalize_explicit_workspace_path(value: str | None) -> Path | None:
 _INSTALL_WORKSPACE_COMMANDS = frozenset({"install", "uninstall"})
 _PROJECT_ROOT_MARKERS = (
     ".git",
-    ".cursor",
     "pyproject.toml",
     "package.json",
     "Cargo.toml",

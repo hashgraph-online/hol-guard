@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import os
 import shlex
+import shutil
 import stat
 import sys
 from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
 
-from ..launcher import merge_guard_launcher_env
 from .base import HarnessContext
 
 HOOK_SCRIPT_NAME = "hol-guard-cursor-hook.py"
@@ -214,9 +212,21 @@ def uninstall_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     }
 
 
-def cursor_hook_script_source(context: HarnessContext) -> str:
+def _resolve_guard_cli_command() -> list[str]:
+    """Prefer the installed hol-guard CLI so hooks use the same runtime as install."""
+
+    hol_guard = shutil.which("hol-guard")
+    if hol_guard:
+        return [hol_guard]
+    return [sys.executable, "-m", "codex_plugin_scanner.cli"]
+
+
+def _uses_top_level_hook_command(guard_cli: list[str]) -> bool:
+    return bool(guard_cli) and Path(guard_cli[0]).name == "hol-guard"
+
+
+def _embedded_guard_hook_argv(context: HarnessContext) -> list[str]:
     guard_argv = [
-        "guard",
         "hook",
         "--guard-home",
         str(context.guard_home),
@@ -228,13 +238,17 @@ def cursor_hook_script_source(context: HarnessContext) -> str:
         guard_argv.extend(["--home", str(context.home_dir)])
     if context.workspace_dir is not None:
         guard_argv.extend(["--workspace", str(context.workspace_dir)])
+    return guard_argv
+
+
+def cursor_hook_script_source(context: HarnessContext) -> str:
+    guard_cli = _resolve_guard_cli_command()
+    guard_argv = _embedded_guard_hook_argv(context)
+    if not _uses_top_level_hook_command(guard_cli):
+        guard_argv = ["guard", *guard_argv]
     return (
         _HOOK_SCRIPT_TEMPLATE.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
-        .replace(
-            "__GUARD_PYTHON__",
-            json.dumps(str(Path(sys.executable).resolve())),
-        )
-        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_hook_launcher_code()))
+        .replace("__GUARD_CLI__", json.dumps(guard_cli))
         .replace(
             "__GUARD_HOOK_ARGV__",
             json.dumps(guard_argv),
@@ -248,39 +262,6 @@ def cursor_hook_script_source(context: HarnessContext) -> str:
             str(max(_MANAGED_HOOK_TIMEOUT_SECONDS - 5, 1)),
         )
     )
-
-
-def _hook_launcher_code() -> str:
-    trusted_entries = _trusted_pythonpath_entries()
-    return (
-        "import json,os,sys;"
-        f"sys.path[:0]={json.dumps(trusted_entries)};"
-        "from codex_plugin_scanner.cli import main;"
-        f"raise SystemExit(main(json.loads(os.environ[{_HOOK_ARGV_ENV!r}])))"
-    )
-
-
-def _trusted_package_root() -> Path:
-    spec = importlib.util.find_spec("codex_plugin_scanner")
-    if spec is None:
-        raise RuntimeError("Guard could not locate the codex_plugin_scanner package")
-    if spec.submodule_search_locations:
-        locations = tuple(spec.submodule_search_locations)
-        if not locations:
-            raise RuntimeError("Guard could not resolve codex_plugin_scanner package locations")
-        return Path(locations[0]).resolve().parent
-    if spec.origin is None:
-        raise RuntimeError("Guard could not determine the codex_plugin_scanner package root")
-    return Path(spec.origin).resolve().parent.parent
-
-
-def _trusted_pythonpath_entries() -> list[str]:
-    launcher_env = merge_guard_launcher_env(pin_package=True)
-    path_entries = [entry for entry in launcher_env.get("PYTHONPATH", "").split(os.pathsep) if entry.strip()]
-    package_root = str(_trusted_package_root())
-    if package_root not in path_entries:
-        path_entries.insert(0, package_root)
-    return path_entries
 
 
 _INHERIT_ENV_KEYS = (
@@ -311,20 +292,18 @@ import sys
 from pathlib import Path
 
 GUARD_HOME = __GUARD_HOME__
-GUARD_PYTHON = __GUARD_PYTHON__
-GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__
+GUARD_CLI = __GUARD_CLI__
 GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
 GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
 
 
-def _hook_process_env(guard_argv: list[str]) -> dict[str, str]:
+def _hook_process_env() -> dict[str, str]:
     env: dict[str, str] = {}
     for key in GUARD_INHERIT_ENV_KEYS:
         value = os.environ.get(key)
         if isinstance(value, str) and value:
             env[key] = value
-    env["HOL_GUARD_HOOK_ARGV"] = json.dumps(guard_argv)
     return env
 
 
@@ -412,12 +391,12 @@ def main() -> int:
             guard_argv.extend(["--workspace", workspace])
     try:
         proc = subprocess.run(
-            [GUARD_PYTHON, "-c", GUARD_HOOK_LAUNCHER],
+            [*GUARD_CLI, *guard_argv],
             input=json.dumps(payload),
             capture_output=True,
             text=True,
             cwd=GUARD_HOME,
-            env=_hook_process_env(guard_argv),
+            env=_hook_process_env(),
             timeout=GUARD_HOOK_TIMEOUT_SECONDS,
         )
     except Exception as exc:
