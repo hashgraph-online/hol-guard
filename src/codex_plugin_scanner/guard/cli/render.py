@@ -992,6 +992,17 @@ def _managed_install_workspace_label(workspace: object) -> str:
     return "global (~/.cursor)"
 
 
+def _managed_install_config_label(manifest: dict[str, object]) -> str:
+    for key in ("config_path", "managed_config_path"):
+        value = manifest.get(key)
+        if isinstance(value, str) and value.strip():
+            return _short_path(value.strip())
+    hooks_path = manifest.get("managed_hooks_path")
+    if isinstance(hooks_path, str) and hooks_path.strip():
+        return f"hooks updated ({_short_path(hooks_path.strip())})"
+    return "no config changed"
+
+
 def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
     manifest = managed_install.get("manifest")
     notes = _managed_install_notes(managed_install, manifest)
@@ -1003,7 +1014,7 @@ def _render_single_managed_install(console: Console, managed_install: dict[str, 
         mode = _managed_install_mode_text(manifest.get("mode"))
         if mode is not None:
             body.add_row("Mode", mode)
-        body.add_row("Config", str(manifest.get("config_path") or "no config changed"))
+        body.add_row("Config", _managed_install_config_label(manifest))
         managed_servers = _coerce_string_list(manifest.get("managed_servers"))
         if managed_servers:
             body.add_row("Managed servers", str(len(managed_servers)))

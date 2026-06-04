@@ -1492,6 +1492,9 @@ def _resolve_default_install_workspace(
     if cursor_project_dir is not None and (harness is None or harness == "cursor"):
         return cursor_project_dir
 
+    if _workspace_has_project_markers(cwd):
+        return cwd
+
     git_root = _git_repo_root(cwd)
     if git_root is not None:
         return git_root
@@ -1500,9 +1503,6 @@ def _resolve_default_install_workspace(
         detected = _workspace_from_harness_detection(harness, cwd=cwd, guard_home=guard_home)
         if detected is not None:
             return detected
-
-    if _workspace_has_project_markers(cwd):
-        return cwd
     return None
 
 
