@@ -149,9 +149,8 @@ _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
 
 
 def _token_sha256(value: str) -> str:
-    # codeql[py/weak-sensitive-data-hashing]: Guard stores high-entropy local token fingerprints for integrity checks,
-    # not password verifiers.
-    return sha256(value.encode("utf-8")).hexdigest()
+    # Guard stores high-entropy local token fingerprints for integrity checks, not password verifiers.
+    return sha256(value.encode("utf-8")).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
 
 
 class SecretStore(Protocol):
