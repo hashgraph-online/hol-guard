@@ -30,7 +30,6 @@ from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.oauth_client import (
     GuardDpopKeyMaterial,
-    detect_guard_oauth_environment,
     is_guard_oauth_origin_allowed,
     resolve_guard_oauth_client_config,
 )
@@ -1769,11 +1768,6 @@ def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str
         return sync_url
     if not is_guard_oauth_origin_allowed(origin):
         raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} Sync URL origin is not allowlisted.")
-    environment = detect_guard_oauth_environment(origin)
-    if environment != "local" and urllib.parse.urlsplit(origin).scheme != "https":
-        raise GuardSyncNotConfiguredError(
-            f"{_guard_sync_reconnect_message()} Sync URL must use https outside local loopback."
-        )
     return sync_url
 
 

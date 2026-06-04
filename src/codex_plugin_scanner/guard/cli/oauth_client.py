@@ -76,7 +76,11 @@ def is_guard_oauth_origin_allowed(issuer: str) -> bool:
 
 def _require_allowlisted_guard_oauth_origin(issuer: str) -> str:
     origin = _issuer_origin(issuer)
-    if is_guard_oauth_origin_allowed(origin):
+    if (
+        origin in _ALLOWED_PRODUCTION_GUARD_ORIGINS
+        or origin in _ALLOWED_STAGING_GUARD_ORIGINS
+        or _is_loopback_guard_origin(origin)
+    ):
         return origin
     raise ValueError("Guard OAuth issuer must use an allowlisted HOL origin or local loopback.")
 
