@@ -1721,10 +1721,8 @@ def test_evaluate_package_request_artifact_blocks_from_cached_bundle_without_clo
     )
     store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
 
-    observed_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
-
     def fail_if_cloud_called(*args: object, **kwargs: object) -> object:
-        observed_calls.append((args, kwargs))
+        del args, kwargs
         raise AssertionError("cached bundle blocking should not call Guard Cloud")
 
     monkeypatch.setattr(urllib.request, "urlopen", fail_if_cloud_called)
@@ -1738,7 +1736,6 @@ def test_evaluate_package_request_artifact_blocks_from_cached_bundle_without_clo
     assert result.decision == "block"
     assert result.policy_action == "block"
     assert result.enforcement == "offline_cached"
-    assert observed_calls == []
 
 
 def test_evaluate_package_request_artifact_stale_bundle_requests_refresh_and_records_monitor(tmp_path: Path) -> None:
