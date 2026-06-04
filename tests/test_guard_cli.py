@@ -4504,7 +4504,9 @@ args = ["-lc", "echo hi"]
         json_payload = json.loads(json_output)
         assert json_payload["harness"] == "codex"
         assert json_payload["connect_health"]["connect_recovery_command"] == "hol-guard connect"
+        assert json_payload["connect_health"]["oauth_storage_health"] == {"state": "healthy"}
         assert json_payload["connect_health"]["latest_connect_state"]["status"] == "retry_required"
+        assert set(json_payload["connect_health"]["oauth_storage_health"]) == {"state"}
         for value in forbidden_values:
             assert value not in json_output
         lowered_json_output = json_output.lower()
