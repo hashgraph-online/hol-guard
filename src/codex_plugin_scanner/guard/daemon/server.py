@@ -19,7 +19,7 @@ import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
@@ -120,6 +120,15 @@ _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {"install", "repair", "test", "audit", "sync", "remove", "uninstall"}
 _SUPPLY_CHAIN_PAID_TIERS = {"paid", "premium", "enterprise", "guard_cloud", "guard-cloud"}
+
+
+class _HookPathValidationError(ValueError):
+    def __init__(self, parameter: str, reason: str) -> None:
+        self.parameter = parameter
+        self.reason = reason
+        parameter_slug = parameter.replace("-", "_")
+        super().__init__(f"invalid_hook_{parameter_slug}_path")
+        self.code = f"invalid_hook_{parameter_slug}_path"
 
 
 def _headless_cloud_sync_store_key(store: GuardStore) -> str:
@@ -2328,11 +2337,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _handle_claude_hook(self, payload: dict[str, object], query: str) -> None:
         params = parse_qs(query)
-        home_dir = self._optional_string(params.get("home", [None])[-1])
-        guard_home = self._optional_string(params.get("guard-home", [None])[-1])
-        from ..cli.commands import _normalize_explicit_workspace_path
-
-        workspace = _normalize_explicit_workspace_path(self._optional_string(params.get("workspace", [None])[-1]))
+        try:
+            home_dir = self._validated_hook_directory_string(
+                "home",
+                self._optional_string(params.get("home", [None])[-1]),
+                roots=self._hook_safe_roots(),
+            )
+            guard_home = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            workspace = self._validated_hook_directory_string(
+                "workspace",
+                self._normalized_hook_workspace_string(params.get("workspace", [None])[-1]),
+                roots=self._hook_safe_roots(),
+            )
+        except _HookPathValidationError as error:
+            self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+            self._write_json({"error": error.code}, status=400)
+            return
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = runtime_harness or "claude-code"
         args = argparse.Namespace(
@@ -2374,6 +2394,41 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         params = parse_qs(query)
         token = params.get("token", [None])[-1]
         return self._tokens_match(token)
+
+    def _write_unauthorized(self, *, extra_headers: dict[str, str] | None = None) -> None:
+        self._record_auth_audit_event()
+        self._write_json({"error": "unauthorized"}, status=401, extra_headers=extra_headers)
+
+    def _daemon_server(self) -> _GuardDaemonHttpServer:
+        return cast(_GuardDaemonHttpServer, self.server)
+
+    def _record_auth_audit_event(self) -> None:
+        origin = self.headers.get("Origin")
+        self._daemon_server().store.add_event(
+            "daemon.auth.unauthorized",
+            {
+                "method": self.command,
+                "path": urlparse(self.path).path,
+                "origin": self._normalize_origin(origin),
+                "origin_header": origin if isinstance(origin, str) and origin.strip() else None,
+                "has_authorization": isinstance(self.headers.get("Authorization"), str),
+                "has_dashboard_session": isinstance(self.headers.get("X-Guard-Dashboard-Session"), str),
+                "has_guard_token": isinstance(self.headers.get("X-Guard-Token"), str),
+            },
+            _now(),
+        )
+
+    def _record_hook_path_rejection(self, *, parameter: str, reason: str) -> None:
+        self._daemon_server().store.add_event(
+            "daemon.hook.path_rejected",
+            {
+                "method": self.command,
+                "path": urlparse(self.path).path,
+                "parameter": parameter,
+                "reason": reason,
+            },
+            _now(),
+        )
 
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")
@@ -2817,6 +2872,94 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if value < 1:
             return None
         return min(value, maximum)
+
+    def _validated_hook_directory_string(
+        self,
+        parameter: str,
+        value: str | None,
+        *,
+        roots: tuple[Path, ...] | None = None,
+    ) -> str | None:
+        if value is None:
+            return None
+        return os.fspath(self._validate_hook_directory_path(parameter, value, roots=roots))
+
+    @staticmethod
+    def _normalized_hook_workspace_string(value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        stripped = value.strip()
+        if not stripped or stripped.lower() in {"none", "null"}:
+            return None
+        # Mirror the CLI hook contract until runtime callers stop emitting `/None`
+        # as the explicit "no workspace" sentinel.
+        candidate = os.path.expanduser(stripped)
+        if os.path.basename(candidate) == "None":
+            candidate = os.path.dirname(candidate)
+            if not candidate.strip():
+                return None
+        return os.path.normpath(candidate)
+
+    def _validate_hook_directory_path(
+        self,
+        parameter: str,
+        value: str,
+        *,
+        roots: tuple[Path, ...] | None = None,
+    ) -> Path:
+        expanded = os.path.expanduser(value)
+        if not os.path.isabs(expanded):
+            raise _HookPathValidationError(parameter, "relative_path")
+        try:
+            candidate = os.path.realpath(expanded)
+        except OSError:
+            raise _HookPathValidationError(parameter, "path_resolve_failed") from None
+        effective_roots = roots
+        if parameter in {"home", "workspace"} and effective_roots is None:
+            effective_roots = self._hook_safe_roots()
+        if effective_roots is not None:
+            root_match = False
+            for root in effective_roots:
+                root_path = os.path.realpath(os.fspath(root))
+                try:
+                    if os.path.commonpath([candidate, root_path]) == root_path:
+                        root_match = True
+                        break
+                except ValueError:
+                    continue
+            if not root_match:
+                raise _HookPathValidationError(parameter, "unexpected_root")
+        return Path(candidate)
+
+    def _validated_hook_guard_home(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        expanded = os.path.expanduser(value)
+        if not os.path.isabs(expanded):
+            raise _HookPathValidationError("guard-home", "relative_path")
+        try:
+            candidate = os.path.realpath(expanded)
+        except OSError:
+            raise _HookPathValidationError("guard-home", "path_resolve_failed") from None
+        expected = os.path.realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
+        if candidate != expected:
+            raise _HookPathValidationError("guard-home", "unexpected_guard_home")
+        return expected
+
+    def _hook_safe_roots(self) -> tuple[Path, ...]:
+        current_home = Path.home().resolve()
+        roots: list[Path] = [current_home]
+        guard_home_root = self._daemon_server().store.guard_home.expanduser().resolve().parent
+        if not self._path_is_within_root(guard_home_root, current_home):
+            roots.append(guard_home_root)
+        return tuple(roots)
+
+    @staticmethod
+    def _path_is_within_root(candidate: str, root: str) -> bool:
+        try:
+            return os.path.commonpath([candidate, root]) == root
+        except ValueError:
+            return False
 
     @staticmethod
     def _scope_target_is_valid(
