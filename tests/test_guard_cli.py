@@ -4409,6 +4409,112 @@ args = ["-lc", "echo hi"]
             "disabled_detector_ids": ["secret.local"],
         }
 
+    def test_guard_doctor_does_not_print_oauth_or_legacy_secret_material(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        _write_text(
+            home_dir / ".codex" / "config.toml",
+            """
+approval_policy = "never"
+
+[mcp_servers.test-stdio]
+command = "/bin/sh"
+args = ["-lc", "echo hi"]
+""".strip()
+            + "\n",
+        )
+        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
+        store = GuardStore(guard_home)
+        store.set_sync_credentials(
+            "https://hol.org/api/guard/receipts/sync",
+            "access-secret-value",
+            "2026-06-01T00:00:00+00:00",
+        )
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-secret-value",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "x-value",
+                "y": "y-value",
+                "alg": "ES256",
+                "use": "sig",
+            },
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            workspace_id="workspace-123",
+            now="2026-06-01T00:00:00+00:00",
+        )
+
+        forbidden_values = (
+            "access-secret-value",
+            "refresh-secret-value",
+            "secret-key-material",
+            "auth-code-secret",
+            "ZXCV-BNMQ",
+            "pairing-secret-value",
+        )
+        forbidden_labels = (
+            "access_token",
+            "refresh_token",
+            "dpop_private_key",
+            "authorization_code",
+            "user_code",
+            "pairing_secret",
+            "guardpairsecret",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--json",
+            ]
+        )
+        json_output = capsys.readouterr().out
+
+        assert rc == 0
+        assert json.loads(json_output)["harness"] == "codex"
+        for value in forbidden_values:
+            assert value not in json_output
+        lowered_json_output = json_output.lower()
+        for label in forbidden_labels:
+            assert label not in lowered_json_output
+
+        rc = main(
+            [
+                "guard",
+                "doctor",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+            ]
+        )
+        human_output = capsys.readouterr().out
+
+        assert rc == 0
+        for value in forbidden_values:
+            assert value not in human_output
+        lowered_human_output = human_output.lower()
+        for label in forbidden_labels:
+            assert label not in lowered_human_output
+
     def test_guard_doctor_notifications_opens_system_settings(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
