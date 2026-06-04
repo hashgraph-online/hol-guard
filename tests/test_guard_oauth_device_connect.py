@@ -225,7 +225,7 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
                         machine_id="machine-123",
                         workspace_id="workspace-123",
                     ),
-                    "refresh_token": "refresh-rotated",
+                    "refresh_token": "refresh-123",
                     "expires_in": 3600,
                     "scope": "guard:runtime.sync guard:offline_access",
                     "token_type": "Bearer",
