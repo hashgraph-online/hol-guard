@@ -158,6 +158,9 @@ class SecretStore(Protocol):
     def get_secret(self, secret_id: str) -> str | None:
         """Fetch a secret value."""
 
+    def delete_secret(self, secret_id: str) -> None:
+        """Delete a secret value if it exists."""
+
 
 class KeychainSecretStore:
     """macOS keychain-backed secret store."""
@@ -212,6 +215,23 @@ class KeychainSecretStore:
         value = result.stdout.rstrip("\r\n")
         return value if value else None
 
+    def delete_secret(self, secret_id: str) -> None:
+        if not self._is_available():
+            return
+        subprocess.run(
+            [
+                "/usr/bin/security",
+                "delete-generic-password",
+                "-a",
+                secret_id,
+                "-s",
+                self.service_name,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
 
 class EncryptedFileSecretStore:
     """Encrypted file-based secret store for predictable cross-platform Guard credentials.
@@ -261,6 +281,12 @@ class EncryptedFileSecretStore:
             return None
         self.set_secret(secret_id, legacy_value)
         return legacy_value
+
+    def delete_secret(self, secret_id: str) -> None:
+        self._ensure_ready()
+        path = self._path_for(secret_id)
+        if path.exists():
+            path.unlink()
 
     def _path_for(self, secret_id: str) -> Path:
         normalized = secret_id.replace("/", "_").replace(":", "_")
@@ -389,6 +415,17 @@ class FallbackSecretStore:
             self.primary.set_secret(secret_id, value)
         except Exception:
             return
+
+    def delete_secret(self, secret_id: str) -> None:
+        for store in (self.primary, self.fallback):
+            try:
+                store.delete_secret(secret_id)
+            except Exception:
+                _store_logger.warning(
+                    "Failed to delete Guard secret from %s",
+                    type(store).__name__,
+                )
+                continue
 
 
 def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
@@ -3000,6 +3037,15 @@ class GuardStore:
         if isinstance(runtime_label, str) and runtime_label:
             result["runtime_label"] = runtime_label
         return result
+
+    def clear_oauth_local_credentials(self) -> None:
+        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        if isinstance(payload, dict):
+            for key in ("refresh_token_ref", "dpop_private_key_ref"):
+                secret_ref = payload.get(key)
+                if isinstance(secret_ref, str) and secret_ref:
+                    self._oauth_secret_store.delete_secret(secret_ref)
+        self.delete_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
 
     def get_oauth_local_credential_health(self) -> dict[str, object]:
         payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
