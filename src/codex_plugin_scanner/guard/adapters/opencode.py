@@ -12,6 +12,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _run_command_probe
+from .hook_python import resolve_guard_hook_python
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -22,6 +23,7 @@ from .mcp_servers import (
 )
 from .opencode_artifacts import (
     CONFIG_FILENAMES,
+    _command_parts,
     append_config_artifacts,
     append_directory_artifacts,
     append_found_path,
@@ -30,8 +32,6 @@ from .opencode_artifacts import (
     runtime_config_path,
     runtime_overlay,
 )
-from .hook_python import resolve_guard_hook_python
-from .opencode_artifacts import _command_parts
 from .opencode_pretool import install_pretool_plugin, remove_pretool_plugin
 
 
