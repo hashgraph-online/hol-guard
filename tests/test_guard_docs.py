@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.docs import install_connect_command_catalog
@@ -151,8 +157,11 @@ def test_project_metadata_declares_apache_license() -> None:
     readme_text = _read_repo_file("README.md")
 
     assert "SPDX-License-Identifier: Apache-2.0" in license_text
-    assert 'license = "Apache-2.0"' in pyproject_text
-    assert "Apache-2.0" in readme_text.split("## License", 1)[-1]
+    pyproject_data = tomllib.loads(pyproject_text)
+    assert pyproject_data.get("project", {}).get("license") == "Apache-2.0"
+    readme_parts = readme_text.split("## License", 1)
+    assert len(readme_parts) == 2, "README.md is missing a '## License' section"
+    assert "Apache-2.0" in readme_parts[1]
 
 
 def test_static_docs_do_not_claim_mit_license_for_hol_guard() -> None:
