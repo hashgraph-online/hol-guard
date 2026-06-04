@@ -315,6 +315,79 @@ class TestOpenCodeInstall:
         result = OpenCodeHarnessAdapter().install(ctx)
         assert result["runtime_env_var"] == "OPENCODE_CONFIG_CONTENT"
 
+    def test_install_keeps_original_mcp_servers_on_disk(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        target = OpenCodeHarnessAdapter._target_config_path(ctx)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _write_mcp_config(
+            target,
+            {
+                "chrome-devtools": {
+                    "type": "local",
+                    "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+                    "enabled": True,
+                },
+                "my-remote": {
+                    "type": "remote",
+                    "url": "https://example.com/mcp",
+                    "enabled": True,
+                },
+            },
+        )
+        result = OpenCodeHarnessAdapter().install(ctx)
+        managed_config = json.loads(target.read_text(encoding="utf-8"))
+        chrome = managed_config["mcp"]["chrome-devtools"]
+        assert chrome["command"] == ["npx", "-y", "chrome-devtools-mcp@latest"]
+        assert "opencode-mcp-proxy" not in json.dumps(chrome)
+        assert managed_config["mcp"]["my-remote"]["url"] == "https://example.com/mcp"
+        runtime_config = json.loads(Path(result["runtime_config_path"]).read_text(encoding="utf-8"))
+        runtime_chrome = runtime_config["mcp"]["chrome-devtools"]
+        assert "opencode-mcp-proxy" in json.dumps(runtime_chrome)
+
+    def test_install_restores_prior_persisted_proxy_wrappers(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        target = OpenCodeHarnessAdapter._target_config_path(ctx)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _write_mcp_config(
+            target,
+            {
+                "chrome-devtools": {
+                    "type": "local",
+                    "command": [
+                        "/usr/bin/python3",
+                        "-m",
+                        "codex_plugin_scanner.cli",
+                        "guard",
+                        "opencode-mcp-proxy",
+                        "--guard-home",
+                        str(ctx.guard_home),
+                        "--server-name",
+                        "chrome-devtools",
+                        "--server-id",
+                        "mcp_server:opencode:global:chrome-devtools:deadbeef",
+                        "--source-scope",
+                        "global",
+                        "--config-path",
+                        str(target),
+                        "--transport",
+                        "local",
+                        "--command",
+                        "npx",
+                        "--arg=-y",
+                        "--arg=chrome-devtools-mcp@latest",
+                    ],
+                    "enabled": True,
+                },
+            },
+        )
+        OpenCodeHarnessAdapter().install(ctx)
+        managed_config = json.loads(target.read_text(encoding="utf-8"))
+        assert managed_config["mcp"]["chrome-devtools"]["command"] == [
+            "npx",
+            "-y",
+            "chrome-devtools-mcp@latest",
+        ]
+
 
 class TestOpenCodeUninstall:
     def test_uninstall_restores_original_content(self, tmp_path: Path) -> None:
