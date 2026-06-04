@@ -95,6 +95,7 @@ from ..shims import (
     repair_package_shims,
     uninstall_package_shims,
 )
+from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
@@ -375,7 +376,7 @@ def _queue_headless_cloud_sync(
     *,
     store: GuardStore,
 ) -> dict[str, object]:
-    if store.get_sync_credentials() is None:
+    if store.get_cloud_sync_profile() is None:
         return {
             "status": "not_configured",
             "message": "Guard Cloud sync is not paired on this machine.",
@@ -437,15 +438,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             and self._is_hosted_dashboard_api_path(parsed.path, path_parts)
             and not self._header_token_is_valid()
         ):
-            self._write_unauthorized()
+            self._write_json({"error": "unauthorized"}, status=401)
             return
         if parsed.path == "/healthz":
             self._write_json(self._public_healthz_payload())
             return
-        if self._requires_get_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
-            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
-            return
         if parsed.path == "/v1/healthz/details":
+            if not self._header_token_is_valid():
+                self._write_json(
+                    {"error": "unauthorized"},
+                    status=401,
+                    extra_headers=self._cors_headers_for_request(),
+                )
+                return
             self._write_json(self._detailed_healthz_payload())
             return
         if parsed.path == "/v1/capabilities":
@@ -663,6 +668,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_static_asset(parsed.path.removeprefix("/"))
             return
         if parsed.path == "/v1/events/stream":
+            if not self._token_is_valid(parsed.query):
+                self._write_json({"error": "unauthorized"}, status=401)
+                return
             self._stream_events(_int_query_value(parsed.query, "cursor"))
             return
         if self._is_dashboard_route(parsed.path):
@@ -679,7 +687,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if not self._header_token_is_valid():
-            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+            self._write_json(
+                {"error": "unauthorized"},
+                status=401,
+                extra_headers=self._cors_headers_for_request(),
+            )
             return
         store = self.server.store  # type: ignore[attr-defined]
         if parsed.path == "/v1/evidence":
@@ -725,9 +737,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=401,
                     extra_headers=self._cors_headers_for_request(),
                 )
-                self._record_auth_audit_event()
             else:
-                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                self._write_json(
+                    {"error": "unauthorized"},
+                    status=401,
+                    extra_headers=self._cors_headers_for_request(),
+                )
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
@@ -1453,7 +1468,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             },
             sort_keys=True,
         )
-        artifact_hash = hashlib.sha256(material.encode("utf-8")).hexdigest()
+        artifact_hash = stable_digest_hex(material.encode("utf-8"))
         changed_capabilities = [] if operation in {"status", "scan"} else [operation]
         artifact_id = f"headless:{harness}:{operation}"
         artifact_name = f"Headless {operation}"
@@ -2285,24 +2300,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         token = params.get("token", [None])[-1]
         return self._tokens_match(token)
 
-    def _write_unauthorized(self, *, extra_headers: dict[str, str] | None = None) -> None:
-        self._record_auth_audit_event()
-        self._write_json({"error": "unauthorized"}, status=401, extra_headers=extra_headers)
-
-    def _record_auth_audit_event(self) -> None:
-        self.server.store.add_event(  # type: ignore[attr-defined]
-            "daemon.auth.unauthorized",
-            {
-                "method": self.command,
-                "path": urlparse(self.path).path,
-                "origin": self._normalize_origin(self.headers.get("Origin")),
-                "has_authorization": isinstance(self.headers.get("Authorization"), str),
-                "has_dashboard_session": isinstance(self.headers.get("X-Guard-Dashboard-Session"), str),
-                "has_guard_token": isinstance(self.headers.get("X-Guard-Token"), str),
-            },
-            _now(),
-        )
-
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")
         path = urlparse(self.path).path
@@ -2572,6 +2569,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
 
+    def _is_hosted_dashboard_origin(self) -> bool:
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
+
     def _public_healthz_payload(self) -> dict[str, object]:
         uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
         pending_approvals = self.server.store.count_approval_requests()  # type: ignore[attr-defined]
@@ -2598,10 +2599,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "package_version": __version__,
             "guard_home": str(store.guard_home.resolve()),
         }
-
-    def _is_hosted_dashboard_origin(self) -> bool:
-        origin = self._normalize_origin(self.headers.get("Origin"))
-        return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
 
     @staticmethod
     def _normalize_origin(origin: str | None) -> str | None:
@@ -2803,7 +2800,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
             "/v1/notifications/setup",
-            "/v1/hooks/claude-code",
         }:
             return True
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
@@ -2835,14 +2831,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision":
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision"
-
-    @staticmethod
-    def _requires_get_header_token(path: str, path_parts: list[str]) -> bool:
-        if not path.startswith("/v1/"):
-            return False
-        if path == "/v1/connect/state":
-            return False
-        return not (len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud")
 
     def _write_json(
         self,

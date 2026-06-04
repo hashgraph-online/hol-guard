@@ -153,6 +153,7 @@ from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
+    GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
     extract_prompt_requests,
     guard_run,
@@ -195,6 +196,7 @@ from .connect_flow import (
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
     connect_recovery_command,
+    resolve_connect_url,
     run_guard_browser_connect_command,
     run_guard_device_connect_command,
     run_guard_disconnect_command,
@@ -9199,7 +9201,7 @@ def _resolve_policy_expiry(args: argparse.Namespace) -> str | None:
 
 
 def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]:
-    latest_state = store.get_latest_guard_connect_state(now=_now())
+    latest_state = store.get_effective_guard_connect_state(now=_now())
     payload: dict[str, object] = {
         "oauth_storage_health": _guard_doctor_oauth_storage_health_payload(store),
         "connect_recovery_command": connect_recovery_command(latest_state),
@@ -9247,7 +9249,7 @@ def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
 
 
 def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
-    if store.get_sync_credentials() is None:
+    if store.get_cloud_sync_profile() is None:
         return
     try:
         sync_receipts(store)
@@ -9257,6 +9259,131 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
         sync_supply_chain_bundle(store)
     except (GuardSyncNotConfiguredError, RuntimeError):
         return
+
+
+def _guard_cloud_urls_for_connect(connect_url: str) -> dict[str, str]:
+    normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
+    dashboard_url = f"{allowed_origin}/guard"
+    return {
+        "connect_url": normalized_connect_url,
+        "sync_url": f"{allowed_origin}/api/guard/receipts/sync",
+        "dashboard_url": dashboard_url,
+        "inbox_url": f"{dashboard_url}/inbox",
+        "fleet_url": f"{dashboard_url}/fleet",
+        "allowed_origin": allowed_origin,
+    }
+
+
+def _finalize_guard_connect_payload(
+    *,
+    store: GuardStore,
+    connect_url: str,
+    payload: dict[str, object],
+    now: str,
+) -> dict[str, object]:
+    urls = _guard_cloud_urls_for_connect(connect_url)
+    for key in ("connect_url", "sync_url", "dashboard_url", "inbox_url", "fleet_url"):
+        payload.setdefault(key, urls[key])
+    if str(payload.get("status") or "") != "connected":
+        return payload
+    store.clear_cloud_sync_state_for_reconnect()
+    latest_state = store.record_guard_connect_pairing_completed(
+        sync_url=str(urls["sync_url"]),
+        allowed_origin=str(urls["allowed_origin"]),
+        now=now,
+    )
+    payload.update(
+        {
+            "status": str(latest_state.get("status") or payload.get("status") or "connected"),
+            "milestone": str(latest_state.get("milestone") or "first_sync_pending"),
+            "completed_at": latest_state.get("completed_at") or now,
+            "latest_connect_state": latest_state,
+        }
+    )
+    oauth_health = store.get_oauth_local_credential_health()
+    oauth_state = str(oauth_health.get("state") or "")
+    if store.get_cloud_sync_profile() is None and oauth_state == "degraded":
+        repair_message = (
+            "Guard Cloud authorization did not persist locally. "
+            "Run hol-guard connect again to repair local sign-in."
+        )
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=now,
+            reason=repair_message,
+        )
+        payload.update(
+            {
+                "status": "retry_required",
+                "milestone": "first_sync_failed",
+                "sync_succeeded": False,
+                "sync_error": repair_message,
+                "repair_message": repair_message,
+                "latest_connect_state": store.get_effective_guard_connect_state(now=now),
+            }
+        )
+        return payload
+    if store.get_cloud_sync_profile() is None:
+        payload["sync_attempted"] = False
+        return payload
+    payload["sync_attempted"] = True
+    try:
+        sync_payload = sync_receipts(store)
+    except GuardSyncNotAvailableError as error:
+        store.record_latest_guard_connect_sync_result(
+            status="connected",
+            milestone="sync_not_available",
+            now=now,
+            reason=str(error),
+        )
+        payload.update(
+            {
+                "milestone": "sync_not_available",
+                "sync_succeeded": False,
+                "sync_error": str(error),
+                "repair_message": str(error),
+                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
+            }
+        )
+        return payload
+    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError, RuntimeError) as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=now,
+            reason=str(error),
+        )
+        payload.update(
+            {
+                "status": "retry_required",
+                "milestone": "first_sync_failed",
+                "sync_succeeded": False,
+                "sync_error": str(error),
+                "repair_message": "Run hol-guard connect again to refresh Guard Cloud authorization.",
+                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
+            }
+        )
+        return payload
+    latest_state = store.record_latest_guard_connect_sync_success(
+        sync_payload=sync_payload,
+        now=str(sync_payload.get("synced_at") or now),
+    )
+    payload.update(
+        {
+            "status": "connected",
+            "milestone": "first_sync_succeeded",
+            "sync_succeeded": True,
+            "sync": sync_payload,
+            "last_sync_at": sync_payload.get("synced_at"),
+            "latest_connect_state": latest_state or store.get_latest_guard_connect_state(now=now),
+        }
+    )
+    try:
+        payload["supply_chain"] = sync_supply_chain_bundle(store)
+    except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
+        payload["supply_chain_error"] = str(error)
+    return payload
 
 
 def _filter_policy_items(items: list[dict[str, object]], *, active_only: bool) -> list[dict[str, object]]:
@@ -9359,6 +9486,12 @@ def _build_guard_device_connect_payload(
     except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
+    payload = _finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload=payload,
+        now=_now(),
+    )
     return payload, 0
 
 

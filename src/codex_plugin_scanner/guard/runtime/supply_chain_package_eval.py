@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import posixpath
@@ -27,6 +26,7 @@ from packaging.version import InvalidVersion, Version
 
 from ..config import load_guard_config, resolve_risk_action
 from ..models import GuardArtifact
+from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
@@ -1292,7 +1292,7 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
     return {
         "dependencyCount": len(dependencies),
         "fileName": lockfile_path.name,
-        "lockfileHash": hashlib.sha256(lockfile_text.encode("utf-8")).hexdigest(),
+        "lockfileHash": stable_digest_hex(lockfile_text.encode("utf-8")),
         "manifestHash": manifest_hashes[0] if manifest_hashes else None,
         "repository": workspace_dir.name,
     }
@@ -3348,14 +3348,14 @@ def _hash_paths(workspace_dir: Path | None, raw_paths: object) -> list[str]:
         if not path.exists():
             continue
         try:
-            hashes.append(hashlib.sha256(path.read_bytes()).hexdigest())
+            hashes.append(stable_digest_hex(path.read_bytes()))
         except OSError:
             continue
     return hashes
 
 
 def _stable_hash(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return stable_digest_hex(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
 
 
 def _split_namespace_name(value: str) -> tuple[str | None, str]:
@@ -3507,7 +3507,7 @@ def _evidence_id(package_intent_hash: str, package: dict[str, object]) -> str:
     )
     dependency_path = _optional_string(package.get("dependencyPath")) or "direct"
     identity = f"{package_intent_hash}:{package_name}:{resolved_version}:{dependency_path}:{decision}"
-    return f"evidence-{hashlib.sha256(identity.encode()).hexdigest()[:16]}"
+    return f"evidence-{stable_digest_hex(identity.encode(), length=16)}"
 
 
 def _with_additional_reason(

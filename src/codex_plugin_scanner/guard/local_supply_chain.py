@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shlex
@@ -32,9 +31,16 @@ from .runtime.package_intent_common import (
     version_target,
 )
 from .runtime.package_manifest_diff import parse_manifest_dependencies, parse_manifest_dependency_changes
+from .runtime.runner import (
+    GuardSyncAuthorizationExpiredError,
+    GuardSyncNotConfiguredError,
+    _guard_sync_headers,
+    _resolve_guard_sync_auth_context,
+)
 from .runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from .runtime.supply_chain_support import ecosystem_support_matrix
 from .shims import package_shim_status, package_shim_supported_managers
+from .stable_digest import stable_digest_hex
 from .store import GuardStore
 
 _LOCAL_SUPPLY_CHAIN_HARNESS = "guard-cli"
@@ -140,7 +146,7 @@ def build_local_supply_chain_posture(
 ) -> dict[str, object]:
     snapshot_now = _parse_timestamp(now) or datetime.now(timezone.utc)
     workspace_id = store.get_cloud_workspace_id()
-    credentials = store.get_sync_credentials()
+    cloud_profile = store.get_cloud_sync_profile()
     summary = _dict_payload(store.get_sync_payload("supply_chain_bundle_summary"))
     entitlement = _dict_payload(store.get_sync_payload("supply_chain_bundle_entitlement"))
     remote_policy = _dict_payload(store.get_sync_payload("policy"))
@@ -150,7 +156,7 @@ def build_local_supply_chain_posture(
     expires_at_text = _string_value(bundle_payload.get("expiresAt"))
     expires_at = _parse_timestamp(expires_at_text)
     status = _posture_status(
-        credentials_present=credentials is not None,
+        credentials_present=cloud_profile is not None,
         workspace_id=workspace_id,
         summary=summary,
         bundle_payload=bundle_payload,
@@ -195,7 +201,7 @@ def build_local_supply_chain_posture(
         "health_status": health_status,
         "detail": _posture_detail(status),
         "connection": {
-            "logged_in": credentials is not None,
+            "logged_in": cloud_profile is not None,
             "paired": workspace_id is not None,
             "workspace_id": workspace_id,
         },
@@ -310,28 +316,41 @@ def build_workspace_audit_payload(
     source = "local"
     fallback_reason: dict[str, object] | None = None
     if _should_use_cloud_workspace_audit(store=store, posture=posture):
-        sync_credentials = store.get_sync_credentials()
-        workspace_id = store.get_cloud_workspace_id()
-        assert sync_credentials is not None
-        assert workspace_id is not None
-        request_payload = _build_cloud_audit_payload(
-            workspace_dir=target_workspace_dir,
-            workspace_id=workspace_id,
-            store=store,
-            manifest_paths=manifest_paths,
-            lockfile_paths=lockfile_paths,
-            inventory=inventory,
-        )
-        cloud_response, fallback_reason = _run_cloud_workspace_audit(
-            request_payload=request_payload,
-            sync_url=str(sync_credentials["sync_url"]),
-            token=str(sync_credentials["token"]),
-            workspace_id=workspace_id,
-        )
-        if cloud_response is not None:
-            evaluation = _normalize_cloud_audit_response(cloud_response)
-            source = "cloud"
-        else:
+        try:
+            auth_context = _resolve_guard_sync_auth_context(store)
+            workspace_id = store.get_cloud_workspace_id()
+            assert workspace_id is not None
+            request_payload = _build_cloud_audit_payload(
+                workspace_dir=target_workspace_dir,
+                workspace_id=workspace_id,
+                store=store,
+                manifest_paths=manifest_paths,
+                lockfile_paths=lockfile_paths,
+                inventory=inventory,
+            )
+            cloud_response, fallback_reason = _run_cloud_workspace_audit(
+                request_payload=request_payload,
+                auth_context=auth_context,
+                workspace_id=workspace_id,
+            )
+            if cloud_response is not None:
+                evaluation = _normalize_cloud_audit_response(cloud_response)
+                source = "cloud"
+            else:
+                evaluation = _workspace_local_evaluation(
+                    store=store,
+                    workspace_dir=target_workspace_dir,
+                    inventory=inventory,
+                    manifest_paths=manifest_paths,
+                    lockfile_paths=lockfile_paths,
+                    command_name=command_name,
+                    now=now,
+                )
+        except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError, RuntimeError):
+            fallback_reason = {
+                "code": "cloud_auth_error",
+                "message": "Guard cloud authorization could not be refreshed, so Guard fell back locally.",
+            }
             evaluation = _workspace_local_evaluation(
                 store=store,
                 workspace_dir=target_workspace_dir,
@@ -488,7 +507,7 @@ def build_package_protect_payload(
     receipt = build_receipt(
         harness=_LOCAL_SUPPLY_CHAIN_HARNESS,
         artifact_id=artifact.artifact_id,
-        artifact_hash=hashlib.sha256(artifact.artifact_id.encode("utf-8")).hexdigest(),
+        artifact_hash=stable_digest_hex(artifact.artifact_id.encode("utf-8")),
         policy_decision=verdict_action,
         capabilities_summary=evaluation.user_copy.summary,
         changed_capabilities=[target.package_name or target.raw_spec for target in sanitized_intent.targets],
@@ -1111,7 +1130,7 @@ def _should_use_cloud_workspace_audit(
     store: GuardStore,
     posture: dict[str, object],
 ) -> bool:
-    if store.get_sync_credentials() is None or store.get_cloud_workspace_id() is None:
+    if store.get_cloud_sync_profile() is None or store.get_cloud_workspace_id() is None:
         return False
     bundle = posture.get("bundle")
     if not isinstance(bundle, dict):
@@ -1122,16 +1141,23 @@ def _should_use_cloud_workspace_audit(
 def _run_cloud_workspace_audit(
     *,
     request_payload: dict[str, object],
-    sync_url: str,
-    token: str,
+    auth_context: dict[str, object] | None = None,
+    sync_url: str | None = None,
+    token: str | None = None,
     workspace_id: str,
 ) -> tuple[dict[str, object] | None, dict[str, object] | None]:
-    request_url = _normalized_supply_chain_batch_url(sync_url, workspace_id)
-    request_headers = {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+    resolved_auth_context = auth_context
+    if resolved_auth_context is None:
+        if not isinstance(sync_url, str) or not sync_url or not isinstance(token, str) or not token:
+            raise TypeError("auth_context or sync_url/token is required")
+        request_url = _normalized_supply_chain_batch_url(sync_url, workspace_id)
+        request_headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+    else:
+        request_url = _normalized_supply_chain_batch_url(str(resolved_auth_context["sync_url"]), workspace_id)
+        request_headers = _guard_sync_headers(resolved_auth_context, request_url=request_url, method="POST")
     aggregated_packages: list[dict[str, object]] = []
     aggregated_reasons: list[dict[str, object]] = []
     cursor: str | None = None
@@ -1272,13 +1298,13 @@ def _workspace_audit_lockfile_context(
     if manifest_paths:
         manifest_path = workspace_dir / manifest_paths[0]
         try:
-            manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            manifest_hash = stable_digest_hex(manifest_path.read_bytes())
         except OSError:
             manifest_hash = None
     return {
         "dependencyCount": len(inventory),
         "fileName": lockfile_path.name,
-        "lockfileHash": hashlib.sha256(lockfile_text.encode("utf-8")).hexdigest(),
+        "lockfileHash": stable_digest_hex(lockfile_text.encode("utf-8")),
         "manifestHash": manifest_hash,
     }
 
@@ -1293,7 +1319,7 @@ def _workspace_audit_fingerprint(
 ) -> str:
     manifest_hashes = _hash_existing_paths(workspace_dir, manifest_paths)
     lockfile_hashes = _hash_existing_paths(workspace_dir, lockfile_paths)
-    return hashlib.sha256(
+    return stable_digest_hex(
         json.dumps(
             {
                 "workspace_id": workspace_id,
@@ -1304,8 +1330,8 @@ def _workspace_audit_fingerprint(
             },
             sort_keys=True,
             separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
+        ).encode("utf-8"),
+    )
 
 
 def _hash_existing_paths(workspace_dir: Path, relative_paths: Sequence[str]) -> list[str]:
@@ -1315,7 +1341,7 @@ def _hash_existing_paths(workspace_dir: Path, relative_paths: Sequence[str]) -> 
         if not disk_path.exists():
             continue
         try:
-            hashes.append(hashlib.sha256(disk_path.read_bytes()).hexdigest())
+            hashes.append(stable_digest_hex(disk_path.read_bytes()))
         except OSError:
             continue
     return hashes

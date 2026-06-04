@@ -568,31 +568,46 @@ def _now() -> str:
 
 
 def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
-    credentials = store.get_sync_credentials()
-    sync_url = credentials["sync_url"] if credentials is not None else None
+    cloud_profile = store.get_cloud_sync_profile()
+    oauth_storage_health = store.get_oauth_local_credential_health()
+    oauth_repair_required = (
+        bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
+    )
+    sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
     remote_policy = store.get_sync_payload("policy") or {}
     team_policy_pack = store.get_sync_payload("team_policy_pack") or {}
     alert_preferences = store.get_sync_payload("alert_preferences") or {}
     remote_payload_active = any((sync_summary, remote_policy, team_policy_pack, alert_preferences))
     cloud_state = _resolve_runtime_cloud_state(
-        sync_configured=credentials is not None,
+        sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
         remote_payload_active=remote_payload_active,
     )
     dashboard_url, inbox_url, fleet_url, connect_url = _resolve_guard_urls(sync_url)
-    sync_health = _build_cloud_sync_health(store, credentials is not None, cloud_state)
+    sync_health = _build_cloud_sync_health(
+        store,
+        cloud_profile is not None,
+        cloud_state,
+        oauth_repair_required=oauth_repair_required,
+    )
     return {
-        "sync_configured": credentials is not None,
+        "sync_configured": cloud_profile is not None,
         "cloud_state": cloud_state,
         "cloud_state_label": _runtime_cloud_state_label(cloud_state),
-        "cloud_state_detail": _runtime_cloud_state_detail(cloud_state),
+        "cloud_state_detail": _runtime_cloud_state_detail(
+            cloud_state,
+            oauth_repair_required=oauth_repair_required,
+        ),
         "cloud_sync_health": sync_health,
         "cloud_pairing_state": {
             "state": cloud_state,
             "label": _runtime_cloud_state_label(cloud_state),
-            "detail": _runtime_cloud_state_detail(cloud_state),
-            "sync_configured": credentials is not None,
+            "detail": _runtime_cloud_state_detail(
+                cloud_state,
+                oauth_repair_required=oauth_repair_required,
+            ),
+            "sync_configured": cloud_profile is not None,
             "dashboard_url": dashboard_url,
             "inbox_url": inbox_url,
             "fleet_url": fleet_url,
@@ -615,7 +630,7 @@ def _build_runtime_device_context(store: GuardStore) -> dict[str, object]:
 
 
 def _build_latest_connect_state(store: GuardStore, now: str) -> dict[str, object] | None:
-    state = store.get_latest_guard_connect_state(now=now)
+    state = store.get_effective_guard_connect_state(now=now)
     if state is None:
         return None
     return {
@@ -732,7 +747,13 @@ def _runtime_proof_status_detail(state: str) -> str:
     return details.get(state, "Connect Guard Cloud to sync this device proof.")
 
 
-def _build_cloud_sync_health(store: GuardStore, sync_configured: bool, cloud_state: str) -> dict[str, object]:
+def _build_cloud_sync_health(
+    store: GuardStore,
+    sync_configured: bool,
+    cloud_state: str,
+    *,
+    oauth_repair_required: bool = False,
+) -> dict[str, object]:
     pending_events = store.count_guard_events_v1(uploaded=False)
     event_summary = store.get_sync_payload("guard_events_v1_summary") or {}
     sync_summary = store.get_sync_payload("sync_summary") or {}
@@ -742,7 +763,9 @@ def _build_cloud_sync_health(store: GuardStore, sync_configured: bool, cloud_sta
         sync_summary.get("synced_at"),
         runtime_summary.get("synced_at"),
     )
-    if not sync_configured:
+    if oauth_repair_required:
+        state = "failed"
+    elif not sync_configured:
         state = "disabled"
     elif isinstance(event_summary, dict) and event_summary.get("status") == "failed":
         state = "failed"
@@ -761,7 +784,11 @@ def _build_cloud_sync_health(store: GuardStore, sync_configured: bool, cloud_sta
     return {
         "state": state,
         "label": _cloud_sync_health_label(state),
-        "detail": _cloud_sync_health_detail(state, pending_events=pending_events),
+        "detail": _cloud_sync_health_detail(
+            state,
+            pending_events=pending_events,
+            oauth_repair_required=oauth_repair_required,
+        ),
         "pending_events": pending_events,
         "last_synced_at": last_synced_at,
         "next_retry_after": event_summary.get("next_retry_after") if isinstance(event_summary, dict) else None,
@@ -810,11 +837,18 @@ def _cloud_sync_health_label(state: str) -> str:
     return labels.get(state, "Cloud sync pending")
 
 
-def _cloud_sync_health_detail(state: str, *, pending_events: int) -> str:
+def _cloud_sync_health_detail(state: str, *, pending_events: int, oauth_repair_required: bool = False) -> str:
     if state == "healthy":
         return "Guard Cloud has the latest local proof from this machine."
     if state == "failed":
-        return "The latest Cloud upload failed. HOL Guard kept local protection active and will retry."
+        if oauth_repair_required:
+            return (
+                "Guard Cloud authorization on this machine needs repair. Run hol-guard connect again to restore sync."
+            )
+        return (
+            "Guard Cloud did not accept the last upload. Guard will retry automatically, "
+            "or run hol-guard sync to try again now."
+        )
     if state == "degraded":
         return "Cloud accepted legacy sync, but v1 Guard event ingest is unavailable. Local protection stayed active."
     if state == "disabled":
@@ -845,7 +879,12 @@ def _runtime_cloud_state_label(cloud_state: str) -> str:
     return labels.get(cloud_state, "Local only")
 
 
-def _runtime_cloud_state_detail(cloud_state: str) -> str:
+def _runtime_cloud_state_detail(cloud_state: str, *, oauth_repair_required: bool = False) -> str:
+    if oauth_repair_required:
+        return (
+            "Guard Cloud sign-in on this machine is incomplete. "
+            "Run hol-guard connect again to repair local authorization and resume sync."
+        )
     if cloud_state == "paired_waiting":
         return (
             "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. "
