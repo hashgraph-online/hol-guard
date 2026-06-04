@@ -421,6 +421,11 @@ class FallbackSecretStore:
             try:
                 store.delete_secret(secret_id)
             except Exception:
+                _store_logger.exception(
+                    "Failed to delete Guard secret from %s for secret_id=%s",
+                    type(store).__name__,
+                    secret_id,
+                )
                 continue
 
 

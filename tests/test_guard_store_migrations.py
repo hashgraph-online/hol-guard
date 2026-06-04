@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -207,6 +208,29 @@ def test_fallback_secret_store_promotes_secret_to_primary():
     store.promote_secret("guard-token", "value-123")
 
     assert primary.get_secret("guard-token") == "value-123"
+
+
+def test_fallback_secret_store_logs_delete_failures(caplog):
+    class FailingStore:
+        def delete_secret(self, secret_id: str) -> None:
+            raise RuntimeError(f"cannot delete {secret_id}")
+
+    class MemoryStore:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        def delete_secret(self, secret_id: str) -> None:
+            self.deleted.append(secret_id)
+
+    fallback = MemoryStore()
+    store = FallbackSecretStore(FailingStore(), fallback)
+
+    caplog.set_level(logging.ERROR, logger="codex_plugin_scanner.guard.store")
+    store.delete_secret("guard-token")
+
+    assert fallback.deleted == ["guard-token"]
+    assert "guard-token" in caplog.text
+    assert "Failed to delete Guard secret from FailingStore" in caplog.text
 
 
 def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(tmp_path, monkeypatch):
