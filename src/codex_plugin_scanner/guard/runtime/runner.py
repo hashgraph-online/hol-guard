@@ -1854,6 +1854,7 @@ def _persist_rotated_oauth_refresh_token(
 
 
 def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
+    oauth_health = store.get_oauth_local_credential_health()
     oauth_credentials = store.get_oauth_local_credentials()
     if oauth_credentials is not None:
         issuer = _optional_string(oauth_credentials.get("issuer"))
@@ -1888,6 +1889,8 @@ def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
             "access_token": str(refreshed["access_token"]),
             "dpop_key_material": dpop_key_material,
         }
+    if bool(oauth_health.get("configured")):
+        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
     credentials = store.get_sync_credentials()
     if credentials is None:
         raise GuardSyncNotConfiguredError("Guard is not logged in.")

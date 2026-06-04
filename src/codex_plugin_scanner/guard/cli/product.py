@@ -88,7 +88,7 @@ def _build_guard_product_payload(
         "generated_at": _now(),
         "guard_home": _redacted_path(context.guard_home, context.home_dir),
         "workspace": _redacted_path(context.workspace_dir, context.home_dir),
-        "sync_configured": store.get_sync_credentials() is not None,
+        "sync_configured": store.get_cloud_sync_profile() is not None,
         "oauth_storage_health": store.get_oauth_local_credential_health(),
         "receipt_count": receipt_count,
         "pending_approvals": store.count_approval_requests(),
@@ -231,8 +231,12 @@ def _resolve_runtime_status(runtime_state: dict[str, object] | None, approval_ce
 
 
 def _build_cloud_context(store: GuardStore) -> dict[str, object]:
-    credentials = store.get_sync_credentials()
-    sync_url = credentials["sync_url"] if credentials is not None else None
+    cloud_profile = store.get_cloud_sync_profile()
+    oauth_storage_health = store.get_oauth_local_credential_health()
+    oauth_repair_required = (
+        bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
+    )
+    sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     dashboard_url, connect_url, inbox_url, fleet_url = _resolve_guard_urls(sync_url)
     advisories = store.list_cached_advisories(limit=3)
     alert_preferences = _coerce_payload_dict(store.get_sync_payload("alert_preferences"))
@@ -240,17 +244,22 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     team_policy_pack = _coerce_payload_dict(store.get_sync_payload("team_policy_pack"))
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
-    latest_connect_state = store.get_latest_guard_connect_state(now=_now())
+    latest_connect_state = store.get_effective_guard_connect_state(now=_now())
     remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
     cloud_state = _resolve_cloud_state(
-        sync_configured=credentials is not None,
+        sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
         remote_payload_active=remote_payload_active,
     )
     return {
         "cloud_state": cloud_state,
         "cloud_state_label": _cloud_state_label(cloud_state),
-        "cloud_state_detail": _cloud_state_detail(cloud_state, connect_url, dashboard_url),
+        "cloud_state_detail": _cloud_state_detail(
+            cloud_state,
+            connect_url,
+            dashboard_url,
+            oauth_repair_required=oauth_repair_required,
+        ),
         "sync_url": sync_url,
         "dashboard_url": dashboard_url,
         "inbox_url": inbox_url,
@@ -456,7 +465,18 @@ def _cloud_state_label(cloud_state: str) -> str:
     return labels.get(cloud_state, "Local only")
 
 
-def _cloud_state_detail(cloud_state: str, connect_url: str, dashboard_url: str) -> str:
+def _cloud_state_detail(
+    cloud_state: str,
+    connect_url: str,
+    dashboard_url: str,
+    *,
+    oauth_repair_required: bool = False,
+) -> str:
+    if oauth_repair_required:
+        return (
+            "Guard Cloud sign-in on this machine is incomplete. "
+            f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair local authorization and resume sync."
+        )
     if cloud_state == "paired_waiting":
         return (
             "Guard Cloud credentials are saved, but this machine has not finished a full sync yet. "

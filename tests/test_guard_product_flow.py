@@ -343,6 +343,56 @@ args = ["workspace-skill.js", "--changed"]
         assert output["connect_status_command"] == "hol-guard connect status"
         assert output["connect_recovery_command"] == "hol-guard connect"
 
+    def test_guard_status_json_uses_oauth_profile_for_cloud_state(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        store = GuardStore(guard_home)
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-secret-value",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "x-value",
+                "y": "y-value",
+                "alg": "ES256",
+                "use": "sig",
+            },
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            workspace_id="workspace-123",
+            now="2026-06-04T18:30:00+00:00",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "status",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["sync_configured"] is True
+        assert output["cloud_state"] == "paired_waiting"
+        assert output["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+        assert output["connect_url"] == "https://hol.org/guard/connect"
+        assert output["dashboard_url"] == "https://hol.org/guard"
+        assert output["inbox_url"] == "https://hol.org/guard/inbox"
+        assert output["fleet_url"] == "https://hol.org/guard/fleet"
+
     def test_guard_help_groups_commands_by_everyday_cloud_and_advanced_work(self, capsys, monkeypatch):
         monkeypatch.setattr(sys, "argv", ["hol-guard"])
 
