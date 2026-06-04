@@ -3880,7 +3880,7 @@ def _should_emit_native_hook_json_response(
         and output_stream is not None
         and (
             event_name in {"PreToolUse", "Notification"}
-            or (harness in {"claude-code", "codex"} and event_name == "UserPromptSubmit")
+            or (harness == "claude-code" and event_name == "UserPromptSubmit")
         )
     )
 
