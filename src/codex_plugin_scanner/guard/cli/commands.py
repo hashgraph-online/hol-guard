@@ -176,6 +176,7 @@ from ..runtime.secret_sensitivity import (
 )
 from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
+from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..shims import install_package_shims, package_shim_status, repair_package_shims, uninstall_package_shims
@@ -1397,6 +1398,25 @@ def _run_init_command(
     return 1 if init_failed else 0
 
 
+def _normalize_explicit_workspace_path(value: str | None) -> Path | None:
+    """Drop sentinel workspace strings and trailing `/None` path segments."""
+
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped or stripped.lower() in {"none", "null"}:
+        return None
+    path = Path(stripped).expanduser()
+    if path.name == "None":
+        path = path.parent
+        if not str(path).strip():
+            return None
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
 def _resolve_guard_workspace(
     args: argparse.Namespace,
     *,
@@ -1404,7 +1424,7 @@ def _resolve_guard_workspace(
 ) -> Path | None:
     explicit_workspace = getattr(args, "workspace", None)
     if explicit_workspace:
-        return Path(explicit_workspace).resolve()
+        return _normalize_explicit_workspace_path(str(explicit_workspace))
     if getattr(args, "guard_command", None) != "apps":
         return None
     if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
@@ -2639,6 +2659,11 @@ def run_guard_command(
         return 0
 
     if args.guard_command == "hook":
+        runtime_harness = getattr(args, "runtime_harness", None)
+        if isinstance(runtime_harness, str) and runtime_harness.strip():
+            args.harness = runtime_harness.strip()
+        else:
+            args.harness = resolve_runtime_hook_harness(args.harness)
         payload = _load_hook_payload(getattr(args, "event_file", None), input_text=input_text)
         managed_install = _managed_install_for(store, args.harness)
         workspace_was_explicit = workspace is not None
@@ -8839,6 +8864,10 @@ def _copilot_mcp_tool_token(value: str) -> str:
 def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -> Path:
     if harness == "hermes":
         return home_dir / ".hermes" / "config.yaml"
+    if harness == "cursor":
+        if workspace is not None:
+            return workspace / ".cursor" / "mcp.json"
+        return home_dir / ".cursor" / "mcp.json"
     if harness == "claude-code":
         if workspace is not None:
             return workspace / ".claude" / "settings.local.json"

@@ -2257,13 +2257,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         params = parse_qs(query)
         home_dir = self._optional_string(params.get("home", [None])[-1])
         guard_home = self._optional_string(params.get("guard-home", [None])[-1])
-        workspace = self._optional_string(params.get("workspace", [None])[-1])
+        from ..cli.commands import _normalize_explicit_workspace_path
+
+        workspace = _normalize_explicit_workspace_path(self._optional_string(params.get("workspace", [None])[-1]))
+        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
+        harness = runtime_harness or "claude-code"
         args = argparse.Namespace(
             guard_command="hook",
             home=home_dir,
             guard_home=guard_home,
-            workspace=workspace,
-            harness="claude-code",
+            workspace=str(workspace) if workspace is not None else None,
+            runtime_harness=runtime_harness,
+            harness=harness,
             artifact_id=None,
             artifact_name=None,
             policy_action=None,

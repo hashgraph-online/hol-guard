@@ -15,6 +15,7 @@ from urllib.parse import urlencode
 from ...path_support import iter_safe_matching_files, resolves_within_root
 from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
+from ..runtime.harness_attribution import cursor_hook_query_extras
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
 
@@ -504,6 +505,8 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             query["home"] = str(context.home_dir)
         if context.workspace_dir is not None:
             query["workspace"] = str(context.workspace_dir)
+        for key, value in cursor_hook_query_extras().items():
+            query[key] = value
         return f"{daemon_url}/v1/hooks/claude-code?{urlencode(query)}"
 
     @staticmethod
@@ -516,6 +519,8 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             query["home"] = str(context.home_dir)
         if context.workspace_dir is not None:
             query["workspace"] = str(context.workspace_dir)
+        for key, value in cursor_hook_query_extras().items():
+            query[key] = value
         package_root = Path(__file__).resolve().parents[3]
         code = (
             f"_HOL_GUARD_CLAUDE_DAEMON_HOOK_MARKER = {CLAUDE_GUARD_DAEMON_HOOK_MARKER!r};"
