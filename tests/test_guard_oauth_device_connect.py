@@ -1,7 +1,6 @@
 import base64
 import io
 import json
-import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1026,35 +1025,31 @@ def test_loopback_callback_listener_uses_random_high_port_and_loopback_path() ->
 
 
 def test_loopback_callback_listener_retries_after_port_conflict(monkeypatch) -> None:
-    occupied_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    occupied_socket.bind(("127.0.0.1", 0))
-    occupied_socket.listen(1)
-    occupied_port = occupied_socket.getsockname()[1]
+    attempted_ports: list[int] = []
+    port_offsets = iter((0, 1))
 
-    probe_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    probe_socket.bind(("127.0.0.1", 0))
-    retry_port = probe_socket.getsockname()[1]
-    probe_socket.close()
-
-    port_offsets = iter(
-        (
-            occupied_port - connect_flow._LOOPBACK_PORT_MIN,
-            retry_port - connect_flow._LOOPBACK_PORT_MIN,
-        )
-    )
+    def fake_init(self, server_address, _handler_class, bind_and_activate=True):
+        attempted_ports.append(server_address[1])
+        self.server_address = server_address
+        self.guard_callback = None
+        if len(attempted_ports) == 1:
+            raise OSError("port conflict")
 
     monkeypatch.setattr(connect_flow, "_LOOPBACK_HOSTS", ("127.0.0.1",))
     monkeypatch.setattr(connect_flow.secrets, "randbelow", lambda _limit: next(port_offsets))
+    monkeypatch.setattr(connect_flow.http.server.ThreadingHTTPServer, "__init__", fake_init)
+    monkeypatch.setattr(connect_flow.http.server.ThreadingHTTPServer, "serve_forever", lambda self: None)
+    monkeypatch.setattr(connect_flow.http.server.ThreadingHTTPServer, "shutdown", lambda self: None)
+    monkeypatch.setattr(connect_flow.http.server.ThreadingHTTPServer, "server_close", lambda self: None)
 
     listener = connect_flow.start_guard_loopback_callback_listener(expected_state="state-123")
-    try:
-        parsed = urllib.parse.urlparse(listener.redirect_uri)
-        assert parsed.hostname == "127.0.0.1"
-        assert parsed.port == retry_port
-        assert parsed.port != occupied_port
-    finally:
-        listener.close()
-        occupied_socket.close()
+    parsed = urllib.parse.urlparse(listener.redirect_uri)
+
+    assert parsed.hostname == "127.0.0.1"
+    assert parsed.port == connect_flow._LOOPBACK_PORT_MIN + 1
+    assert attempted_ports == [connect_flow._LOOPBACK_PORT_MIN, connect_flow._LOOPBACK_PORT_MIN + 1]
+
+    listener.close()
 
 
 def test_loopback_callback_listener_rejects_state_mismatch() -> None:
