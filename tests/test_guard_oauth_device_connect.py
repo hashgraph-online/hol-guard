@@ -1050,6 +1050,7 @@ def test_loopback_callback_listener_rejects_raw_runtime_credentials_without_code
             "&pairing_secret=pair-secret"
             "&sync_token=sync-secret"
         )
+        response_body = ""
         try:
             urllib.request.urlopen(legacy_query_url, timeout=5)
         except urllib.error.HTTPError as error:
