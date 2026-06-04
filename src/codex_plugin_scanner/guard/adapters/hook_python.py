@@ -10,12 +10,25 @@ from pathlib import Path
 
 from .base import HarnessContext
 
-_WORKTREE_MARKERS = ("/.worktrees/", "/worktrees/", "-wt-")
+_WORKTREE_MARKERS = ("/.worktrees/", "/worktrees/")
+_WORKTREE_SEGMENT_PREFIXES = ("hol-guard-wt-",)
+_PROBE_ENV_KEYS = (
+    "PATH",
+    "HOME",
+    "VIRTUAL_ENV",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "UV_PROJECT_ENVIRONMENT",
+    "UV_PYTHON",
+    "CONDA_PREFIX",
+)
 
 
 def _path_looks_like_worktree(path: Path) -> bool:
-    text = str(path.resolve())
-    return any(marker in text for marker in _WORKTREE_MARKERS)
+    text = str(path.resolve()).replace("\\", "/")
+    if any(marker in text for marker in _WORKTREE_MARKERS):
+        return True
+    return any(segment.startswith(prefix) for segment in text.split("/") for prefix in _WORKTREE_SEGMENT_PREFIXES)
 
 
 def filter_worktree_path_entries(entries: list[str]) -> list[str]:
@@ -33,11 +46,6 @@ def filter_worktree_path_entries(entries: list[str]) -> list[str]:
 
 def _guard_hook_python_candidates(context: HarnessContext) -> list[Path]:
     candidates: list[Path] = []
-    if context.workspace_dir is not None:
-        for name in (".venv", "venv"):
-            python_path = context.workspace_dir / name / "bin" / "python"
-            if python_path.is_file() and not _path_looks_like_worktree(python_path):
-                candidates.append(python_path.resolve())
     pipx_python = Path.home() / ".local" / "pipx" / "venvs" / "hol-guard" / "bin" / "python"
     if pipx_python.is_file():
         candidates.append(pipx_python.resolve())
@@ -48,6 +56,11 @@ def _guard_hook_python_candidates(context: HarnessContext) -> list[Path]:
             interpreter = _python_from_launcher_shim(shim)
             if interpreter is not None and interpreter.is_file():
                 candidates.append(interpreter.resolve())
+    if context.workspace_dir is not None:
+        for name in (".venv", "venv"):
+            python_path = context.workspace_dir / name / "bin" / "python"
+            if python_path.is_file() and not _path_looks_like_worktree(python_path):
+                candidates.append(python_path.resolve())
     executable = Path(sys.executable).resolve()
     if executable.is_file() and not _path_looks_like_worktree(executable):
         candidates.append(executable)
@@ -75,7 +88,24 @@ def _python_from_launcher_shim(shim: Path) -> Path | None:
     return interpreter if interpreter.is_file() else None
 
 
+def _hook_python_probe_env() -> dict[str, str]:
+    return {key: os.environ[key] for key in _PROBE_ENV_KEYS if key in os.environ}
+
+
+def _current_interpreter_can_import_guard() -> bool:
+    try:
+        import cryptography  # noqa: F401
+
+        import codex_plugin_scanner  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def _python_can_import_guard(python: Path) -> bool:
+    current = Path(sys.executable).resolve()
+    if python == current and _current_interpreter_can_import_guard():
+        return True
     probe = "import codex_plugin_scanner; import cryptography"
     try:
         completed = subprocess.run(
@@ -84,7 +114,7 @@ def _python_can_import_guard(python: Path) -> bool:
             text=True,
             check=False,
             timeout=15,
-            env={key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ},
+            env=_hook_python_probe_env(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -95,6 +125,9 @@ def resolve_guard_hook_python(context: HarnessContext) -> Path:
     for candidate in _guard_hook_python_candidates(context):
         if _python_can_import_guard(candidate):
             return candidate
+    current = Path(sys.executable).resolve()
+    if current.is_file() and _python_can_import_guard(current):
+        return current
     raise RuntimeError(
         "Guard could not find a Python interpreter with codex_plugin_scanner and cryptography. "
         "Install hol-guard with pipx and re-run `hol-guard install opencode`."
@@ -102,6 +135,13 @@ def resolve_guard_hook_python(context: HarnessContext) -> Path:
 
 
 def package_root_from_python(python: Path) -> str:
+    current = Path(sys.executable).resolve()
+    if python == current and _current_interpreter_can_import_guard():
+        import pathlib
+
+        import codex_plugin_scanner
+
+        return str(pathlib.Path(codex_plugin_scanner.__file__).resolve().parent.parent)
     probe = (
         "import pathlib;"
         "import codex_plugin_scanner;"
@@ -114,7 +154,7 @@ def package_root_from_python(python: Path) -> str:
             text=True,
             check=False,
             timeout=15,
-            env={key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ},
+            env=_hook_python_probe_env(),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError("Guard could not resolve codex_plugin_scanner from the hook Python.") from exc

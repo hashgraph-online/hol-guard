@@ -25,7 +25,7 @@ def _ctx(tmp_path: Path) -> HarnessContext:
 
 
 def test_filter_worktree_path_entries_drops_worktree_paths() -> None:
-    worktree_src = "/tmp/hol-guard-wt-opencode-trusted-hook/src"
+    worktree_src = "/Users/me/CascadeProjects/hol-guard-wt-opencode-trusted-hook/src"
     stable = "/Users/me/.local/pipx/venvs/hol-guard/lib/python3.12/site-packages"
     filtered = filter_worktree_path_entries(
         [

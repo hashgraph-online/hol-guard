@@ -147,7 +147,8 @@ export const HolGuardPretoolPlugin = async ({
 
 
 def _trusted_pythonpath_entries(package_root: str) -> list[str]:
-    return filter_worktree_path_entries([package_root])
+    trimmed = package_root.strip()
+    return [trimmed] if trimmed else []
 
 
 def _pretool_hook_launcher_code(*, package_root: str) -> str:
