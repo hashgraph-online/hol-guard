@@ -144,7 +144,7 @@ def _redact_inline_secret_assignments(value: str, pattern: re.Pattern[str]) -> s
         if match is None:
             redacted.append(value[search_start:])
             return "".join(redacted)
-        redacted.append(value[search_start:match.start()])
+        redacted.append(value[search_start : match.start()])
         redacted.append("[redacted]")
         search_start = _consume_inline_secret_value(value, match.end())
 
