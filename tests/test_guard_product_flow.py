@@ -11,6 +11,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli.product import build_guard_status_payload
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.consumer import detect_all
+from codex_plugin_scanner.guard.consumer.service import artifact_hash
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -118,6 +123,48 @@ class TestGuardProductFlow:
         assert "same-chat approvals" in codex_summary["approval_flow"]["summary"]
         assert output["next_steps"][0]["command"] == "hol-guard install codex"
         assert output["next_steps"][1]["command"] == "hol-guard run codex --dry-run"
+
+    def test_guard_status_review_count_does_not_resolve_policy(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+        config = GuardConfig(guard_home=guard_home, workspace=workspace_dir)
+        store = GuardStore(guard_home)
+        detections = detect_all(context)
+        codex_detection = next(item for item in detections if item.harness == "codex")
+
+        assert codex_detection.artifacts
+
+        for artifact in codex_detection.artifacts:
+            store.save_snapshot(
+                codex_detection.harness,
+                artifact.artifact_id,
+                artifact.to_dict(),
+                artifact_hash(artifact),
+                "2026-06-04T12:00:00+00:00",
+            )
+
+        _write_text(
+            workspace_dir / ".codex" / "config.toml",
+            """
+[mcp_servers.workspace_skill]
+command = "node"
+args = ["workspace-skill.js", "--changed"]
+""".strip()
+            + "\n",
+        )
+        monkeypatch.setattr(
+            store,
+            "resolve_policy",
+            lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("status should not resolve policy")),
+        )
+
+        payload = build_guard_status_payload(context, store, config)
+        codex_summary = next(item for item in payload["harnesses"] if item["harness"] == "codex")
+
+        assert codex_summary["review_count"] >= 1
 
     def test_guard_bootstrap_stays_local_when_cloud_is_unreachable(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
