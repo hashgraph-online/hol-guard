@@ -36,6 +36,7 @@ output/playwright/
 # IDE
 .idea/
 .vscode/
+.codex/
 *.swp
 *.swo
 

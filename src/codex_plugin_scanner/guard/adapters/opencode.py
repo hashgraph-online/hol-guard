@@ -30,6 +30,7 @@ from .opencode_artifacts import (
     runtime_config_path,
     runtime_overlay,
 )
+from .opencode_pretool import install_pretool_plugin, remove_pretool_plugin
 
 
 class OpenCodeHarnessAdapter(HarnessAdapter):
@@ -189,6 +190,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         target_config_path.parent.mkdir(parents=True, exist_ok=True)
         target_config_path.write_text(json.dumps(target_payload, indent=2) + "\n", encoding="utf-8")
         shim_manifest = install_guard_shim(self.harness, context)
+        plugin_manifest = install_pretool_plugin(context)
         overlay_path = runtime_config_path(context)
         overlay_path.parent.mkdir(parents=True, exist_ok=True)
         overlay_path.write_text(
@@ -212,14 +214,19 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         )
         notes = [
             *list(shim_manifest.get("notes", [])),
+            "Guard installed an OpenCode pretool plugin that reviews bash and shell commands through "
+            "hol-guard hook before execution.",
             "Guard added an OpenCode runtime overlay that keeps managed MCP tools on native ask and routes "
             "managed local MCP servers through Guard runtime interception when you launch through Guard.",
+            "Launch OpenCode through guard-opencode or hol-guard run opencode when you also want "
+            "pre-launch artifact checks and the runtime skill overlay.",
         ]
         return {
             "harness": self.harness,
             "active": True,
             "config_path": str(target_config_path),
             **shim_manifest,
+            **plugin_manifest,
             "managed_config_path": str(target_config_path),
             "backup_path": str(backup_path),
             "state_path": str(state_path),
@@ -257,8 +264,10 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         if state_cleanup_complete and state_path.is_file():
             state_path.unlink()
         shim_manifest = remove_guard_shim(self.harness, context)
+        plugin_manifest = remove_pretool_plugin(context)
         notes = [
             *list(shim_manifest.get("notes", [])),
+            "Guard removed the OpenCode pretool plugin from the global plugin directory.",
             "Guard leaves the OpenCode runtime overlay on disk for auditability, but it is ignored unless you "
             "launch through Guard.",
         ]
@@ -267,6 +276,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "active": False,
             "config_path": str(target_config_path),
             **shim_manifest,
+            **plugin_manifest,
             "managed_config_path": str(target_config_path),
             "backup_path": str(backup_path),
             "state_path": str(state_path),
