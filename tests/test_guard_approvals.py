@@ -1192,7 +1192,12 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests", timeout=5) as response:
+            list_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(list_request, timeout=5) as response:
                 approvals_payload = json.loads(response.read().decode("utf-8"))
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/approvals/req-456/decision",
@@ -1233,7 +1238,12 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/runtime",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
                 snapshot_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1269,7 +1279,12 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/runtime",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
                 snapshot_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1411,23 +1426,41 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests", timeout=5) as response:
+            list_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(list_request, timeout=5) as response:
                 requests_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests/req-v1", timeout=5) as response:
+            item_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/req-v1",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(item_request, timeout=5) as response:
                 request_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/receipts/{built_receipt.receipt_id}", timeout=5
-            ) as response:
+            receipt_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/receipts/{built_receipt.receipt_id}",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(receipt_request, timeout=5) as response:
                 receipt_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(
+            latest_receipt_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/receipts/latest?harness=codex&artifact_id="
                 f"{urllib.parse.quote(artifact.artifact_id, safe='')}",
-                timeout=5,
-            ) as response:
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(latest_receipt_request, timeout=5) as response:
                 latest_receipt_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/artifacts/{artifact.artifact_id}/diff?harness=codex", timeout=5
-            ) as response:
+            diff_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/artifacts/{artifact.artifact_id}/diff?harness=codex",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(diff_request, timeout=5) as response:
                 diff_payload = json.loads(response.read().decode("utf-8"))
             policy_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
@@ -1445,9 +1478,12 @@ class TestGuardApprovals:
             )
             with urllib.request.urlopen(policy_request, timeout=5) as response:
                 policy_save_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/policy?harness=codex", timeout=5
-            ) as response:
+            policy_list_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy?harness=codex",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(policy_list_request, timeout=5) as response:
                 policy_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1475,10 +1511,12 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(
+            request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/artifacts/codex%3Aproject%3Atools%2Fwith%2Fslash/diff?harness=codex",
-                timeout=5,
-            ) as response:
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
                 diff_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
