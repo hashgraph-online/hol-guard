@@ -90,6 +90,15 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
 )
 
+_SENSITIVE_INLINE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r'(?i)"?sync_state\.credentials"?\s*[:=]\s*(?:\{[^{}]*\}|".*?"|\'[^\']*\'|[^,\s;}\]]+)',
+    ),
+    re.compile(
+        r'(?i)"?(?:access[_-]?token|refresh[_-]?token|authorization[_-]?code|user[_-]?code|'
+        r'dpop[_-]?private[_-]?key(?:[_-]?(?:pem|ref))?)"?\s*[:=]\s*(?:".*?"|\'[^\']*\'|[^,\s;}\]]+)',
+    ),
+)
 _SENSITIVE_TEXT_PATTERN = re.compile(r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)")
 _POSIX_USER_PATH_PATTERN = re.compile(
     r"(?P<prefix>^|[\s\"'=({\[])(?P<root>/(?:Users|home)/[^/\s\"'`,;:)}\]]+)(?P<rest>(?:/[^\s\"'`,;:)}\]]*)?)"
@@ -121,7 +130,10 @@ def redact_text(value: str) -> RedactedText:
 
 
 def redact_sensitive_text(value: str) -> str:
-    return _SENSITIVE_TEXT_PATTERN.sub("[redacted]", value)
+    redacted = value
+    for pattern in _SENSITIVE_INLINE_PATTERNS:
+        redacted = pattern.sub("[redacted]", redacted)
+    return _SENSITIVE_TEXT_PATTERN.sub("[redacted]", redacted)
 
 
 def redact_local_path(value: str, *, home_dir: Path | None = None) -> str:

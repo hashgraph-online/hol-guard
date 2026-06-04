@@ -136,6 +136,15 @@ def test_static_docs_include_skill_guidance_for_package_install_workflows() -> N
     assert "hol-guard supply-chain audit --json" in docs_text
 
 
+def test_release_checklist_mentions_oauth_only_connect_and_token_retirement() -> None:
+    release_checklist = _read_repo_file("docs/guard/release-checklist.md").lower()
+
+    assert "hol-guard connect" in release_checklist
+    assert "oauth" in release_checklist
+    assert "token" in release_checklist
+    assert "retired" in release_checklist
+
+
 def test_static_docs_cover_false_positive_remediation_and_incident_response() -> None:
     docs_text = "\n".join(
         [

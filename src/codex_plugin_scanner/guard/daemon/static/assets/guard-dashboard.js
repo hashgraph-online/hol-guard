@@ -13323,7 +13323,7 @@ function buildDemoRuntimeSnapshot() {
     proof_status: {
       state: "pending",
       label: "First proof pending",
-      detail: "Browser pairing finished. First proof sync has not completed yet.",
+      detail: "Browser sign-in finished. First proof sync has not completed yet.",
       request_id: "demo-connect-request",
       pairing_completed_at: now2,
       first_synced_at: null,
@@ -15062,7 +15062,7 @@ function WelcomeState(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4", children: "Sync decisions" }),
         props.connectUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, children: "Open pairing flow" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, children: "Open Guard connect" }),
           props.dashboardUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.dashboardUrl, variant: "outline", children: "Open Home" }) : null,
           props.inboxUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.inboxUrl, variant: "outline", children: "Review Queue" }) : null,
           props.fleetUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.fleetUrl, variant: "outline", children: "Protect" }) : null
