@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/runtime-overview.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js","assets/chunks/supply-chain-workspace.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/runtime-overview.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -14128,9 +14128,6 @@ function HiMiniLockClosed(props) {
 function HiMiniListBullet(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniLink(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" }, "child": [] }] })(props);
-}
 function HiMiniKey(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -14779,7 +14776,7 @@ function ShellHeader(props) {
             "aria-label": "Navigate Guard sections",
             className: "h-11 w-full rounded-full border border-white/25 bg-white/95 px-4 text-sm font-medium text-brand-dark shadow-none transition-colors duration-150 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40",
             onChange: handleMobileNavigationChange,
-            value: sidebarLinks.find((item) => item.view === props.view)?.href ?? "/",
+            value: sidebarLinks.find((item) => item.view === props.view)?.href ?? (hubViews.has(props.view) ? "/supply-chain" : "/"),
             children: sidebarLinks.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: item.href, children: item.label }, item.href))
           }
         ) }),
@@ -14810,15 +14807,13 @@ function ShellHeader(props) {
     }
   );
 }
+const hubViews = /* @__PURE__ */ new Set(["audit", "policy", "feed-health"]);
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
-  { href: "/supply-chain", label: "Supply Chain", view: "supply-chain", icon: HiMiniLink },
-  { href: "/audit", label: "Audit", view: "audit", icon: HiMiniBugAnt },
-  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniMagnifyingGlass },
-  { href: "/feed-health", label: "Feed Health", view: "feed-health", icon: HiMiniCog6Tooth },
+  { href: "/supply-chain", label: "Trust Center", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
 ];
 function ShellSidebar(props) {
@@ -14858,7 +14853,7 @@ function ShellSidebar(props) {
           SidebarLink,
           {
             href: item.href,
-            active: props.view === item.view || props.view === "app-detail" && item.view === "fleet",
+            active: props.view === item.view || props.view === "app-detail" && item.view === "fleet" || item.view === "supply-chain" && hubViews.has(props.view),
             icon: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4" }),
             badgeCount: item.view === "inbox" ? props.queuedCount : 0,
             collapsed,
@@ -15126,6 +15121,20 @@ function ProofStrip(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-2xl font-semibold tracking-tight ${toneColor}`, children: item.value })
     ] }, item.label);
   }) });
+}
+function TabBar(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "tablist", className: "flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5", children: props.tabs.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      role: "tab",
+      "aria-selected": props.active === tab.value,
+      onClick: () => props.onChange(tab.value),
+      className: `rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${props.active === tab.value ? "bg-white text-brand-dark shadow-sm" : "text-slate-500 hover:text-brand-dark"}`,
+      children: tab.label
+    },
+    tab.value
+  )) });
 }
 function DataFlowEvidenceCard(props) {
   const evidence = deriveDataFlowEvidence(props.item);
@@ -20488,7 +20497,7 @@ function ApprovalCenterLayout(props) {
         onBulkBlock: props.onBulkBlock
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "supply-chain" ? props.supplyChainContent ?? null : props.view === "audit" ? props.auditContent ?? null : props.view === "policy" ? props.policyContent ?? null : props.view === "feed-health" ? props.feedHealthContent ?? null : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewWorkspace,
       {
         requests: props.requests.kind === "ready" ? props.requests.items : [],
@@ -22121,10 +22130,9 @@ const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chu
 const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,2,4,1]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([6,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([7,1]) : void 0).then((m) => ({ default: m.HelpModal })));
-const SupplyChainWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/supply-chain-workspace.js"), true ? __vite__mapDeps([8,2]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace })));
-const AuditWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/audit-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AuditWorkspace })));
-const PolicyWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/policy-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.PolicyWorkspace })));
-const FeedHealthWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/feed-health-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.FeedHealthWorkspace })));
+const SupplyChainHubWorkspace = reactExports.lazy(
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+);
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
@@ -22375,9 +22383,6 @@ function App() {
   const handleOpenEvidence = reactExports.useCallback(() => navigate("/evidence"), []);
   const handleOpenSettings = reactExports.useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = reactExports.useCallback(() => navigate("/supply-chain"), []);
-  reactExports.useCallback(() => navigate("/audit"), []);
-  reactExports.useCallback(() => navigate("/policy"), []);
-  reactExports.useCallback(() => navigate("/feed-health"), []);
   const handleOpenHelp = reactExports.useCallback(() => setHelpOpen(true), []);
   const handleCloseHelp = reactExports.useCallback(() => setHelpOpen(false), []);
   const handleGoHome = reactExports.useCallback(() => navigate("/"), []);
@@ -22617,7 +22622,7 @@ function App() {
         children: "Skip to content"
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : view === "supply-chain" ? "Supply Chain" : view === "audit" ? "Audit" : view === "policy" ? "Policy" : view === "feed-health" ? "Feed Health" : "App detail" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : view === "supply-chain" || view === "audit" || view === "policy" || view === "feed-health" ? "Trust Center" : "App detail" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalCenterLayout,
       {
@@ -22675,34 +22680,17 @@ function App() {
         ) }) : null,
         appDetailContent: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { onReset: handleGoHome, children: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: appDetailContent }) }),
         settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, { onApprovalGateChange: setApprovalGate }) }),
-        supplyChainContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          SupplyChainWorkspace,
+        supplyChainHubContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SupplyChainHubWorkspace,
           {
+            activeView: view,
             snapshot: runtime.snapshot,
-            onGoHome: handleGoHome
-          }
-        ) }) : null,
-        auditContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          AuditWorkspace,
-          {
-            snapshot: runtime.snapshot,
-            receipts: receipts.kind === "ready" ? receipts.items : []
-          }
-        ) }) : null,
-        policyContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          PolicyWorkspace,
-          {
+            receipts: receipts.kind === "ready" ? receipts.items : [],
             policies: policies.kind === "ready" ? policies.items : [],
-            snapshot: runtime.snapshot,
             onClearPolicy: handleClearPolicy,
-            onOpenSettings: handleOpenSettings
-          }
-        ) }) : null,
-        feedHealthContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FeedHealthWorkspace,
-          {
-            snapshot: runtime.snapshot,
-            onOpenSettings: handleOpenSettings
+            onOpenSettings: handleOpenSettings,
+            onGoHome: handleGoHome,
+            onNavigate: navigate
           }
         ) }) : null
       }
@@ -22763,15 +22751,17 @@ export {
   clearLabelForScope as ad,
   formatHarnessCommand as ae,
   HiMiniCommandLine as af,
-  HiMiniArrowTopRightOnSquare as ag,
-  HiMiniBeaker as ah,
-  fetchPackageFirewallStatus as ai,
-  runPackageFirewallAction as aj,
-  runPackageAudit as ak,
-  runPackageSync as al,
-  HiMiniBugAnt as am,
-  HiMiniSignal as an,
-  HiMiniClock as ao,
+  TabBar as ag,
+  __vitePreload as ah,
+  HiMiniArrowTopRightOnSquare as ai,
+  HiMiniBeaker as aj,
+  fetchPackageFirewallStatus as ak,
+  runPackageFirewallAction as al,
+  runPackageAudit as am,
+  runPackageSync as an,
+  HiMiniBugAnt as ao,
+  HiMiniSignal as ap,
+  HiMiniClock as aq,
   HiMiniInformationCircle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,
