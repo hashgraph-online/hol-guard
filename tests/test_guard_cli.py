@@ -3010,10 +3010,9 @@ args = ["workspace-skill.js", "--changed"]
         assert Path(str(manifest["backup_path"])).is_file()
         assert managed_payload["permission"]["danger_lab_*"] == "ask"
         assert managed_payload["mcp"]["danger_lab"]["type"] == "local"
-        assert managed_payload["mcp"]["danger_lab"]["command"][2] == "codex_plugin_scanner.cli"
-        assert managed_payload["mcp"]["danger_lab"]["command"][3] == "guard"
-        assert managed_payload["mcp"]["danger_lab"]["command"][4] == "opencode-mcp-proxy"
+        assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
         assert managed_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
+        assert "opencode-mcp-proxy" not in json.dumps(managed_payload["mcp"]["danger_lab"])
 
     def test_guard_reinstall_does_not_double_wrap_opencode_mcp_proxies(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3059,10 +3058,13 @@ args = ["workspace-skill.js", "--changed"]
         second_output = json.loads(capsys.readouterr().out)
         managed_config_path = Path(str(second_output["managed_install"]["manifest"]["managed_config_path"]))
         managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
-        proxy_command = managed_payload["mcp"]["danger_lab"]["command"]
+        runtime_config_path = Path(str(second_output["managed_install"]["manifest"]["runtime_config_path"]))
+        runtime_payload = json.loads(runtime_config_path.read_text(encoding="utf-8"))
+        proxy_command = runtime_payload["mcp"]["danger_lab"]["command"]
 
         assert first_rc == 0
         assert second_rc == 0
+        assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
         assert proxy_command.count("opencode-mcp-proxy") == 1
         assert proxy_command[proxy_command.index("--command") + 1] == "python3"
         assert "--arg=danger-server.py" in proxy_command
