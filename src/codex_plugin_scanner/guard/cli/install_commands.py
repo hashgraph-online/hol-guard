@@ -226,6 +226,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
     config_path = OpenCodeHarnessAdapter()._target_config_path(context)
     shim_path = context.guard_home / "bin" / "guard-opencode"
     plugin_path = global_plugin_path(context)
+    mcp_proxy_configured = opencode_config_uses_guard_proxy(config_path)
     warnings: list[str] = []
     if not (managed and managed.get("active")):
         warnings.append("Run `hol-guard install opencode` to activate Guard-managed OpenCode protection.")
@@ -233,7 +234,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
         warnings.append(
             "OpenCode pretool plugin is missing from ~/.config/opencode/plugins/. Re-run `hol-guard install opencode`."
         )
-    if not opencode_config_uses_guard_proxy(config_path):
+    if not mcp_proxy_configured:
         warnings.append("OpenCode MCP servers are not routed through hol-guard. Re-run `hol-guard install opencode`.")
     if not shim_path.is_file():
         warnings.append(
@@ -242,7 +243,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
         )
     return {
         "pretool_plugin_installed": plugin_path.is_file(),
-        "mcp_proxy_configured": opencode_config_uses_guard_proxy(config_path),
+        "mcp_proxy_configured": mcp_proxy_configured,
         "launch_shim_installed": shim_path.is_file(),
         "managed_install_active": bool(managed and managed.get("active")),
         "warnings": warnings,

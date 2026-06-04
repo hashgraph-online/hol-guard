@@ -84,14 +84,24 @@ export const HolGuardPretoolPlugin = async ({
       if (typeof command !== "string" || !command.trim()) {
         return;
       }
-      const result = await runGuardHook(directory, {
-        hook_event_name: "PreToolUse",
-        event: "PreToolUse",
-        tool_name: input.tool,
-        tool_input: { command },
-        cwd: directory,
-        source_scope: "project",
-      });
+      const workspace = directory?.trim() || process.cwd();
+      let result;
+      try {
+        result = await runGuardHook(directory, {
+          hook_event_name: "PreToolUse",
+          event: "PreToolUse",
+          tool_name: input.tool,
+          tool_input: { command },
+          cwd: workspace,
+          source_scope: workspace ? "project" : "global",
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `HOL Guard could not review this ${input.tool} command (${detail}). ` +
+            "Re-run `hol-guard install opencode` and ensure the Guard CLI is available.",
+        );
+      }
       if (result.exitCode === 0) {
         return;
       }
