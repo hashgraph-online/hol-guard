@@ -986,13 +986,22 @@ def _render_skill_scan_results(console: Console, skill_scan: list[dict[str, obje
     )
 
 
+def _managed_install_workspace_label(workspace: object) -> str:
+    if isinstance(workspace, str) and workspace.strip():
+        return workspace.strip()
+    try:
+        return str(Path.cwd().resolve())
+    except OSError:
+        return "current shell"
+
+
 def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
     manifest = managed_install.get("manifest")
     notes = _managed_install_notes(managed_install, manifest)
     body = Table.grid(padding=(0, 1))
     body.add_row("Harness", f"[bold]{managed_install.get('harness', 'unknown')}[/bold]")
     body.add_row("Protection", _managed_install_state_text(managed_install))
-    body.add_row("Workspace", str(managed_install.get("workspace") or "current shell"))
+    body.add_row("Workspace", _managed_install_workspace_label(managed_install.get("workspace")))
     if isinstance(manifest, dict):
         mode = _managed_install_mode_text(manifest.get("mode"))
         if mode is not None:
