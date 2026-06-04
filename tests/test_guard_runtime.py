@@ -15355,10 +15355,14 @@ def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
 def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
-        "https://evil.example/api/guard/receipts/sync",
+        "https://hol.org/api/guard/receipts/sync",
         "guard-live-token",
         "2026-04-19T00:00:00+00:00",
     )
+    credentials_payload = store.get_sync_payload("credentials")
+    assert isinstance(credentials_payload, dict)
+    credentials_payload["sync_url"] = "https://evil.example/api/guard/receipts/sync"
+    store.set_sync_payload("credentials", credentials_payload, "2026-04-19T00:00:01+00:00")
     attempted_request = False
 
     def _fake_urlopen(request, timeout):
@@ -15995,7 +15999,7 @@ def test_sync_runtime_session_rejects_untrusted_oauth_issuer_before_network(tmp_
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
     store.set_oauth_local_credentials(
-        issuer="https://evil.example",
+        issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-token-1",
         dpop_private_key_pem=dpop_key_material.private_key_pem,
@@ -16006,6 +16010,10 @@ def test_sync_runtime_session_rejects_untrusted_oauth_issuer_before_network(tmp_
         workspace_id="workspace-1",
         now="2026-06-01T00:00:00+00:00",
     )
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(oauth_payload, dict)
+    oauth_payload["issuer"] = "https://evil.example"
+    store.set_sync_payload("oauth_local_credentials", oauth_payload, "2026-06-01T00:00:01+00:00")
     attempted_request = False
 
     def _fake_urlopen(request, timeout):
