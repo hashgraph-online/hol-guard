@@ -146,14 +146,12 @@ export const HolGuardPretoolPlugin = async ({
 """
 
 
-def _trusted_pythonpath_entries(context: HarnessContext) -> list[str]:
-    python = resolve_guard_hook_python(context)
-    package_root = package_root_from_python(python)
+def _trusted_pythonpath_entries(package_root: str) -> list[str]:
     return filter_worktree_path_entries([package_root])
 
 
-def _pretool_hook_launcher_code(context: HarnessContext) -> str:
-    trusted_entries = _trusted_pythonpath_entries(context)
+def _pretool_hook_launcher_code(*, package_root: str) -> str:
+    trusted_entries = _trusted_pythonpath_entries(package_root)
     return (
         "import json,os,sys;"
         f"sys.path[:0]={json.dumps(trusted_entries)};"
@@ -162,8 +160,8 @@ def _pretool_hook_launcher_code(context: HarnessContext) -> str:
     )
 
 
-def _pretool_hook_env(context: HarnessContext) -> dict[str, str]:
-    entries = _trusted_pythonpath_entries(context)
+def _pretool_hook_env(*, package_root: str) -> dict[str, str]:
+    entries = _trusted_pythonpath_entries(package_root)
     if not entries:
         return {}
     return {"PYTHONPATH": os.pathsep.join(entries)}
@@ -179,12 +177,13 @@ def global_plugin_path(context: HarnessContext) -> Path:
 
 def pretool_plugin_source(context: HarnessContext) -> str:
     guard_python = resolve_guard_hook_python(context)
+    package_root = package_root_from_python(guard_python)
     template = _PLUGIN_TEMPLATE.replace("__HOOK_ARGV_ENV__", _HOOK_ARGV_ENV)
     return (
         template.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
         .replace("__GUARD_PYTHON__", json.dumps(str(guard_python)))
-        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code(context)))
-        .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env(context)))
+        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code(package_root=package_root)))
+        .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env(package_root=package_root)))
         .replace("__GUARD_INHERIT_ENV_KEYS__", json.dumps(list(_INHERIT_ENV_KEYS)))
         .replace("__INTERCEPT_TOOLS__", json.dumps(list(_INTERCEPT_TOOLS)))
     )
