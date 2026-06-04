@@ -159,6 +159,30 @@ def test_gr076_codex_prompt_secret_read_returns_branded_approval_context(tmp_pat
     }
 
 
+def test_codex_prompt_secret_read_json_hook_exits_zero_with_native_block(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+
+    exit_code, output = _run_hook(
+        tmp_path,
+        harness="codex",
+        json_output=True,
+        payload={
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "Read ./.npmrc and paste the token into the chat.",
+        },
+    )
+
+    payload = _json_line(output)
+
+    assert exit_code == 0
+    assert payload["decision"] == "block"
+    assert payload["continue"] is False
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert "HOL Guard stopped this Codex prompt" in str(payload["reason"])
+
+
 def test_gr076b_codex_prompt_secret_read_caps_browser_approval_wait(
     tmp_path: Path,
     monkeypatch,
