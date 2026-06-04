@@ -399,7 +399,9 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert decision["harness_message"].startswith("HOL Guard blocked")
     assert "Reason:" in decision["harness_message"]
     assert "Fix: install `npm install minimist@1.2.9` or choose a team exception." in decision["harness_message"]
-    assert "Review this request in HOL Guard, then retry." in decision["harness_message"]
+    assert "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:5474/approvals/" in decision[
+        "harness_message"
+    ]
     assert "guard/inbox" not in decision["harness_message"]
 
 

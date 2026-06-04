@@ -2859,6 +2859,7 @@ def run_guard_command(
                 queued=queued,
                 managed_install=managed_install,
             )
+            _localize_pending_approval_copy(response_payload, harness=args.harness)
             _record_harness_usage_for_hook(
                 store=store,
                 action_envelope=action_envelope,
@@ -3399,6 +3400,7 @@ def run_guard_command(
                         args.harness,
                         managed_install=managed_install,
                     )
+                    _localize_pending_approval_copy(response_payload, harness=args.harness)
             if _should_emit_copilot_hook_response(args):
                 _record_harness_usage_for_hook(
                     store=store,
@@ -4859,6 +4861,66 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
     )
 
 
+def _localize_pending_approval_copy(response_payload: dict[str, object], *, harness: str) -> None:
+    review_context = _native_approval_center_context(response_payload, harness=harness)
+    if review_context is None:
+        return
+    queued = response_payload.get("approval_requests")
+    review_url = first_approval_url(queued) if isinstance(queued, list) else None
+    approval_center_url = response_payload.get("approval_center_url")
+    if review_url is None and isinstance(approval_center_url, str) and approval_center_url.strip():
+        review_url = approval_center_url.strip()
+    if review_url is None:
+        return
+    decision_v2 = response_payload.get("decision_v2_json")
+    if isinstance(decision_v2, dict):
+        _localize_decision_v2_review_copy(decision_v2, review_context)
+    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
+    if isinstance(supply_chain_evaluation, dict):
+        user_copy = supply_chain_evaluation.get("user_copy")
+        if isinstance(user_copy, dict):
+            harness_message = _optional_string(user_copy.get("harness_message"))
+            if harness_message is not None:
+                user_copy["harness_message"] = _approval_center_routed_message(harness_message, review_context)
+            user_copy["dashboard_url"] = review_url
+    if isinstance(queued, list):
+        for item in queued:
+            if not isinstance(item, dict):
+                continue
+            decision_v2 = item.get("decision_v2_json")
+            if isinstance(decision_v2, dict):
+                _localize_decision_v2_review_copy(decision_v2, review_context)
+
+
+def _localize_decision_v2_review_copy(decision_v2: dict[str, object], review_context: str) -> None:
+    harness_message = _optional_string(decision_v2.get("harness_message"))
+    if harness_message is not None:
+        decision_v2["harness_message"] = _approval_center_routed_message(harness_message, review_context)
+    action = _optional_string(decision_v2.get("action"))
+    if action in {"ask", "block"}:
+        decision_v2["retry_instruction"] = review_context
+
+
+def _approval_center_routed_message(message: str, review_context: str) -> str:
+    normalized = re.sub(r"https?://[^\s]+/guard/inbox/?\.?", "", message).strip()
+    normalized = normalized.replace("Review this request in HOL Guard, then retry.", "").strip()
+    normalized = re.sub(
+        (
+            r"Open HOL Guard to approve or keep this blocked: https?://\S+\.\s+"
+            r"After you choose, retry the same [^.]+ action\."
+        ),
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    ).strip()
+    normalized = re.sub(r"\s{2,}", " ", normalized).strip()
+    if normalized.endswith("Review evidence:"):
+        normalized = normalized[: -len("Review evidence:")].rstrip()
+    if not normalized:
+        return review_context
+    return f"{_ensure_terminal_punctuation(normalized)} {review_context}"
+
+
 def _runtime_stored_policy_action(
     *,
     store: GuardStore,
@@ -5771,6 +5833,7 @@ def _headless_approval_resolver(
                 queued=queued,
             )
             payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
+            _localize_pending_approval_copy(payload, harness=args.harness)
             if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
                 payload["approval_wait"] = {
                     "resolved": False,
@@ -5837,6 +5900,7 @@ def _headless_approval_resolver(
             managed_install=managed_install,
         )
         payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
+        _localize_pending_approval_copy(payload, harness=args.harness)
         if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
             payload["approval_wait"] = {
                 "resolved": False,
