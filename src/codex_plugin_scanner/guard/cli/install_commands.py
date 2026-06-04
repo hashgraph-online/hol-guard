@@ -182,20 +182,23 @@ def build_harness_verification(
 ) -> dict[str, object]:
     adapter = get_adapter(requested_harness)
     detection = _safe_setup_detection(adapter, context, store)
+    verification: dict[str, object] = {
+        "checked": True,
+        "writes_config": False,
+        "installed": detection["installed"],
+        "command_available": detection["command_available"],
+        "config_paths": detection["config_paths"],
+        "artifact_count": 0,
+        "warnings": [],
+        "steps": [step.to_dict() for step in adapter.verify_steps()],
+    }
+    if adapter.harness == "opencode":
+        verification.update(_opencode_protection_checks(context, store))
     payload: dict[str, object] = {
         "harness": adapter.harness,
         "safe": True,
         "contract": adapter.setup_contract().to_dict(),
-        "verification": {
-            "checked": True,
-            "writes_config": False,
-            "installed": detection["installed"],
-            "command_available": detection["command_available"],
-            "config_paths": detection["config_paths"],
-            "artifact_count": 0,
-            "warnings": [],
-            "steps": [step.to_dict() for step in adapter.verify_steps()],
-        },
+        "verification": verification,
     }
     if adapter.harness == "cursor":
         payload["cursor_action"] = cursor_local_action_payload(
@@ -213,6 +216,43 @@ def build_harness_verification(
 
 def uninstall_confirmation_token(harness: str) -> str:
     return f"disconnect-{harness}"
+
+
+def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
+    from ..adapters.opencode import OpenCodeHarnessAdapter
+    from ..adapters.opencode_pretool import (
+        global_plugin_path,
+        opencode_config_has_mcp_servers,
+        opencode_config_uses_guard_proxy,
+    )
+
+    managed = store.get_managed_install("opencode") if store is not None else None
+    config_path = OpenCodeHarnessAdapter()._target_config_path(context)
+    shim_path = context.guard_home / "bin" / "guard-opencode"
+    plugin_path = global_plugin_path(context)
+    mcp_proxy_configured = opencode_config_uses_guard_proxy(config_path)
+    warnings: list[str] = []
+    if not (managed and managed.get("active")):
+        warnings.append("Run `hol-guard install opencode` to activate Guard-managed OpenCode protection.")
+    if not plugin_path.is_file():
+        warnings.append(
+            "OpenCode pretool plugin is missing from ~/.config/opencode/plugins/. Re-run `hol-guard install opencode`."
+        )
+    if opencode_config_has_mcp_servers(config_path) and not mcp_proxy_configured:
+        warnings.append("OpenCode MCP servers are not routed through hol-guard. Re-run `hol-guard install opencode`.")
+    if not shim_path.is_file():
+        warnings.append(
+            f"guard-opencode launcher shim is missing. Add {context.guard_home / 'bin'} to PATH or launch with "
+            "`hol-guard run opencode` for pre-launch checks."
+        )
+    return {
+        "pretool_plugin_installed": plugin_path.is_file(),
+        "mcp_proxy_configured": mcp_proxy_configured,
+        "launch_shim_installed": shim_path.is_file(),
+        "managed_install_active": bool(managed and managed.get("active")),
+        "warnings": warnings,
+        "ready": not warnings,
+    }
 
 
 def _safe_setup_detection(

@@ -176,7 +176,8 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         browser_fallback=True,
         resume_support=False,
         known_blind_spots=(
-            "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard."
+            "Prompt content is not currently surfaced through hooks. File read/write events bypass Guard "
+            "unless OpenCode permission rules block them."
         ),
         smoke_command="hol-guard install opencode --dry-run",
     ),
