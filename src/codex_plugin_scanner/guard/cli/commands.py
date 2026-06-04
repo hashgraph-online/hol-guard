@@ -149,6 +149,7 @@ from ..runtime.false_positive_rules import (
     split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
+from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -176,7 +177,6 @@ from ..runtime.secret_sensitivity import (
 )
 from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
-from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..shims import install_package_shims, package_shim_status, repair_package_shims, uninstall_package_shims
