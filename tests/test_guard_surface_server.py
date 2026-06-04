@@ -614,6 +614,48 @@ class TestGuardSurfaceServer:
         assert response.status == 200
         assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
+    def test_guard_daemon_claude_hook_endpoint_preserves_workspace_trailing_none_sentinel(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        captured: dict[str, str | None] = {}
+
+        def fake_run_guard_command(args, *, input_text, output_stream):
+            del input_text
+            captured["workspace"] = args.workspace
+            output_stream.write("{}")
+            return 0
+
+        monkeypatch.setattr(guard_commands_module, "run_guard_command", fake_run_guard_command)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            trailing_none = workspace_dir / "None"
+            request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"guard-home={urllib.parse.quote(str(store.guard_home))}"
+                    f"&workspace={urllib.parse.quote(str(trailing_none))}"
+                ),
+                data=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hi"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert payload == {}
+        assert captured["workspace"] == str(workspace_dir)
+
     def test_guard_daemon_claude_hook_endpoint_rejects_workspace_path_outside_safe_roots_and_records_audit(
         self, tmp_path
     ) -> None:
