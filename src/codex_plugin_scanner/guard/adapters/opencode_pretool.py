@@ -35,7 +35,7 @@ async function runGuardHook(directory: string, payload: Record<string, unknown>)
     ],
     {
       cwd: workspace,
-      stdin: new TextEncoder().encode(JSON.stringify(payload)),
+      stdin: new Blob([JSON.stringify(payload)]).stream(),
       stdout: "pipe",
       stderr: "pipe",
     },
@@ -93,7 +93,7 @@ export const HolGuardPretoolPlugin = async ({
           tool_name: input.tool,
           tool_input: { command },
           cwd: workspace,
-          source_scope: workspace ? "project" : "global",
+          source_scope: directory?.trim() ? "project" : "global",
         });
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);

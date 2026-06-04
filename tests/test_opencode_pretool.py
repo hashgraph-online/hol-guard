@@ -36,10 +36,10 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     source = pretool_plugin_source(ctx)
     assert str(ctx.guard_home.resolve()) in source
     assert "tool.execute.before" in source
-    assert "TextEncoder().encode" in source
+    assert "Blob([JSON.stringify(payload)]).stream()" in source
     assert "stdoutPromise" in source
     assert "try {" in source
-    assert 'source_scope: workspace ? "project" : "global"' in source
+    assert 'source_scope: directory?.trim() ? "project" : "global"' in source
     assert "codex_plugin_scanner.cli" in source
     assert "guard" in source
 

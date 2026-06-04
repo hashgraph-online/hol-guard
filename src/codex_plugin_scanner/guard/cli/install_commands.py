@@ -242,7 +242,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
         warnings.append("OpenCode MCP servers are not routed through hol-guard. Re-run `hol-guard install opencode`.")
     if not shim_path.is_file():
         warnings.append(
-            "guard-opencode launcher shim is missing. Add ~/.hol-guard/bin to PATH or launch with "
+            f"guard-opencode launcher shim is missing. Add {context.guard_home / 'bin'} to PATH or launch with "
             "`hol-guard run opencode` for pre-launch checks."
         )
     return {
