@@ -2929,8 +2929,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     continue
             if not root_match:
                 raise _HookPathValidationError(parameter, "unexpected_root")
-        if os.path.exists(candidate) and not os.path.isdir(candidate):
-            raise _HookPathValidationError(parameter, "non_directory")
         return Path(candidate)
 
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
