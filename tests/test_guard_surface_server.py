@@ -763,7 +763,7 @@ class TestGuardSurfaceServer:
     def test_guard_daemon_runtime_snapshot_derives_cloud_urls_from_sync_origin(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         store.set_sync_credentials(
-            "https://guard.example.com/api/guard/receipts/sync",
+            "https://hol.org/api/guard/receipts/sync",
             "guard-token",
             "2026-04-22T00:00:00Z",
         )
@@ -784,10 +784,10 @@ class TestGuardSurfaceServer:
         assert payload["cloud_state"] == "paired_waiting"
         assert payload["cloud_pairing_state"]["state"] == "paired_waiting"
         assert payload["cloud_pairing_state"]["sync_configured"] is True
-        assert payload["dashboard_url"] == "https://guard.example.com/guard"
-        assert payload["inbox_url"] == "https://guard.example.com/guard/inbox"
-        assert payload["fleet_url"] == "https://guard.example.com/guard/fleet"
-        assert payload["connect_url"] == "https://guard.example.com/guard/connect"
+        assert payload["dashboard_url"] == "https://hol.org/guard"
+        assert payload["inbox_url"] == "https://hol.org/guard/inbox"
+        assert payload["fleet_url"] == "https://hol.org/guard/fleet"
+        assert payload["connect_url"] == "https://hol.org/guard/connect"
 
     def test_guard_daemon_claude_hook_endpoint_accepts_empty_allow_response(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
