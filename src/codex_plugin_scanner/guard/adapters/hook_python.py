@@ -64,7 +64,7 @@ def _python_from_launcher_shim(shim: Path) -> Path | None:
         if not lines:
             return None
         first_line = lines[0]
-    except OSError:
+    except (OSError, ValueError):
         return None
     if not first_line.startswith("#!"):
         return None
