@@ -20,9 +20,7 @@ def cursor_runtime_detected(env: Mapping[str, str] | None = None) -> bool:
     """Return True when hook subprocess env indicates Cursor IDE/agent."""
 
     source = os.environ if env is None else env
-    return any(
-        isinstance(source.get(key), str) and source[key].strip() for key in _CURSOR_ENV_MARKERS
-    )
+    return any(isinstance(source.get(key), str) and source[key].strip() for key in _CURSOR_ENV_MARKERS)
 
 
 def resolve_runtime_hook_harness(
