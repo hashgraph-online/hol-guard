@@ -744,12 +744,21 @@ def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_actio
     if _looks_like_cloud_inbox_url(dashboard_url):
         dashboard_url = None
     harness_message = _CLOUD_INBOX_URL_RE.sub("", user_copy.harness_message or "").strip()
-    harness_message = re.sub(r"\s{2,}", " ", harness_message).strip()
-    harness_message = re.sub(r"\bReview evidence:\s*\.?\s*$", "", harness_message).strip()
+    harness_message = " ".join(harness_message.split())
+    harness_message = _strip_review_evidence_tail(harness_message)
     needs_local_review = policy_action in {"require-reapproval", "block"}
     if needs_local_review and _LOCAL_REVIEW_INSTRUCTION.lower() not in harness_message.lower():
         harness_message = f"{harness_message} {_LOCAL_REVIEW_INSTRUCTION}".strip()
     return replace(user_copy, dashboard_url=dashboard_url, harness_message=harness_message)
+
+
+def _strip_review_evidence_tail(message: str) -> str:
+    stripped = message.strip()
+    lower_stripped = stripped.lower()
+    for suffix in ("Review evidence: .", "Review evidence:.", "Review evidence:"):
+        if lower_stripped.endswith(suffix.lower()):
+            return stripped[: -len(suffix)].rstrip()
+    return stripped
 
 
 def _looks_like_cloud_inbox_url(url: str | None) -> bool:

@@ -4905,11 +4905,20 @@ def _approval_center_routed_message(message: str, review_context: str) -> str:
     normalized = _strip_cloud_inbox_urls(message)
     normalized = normalized.replace("Review this request in HOL Guard, then retry.", "").strip()
     normalized = _strip_legacy_approval_center_sentence(normalized)
-    normalized = re.sub(r"\s{2,}", " ", normalized).strip()
-    normalized = re.sub(r"\bReview evidence:\s*\.?\s*$", "", normalized).strip()
+    normalized = " ".join(normalized.split())
+    normalized = _strip_review_evidence_tail(normalized)
     if not normalized:
         return review_context
     return f"{_ensure_terminal_punctuation(normalized)} {review_context}"
+
+
+def _strip_review_evidence_tail(message: str) -> str:
+    stripped = message.strip()
+    lower_stripped = stripped.lower()
+    for suffix in ("Review evidence: .", "Review evidence:.", "Review evidence:"):
+        if lower_stripped.endswith(suffix.lower()):
+            return stripped[: -len(suffix)].rstrip()
+    return stripped
 
 
 def _strip_legacy_approval_center_sentence(message: str) -> str:
