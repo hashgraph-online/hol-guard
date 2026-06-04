@@ -1748,13 +1748,9 @@ def _guard_sync_origin(sync_url: str) -> str:
             f"{_guard_sync_reconnect_message()} Sync URL must be an absolute http(s) URL."
         )
     if parsed.username is not None or parsed.password is not None:
-        raise GuardSyncNotConfiguredError(
-            f"{_guard_sync_reconnect_message()} Sync URL userinfo is not allowed."
-        )
+        raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} Sync URL userinfo is not allowed.")
     if parsed.fragment:
-        raise GuardSyncNotConfiguredError(
-            f"{_guard_sync_reconnect_message()} Sync URL fragments are not allowed."
-        )
+        raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} Sync URL fragments are not allowed.")
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
 
 
@@ -1764,9 +1760,7 @@ def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str
         try:
             oauth_client = resolve_guard_oauth_client_config(issuer)
         except ValueError as error:
-            raise GuardSyncAuthorizationExpiredError(
-                f"{_guard_oauth_reauthorization_message()} {error}"
-            ) from error
+            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
         if origin != oauth_client.issuer:
             raise GuardSyncAuthorizationExpiredError(
                 f"{_guard_oauth_reauthorization_message()} "
@@ -1774,9 +1768,7 @@ def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str
             )
         return sync_url
     if not is_guard_oauth_origin_allowed(origin):
-        raise GuardSyncNotConfiguredError(
-            f"{_guard_sync_reconnect_message()} Sync URL origin is not allowlisted."
-        )
+        raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} Sync URL origin is not allowlisted.")
     environment = detect_guard_oauth_environment(origin)
     if environment != "local" and urllib.parse.urlsplit(origin).scheme != "https":
         raise GuardSyncNotConfiguredError(
@@ -1901,9 +1893,7 @@ def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
         try:
             oauth_client = resolve_guard_oauth_client_config(issuer)
         except ValueError as error:
-            raise GuardSyncAuthorizationExpiredError(
-                f"{_guard_oauth_reauthorization_message()} {error}"
-            ) from error
+            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
         refreshed = _refresh_guard_oauth_access_token(
             token_endpoint=oauth_client.token_endpoint,
             client_id=client_id,
