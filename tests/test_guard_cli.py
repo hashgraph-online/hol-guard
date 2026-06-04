@@ -4429,6 +4429,19 @@ args = ["-lc", "echo hi"]
             + "\n",
         )
         monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
+        monkeypatch.setattr(
+            GuardStore,
+            "get_latest_guard_connect_state",
+            lambda self, *, now: {
+                "status": "retry_required",
+                "milestone": "first_sync_failed",
+                "reason": "Guard authorization expired. Run `hol-guard connect` to sign in again.",
+                "authorization_code": "auth-code-secret",
+                "user_code": "ZXCV-BNMQ",
+                "pairing_secret": "pairing-secret-value",
+                "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ZXCV-BNMQ",
+            },
+        )
         store = GuardStore(guard_home)
         store.set_sync_credentials(
             "https://hol.org/api/guard/receipts/sync",
@@ -4488,7 +4501,12 @@ args = ["-lc", "echo hi"]
         json_output = capsys.readouterr().out
 
         assert rc == 0
-        assert json.loads(json_output)["harness"] == "codex"
+        json_payload = json.loads(json_output)
+        assert json_payload["harness"] == "codex"
+        assert json_payload["connect_health"]["connect_recovery_command"] == "hol-guard connect"
+        assert json_payload["connect_health"]["oauth_storage_health"] == {"state": "healthy"}
+        assert json_payload["connect_health"]["latest_connect_state"]["status"] == "retry_required"
+        assert set(json_payload["connect_health"]["oauth_storage_health"]) == {"state"}
         for value in forbidden_values:
             assert value not in json_output
         lowered_json_output = json_output.lower()
@@ -4509,6 +4527,9 @@ args = ["-lc", "echo hi"]
         human_output = capsys.readouterr().out
 
         assert rc == 0
+        assert "OAuth storage" in human_output
+        assert "Connect state" in human_output
+        assert "hol-guard connect" in human_output
         for value in forbidden_values:
             assert value not in human_output
         lowered_human_output = human_output.lower()

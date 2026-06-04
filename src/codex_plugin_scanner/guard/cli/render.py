@@ -494,6 +494,19 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             registry_state = "enabled" if bool(registry.get("enabled")) else "disabled"
             timeout_ms = registry.get("timeout_ms")
             summary.add_row("Detector registry", f"{registry_state}, {timeout_ms} ms")
+        connect_health = payload.get("connect_health")
+        if isinstance(connect_health, dict):
+            oauth_storage_health = connect_health.get("oauth_storage_health")
+            if isinstance(oauth_storage_health, dict):
+                summary.add_row("OAuth storage", str(oauth_storage_health.get("state") or "unknown"))
+            latest_connect_state = connect_health.get("latest_connect_state")
+            if isinstance(latest_connect_state, dict):
+                connect_status = str(latest_connect_state.get("status") or "unknown")
+                milestone = str(latest_connect_state.get("milestone") or "unknown")
+                summary.add_row("Connect state", f"{connect_status}, {milestone}")
+            recovery_command = connect_health.get("connect_recovery_command")
+            if isinstance(recovery_command, str) and recovery_command.strip():
+                summary.add_row("Recovery", recovery_command)
         summary.add_row("Warnings", str(len(warnings)))
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:

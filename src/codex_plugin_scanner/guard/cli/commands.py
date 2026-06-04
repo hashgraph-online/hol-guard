@@ -193,6 +193,7 @@ from .connect_flow import (
     DEFAULT_GUARD_CONNECT_URL,
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
+    connect_recovery_command,
     run_guard_browser_connect_command,
     run_guard_device_connect_command,
 )
@@ -2324,6 +2325,7 @@ def run_guard_command(
             adapter = get_adapter(args.harness)
             payload = adapter.diagnostics(context)
             payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
+            payload["connect_health"] = _guard_doctor_connect_health_payload(store)
             if args.harness == "codex":
                 payload["codex_resume"] = inspect_codex_resume_capabilities(store)
         else:
@@ -9055,6 +9057,49 @@ def _resolve_policy_expiry(args: argparse.Namespace) -> str | None:
         print("--expires-in-hours must be greater than 0.", file=sys.stderr)
         raise SystemExit(2)
     return (datetime.now(timezone.utc) + timedelta(hours=float(hours))).isoformat()
+
+
+def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]:
+    latest_state = store.get_latest_guard_connect_state(now=_now())
+    payload: dict[str, object] = {
+        "oauth_storage_health": _guard_doctor_oauth_storage_health_payload(store),
+        "connect_recovery_command": connect_recovery_command(latest_state),
+    }
+    if isinstance(latest_state, dict):
+        payload["latest_connect_state"] = _guard_doctor_latest_connect_state_payload(latest_state)
+    return payload
+
+
+def _guard_doctor_oauth_storage_health_payload(store: GuardStore) -> dict[str, str]:
+    oauth_storage_health = store.get_oauth_local_credential_health()
+    state = "unknown"
+    if isinstance(oauth_storage_health, dict):
+        raw_state = oauth_storage_health.get("state")
+        if isinstance(raw_state, str) and raw_state.strip():
+            state = raw_state
+    return {"state": state}
+
+
+def _guard_doctor_latest_connect_state_payload(latest_state: dict[str, object]) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    for key in (
+        "request_id",
+        "status",
+        "milestone",
+        "reason",
+        "created_at",
+        "updated_at",
+        "expires_at",
+        "completed_at",
+        "version",
+    ):
+        value = latest_state.get(key)
+        if isinstance(value, str) and value.strip():
+            payload[key] = value
+    poll_after_ms = latest_state.get("poll_after_ms")
+    if isinstance(poll_after_ms, int):
+        payload["poll_after_ms"] = poll_after_ms
+    return payload
 
 
 def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
