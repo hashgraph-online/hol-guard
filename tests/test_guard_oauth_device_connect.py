@@ -1024,6 +1024,34 @@ def test_loopback_callback_listener_uses_random_high_port_and_loopback_path() ->
         listener.close()
 
 
+def test_loopback_callback_listener_retries_after_port_conflict(monkeypatch) -> None:
+    attempted_ports: list[int] = []
+    port_offsets = iter((0, 1))
+
+    def fake_init(self, server_address, _handler_class, bind_and_activate=True):
+        attempted_ports.append(server_address[1])
+        self.server_address = server_address
+        self.guard_callback = None
+        if len(attempted_ports) == 1:
+            raise OSError("port conflict")
+
+    monkeypatch.setattr(connect_flow, "_LOOPBACK_HOSTS", ("127.0.0.1",))
+    monkeypatch.setattr(connect_flow.secrets, "randbelow", lambda _limit: next(port_offsets))
+    monkeypatch.setattr(connect_flow.http.server.ThreadingHTTPServer, "__init__", fake_init)
+    monkeypatch.setattr(connect_flow.http.server.ThreadingHTTPServer, "serve_forever", lambda self: None)
+    monkeypatch.setattr(connect_flow.http.server.ThreadingHTTPServer, "shutdown", lambda self: None)
+    monkeypatch.setattr(connect_flow.http.server.ThreadingHTTPServer, "server_close", lambda self: None)
+
+    listener = connect_flow.start_guard_loopback_callback_listener(expected_state="state-123")
+    parsed = urllib.parse.urlparse(listener.redirect_uri)
+
+    assert parsed.hostname == "127.0.0.1"
+    assert parsed.port == connect_flow._LOOPBACK_PORT_MIN + 1
+    assert attempted_ports == [connect_flow._LOOPBACK_PORT_MIN, connect_flow._LOOPBACK_PORT_MIN + 1]
+
+    listener.close()
+
+
 def test_loopback_callback_listener_rejects_state_mismatch() -> None:
     listener = connect_flow.start_guard_loopback_callback_listener(expected_state="state-123")
     try:
