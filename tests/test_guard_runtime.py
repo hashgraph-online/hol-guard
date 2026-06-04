@@ -15352,6 +15352,28 @@ def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
     assert payload["synced_at"] == "2026-04-19T00:00:10+00:00"
 
 
+def test_sync_receipts_rejects_untrusted_sync_host_before_network(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://evil.example/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    attempted_request = False
+
+    def _fake_urlopen(request, timeout):
+        nonlocal attempted_request
+        attempted_request = True
+        raise AssertionError("network call should be blocked before urlopen")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="hol-guard connect"):
+        guard_runner_module.sync_receipts(store)
+
+    assert attempted_request is False
+
+
 def test_sync_receipts_batches_large_local_history(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
@@ -15967,6 +15989,52 @@ def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypa
 
     assert timeouts == [10, 90]
     assert payload["runtime_session_id"] == "session-read-timeout"
+
+
+def test_sync_runtime_session_rejects_untrusted_oauth_issuer_before_network(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://evil.example",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    attempted_request = False
+
+    def _fake_urlopen(request, timeout):
+        nonlocal attempted_request
+        attempted_request = True
+        raise AssertionError("network call should be blocked before urlopen")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError, match="hol-guard connect"):
+        guard_runner_module.sync_runtime_session(
+            store,
+            session={
+                "session_id": "session-oauth",
+                "harness": "codex",
+                "surface": "cli",
+                "status": "active",
+                "client_name": "Codex",
+                "client_title": "Codex CLI",
+                "client_version": "1.0.0",
+                "workspace": "prod",
+                "capabilities": ["chat"],
+                "started_at": "2026-06-01T00:00:00+00:00",
+                "updated_at": "2026-06-01T00:00:00+00:00",
+                "operations": [],
+            },
+        )
+
+    assert attempted_request is False
 
 
 def test_sync_runtime_session_refreshes_oauth_access_token_and_rotates_refresh_token(tmp_path, monkeypatch):
