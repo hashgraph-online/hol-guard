@@ -48,6 +48,8 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     assert "try {" in source
     assert 'source_scope: directory?.trim() ? "project" : "global"' in source
     assert "GUARD_HOOK_LAUNCHER" in source
+    assert "hookProcessEnv" in source
+    assert "GUARD_INHERIT_ENV_KEYS" in source
     assert "HOL_GUARD_HOOK_ARGV" in source
     assert "cwd: GUARD_HOME" in source
     spawn_block = source.split("Bun.spawn(", 1)[1].split("});", 1)[0]
@@ -74,11 +76,12 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
     guard_home.mkdir()
     ctx = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=guard_home)
     launcher = _pretool_hook_launcher_code()
-    env = {**_pretool_hook_env(), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
+    inherit_env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
+    env = {**inherit_env, **_pretool_hook_env(), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
     completed = subprocess.run(
         [sys.executable, "-c", launcher],
         cwd=workspace,
-        env={**os.environ, **env},
+        env=env,
         input="{}",
         capture_output=True,
         text=True,

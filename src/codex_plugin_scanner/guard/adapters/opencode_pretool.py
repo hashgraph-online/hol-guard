@@ -14,13 +14,27 @@ from .base import HarnessContext
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
 _INTERCEPT_TOOLS = ("bash", "shell", "sh", "zsh", "terminal")
 _HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
+_INHERIT_ENV_KEYS = ("PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "SYSTEMROOT")
 
 _PLUGIN_TEMPLATE = """// Managed by HOL Guard. Re-run `hol-guard install opencode` after moving Guard home.
 const GUARD_HOME = __GUARD_HOME__;
 const GUARD_PYTHON = __GUARD_PYTHON__;
 const GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__;
 const GUARD_HOOK_ENV = __GUARD_HOOK_ENV__;
+const GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__;
 const INTERCEPT_TOOLS = new Set(__INTERCEPT_TOOLS__);
+
+function hookProcessEnv(guardArgv: string[]) {
+  const env: Record<string, string> = { ...GUARD_HOOK_ENV };
+  for (const key of GUARD_INHERIT_ENV_KEYS) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.length > 0) {
+      env[key] = value;
+    }
+  }
+  env.__HOOK_ARGV_ENV__ = JSON.stringify(guardArgv);
+  return env;
+}
 
 async function runGuardHook(directory: string, payload: Record<string, unknown>) {
   const workspace = directory?.trim() || process.cwd();
@@ -37,7 +51,7 @@ async function runGuardHook(directory: string, payload: Record<string, unknown>)
   ];
   const proc = Bun.spawn([GUARD_PYTHON, "-c", GUARD_HOOK_LAUNCHER], {
     cwd: GUARD_HOME,
-    env: { ...GUARD_HOOK_ENV, __HOOK_ARGV_ENV__: JSON.stringify(guardArgv) },
+    env: hookProcessEnv(guardArgv),
     stdin: new Blob([JSON.stringify(payload)]).stream(),
     stdout: "pipe",
     stderr: "pipe",
@@ -125,7 +139,10 @@ def _trusted_package_root() -> Path:
     if spec is None:
         raise RuntimeError("Guard could not locate the codex_plugin_scanner package")
     if spec.submodule_search_locations:
-        return Path(next(iter(spec.submodule_search_locations))).resolve().parent
+        locations = tuple(spec.submodule_search_locations)
+        if not locations:
+            raise RuntimeError("Guard could not resolve codex_plugin_scanner package locations")
+        return Path(locations[0]).resolve().parent
     if spec.origin is None:
         raise RuntimeError("Guard could not determine the codex_plugin_scanner package root")
     return Path(spec.origin).resolve().parent.parent
@@ -170,6 +187,7 @@ def pretool_plugin_source(context: HarnessContext) -> str:
         .replace("__GUARD_PYTHON__", json.dumps(str(Path(sys.executable).resolve())))
         .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code()))
         .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env()))
+        .replace("__GUARD_INHERIT_ENV_KEYS__", json.dumps(list(_INHERIT_ENV_KEYS)))
         .replace("__INTERCEPT_TOOLS__", json.dumps(list(_INTERCEPT_TOOLS)))
     )
 
