@@ -121,6 +121,9 @@ def test_install_cursor_hooks_writes_hooks_json_and_script(tmp_path: Path) -> No
     assert "preToolUse" in hooks
     assert "beforeReadFile" in hooks
     assert hooks["beforeShellExecution"][0]["failClosed"] is True
+    assert hooks["beforeMCPExecution"][0]["failClosed"] is True
+    assert hooks["beforeReadFile"][0]["failClosed"] is True
+    assert hooks["preToolUse"][0]["failClosed"] is True
     assert hooks["preToolUse"][0]["matcher"]
 
 
