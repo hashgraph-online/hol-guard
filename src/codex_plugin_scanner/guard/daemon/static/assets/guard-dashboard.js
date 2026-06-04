@@ -13323,7 +13323,7 @@ function buildDemoRuntimeSnapshot() {
     proof_status: {
       state: "pending",
       label: "First proof pending",
-      detail: "Browser sign-in finished. First proof sync has not completed yet.",
+      detail: "Browser pairing finished. First proof sync has not completed yet.",
       request_id: "demo-connect-request",
       pairing_completed_at: now2,
       first_synced_at: null,
@@ -13931,6 +13931,24 @@ async function runPackageFirewallAction(action, manager) {
         ...guardAuthHeaders()
       },
       body: JSON.stringify(payload)
+    }
+  );
+  return normalizePackageFirewallAction(response);
+}
+async function runAuditRemediation(input) {
+  const response = await readJson(
+    `/v1/audit/remediations/${input.action}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders()
+      },
+      body: JSON.stringify({
+        manager: input.manager,
+        ...input.approval_password !== void 0 ? { approval_password: input.approval_password } : {},
+        ...input.approval_totp_code !== void 0 ? { approval_totp_code: input.approval_totp_code } : {}
+      })
     }
   );
   return normalizePackageFirewallAction(response);
@@ -15057,7 +15075,7 @@ function WelcomeState(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4", children: "Sync decisions" }),
         props.connectUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, children: "Open Guard connect" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, children: "Open pairing flow" }),
           props.dashboardUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.dashboardUrl, variant: "outline", children: "Open Home" }) : null,
           props.inboxUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.inboxUrl, variant: "outline", children: "Review Queue" }) : null,
           props.fleetUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.fleetUrl, variant: "outline", children: "Protect" }) : null
@@ -22687,6 +22705,7 @@ function App() {
             snapshot: runtime.snapshot,
             receipts: receipts.kind === "ready" ? receipts.items : [],
             policies: policies.kind === "ready" ? policies.items : [],
+            approvalGate,
             onClearPolicy: handleClearPolicy,
             onOpenSettings: handleOpenSettings,
             onGoHome: handleGoHome,
@@ -22760,8 +22779,9 @@ export {
   runPackageAudit as am,
   runPackageSync as an,
   HiMiniBugAnt as ao,
-  HiMiniSignal as ap,
-  HiMiniClock as aq,
+  runAuditRemediation as ap,
+  HiMiniSignal as aq,
+  HiMiniClock as ar,
   HiMiniInformationCircle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,

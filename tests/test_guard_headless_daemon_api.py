@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
+from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -265,6 +266,90 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(tmp_path:
     assert test_payload["status"] == "completed"
     assert test_payload["result"]["tested_managers"] == ["npm"]
     assert test_payload["result"]["blocked_execution"] is True
+
+
+def test_audit_package_shim_path_remediation_requires_approval_gate_proof(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
+    update_approval_gate_settings(
+        store.guard_home,
+        {
+            "enabled": True,
+            "new_password": "local-password",
+            "confirm_password": "local-password",
+        },
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/audit/remediations/package_shim_path",
+                token=token,
+                payload={"manager": "pnpm"},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 403
+    assert payload["error"] == "approval_gate_required"
+
+
+def test_audit_package_shim_path_remediation_updates_profile_with_gate_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
+    update_approval_gate_settings(
+        store.guard_home,
+        {
+            "enabled": True,
+            "new_password": "local-password",
+            "confirm_password": "local-password",
+        },
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/audit/remediations/package_shim_path",
+                token=token,
+                payload={"manager": "pnpm", "approval_password": "local-password"},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    profile_path = home_dir / ".zshrc"
+    shim_path = store.guard_home / "package-shims" / "bin" / "pnpm"
+    assert status == 200
+    assert payload["operation"] == "package_shim_path"
+    assert payload["receipt"]["operation"] == "package_shim_path"
+    assert shim_path.exists()
+    assert str(store.guard_home / "package-shims" / "bin") in profile_path.read_text(encoding="utf-8")
+    result = payload["result"]
+    assert isinstance(result, dict)
+    assert result["manager"] == "pnpm"
+    assert result["profile"]["changed"] is True
 
 
 def test_supply_chain_package_firewall_rejects_duplicate_managers(tmp_path: Path) -> None:

@@ -492,6 +492,57 @@ def repair_package_shims(
     }
 
 
+def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
+    """Prepend the package shim dir in the user's normal shell profile."""
+
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    profile_path, export_line = _package_shim_profile_target(context.home_dir, shim_dir)
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
+    if _profile_already_references_path(existing, shim_dir):
+        return {
+            "changed": False,
+            "profile_path": str(profile_path),
+            "shim_dir": str(shim_dir),
+            "restart_shell_required": True,
+        }
+    prefix = "" if existing == "" or existing.endswith("\n") else "\n"
+    profile_path.write_text(f"{existing}{prefix}{export_line}\n", encoding="utf-8")
+    return {
+        "changed": True,
+        "profile_path": str(profile_path),
+        "shim_dir": str(shim_dir),
+        "restart_shell_required": True,
+    }
+
+
+def _package_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, str]:
+    shell = Path(os.environ.get("SHELL", "")).name
+    marker = "# HOL Guard package manager shims"
+    if shell == "fish":
+        return (
+            home_dir / ".config" / "fish" / "config.fish",
+            f"{marker}\nfish_add_path --prepend {shim_dir}",
+        )
+    if shell == "bash":
+        return (
+            home_dir / ".bashrc",
+            f'{marker}\nexport PATH="{shim_dir}:$PATH"',
+        )
+    return (
+        home_dir / ".zshrc",
+        f'{marker}\nexport PATH="{shim_dir}:$PATH"',
+    )
+
+
+def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
+    shim_text = str(shim_dir)
+    return any(
+        (shim_text in line and "PATH" in line) or (shim_text in line and "fish_add_path" in line)
+        for line in content.splitlines()
+    )
+
+
 def _build_package_manager_python_shim(context: HarnessContext, command: str) -> str:
     workspace_args: list[str] = []
     if context.workspace_dir is not None:
@@ -605,6 +656,7 @@ def _path_export_hints(shim_dir: Path) -> dict[str, str]:
 
 
 __all__ = [
+    "ensure_package_shim_path_in_shell_profile",
     "install_guard_shim",
     "install_package_shims",
     "package_shim_cloud_coverage",

@@ -1672,6 +1672,34 @@ export async function runPackageFirewallAction(
   return normalizePackageFirewallAction(response);
 }
 
+export type AuditRemediationAction = "package_shim_path";
+
+export type AuditRemediationInput = {
+  action: AuditRemediationAction;
+  manager: string;
+  approval_password?: string;
+  approval_totp_code?: string;
+};
+
+export async function runAuditRemediation(input: AuditRemediationInput): Promise<PackageFirewallActionResponse> {
+  const response = await readJson<unknown>(
+    `/v1/audit/remediations/${input.action}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders(),
+      },
+      body: JSON.stringify({
+        manager: input.manager,
+        ...(input.approval_password !== undefined ? { approval_password: input.approval_password } : {}),
+        ...(input.approval_totp_code !== undefined ? { approval_totp_code: input.approval_totp_code } : {}),
+      }),
+    },
+  );
+  return normalizePackageFirewallAction(response);
+}
+
 export async function runPackageAudit(): Promise<PackageFirewallActionResponse> {
   const response = await readJson<unknown>("/v1/supply-chain/audit", {
     method: "POST",

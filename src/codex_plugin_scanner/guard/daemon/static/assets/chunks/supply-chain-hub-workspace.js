@@ -40,7 +40,7 @@ function SupplyChainHubWorkspace(props) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: [
       tab === "supply-chain" && /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainWorkspace, { snapshot: props.snapshot, onGoHome: props.onGoHome }),
-      tab === "audit" && /* @__PURE__ */ jsxRuntimeExports.jsx(AuditWorkspace, { snapshot: props.snapshot, receipts: props.receipts }),
+      tab === "audit" && /* @__PURE__ */ jsxRuntimeExports.jsx(AuditWorkspace, { snapshot: props.snapshot, receipts: props.receipts, approvalGate: props.approvalGate }),
       tab === "policy" && /* @__PURE__ */ jsxRuntimeExports.jsx(
         PolicyWorkspace,
         {
