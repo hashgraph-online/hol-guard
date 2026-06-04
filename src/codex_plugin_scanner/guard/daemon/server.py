@@ -2917,10 +2917,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         effective_roots = roots
         if parameter in {"home", "workspace"} and effective_roots is None:
             effective_roots = self._hook_safe_roots()
-        if effective_roots is not None and not any(
-            self._path_is_within_root(candidate, os.fspath(root)) for root in effective_roots
-        ):
-            raise _HookPathValidationError(parameter, "unexpected_root")
+        if effective_roots is not None:
+            root_match = False
+            for root in effective_roots:
+                root_path = os.path.realpath(os.fspath(root))
+                try:
+                    if os.path.commonpath([candidate, root_path]) == root_path:
+                        root_match = True
+                        break
+                except ValueError:
+                    continue
+            if not root_match:
+                raise _HookPathValidationError(parameter, "unexpected_root")
         if os.path.exists(candidate) and not os.path.isdir(candidate):
             raise _HookPathValidationError(parameter, "non_directory")
         return Path(candidate)
