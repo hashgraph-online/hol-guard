@@ -225,7 +225,7 @@ def test_headless_connect_requests_device_code_without_persisting_secrets(tmp_pa
                         machine_id="machine-123",
                         workspace_id="workspace-123",
                     ),
-                    "refresh_token": "refresh-123",
+                    "refresh_token": "refresh-rotated",
                     "expires_in": 3600,
                     "scope": "guard:runtime.sync guard:offline_access",
                     "token_type": "Bearer",
@@ -287,7 +287,7 @@ def test_headless_connect_uses_staging_client_defaults(tmp_path: Path) -> None:
                         machine_id="machine-123",
                         workspace_id="workspace-123",
                     ),
-                    "refresh_token": "refresh-123",
+                    "refresh_token": "refresh-rotated",
                     "expires_in": 3600,
                     "scope": "guard:runtime.sync guard:offline_access",
                     "token_type": "Bearer",
@@ -339,7 +339,7 @@ def test_headless_connect_ci_safe_uses_explicit_label_and_restricted_scopes(tmp_
                         machine_id="machine-123",
                         workspace_id="workspace-123",
                     ),
-                    "refresh_token": "refresh-123",
+                    "refresh_token": "refresh-rotated",
                     "expires_in": 3600,
                     "scope": "guard:runtime.sync guard:offline_access",
                     "token_type": "Bearer",
@@ -496,7 +496,7 @@ def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(tmp_pat
                         machine_id="machine-123",
                         workspace_id="workspace-123",
                     ),
-                    "refresh_token": "refresh-123",
+                    "refresh_token": "refresh-rotated",
                     "expires_in": 3600,
                     "scope": "guard:runtime.sync guard:offline_access",
                     "token_type": "Bearer",
@@ -534,7 +534,9 @@ def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(tmp_pat
     else:
         raise AssertionError("disconnect should fail when self-revocation fails")
 
-    assert store.get_oauth_local_credentials() is not None
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-rotated"
 
 
 def test_headless_connect_polls_until_success_and_persists_oauth_credentials(tmp_path: Path) -> None:

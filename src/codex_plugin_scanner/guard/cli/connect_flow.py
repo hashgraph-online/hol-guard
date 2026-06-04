@@ -22,6 +22,7 @@ from ...version import __version__
 from ..store import GuardStore
 from .oauth_client import (
     GuardDpopKeyMaterial,
+    GuardOAuthClientConfig,
     build_pkce_s256_challenge,
     generate_dpop_key_pair,
     generate_pkce_verifier,
@@ -641,7 +642,7 @@ def refresh_guard_access_token(
 
 def revoke_guard_self_oauth_grant(
     *,
-    issuer: str,
+    oauth_client: GuardOAuthClientConfig,
     access_token: str,
     workspace_id: str,
     revoke_cloud_grant: bool,
@@ -649,7 +650,7 @@ def revoke_guard_self_oauth_grant(
     urlopen=urllib.request.urlopen,
     now: datetime | None = None,
 ) -> None:
-    revoke_url = f"{resolve_guard_oauth_client_config(issuer).issuer}{_SELF_REVOKE_PATH}"
+    revoke_url = f"{oauth_client.issuer}{_SELF_REVOKE_PATH}"
     request = urllib.request.Request(
         revoke_url,
         data=_self_revoke_request_body(
@@ -706,6 +707,36 @@ def _oauth_dpop_key_material_from_credentials(
     )
 
 
+def _persist_oauth_local_credentials(
+    *,
+    store: GuardStore,
+    issuer: str,
+    client_id: str,
+    refresh_token: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+    now: str,
+    grant_id: str | None = None,
+    machine_id: str | None = None,
+    workspace_id: str | None = None,
+    runtime_id: str | None = None,
+    runtime_label: str | None = None,
+) -> None:
+    store.set_oauth_local_credentials(
+        issuer=issuer,
+        client_id=client_id,
+        refresh_token=refresh_token,
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id=grant_id,
+        machine_id=machine_id,
+        workspace_id=workspace_id,
+        runtime_id=runtime_id,
+        runtime_label=runtime_label,
+        now=now,
+    )
+
+
 def run_guard_disconnect_command(
     *,
     store: GuardStore,
@@ -726,9 +757,11 @@ def run_guard_disconnect_command(
     refresh_token = _require_oauth_credential_string(credentials, "refresh_token")
     workspace_id = _require_oauth_credential_string(credentials, "workspace_id")
     dpop_key_material = _oauth_dpop_key_material_from_credentials(credentials)
+    oauth_client = resolve_guard_oauth_client_config(issuer)
     exchange_now = datetime.fromisoformat(now) if isinstance(now, str) else datetime.now(timezone.utc)
+    timestamp = now or exchange_now.isoformat()
     token_result = refresh_guard_access_token(
-        token_endpoint=resolve_guard_oauth_client_config(issuer).token_endpoint,
+        token_endpoint=oauth_client.token_endpoint,
         client_id=client_id,
         refresh_token=refresh_token,
         dpop_key_material=dpop_key_material,
@@ -737,22 +770,21 @@ def run_guard_disconnect_command(
     )
     rotated_refresh_token = token_result.refresh_token
     if rotated_refresh_token and rotated_refresh_token != refresh_token:
-        store.set_oauth_local_credentials(
-            issuer=issuer,
+        _persist_oauth_local_credentials(
+            store=store,
+            issuer=oauth_client.issuer,
             client_id=client_id,
             refresh_token=rotated_refresh_token,
-            dpop_private_key_pem=dpop_key_material.private_key_pem,
-            dpop_public_jwk=dpop_key_material.public_jwk,
-            dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+            dpop_key_material=dpop_key_material,
             grant_id=_read_nested_string(credentials, "grant_id"),
             machine_id=_read_nested_string(credentials, "machine_id"),
             workspace_id=workspace_id,
             runtime_id=_read_nested_string(credentials, "runtime_id"),
             runtime_label=_read_nested_string(credentials, "runtime_label"),
-            now=now or datetime.now(timezone.utc).isoformat(),
+            now=timestamp,
         )
     revoke_guard_self_oauth_grant(
-        issuer=issuer,
+        oauth_client=oauth_client,
         access_token=token_result.access_token,
         workspace_id=workspace_id,
         revoke_cloud_grant=revoke_cloud_grant,
@@ -829,13 +861,12 @@ def run_guard_device_connect_command(
     if token_result.refresh_token is None:
         raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
     timestamp = now or datetime.now(timezone.utc).isoformat()
-    store.set_oauth_local_credentials(
+    _persist_oauth_local_credentials(
+        store=store,
         issuer=oauth_client.issuer,
         client_id=oauth_client.client_id,
         refresh_token=token_result.refresh_token,
-        dpop_private_key_pem=dpop_key_material.private_key_pem,
-        dpop_public_jwk=dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        dpop_key_material=dpop_key_material,
         grant_id=token_result.grant_id,
         machine_id=token_result.machine_id,
         workspace_id=token_result.workspace_id,
@@ -892,13 +923,12 @@ def run_guard_browser_connect_command(
     if token_result.refresh_token is None:
         raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
     timestamp = now or datetime.now(timezone.utc).isoformat()
-    store.set_oauth_local_credentials(
+    _persist_oauth_local_credentials(
+        store=store,
         issuer=oauth_client.issuer,
         client_id=oauth_client.client_id,
         refresh_token=token_result.refresh_token,
-        dpop_private_key_pem=session.dpop_key_material.private_key_pem,
-        dpop_public_jwk=session.dpop_key_material.public_jwk,
-        dpop_public_jwk_thumbprint=session.dpop_key_material.public_jwk_thumbprint,
+        dpop_key_material=session.dpop_key_material,
         grant_id=token_result.grant_id,
         machine_id=token_result.machine_id,
         workspace_id=token_result.workspace_id,
