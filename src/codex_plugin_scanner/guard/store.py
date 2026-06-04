@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from hashlib import pbkdf2_hmac, sha256
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -69,6 +70,7 @@ from .store_approvals import (
     resolve_request_with_queue_result as persist_queue_resolution,
 )
 from .store_connect import (
+    build_connect_state_response,
     connect_request_schema_statement,
     connect_state_schema_statement,
     load_connect_state,
@@ -138,6 +140,20 @@ _SYNC_TOKEN_HASH_KEY = "token_sha256"
 _OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
 _OAUTH_LOCAL_CREDENTIALS_HASH_KEY = "credentials_sha256"
 _OAUTH_LOCAL_CREDENTIALS_REF_KEY = "credentials_ref"
+_GUARD_CLOUD_RESET_STATE_KEYS = (
+    "credentials",
+    "sync_summary",
+    "receipt_sync_cursor",
+    "policy",
+    "alert_preferences",
+    "team_policy_pack",
+    "guard_events_v1_summary",
+    "runtime_session_summary",
+    "supply_chain_bundle_summary",
+    "supply_chain_bundle_entitlement",
+    "supply_chain_bundle_daemon",
+    "headless_app_sync_summary",
+)
 _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
@@ -149,6 +165,20 @@ _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "gl
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
 _SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
 _SECRET_FINGERPRINT_SALT = b"hol-guard-secret-fingerprint:v1"
+
+
+def _oauth_sync_url_from_issuer(issuer: str) -> str:
+    oauth_client = resolve_guard_oauth_client_config(issuer)
+    return f"{oauth_client.issuer}/api/guard/receipts/sync"
+
+
+def _allowed_origin_from_sync_url(sync_url: str) -> str | None:
+    parsed = urlparse(sync_url)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 _SECRET_FINGERPRINT_ITERATIONS = 200_000
 
 
@@ -2984,6 +3014,42 @@ class GuardStore:
             return None
         return None
 
+    def get_cloud_sync_profile(self) -> dict[str, str] | None:
+        oauth_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        if isinstance(oauth_payload, dict):
+            oauth_credentials = self.get_oauth_local_credentials()
+            if oauth_credentials is None:
+                return None
+            issuer = oauth_credentials.get("issuer")
+            if isinstance(issuer, str) and issuer.strip():
+                profile = {
+                    "auth_mode": "oauth",
+                    "sync_url": _oauth_sync_url_from_issuer(issuer),
+                }
+                workspace_id = oauth_credentials.get("workspace_id")
+                if isinstance(workspace_id, str) and workspace_id.strip():
+                    profile["workspace_id"] = workspace_id.strip()
+                return profile
+        credentials = self.get_sync_credentials()
+        if credentials is None:
+            return None
+        profile = {
+            "auth_mode": "legacy",
+            "sync_url": str(credentials["sync_url"]),
+        }
+        workspace_id = self.get_cloud_workspace_id()
+        if isinstance(workspace_id, str) and workspace_id.strip():
+            profile["workspace_id"] = workspace_id.strip()
+        return profile
+
+    def clear_sync_credentials(self) -> None:
+        self._secret_store.delete_secret(self._sync_token_ref)
+        self.delete_sync_payload("credentials")
+
+    def clear_cloud_sync_state_for_reconnect(self) -> None:
+        self.clear_sync_credentials()
+        self.delete_sync_payloads(list(_GUARD_CLOUD_RESET_STATE_KEYS))
+
     def set_oauth_local_credentials(
         self,
         *,
@@ -3156,11 +3222,74 @@ class GuardStore:
         with self._connect() as connection:
             return load_latest_connect_state(connection, now=now)
 
-    def record_latest_guard_connect_sync_success(
+    def get_effective_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
+        latest_state = self.get_latest_guard_connect_state(now=now)
+        cloud_profile = self.get_cloud_sync_profile()
+        sync_summary = self.get_sync_payload("sync_summary")
+        return self._normalize_guard_connect_state(
+            latest_state=latest_state,
+            cloud_profile=cloud_profile,
+            sync_summary=sync_summary if isinstance(sync_summary, dict) else None,
+            now=now,
+        )
+
+    def record_guard_connect_pairing_completed(
         self,
         *,
-        sync_payload: dict[str, object],
+        sync_url: str,
+        allowed_origin: str,
         now: str,
+        request_id: str | None = None,
+    ) -> dict[str, object]:
+        normalized_request_id = request_id.strip() if isinstance(request_id, str) and request_id.strip() else None
+        resolved_request_id = normalized_request_id or f"connect-{uuid4().hex}"
+        proof = {
+            "pairing_completed_at": now,
+            "first_synced_at": None,
+            "receipts_stored": 0,
+            "inventory_items": 0,
+            "runtime_session_id": None,
+            "runtime_session_synced_at": None,
+        }
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_connect_states (
+                  request_id,
+                  sync_url,
+                  allowed_origin,
+                  status,
+                  milestone,
+                  reason,
+                  created_at,
+                  updated_at,
+                  expires_at,
+                  completed_at,
+                  proof_json
+                )
+                values (?, ?, ?, 'connected', 'first_sync_pending', null, ?, ?, ?, ?, ?)
+                """,
+                (
+                    resolved_request_id,
+                    sync_url,
+                    allowed_origin,
+                    now,
+                    now,
+                    now,
+                    now,
+                    json.dumps(proof),
+                ),
+            )
+            return load_connect_state(connection, resolved_request_id, now=now) or {}
+
+    def record_latest_guard_connect_sync_result(
+        self,
+        *,
+        status: str,
+        milestone: str,
+        now: str,
+        reason: str | None = None,
+        sync_payload: dict[str, object] | None = None,
     ) -> dict[str, object] | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -3178,17 +3307,186 @@ class GuardStore:
             latest_state = load_connect_state(connection, str(row["request_id"]), now=now)
             if latest_state is None:
                 return None
-            if latest_state.get("status") != "connected":
+            if latest_state.get("status") not in {"connected", "retry_required"}:
                 return latest_state
             return persist_connect_result(
                 connection,
                 request_id=str(latest_state["request_id"]),
-                status="connected",
-                milestone="first_sync_succeeded",
+                status=status,
+                milestone=milestone,
                 updated_at=now,
-                reason=None,
+                reason=reason,
                 sync_payload=sync_payload,
             )
+
+    def record_latest_guard_connect_sync_success(
+        self,
+        *,
+        sync_payload: dict[str, object],
+        now: str,
+    ) -> dict[str, object] | None:
+        return self.record_latest_guard_connect_sync_result(
+            status="connected",
+            milestone="first_sync_succeeded",
+            now=now,
+            reason=None,
+            sync_payload=sync_payload,
+        )
+
+    def _normalize_guard_connect_state(
+        self,
+        *,
+        latest_state: dict[str, object] | None,
+        cloud_profile: dict[str, str] | None,
+        sync_summary: dict[str, object] | None,
+        now: str,
+    ) -> dict[str, object] | None:
+        if cloud_profile is None:
+            return latest_state
+        normalized = self._hydrate_guard_connect_state_from_cloud_profile(
+            latest_state=latest_state,
+            cloud_profile=cloud_profile,
+            sync_summary=sync_summary,
+            now=now,
+        )
+        if normalized is None:
+            return None
+        status = str(normalized.get("status") or "")
+        milestone = str(normalized.get("milestone") or "")
+        has_sync_summary = bool(sync_summary)
+        if has_sync_summary:
+            return self._coerce_guard_connect_state_status(
+                state=normalized,
+                status="connected",
+                milestone="first_sync_succeeded",
+                reason="first_sync_succeeded",
+                sync_summary=sync_summary,
+                now=now,
+            )
+        if status in {"expired", "waiting"} or milestone in {"expired", "waiting_for_browser"}:
+            return self._coerce_guard_connect_state_status(
+                state=normalized,
+                status="connected",
+                milestone="first_sync_pending",
+                reason="waiting_for_first_sync",
+                sync_summary=sync_summary,
+                now=now,
+            )
+        return normalized
+
+    def _hydrate_guard_connect_state_from_cloud_profile(
+        self,
+        *,
+        latest_state: dict[str, object] | None,
+        cloud_profile: dict[str, str],
+        sync_summary: dict[str, object] | None,
+        now: str,
+    ) -> dict[str, object]:
+        sync_url = str(cloud_profile["sync_url"])
+        allowed_origin = _allowed_origin_from_sync_url(sync_url)
+        if latest_state is None:
+            return self._coerce_guard_connect_state_status(
+                state={
+                    "request_id": None,
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                    "status": "connected",
+                    "milestone": "first_sync_pending",
+                    "reason": "waiting_for_first_sync",
+                    "created_at": None,
+                    "updated_at": now,
+                    "expires_at": None,
+                    "completed_at": None,
+                    "proof": {},
+                },
+                status="connected",
+                milestone="first_sync_succeeded" if sync_summary else "first_sync_pending",
+                reason="first_sync_succeeded" if sync_summary else "waiting_for_first_sync",
+                sync_summary=sync_summary,
+                now=now,
+            )
+        hydrated = dict(latest_state)
+        hydrated["sync_url"] = str(hydrated.get("sync_url") or sync_url)
+        hydrated["allowed_origin"] = str(hydrated.get("allowed_origin") or allowed_origin or "")
+        return self._coerce_guard_connect_state_status(
+            state=hydrated,
+            status=str(hydrated.get("status") or "connected"),
+            milestone=str(
+                hydrated.get("milestone") or ("first_sync_succeeded" if sync_summary else "first_sync_pending")
+            ),
+            reason=(
+                str(hydrated.get("reason"))
+                if isinstance(hydrated.get("reason"), str)
+                else ("first_sync_succeeded" if sync_summary else "waiting_for_first_sync")
+            ),
+            sync_summary=sync_summary,
+            now=now,
+        )
+
+    def _coerce_guard_connect_state_status(
+        self,
+        *,
+        state: dict[str, object],
+        status: str,
+        milestone: str,
+        reason: str | None,
+        sync_summary: dict[str, object] | None,
+        now: str,
+    ) -> dict[str, object]:
+        proof_source = state.get("proof")
+        proof = dict(proof_source) if isinstance(proof_source, dict) else {}
+        synced_at = None
+        receipts_stored = 0
+        inventory_tracked = 0
+        runtime_session_id = None
+        runtime_session_synced_at = None
+        if isinstance(sync_summary, dict):
+            synced_at_value = sync_summary.get("synced_at")
+            if isinstance(synced_at_value, str) and synced_at_value:
+                synced_at = synced_at_value
+            receipts_value = sync_summary.get("receipts_stored")
+            if isinstance(receipts_value, int):
+                receipts_stored = max(0, receipts_value)
+            inventory_value = sync_summary.get("inventory_tracked", sync_summary.get("inventory"))
+            if isinstance(inventory_value, int):
+                inventory_tracked = max(0, inventory_value)
+            runtime_session_id_value = sync_summary.get("runtime_session_id")
+            if isinstance(runtime_session_id_value, str) and runtime_session_id_value:
+                runtime_session_id = runtime_session_id_value
+            runtime_session_synced_at_value = sync_summary.get("runtime_session_synced_at")
+            if isinstance(runtime_session_synced_at_value, str) and runtime_session_synced_at_value:
+                runtime_session_synced_at = runtime_session_synced_at_value
+        existing_receipts = proof.get("receipts_stored")
+        existing_inventory = proof.get("inventory_items")
+        proof.setdefault("pairing_completed_at", state.get("completed_at"))
+        if synced_at is not None:
+            proof["first_synced_at"] = synced_at
+        else:
+            proof.setdefault("first_synced_at", None)
+        proof["receipts_stored"] = max(
+            receipts_stored,
+            existing_receipts if isinstance(existing_receipts, int) else 0,
+        )
+        proof["inventory_items"] = max(
+            inventory_tracked,
+            existing_inventory if isinstance(existing_inventory, int) else 0,
+        )
+        proof["runtime_session_id"] = runtime_session_id or proof.get("runtime_session_id")
+        proof["runtime_session_synced_at"] = runtime_session_synced_at or proof.get("runtime_session_synced_at")
+        payload = {
+            "request_id": state.get("request_id"),
+            "sync_url": state.get("sync_url"),
+            "allowed_origin": state.get("allowed_origin"),
+            "status": status,
+            "milestone": milestone,
+            "reason": reason,
+            "created_at": state.get("created_at"),
+            "updated_at": state.get("updated_at") or now,
+            "expires_at": state.get("expires_at"),
+            "completed_at": state.get("completed_at") or proof.get("pairing_completed_at"),
+            "proof": proof,
+        }
+        return build_connect_state_response(payload, poll_after_ms=0)
 
     def _credential_payload_token_hash(self, payload: dict[str, object]) -> str | None:
         token_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
@@ -3287,22 +3585,22 @@ class GuardStore:
 
     @staticmethod
     def _cloud_workspace_id_from_connection(connection: sqlite3.Connection) -> str | None:
-        row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
-        if row is not None:
-            payload = json.loads(str(row["payload_json"]))
-            if isinstance(payload, dict):
-                workspace_id = payload.get("workspace_id")
-                if isinstance(workspace_id, str) and workspace_id.strip():
-                    return workspace_id
         oauth_row = connection.execute(
             "select payload_json from sync_state where state_key = 'oauth_local_credentials'"
         ).fetchone()
-        if oauth_row is None:
+        if oauth_row is not None:
+            oauth_payload = json.loads(str(oauth_row["payload_json"]))
+            if isinstance(oauth_payload, dict):
+                workspace_id = oauth_payload.get("workspace_id")
+                if isinstance(workspace_id, str) and workspace_id.strip():
+                    return workspace_id
+        row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
+        if row is None:
             return None
-        oauth_payload = json.loads(str(oauth_row["payload_json"]))
-        if not isinstance(oauth_payload, dict):
+        payload = json.loads(str(row["payload_json"]))
+        if not isinstance(payload, dict):
             return None
-        workspace_id = oauth_payload.get("workspace_id")
+        workspace_id = payload.get("workspace_id")
         if isinstance(workspace_id, str) and workspace_id.strip():
             return workspace_id
         return None

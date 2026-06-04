@@ -27,6 +27,7 @@ from packaging.version import InvalidVersion, Version
 
 from ..config import load_guard_config, resolve_risk_action
 from ..models import GuardArtifact
+from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from .js_semver import highest_js_version_for_selector, version_matches_js_selector
@@ -3355,7 +3356,7 @@ def _hash_paths(workspace_dir: Path | None, raw_paths: object) -> list[str]:
 
 
 def _stable_hash(value: object) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return stable_digest_hex(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8"))
 
 
 def _split_namespace_name(value: str) -> tuple[str | None, str]:
