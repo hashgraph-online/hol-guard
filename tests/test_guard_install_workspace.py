@@ -28,6 +28,23 @@ def _install_args(*, harness: str = "cursor", workspace: str | None = None) -> a
     )
 
 
+def test_resolve_default_install_workspace_prefers_cwd_markers_over_git_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monorepo = tmp_path / "monorepo"
+    monorepo.mkdir()
+    package = monorepo / "hol-guard"
+    package.mkdir()
+    (package / "pyproject.toml").write_text("[project]\nname='hol-guard'\n", encoding="utf-8")
+    subprocess.run(["git", "init"], cwd=monorepo, check=True, capture_output=True)
+    monkeypatch.chdir(package)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+    guard_home = resolve_guard_home(None)
+    resolved = _resolve_default_install_workspace(_install_args(), guard_home=guard_home)
+    assert resolved == package.resolve()
+
+
 def test_resolve_default_install_workspace_uses_git_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = tmp_path / "repo"
     nested = repo / "src" / "pkg"
