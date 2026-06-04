@@ -145,6 +145,38 @@ def test_release_checklist_mentions_oauth_only_connect_and_token_retirement() ->
     assert "retired" in release_checklist
 
 
+def test_project_metadata_declares_apache_license() -> None:
+    license_text = _read_repo_file("LICENSE")
+    pyproject_text = _read_repo_file("pyproject.toml")
+    readme_text = _read_repo_file("README.md")
+
+    assert "SPDX-License-Identifier: Apache-2.0" in license_text
+    assert 'license = "Apache-2.0"' in pyproject_text
+    assert "Apache-2.0" in readme_text.split("## License", 1)[-1]
+
+
+def test_static_docs_do_not_claim_mit_license_for_hol_guard() -> None:
+    docs_text = "\n".join(
+        [
+            _read_repo_file("README.md"),
+            _read_repo_file("docs/guard/get-started.md"),
+            _read_repo_file("docs/guard/local-vs-cloud.md"),
+            _read_repo_file("docs/guard/architecture.md"),
+            _read_repo_file("docs/guard/SKILL.md"),
+        ]
+    )
+
+    forbidden_claims = (
+        "published under MIT",
+        "MIT licensed",
+        "licensed under MIT",
+        "hol-guard is MIT",
+        "HOL Guard is MIT",
+    )
+    for claim in forbidden_claims:
+        assert claim.lower() not in docs_text.lower()
+
+
 def test_static_docs_cover_false_positive_remediation_and_incident_response() -> None:
     docs_text = "\n".join(
         [
