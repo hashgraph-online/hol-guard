@@ -1701,6 +1701,46 @@ def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
     assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
 
 
+def test_evaluate_package_request_artifact_blocks_from_cached_bundle_without_cloud_reachability(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
+    )
+    response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="minimist",
+                version="1.2.8",
+                default_action="block",
+                recommended_fix_version="1.2.9",
+            )
+        ]
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
+
+    observed_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def fail_if_cloud_called(*args: object, **kwargs: object) -> object:
+        observed_calls.append((args, kwargs))
+        raise AssertionError("cached bundle blocking should not call Guard Cloud")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fail_if_cloud_called)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("minimist@1.2.8"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert result.enforcement == "offline_cached"
+    assert observed_calls == []
+
+
 def test_evaluate_package_request_artifact_stale_bundle_requests_refresh_and_records_monitor(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
