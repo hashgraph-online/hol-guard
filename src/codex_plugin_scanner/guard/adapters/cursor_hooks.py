@@ -243,6 +243,10 @@ def cursor_hook_script_source(context: HarnessContext) -> str:
             "__GUARD_INHERIT_ENV_KEYS__",
             json.dumps(list(_INHERIT_ENV_KEYS)),
         )
+        .replace(
+            "__GUARD_HOOK_TIMEOUT_SECONDS__",
+            str(max(_MANAGED_HOOK_TIMEOUT_SECONDS - 5, 1)),
+        )
     )
 
 
@@ -311,15 +315,16 @@ GUARD_PYTHON = __GUARD_PYTHON__
 GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__
 GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
 GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
+GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
 
 
-def _hook_process_env() -> dict[str, str]:
+def _hook_process_env(guard_argv: list[str]) -> dict[str, str]:
     env: dict[str, str] = {}
     for key in GUARD_INHERIT_ENV_KEYS:
         value = os.environ.get(key)
         if isinstance(value, str) and value:
             env[key] = value
-    env["HOL_GUARD_HOOK_ARGV"] = json.dumps(GUARD_HOOK_ARGV)
+    env["HOL_GUARD_HOOK_ARGV"] = json.dumps(guard_argv)
     return env
 
 
@@ -327,7 +332,7 @@ def _workspace_from_cursor_input(payload: dict[str, object]) -> str | None:
     project_dir = os.environ.get("CURSOR_PROJECT_DIR")
     if isinstance(project_dir, str) and project_dir.strip():
         return project_dir.strip()
-    roots = payload.get("workspace_roots")
+    roots = payload.get("workspace_roots") or payload.get("workspaceRoots")
     if isinstance(roots, list):
         for item in roots:
             if isinstance(item, str) and item.strip():
@@ -398,16 +403,33 @@ def main() -> int:
         return 2
     workspace = _workspace_from_cursor_input(payload)
     guard_argv = list(GUARD_HOOK_ARGV)
-    if workspace and "--workspace" not in guard_argv:
-        guard_argv.extend(["--workspace", workspace])
-    proc = subprocess.run(
-        [GUARD_PYTHON, "-c", GUARD_HOOK_LAUNCHER],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        cwd=GUARD_HOME,
-        env=_hook_process_env(),
-    )
+    if workspace:
+        if "--workspace" in guard_argv:
+            workspace_index = guard_argv.index("--workspace")
+            if workspace_index + 1 < len(guard_argv):
+                guard_argv[workspace_index + 1] = workspace
+        else:
+            guard_argv.extend(["--workspace", workspace])
+    try:
+        proc = subprocess.run(
+            [GUARD_PYTHON, "-c", GUARD_HOOK_LAUNCHER],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            cwd=GUARD_HOME,
+            env=_hook_process_env(guard_argv),
+            timeout=GUARD_HOOK_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        print(
+            json.dumps(
+                {
+                    "permission": "deny",
+                    "user_message": f"HOL Guard hook execution failed: {exc}",
+                }
+            )
+        )
+        return 2
     guard_payload: dict[str, object] = {}
     if proc.stdout.strip():
         try:
@@ -418,7 +440,7 @@ def main() -> int:
             guard_payload = {}
     policy_action = str(guard_payload.get("policy_action") or "allow")
     hook_event_name = str(payload.get("hook_event_name") or payload.get("hookEventName") or "preToolUse")
-    if proc.returncode not in {0, 1} and not guard_payload:
+    if proc.returncode != 0 and not guard_payload:
         print(
             json.dumps(
                 {
@@ -461,11 +483,10 @@ def _managed_hook_entry(
 
 
 def _merge_hook_entries(entries: object, hook_entry: dict[str, object], *, event_name: str) -> list[object]:
+    del event_name
     normalized = list(entries) if isinstance(entries, list) else []
     command = str(hook_entry.get("command", ""))
     preserved = [entry for entry in normalized if not _is_managed_hook_entry(entry, command=command)]
-    if event_name == "preToolUse" and "matcher" in hook_entry:
-        hook_entry = dict(hook_entry)
     return [*preserved, hook_entry]
 
 
@@ -545,6 +566,8 @@ def _raw_hook_event_name(payload: Mapping[str, object]) -> str:
 def _tool_input_dict(value: object) -> dict[str, object]:
     if isinstance(value, dict):
         return dict(value)
+    if isinstance(value, list):
+        return {"arguments": list(value)}
     if isinstance(value, str) and value.strip():
         try:
             parsed = json.loads(value)
@@ -552,6 +575,8 @@ def _tool_input_dict(value: object) -> dict[str, object]:
             return {"raw": value.strip()}
         if isinstance(parsed, dict):
             return dict(parsed)
+        if isinstance(parsed, list):
+            return {"arguments": list(parsed)}
     return {}
 
 
