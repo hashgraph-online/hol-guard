@@ -43,7 +43,9 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     source = pretool_plugin_source(ctx)
     assert str(ctx.guard_home.resolve()) in source
     assert "tool.execute.before" in source
-    assert "Blob([JSON.stringify(payload)]).stream()" in source
+    assert "stdin: new Blob([JSON.stringify(payload)])" in source
+    assert "normalizeCommand" in source
+    assert '.stream()' not in source.split("Bun.spawn", 1)[1].split("});", 1)[0]
     assert "stdoutPromise" in source
     assert "try {" in source
     assert 'source_scope: directory?.trim() ? "project" : "global"' in source
@@ -56,6 +58,11 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     assert "cwd: workspace" not in spawn_block
     assert '"-m",' not in source
     assert '-m",' not in source
+
+
+def test_pretool_plugin_source_normalizes_argv_array_commands(tmp_path: Path) -> None:
+    source = pretool_plugin_source(_ctx(tmp_path))
+    assert "Array.isArray(command)" in source
 
 
 def test_pretool_hook_launcher_ignores_workspace_package_hijack(

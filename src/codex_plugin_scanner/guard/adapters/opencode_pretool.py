@@ -36,6 +36,16 @@ function hookProcessEnv(guardArgv: string[]) {
   return env;
 }
 
+function normalizeCommand(command: unknown): string | null {
+  if (typeof command === "string" && command.trim()) {
+    return command.trim();
+  }
+  if (Array.isArray(command) && command.length > 0 && command.every((part) => typeof part === "string")) {
+    return command.join(" ");
+  }
+  return null;
+}
+
 async function runGuardHook(directory: string, payload: Record<string, unknown>) {
   const workspace = directory?.trim() || process.cwd();
   const guardArgv = [
@@ -52,7 +62,7 @@ async function runGuardHook(directory: string, payload: Record<string, unknown>)
   const proc = Bun.spawn([GUARD_PYTHON, "-c", GUARD_HOOK_LAUNCHER], {
     cwd: GUARD_HOME,
     env: hookProcessEnv(guardArgv),
-    stdin: new Blob([JSON.stringify(payload)]).stream(),
+    stdin: new Blob([JSON.stringify(payload)]),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -96,8 +106,8 @@ export const HolGuardPretoolPlugin = async ({
       if (!INTERCEPT_TOOLS.has(input.tool)) {
         return;
       }
-      const command = output.args?.command;
-      if (typeof command !== "string" || !command.trim()) {
+      const command = normalizeCommand(output.args?.command);
+      if (command === null) {
         return;
       }
       const workspace = directory?.trim() || process.cwd();
