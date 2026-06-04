@@ -9,6 +9,8 @@ import os
 import sqlite3
 import subprocess
 
+import pytest
+
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.store import (
     EncryptedFileSecretStore,
@@ -135,6 +137,32 @@ def test_sync_credentials_are_scoped_per_guard_home(tmp_path):
         "sync_url": "https://hol.org/api/guard/receipts/sync",
         "token": "token-b",
     }
+
+
+def test_set_sync_credentials_rejects_unallowlisted_sync_host(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+
+    with pytest.raises(ValueError, match="allowlisted HOL origin"):
+        store.set_sync_credentials(
+            "https://evil.example/api/guard/receipts/sync",
+            "secret-token-value",
+            "2026-04-19T00:00:00+00:00",
+        )
+
+
+def test_set_oauth_local_credentials_rejects_unallowlisted_issuer(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+
+    with pytest.raises(ValueError, match="allowlisted HOL origin"):
+        store.set_oauth_local_credentials(
+            issuer="https://evil.example",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-token",
+            dpop_private_key_pem="private-key",
+            dpop_public_jwk={"kty": "EC"},
+            dpop_public_jwk_thumbprint="thumbprint",
+            now="2026-04-19T00:00:00+00:00",
+        )
 
 
 def test_legacy_token_reference_is_rejected_on_read(tmp_path):
