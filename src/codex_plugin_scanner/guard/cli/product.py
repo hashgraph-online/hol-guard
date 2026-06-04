@@ -9,9 +9,10 @@ from urllib.parse import urlparse
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
-from ..consumer import detect_all, evaluate_detection
+from ..consumer import detect_all
+from ..consumer.service import diff_artifact
 from ..daemon import load_guard_daemon_url
-from ..models import HarnessDetection
+from ..models import GuardArtifact, HarnessDetection
 from ..redaction import redact_local_path
 from ..store import GuardStore
 from .connect_flow import CONNECT_COMMAND, CONNECT_REPAIR_COMMAND, CONNECT_STATUS_COMMAND, connect_recovery_command
@@ -110,10 +111,9 @@ def _summarize_harness(
     config: GuardConfig,
     home_dir: Path,
 ) -> dict[str, object]:
-    evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
     managed_install = store.get_managed_install(detection.harness)
     approval_flow = get_adapter(detection.harness).approval_flow(managed_install=managed_install)
-    review_count = sum(1 for artifact in evaluation["artifacts"] if bool(artifact["changed"]))
+    review_count = _count_review_artifacts(store, detection.artifacts, detection.harness)
     managed = bool(managed_install and managed_install.get("active"))
     shim_path = None
     if managed_install is not None:
@@ -138,6 +138,15 @@ def _summarize_harness(
         "receipts_command": f"{GUARD_COMMAND} receipts",
         "approval_flow": approval_flow,
     }
+
+
+def _count_review_artifacts(store: GuardStore, artifacts: tuple[GuardArtifact, ...], harness: str) -> int:
+    previous_snapshots = store.list_snapshots(harness)
+    return sum(
+        1
+        for artifact in artifacts
+        if bool(diff_artifact(previous_snapshots.get(artifact.artifact_id), artifact)["changed"])
+    )
 
 
 def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:
