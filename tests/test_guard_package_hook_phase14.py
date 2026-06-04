@@ -399,7 +399,8 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     assert decision["harness_message"].startswith("HOL Guard blocked")
     assert "Reason:" in decision["harness_message"]
     assert "Fix: install `npm install minimist@1.2.9` or choose a team exception." in decision["harness_message"]
-    assert "Review evidence: https://hol.org/guard/inbox." in decision["harness_message"]
+    assert "Review this request in HOL Guard, then retry." in decision["harness_message"]
+    assert "guard/inbox" not in decision["harness_message"]
 
 
 def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(tmp_path: Path) -> None:
