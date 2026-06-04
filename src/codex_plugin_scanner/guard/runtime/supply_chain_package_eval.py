@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import posixpath
@@ -1293,7 +1292,7 @@ def _lockfile_context(workspace_dir: Path | None, artifact: GuardArtifact) -> di
     return {
         "dependencyCount": len(dependencies),
         "fileName": lockfile_path.name,
-        "lockfileHash": hashlib.sha256(lockfile_text.encode("utf-8")).hexdigest(),
+        "lockfileHash": stable_digest_hex(lockfile_text.encode("utf-8")),
         "manifestHash": manifest_hashes[0] if manifest_hashes else None,
         "repository": workspace_dir.name,
     }
@@ -3349,7 +3348,7 @@ def _hash_paths(workspace_dir: Path | None, raw_paths: object) -> list[str]:
         if not path.exists():
             continue
         try:
-            hashes.append(hashlib.sha256(path.read_bytes()).hexdigest())
+            hashes.append(stable_digest_hex(path.read_bytes()))
         except OSError:
             continue
     return hashes
@@ -3508,7 +3507,7 @@ def _evidence_id(package_intent_hash: str, package: dict[str, object]) -> str:
     )
     dependency_path = _optional_string(package.get("dependencyPath")) or "direct"
     identity = f"{package_intent_hash}:{package_name}:{resolved_version}:{dependency_path}:{decision}"
-    return f"evidence-{hashlib.sha256(identity.encode()).hexdigest()[:16]}"
+    return f"evidence-{stable_digest_hex(identity.encode(), length=16)}"
 
 
 def _with_additional_reason(

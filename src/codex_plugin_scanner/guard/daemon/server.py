@@ -95,6 +95,7 @@ from ..shims import (
     repair_package_shims,
     uninstall_package_shims,
 )
+from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
@@ -1467,7 +1468,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             },
             sort_keys=True,
         )
-        artifact_hash = hashlib.sha256(material.encode("utf-8")).hexdigest()
+        artifact_hash = stable_digest_hex(material.encode("utf-8"))
         changed_capabilities = [] if operation in {"status", "scan"} else [operation]
         artifact_id = f"headless:{harness}:{operation}"
         artifact_name = f"Headless {operation}"

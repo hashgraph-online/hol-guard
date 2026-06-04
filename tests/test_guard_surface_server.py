@@ -656,7 +656,7 @@ class TestGuardSurfaceServer:
     def test_guard_daemon_runtime_snapshot_uses_oauth_profile_without_legacy_credentials(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         store.set_oauth_local_credentials(
-            issuer="https://guard.example.com",
+            issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
             dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
@@ -685,17 +685,17 @@ class TestGuardSurfaceServer:
 
         assert payload["cloud_state"] == "paired_waiting"
         assert payload["sync_configured"] is True
-        assert payload["dashboard_url"] == "https://guard.example.com/guard"
-        assert payload["inbox_url"] == "https://guard.example.com/guard/inbox"
-        assert payload["fleet_url"] == "https://guard.example.com/guard/fleet"
-        assert payload["connect_url"] == "https://guard.example.com/guard/connect"
+        assert payload["dashboard_url"] == "https://hol.org/guard"
+        assert payload["inbox_url"] == "https://hol.org/guard/inbox"
+        assert payload["fleet_url"] == "https://hol.org/guard/fleet"
+        assert payload["connect_url"] == "https://hol.org/guard/connect"
         assert payload["cloud_pairing_state"]["state"] == "paired_waiting"
         assert payload["cloud_pairing_state"]["sync_configured"] is True
 
     def test_guard_daemon_runtime_snapshot_mirrors_oauth_repair_detail_in_pairing_state(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         store.set_oauth_local_credentials(
-            issuer="https://guard.example.com",
+            issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
             dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
@@ -733,7 +733,7 @@ class TestGuardSurfaceServer:
     def test_guard_daemon_runtime_snapshot_keeps_failed_sync_copy_distinct_from_oauth_repair(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         store.set_oauth_local_credentials(
-            issuer="https://guard.example.com",
+            issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
             dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
@@ -776,7 +776,7 @@ class TestGuardSurfaceServer:
     def test_guard_daemon_runtime_snapshot_prefers_active_sync_over_expired_connect_state(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         store.set_oauth_local_credentials(
-            issuer="https://guard.example.com",
+            issuer="https://hol.org",
             client_id="guard-local-daemon",
             refresh_token="refresh-secret-value",
             dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
@@ -823,8 +823,8 @@ class TestGuardSurfaceServer:
                 """,
                 (
                     "connect-expired",
-                    "https://guard.example.com/api/guard/receipts/sync",
-                    "https://guard.example.com",
+                    "https://hol.org/api/guard/receipts/sync",
+                    "https://hol.org",
                     "2026-06-04T18:20:00+00:00",
                     "2026-06-04T18:20:00+00:00",
                     "2026-06-04T18:25:00+00:00",

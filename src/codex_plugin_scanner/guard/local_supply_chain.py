@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shlex
@@ -41,6 +40,7 @@ from .runtime.runner import (
 from .runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from .runtime.supply_chain_support import ecosystem_support_matrix
 from .shims import package_shim_status, package_shim_supported_managers
+from .stable_digest import stable_digest_hex
 from .store import GuardStore
 
 _LOCAL_SUPPLY_CHAIN_HARNESS = "guard-cli"
@@ -507,7 +507,7 @@ def build_package_protect_payload(
     receipt = build_receipt(
         harness=_LOCAL_SUPPLY_CHAIN_HARNESS,
         artifact_id=artifact.artifact_id,
-        artifact_hash=hashlib.sha256(artifact.artifact_id.encode("utf-8")).hexdigest(),
+        artifact_hash=stable_digest_hex(artifact.artifact_id.encode("utf-8")),
         policy_decision=verdict_action,
         capabilities_summary=evaluation.user_copy.summary,
         changed_capabilities=[target.package_name or target.raw_spec for target in sanitized_intent.targets],
@@ -1298,13 +1298,13 @@ def _workspace_audit_lockfile_context(
     if manifest_paths:
         manifest_path = workspace_dir / manifest_paths[0]
         try:
-            manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            manifest_hash = stable_digest_hex(manifest_path.read_bytes())
         except OSError:
             manifest_hash = None
     return {
         "dependencyCount": len(inventory),
         "fileName": lockfile_path.name,
-        "lockfileHash": hashlib.sha256(lockfile_text.encode("utf-8")).hexdigest(),
+        "lockfileHash": stable_digest_hex(lockfile_text.encode("utf-8")),
         "manifestHash": manifest_hash,
     }
 
@@ -1319,7 +1319,7 @@ def _workspace_audit_fingerprint(
 ) -> str:
     manifest_hashes = _hash_existing_paths(workspace_dir, manifest_paths)
     lockfile_hashes = _hash_existing_paths(workspace_dir, lockfile_paths)
-    return hashlib.sha256(
+    return stable_digest_hex(
         json.dumps(
             {
                 "workspace_id": workspace_id,
@@ -1330,8 +1330,8 @@ def _workspace_audit_fingerprint(
             },
             sort_keys=True,
             separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
+        ).encode("utf-8"),
+    )
 
 
 def _hash_existing_paths(workspace_dir: Path, relative_paths: Sequence[str]) -> list[str]:
@@ -1341,7 +1341,7 @@ def _hash_existing_paths(workspace_dir: Path, relative_paths: Sequence[str]) -> 
         if not disk_path.exists():
             continue
         try:
-            hashes.append(hashlib.sha256(disk_path.read_bytes()).hexdigest())
+            hashes.append(stable_digest_hex(disk_path.read_bytes()))
         except OSError:
             continue
     return hashes
