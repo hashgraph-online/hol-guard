@@ -451,9 +451,13 @@ def _build_secret_store(guard_home: Path) -> SecretStore:
 def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
     if KeychainSecretStore._is_available():
+        # Device connect persists a refresh token plus multiline DPoP key material.
+        # Keep writes on the encrypted file backend so normal CLI pairing never drops
+        # the user into repeated macOS keychain password prompts, while still reading
+        # legacy keychain-backed installs through the fallback path and migrating them forward.
         return FallbackSecretStore(
-            KeychainSecretStore(service_name="hol-guard.oauth"),
             fallback_store,
+            KeychainSecretStore(service_name="hol-guard.oauth"),
         )
     return fallback_store
 

@@ -244,15 +244,15 @@ def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(
     assert isinstance(secret_store.fallback, KeychainSecretStore)
 
 
-def test_oauth_secret_store_prefers_keychain_when_available(tmp_path, monkeypatch):
+def test_oauth_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
 
     secret_store = _build_oauth_secret_store(guard_home)
 
     assert isinstance(secret_store, FallbackSecretStore)
-    assert isinstance(secret_store.primary, KeychainSecretStore)
-    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
+    assert isinstance(secret_store.primary, EncryptedFileSecretStore)
+    assert isinstance(secret_store.fallback, KeychainSecretStore)
 
 
 def test_encrypted_file_secret_store_secures_secret_directory_permissions(tmp_path):
@@ -291,6 +291,28 @@ def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_availa
 
     monkeypatch.setattr(subprocess, "run", fail_on_keychain)
     GuardStore(guard_home)
+
+
+def test_oauth_local_credentials_do_not_shell_out_to_keychain_when_file_store_is_available(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+
+    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("keychain should not be used for OAuth credential writes")
+
+    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
+    store = GuardStore(guard_home)
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    assert store.get_oauth_local_credentials() is not None
 
 
 def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
@@ -535,6 +557,111 @@ def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_wr
         "grant_id": "grant-old",
         "machine_id": "machine-old",
         "workspace_id": "workspace-old",
+    }
+
+
+def test_validated_keychain_fallback_oauth_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+
+    refresh_token = "legacy-refresh-token"
+    dpop_private_key_pem = "-----BEGIN PRIVATE KEY-----\nlegacy-key-material\n-----END PRIVATE KEY-----"
+    refresh_token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+    dpop_private_key_hash = hashlib.sha256(dpop_private_key_pem.encode("utf-8")).hexdigest()
+    keychain_reads: list[str] = []
+
+    def keychain_lookup(args: list[str], *other_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        del other_args, kwargs
+        secret_id = str(args[args.index("-a") + 1])
+        keychain_reads.append(secret_id)
+        if secret_id.endswith(refresh_token_hash[:16]):
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=f"{refresh_token}\n", stderr="")
+        if secret_id.endswith(dpop_private_key_hash[:16]):
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=dpop_private_key_pem, stderr="")
+        return subprocess.CompletedProcess(args=args, returncode=44, stdout="", stderr="not found")
+
+    monkeypatch.setattr(subprocess, "run", keychain_lookup)
+    store = GuardStore(guard_home)
+    refresh_token_ref = store._versioned_secret_ref(store._oauth_refresh_token_ref, refresh_token_hash)
+    dpop_private_key_ref = store._versioned_secret_ref(store._oauth_dpop_private_key_ref, dpop_private_key_hash)
+
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            insert into sync_state (state_key, payload_json, updated_at)
+            values ('oauth_local_credentials', ?, ?)
+            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
+            """,
+            (
+                json.dumps(
+                    {
+                        "issuer": "https://hol.org",
+                        "client_id": "guard-local-daemon",
+                        "refresh_token_ref": refresh_token_ref,
+                        "refresh_token_sha256": refresh_token_hash,
+                        "dpop_private_key_ref": dpop_private_key_ref,
+                        "dpop_private_key_sha256": dpop_private_key_hash,
+                        "dpop_public_jwk": {
+                            "kty": "EC",
+                            "crv": "P-256",
+                            "x": "x-value",
+                            "y": "y-value",
+                            "alg": "ES256",
+                            "use": "sig",
+                        },
+                        "dpop_public_jwk_thumbprint": "thumbprint-123",
+                        "grant_id": "grant-123",
+                        "machine_id": "machine-123",
+                        "workspace_id": "workspace-123",
+                    }
+                ),
+                "2026-06-01T00:00:00+00:00",
+            ),
+        )
+
+    assert store.get_oauth_local_credentials() == {
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "refresh_token": refresh_token,
+        "dpop_private_key_pem": dpop_private_key_pem,
+        "dpop_public_jwk": {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "x-value",
+            "y": "y-value",
+            "alg": "ES256",
+            "use": "sig",
+        },
+        "dpop_public_jwk_thumbprint": "thumbprint-123",
+        "grant_id": "grant-123",
+        "machine_id": "machine-123",
+        "workspace_id": "workspace-123",
+    }
+    assert len(keychain_reads) == 2
+    assert any((guard_home / "secrets").glob("*.enc"))
+
+    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("OAuth keychain fallback should not run after migration")
+
+    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
+
+    assert store.get_oauth_local_credentials() == {
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "refresh_token": refresh_token,
+        "dpop_private_key_pem": dpop_private_key_pem,
+        "dpop_public_jwk": {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "x-value",
+            "y": "y-value",
+            "alg": "ES256",
+            "use": "sig",
+        },
+        "dpop_public_jwk_thumbprint": "thumbprint-123",
+        "grant_id": "grant-123",
+        "machine_id": "machine-123",
+        "workspace_id": "workspace-123",
     }
 
 
