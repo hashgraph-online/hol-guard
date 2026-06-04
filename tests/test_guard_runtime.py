@@ -595,14 +595,15 @@ clearer UX and an implementation plan with technical references.
             ]
         )
         output = json.loads(capsys.readouterr().out)
-        approval_requests = output["approval_requests"]
+        approval_requests = GuardStore(home_dir).list_approval_requests(limit=10)
 
-        assert rc == 1
-        assert output["artifact_type"] == "prompt_request"
-        assert "read .authrc" in output["launch_summary"]
-        assert output["approval_center_url"] == "http://127.0.0.1:4455"
+        assert rc == 0
+        assert output["decision"] == "block"
+        assert output["continue"] is False
+        assert output["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+        assert "http://127.0.0.1:4455/approvals/" in output["reason"]
         assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
-        assert approval_requests[0]["approval_url"] in output["review_hint"]
+        assert approval_requests[0]["approval_url"] in output["reason"]
         assert approval_requests[0]["launch_target"] == "Codex prompt for `.authrc`: read .authrc"
         assert approval_requests[0]["action_envelope_json"]["action_type"] == "prompt"
         assert approval_requests[0]["action_envelope_json"]["prompt_excerpt"] == "read .authrc"
