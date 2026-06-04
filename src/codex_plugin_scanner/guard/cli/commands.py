@@ -6114,7 +6114,9 @@ def _load_hook_payload(event_file: str | None, *, input_text: str | None = None)
     return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
 
 
-_ACTION_ENVELOPE_HARNESSES = frozenset({"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw"})
+_ACTION_ENVELOPE_HARNESSES = frozenset(
+    {"codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw", "cursor"}
+)
 
 
 def _hook_action_envelope(
