@@ -107,8 +107,12 @@ def _force_duplicate_row(store: GuardStore, request_id: str, source_request_id: 
         connection.close()
 
 
-def _get_json(port: int, path: str) -> dict[str, object]:
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as response:
+def _get_json(port: int, path: str, *, token: str | None = None) -> dict[str, object]:
+    headers: dict[str, str] = {}
+    if token is not None:
+        headers["X-Guard-Token"] = token
+    request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers=headers, method="GET")
+    with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -826,8 +830,8 @@ def test_request_list_status_filter_includes_resolved_items(tmp_path: Path) -> N
     daemon.start()
 
     try:
-        resolved_page = _get_json(daemon.port, "/v1/requests?status=resolved")
-        all_page = _get_json(daemon.port, "/v1/requests?status=all")
+        resolved_page = _get_json(daemon.port, "/v1/requests?status=resolved", token=daemon._server.auth_token)
+        all_page = _get_json(daemon.port, "/v1/requests?status=all", token=daemon._server.auth_token)
     finally:
         daemon.stop()
 
@@ -850,18 +854,35 @@ def test_request_list_limit_cursor_search_and_harness_filters(tmp_path: Path) ->
     daemon.start()
 
     try:
-        first_page = _get_json(daemon.port, "/v1/requests?limit=2")
+        first_page = _get_json(daemon.port, "/v1/requests?limit=2", token=daemon._server.auth_token)
         second_page = _get_json(
             daemon.port,
             f"/v1/requests?limit=2&cursor={urllib.parse.quote(str(first_page['next_cursor']))}",
+            token=daemon._server.auth_token,
         )
-        command_match = _get_json(daemon.port, "/v1/requests?search=npmrc&harness=codex")
-        prompt_match = _get_json(daemon.port, "/v1/requests?search=plugin%20prompt")
-        mcp_match = _get_json(daemon.port, "/v1/requests?search=read_secret")
-        harness_match = _get_json(daemon.port, "/v1/requests?harness=copilot")
+        command_match = _get_json(
+            daemon.port,
+            "/v1/requests?search=npmrc&harness=codex",
+            token=daemon._server.auth_token,
+        )
+        prompt_match = _get_json(
+            daemon.port,
+            "/v1/requests?search=plugin%20prompt",
+            token=daemon._server.auth_token,
+        )
+        mcp_match = _get_json(
+            daemon.port,
+            "/v1/requests?search=read_secret",
+            token=daemon._server.auth_token,
+        )
+        harness_match = _get_json(
+            daemon.port,
+            "/v1/requests?harness=copilot",
+            token=daemon._server.auth_token,
+        )
         bad_limit_status = None
         try:
-            _get_json(daemon.port, "/v1/requests?limit=banana")
+            _get_json(daemon.port, "/v1/requests?limit=banana", token=daemon._server.auth_token)
         except urllib.error.HTTPError as error:
             bad_limit_status = error.code
     finally:
@@ -884,7 +905,7 @@ def test_request_list_invalid_cursor_returns_recovery_error(tmp_path: Path) -> N
 
     try:
         try:
-            _get_json(daemon.port, "/v1/requests?cursor=not-a-valid-cursor")
+            _get_json(daemon.port, "/v1/requests?cursor=not-a-valid-cursor", token=daemon._server.auth_token)
         except urllib.error.HTTPError as error:
             status = error.code
             payload = json.loads(error.read().decode("utf-8"))

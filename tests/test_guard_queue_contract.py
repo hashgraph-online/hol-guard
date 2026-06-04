@@ -87,8 +87,12 @@ def _post_json(port: int, token: str, path: str, payload: dict[str, object]) -> 
         return json.loads(response.read().decode("utf-8"))
 
 
-def _get_json(port: int, path: str) -> dict[str, object]:
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as response:
+def _get_json(port: int, path: str, *, token: str | None = None) -> dict[str, object]:
+    headers: dict[str, str] = {}
+    if token is not None:
+        headers["X-Guard-Token"] = token
+    request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers=headers, method="GET")
+    with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -601,8 +605,12 @@ def test_daemon_resolution_envelope_and_request_filters(tmp_path: Path) -> None:
             "/v1/requests/req-2/approve",
             {"scope": "artifact", "reason": "reviewed"},
         )
-        filtered = _get_json(daemon.port, f"/v1/requests?search={urllib.parse.quote('npmrc')}&harness=codex&limit=1")
-        runtime = _get_json(daemon.port, "/v1/runtime?active_request_id=req-1")
+        filtered = _get_json(
+            daemon.port,
+            f"/v1/requests?search={urllib.parse.quote('npmrc')}&harness=codex&limit=1",
+            token=daemon._server.auth_token,
+        )
+        runtime = _get_json(daemon.port, "/v1/runtime?active_request_id=req-1", token=daemon._server.auth_token)
     finally:
         daemon.stop()
 

@@ -137,16 +137,19 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
         return None
     url = f"http://127.0.0.1:{port}"
     try:
-        with urllib.request.urlopen(f"{url}/healthz", timeout=1) as response:
+        with urllib.request.urlopen(_daemon_health_request(f"{url}/healthz"), timeout=1) as response:
             raw_payload = response.read().decode("utf-8")
             if response.status != 200 or not _healthz_payload_is_current(raw_payload):
                 return None
-            if _healthz_payload_matches_guard_home(raw_payload, guard_home):
-                return url
-            if _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
-                return url
     except (OSError, ValueError, urllib.error.URLError):
         return None
+    if _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
+        return url
+    # In-process or wrapped daemons may not expose a command line we can bind
+    # back to guard_home, so fall back to authenticated detailed health.
+    auth_token = load_guard_daemon_auth_token(guard_home)
+    if auth_token and _daemon_healthz_details_match_guard_home(url, guard_home, auth_token=auth_token):
+        return url
     compatibility_version = payload.get("compatibility_version")
     if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
         return None
@@ -166,6 +169,24 @@ def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
         return None
     token = payload.get("auth_token")
     return token if isinstance(token, str) and token.strip() else None
+
+
+def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.request.Request:
+    headers: dict[str, str] = {}
+    if isinstance(auth_token, str) and auth_token.strip():
+        headers["X-Guard-Token"] = auth_token
+    return urllib.request.Request(url, headers=headers, method="GET")
+
+
+def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth_token: str) -> bool:
+    try:
+        request = _daemon_health_request(f"{url}/v1/healthz/details", auth_token)
+        with urllib.request.urlopen(request, timeout=1) as response:
+            if response.status != 200:
+                return False
+            return _healthz_payload_matches_guard_home(response.read().decode("utf-8"), guard_home)
+    except (OSError, ValueError, urllib.error.URLError):
+        return False
 
 
 def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> None:
@@ -823,6 +844,8 @@ def _healthz_payload_is_current(raw_payload: str) -> bool:
     if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
         return False
     tables = payload.get("tables")
+    if tables is None:
+        return True
     if not isinstance(tables, list):
         return False
     table_names = {table for table in tables if isinstance(table, str)}

@@ -15296,6 +15296,13 @@ def test_guard_daemon_serves_health_and_receipt_state(tmp_path):
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5) as response:
             health_payload = json.loads(response.read().decode("utf-8"))
+        detailed_health_request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/healthz/details",
+            headers={"X-Guard-Token": daemon._server.auth_token},
+            method="GET",
+        )
+        with urllib.request.urlopen(detailed_health_request, timeout=5) as response:
+            detailed_health_payload = json.loads(response.read().decode("utf-8"))
         runtime_error = None
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/receipts", timeout=5)
@@ -15305,7 +15312,9 @@ def test_guard_daemon_serves_health_and_receipt_state(tmp_path):
         daemon.stop()
 
     assert health_payload["ok"] is True
-    assert health_payload["receipts"] == 1
+    assert "receipts" not in health_payload
+    assert detailed_health_payload["ok"] is True
+    assert detailed_health_payload["receipts"] == 1
     assert runtime_error is not None
     assert runtime_error.code == 404
 
