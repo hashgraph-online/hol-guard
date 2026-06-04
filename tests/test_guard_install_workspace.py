@@ -32,6 +32,7 @@ def test_resolve_default_install_workspace_uses_git_root(tmp_path: Path, monkeyp
     nested.mkdir(parents=True)
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     monkeypatch.chdir(nested)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
     guard_home = resolve_guard_home(None)
     resolved = _resolve_default_install_workspace(_install_args(), guard_home=guard_home)
     assert resolved == repo.resolve()
@@ -73,6 +74,7 @@ def test_install_cursor_without_workspace_writes_project_hooks(
     home_dir.mkdir()
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     monkeypatch.chdir(repo)
+    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
 
     rc = main(
         [

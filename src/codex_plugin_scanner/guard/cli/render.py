@@ -989,10 +989,7 @@ def _render_skill_scan_results(console: Console, skill_scan: list[dict[str, obje
 def _managed_install_workspace_label(workspace: object) -> str:
     if isinstance(workspace, str) and workspace.strip():
         return workspace.strip()
-    try:
-        return str(Path.cwd().resolve())
-    except OSError:
-        return "current shell"
+    return "global (~/.cursor)"
 
 
 def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
