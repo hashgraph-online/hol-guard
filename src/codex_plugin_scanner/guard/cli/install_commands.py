@@ -220,7 +220,11 @@ def uninstall_confirmation_token(harness: str) -> str:
 
 def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
     from ..adapters.opencode import OpenCodeHarnessAdapter
-    from ..adapters.opencode_pretool import global_plugin_path, opencode_config_uses_guard_proxy
+    from ..adapters.opencode_pretool import (
+        global_plugin_path,
+        opencode_config_has_mcp_servers,
+        opencode_config_uses_guard_proxy,
+    )
 
     managed = store.get_managed_install("opencode") if store is not None else None
     config_path = OpenCodeHarnessAdapter()._target_config_path(context)
@@ -234,7 +238,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
         warnings.append(
             "OpenCode pretool plugin is missing from ~/.config/opencode/plugins/. Re-run `hol-guard install opencode`."
         )
-    if not mcp_proxy_configured:
+    if opencode_config_has_mcp_servers(config_path) and not mcp_proxy_configured:
         warnings.append("OpenCode MCP servers are not routed through hol-guard. Re-run `hol-guard install opencode`.")
     if not shim_path.is_file():
         warnings.append(

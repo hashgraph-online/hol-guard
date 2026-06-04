@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.adapters.opencode_pretool import (
     global_plugin_path,
     install_pretool_plugin,
     managed_plugin_path,
+    opencode_config_has_mcp_servers,
     opencode_config_uses_guard_proxy,
     pretool_plugin_source,
     remove_pretool_plugin,
@@ -106,6 +107,27 @@ def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path
         encoding="utf-8",
     )
     assert opencode_config_uses_guard_proxy(config) is True
+
+
+def test_opencode_verification_ready_without_mcp_servers(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    ctx = _ctx(tmp_path)
+    config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text('{"mcp": {}}', encoding="utf-8")
+    install_pretool_plugin(ctx)
+    (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
+    (ctx.guard_home / "bin" / "guard-opencode").write_text("#!/bin/sh\n", encoding="utf-8")
+    store = GuardStore(ctx.guard_home)
+    store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
+    payload = install_commands_module.build_harness_verification("opencode", ctx, store=store)
+    verification = payload["verification"]
+    assert verification["pretool_plugin_installed"] is True
+    assert verification["mcp_proxy_configured"] is False
+    assert opencode_config_has_mcp_servers(config) is False
+    assert verification["ready"] is True
+    assert not verification["warnings"]
 
 
 def test_opencode_verification_reports_missing_plugin(tmp_path: Path) -> None:

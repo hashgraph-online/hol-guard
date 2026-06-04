@@ -159,6 +159,18 @@ def remove_pretool_plugin(context: HarnessContext) -> dict[str, object]:
     return {"removed_plugin_paths": removed_paths}
 
 
+def opencode_config_has_mcp_servers(config_path: Path) -> bool:
+    from ...ecosystems.opencode import _load_json_or_jsonc
+
+    if not config_path.is_file():
+        return False
+    payload, parse_error, _ = _load_json_or_jsonc(config_path)
+    if parse_error or not isinstance(payload, dict):
+        return False
+    mcp = payload.get("mcp")
+    return isinstance(mcp, dict) and bool(mcp)
+
+
 def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
     from ...ecosystems.opencode import _load_json_or_jsonc
 
@@ -186,6 +198,7 @@ __all__ = [
     "global_plugin_path",
     "install_pretool_plugin",
     "managed_plugin_path",
+    "opencode_config_has_mcp_servers",
     "opencode_config_uses_guard_proxy",
     "pretool_plugin_source",
     "remove_pretool_plugin",
