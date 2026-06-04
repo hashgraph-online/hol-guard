@@ -309,6 +309,15 @@ assert(
   auditResults.some((r) => r.severity === "high"),
   "SCRG171-V: audit loader data: unprotected manager appears as high severity",
 );
+const unprotectedManagerAudit = auditResults.find((r) => r.id === "unprotected-pip");
+assert(
+  unprotectedManagerAudit?.remediationAction?.action === "package_shim_path",
+  "SCRG171-V2: unprotected manager audit issue exposes a daemon remediation action",
+);
+assert(
+  unprotectedManagerAudit?.remediationAction?.manager === "pip",
+  "SCRG171-V3: unprotected manager remediation action targets the affected manager",
+);
 assert(
   auditResults.some((r) => r.severity === "medium"),
   "SCRG171-W: audit loader data: blocked receipt appears as medium severity",

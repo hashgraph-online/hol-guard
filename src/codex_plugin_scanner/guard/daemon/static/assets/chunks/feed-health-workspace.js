@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, a as HiMiniExclamationTriangle, ab as HiMiniArrowPath, g as HiMiniCheckCircle, ap as HiMiniSignal, h as HiMiniXCircle, aq as HiMiniClock, f as formatRelativeTime, B as Badge, T as Tag } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, a as HiMiniExclamationTriangle, ab as HiMiniArrowPath, g as HiMiniCheckCircle, aq as HiMiniSignal, h as HiMiniXCircle, ar as HiMiniClock, f as formatRelativeTime, B as Badge, T as Tag } from "../guard-dashboard.js";
 function resolveFeedSourceMode(cloudState) {
   if (cloudState === "local_only") return "sample";
   if (cloudState === "paired_waiting") return "full";
@@ -85,7 +85,7 @@ function FeedHealthWorkspace({ snapshot, onOpenSettings }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Full feed syncing" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 mt-0.5", children: "Cloud connection is complete. Feed sync is in progress. First proof will arrive shortly." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 mt-0.5", children: "Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly." })
         ] })
       ] }),
       sourceMode === "live" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-xl border border-brand-green/20 bg-brand-green/[0.04] px-3 py-2.5", children: [

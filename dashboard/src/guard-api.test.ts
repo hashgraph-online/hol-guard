@@ -4,15 +4,16 @@ import {
   fetchAllPendingRequests,
   fetchApprovalPage,
   fetchQueueSummary,
-  fetchResumeStatus,
-  formatHarnessCommand,
-  normalizeRuntimeSnapshot,
-  normalizeApprovalRequest,
-  parseActionEnvelope,
-  parseDecisionV2,
-  resolveRequestWithQueueResult,
-  retryResume,
-} from "./guard-api";
+	  fetchResumeStatus,
+	  formatHarnessCommand,
+	  normalizeRuntimeSnapshot,
+	  normalizeApprovalRequest,
+	  parseActionEnvelope,
+	  parseDecisionV2,
+	  runAuditRemediation,
+	  resolveRequestWithQueueResult,
+	  retryResume,
+	} from "./guard-api";
 import { resolveCloudSyncHealthCopy } from "./runtime-overview";
 import {
   resolveDecisionV2Detail,
@@ -753,6 +754,33 @@ const clearQueueGate = clearQueueBody["approval_gate"] as Record<string, unknown
 assert(clearQueueGate["password"] === "local-password", "L079b: clearReviewQueue sends approval password");
 assert(clearQueueGate["totp_code"] === "123456", "L079b: clearReviewQueue sends authenticator code");
 assert(clearQueueResult.cleared === 2, "L079b: clearReviewQueue returns cleared count");
+
+installGuardWindow("?guard-token=token-remediate&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const remediationCalls = installFetchStub({
+  "/v1/audit/remediations/package_shim_path": {
+    entitlement: { allowed: true },
+    operation: "package_shim_path",
+    receipt: null,
+    result: { manager: "pnpm" },
+    status: "completed"
+  }
+});
+const remediation = await runAuditRemediation({
+  action: "package_shim_path",
+  manager: "pnpm",
+  approval_password: "local-password",
+  approval_totp_code: "123456"
+});
+const remediationBody = JSON.parse(String(remediationCalls[0].init?.body)) as Record<string, unknown>;
+assert(
+  remediationCalls[0].url === "http://127.0.0.1:4781/v1/audit/remediations/package_shim_path",
+  "L079c: runAuditRemediation posts to daemon remediation route"
+);
+assert(headerValue(remediationCalls[0].init, "X-Guard-Token") === "token-remediate", "L079c: runAuditRemediation sends Guard token");
+assert(remediationBody["manager"] === "pnpm", "L079c: runAuditRemediation sends manager");
+assert(remediationBody["approval_password"] === "local-password", "L079c: runAuditRemediation sends approval password");
+assert(remediationBody["approval_totp_code"] === "123456", "L079c: runAuditRemediation sends approval TOTP code");
+assert(remediation.operation === "package_shim_path", "L079c: runAuditRemediation normalizes response");
 
 installGuardWindow("?guard-token=token-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchResolveCalls = installFetchStub({

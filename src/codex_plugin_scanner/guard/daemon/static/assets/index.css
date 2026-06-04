@@ -123,6 +123,7 @@
     --color-slate-600: oklch(44.6% .043 257.281);
     --color-slate-700: oklch(37.2% .044 257.287);
     --color-slate-900: oklch(20.8% .042 265.755);
+    --color-slate-950: oklch(12.9% .042 264.695);
     --color-gray-100: oklch(96.7% .003 264.542);
     --color-gray-200: oklch(92.8% .006 264.531);
     --color-gray-500: oklch(55.1% .027 264.364);
@@ -2568,6 +2569,16 @@
 
   .bg-slate-300 {
     background-color: var(--color-slate-300);
+  }
+
+  .bg-slate-950\/40 {
+    background-color: #02061866;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-slate-950\/40 {
+      background-color: color-mix(in oklab, var(--color-slate-950) 40%, transparent);
+    }
   }
 
   .bg-surface-1 {
