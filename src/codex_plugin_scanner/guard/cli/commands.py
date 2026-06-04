@@ -9062,12 +9062,22 @@ def _resolve_policy_expiry(args: argparse.Namespace) -> str | None:
 def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]:
     latest_state = store.get_latest_guard_connect_state(now=_now())
     payload: dict[str, object] = {
-        "oauth_storage_health": store.get_oauth_local_credential_health(),
+        "oauth_storage_health": _guard_doctor_oauth_storage_health_payload(store),
         "connect_recovery_command": connect_recovery_command(latest_state),
     }
     if isinstance(latest_state, dict):
         payload["latest_connect_state"] = _guard_doctor_latest_connect_state_payload(latest_state)
     return payload
+
+
+def _guard_doctor_oauth_storage_health_payload(store: GuardStore) -> dict[str, str]:
+    oauth_storage_health = store.get_oauth_local_credential_health()
+    state = "unknown"
+    if isinstance(oauth_storage_health, dict):
+        raw_state = oauth_storage_health.get("state")
+        if isinstance(raw_state, str) and raw_state.strip():
+            state = raw_state
+    return {"state": state}
 
 
 def _guard_doctor_latest_connect_state_payload(latest_state: dict[str, object]) -> dict[str, object]:
