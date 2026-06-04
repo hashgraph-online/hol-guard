@@ -6,6 +6,8 @@ import json
 import threading
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -13,7 +15,7 @@ from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bri
 
 
 class _CapturingProxyHandler(BaseHTTPRequestHandler):
-    captured_paths: list[str] = []
+    captured_paths: ClassVar[list[str]] = []
 
     def do_POST(self) -> None:
         type(self).captured_paths.append(self.path)
@@ -33,7 +35,7 @@ class _CapturingProxyHandler(BaseHTTPRequestHandler):
             ).encode("utf-8")
         )
 
-    def log_message(self, format: str, *args: object) -> None:
+    def log_message(self, fmt: str, *args: object) -> None:
         return
 
 
@@ -49,8 +51,10 @@ def test_daemon_url_rejects_non_loopback_fallback() -> None:
 
 class _DaemonHandler(BaseHTTPRequestHandler):
     response_marker = "from-real-daemon"
+    captured_guard_token: ClassVar[str | None] = None
 
     def do_POST(self) -> None:
+        type(self).captured_guard_token = self.headers.get("X-Guard-Token")
         length = int(self.headers.get("Content-Length", "0"))
         _ = self.rfile.read(length)
         self.send_response(200)
@@ -68,20 +72,27 @@ class _DaemonHandler(BaseHTTPRequestHandler):
             ).encode("utf-8")
         )
 
-    def log_message(self, format: str, *args: object) -> None:
+    def log_message(self, fmt: str, *args: object) -> None:
         return
 
 
-def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _CapturingProxyHandler.captured_paths = []
     proxy_server = HTTPServer(("127.0.0.1", 0), _CapturingProxyHandler)
     proxy_thread = threading.Thread(target=proxy_server.serve_forever, daemon=True)
     proxy_thread.start()
 
+    auth_token = "test-guard-token"
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "daemon-auth-token").write_text(auth_token, encoding="utf-8")
+    state_path = guard_home / "daemon-state.json"
+
     daemon_server = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
     daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
     daemon_thread.start()
     daemon_port = daemon_server.server_address[1]
+    _DaemonHandler.captured_guard_token = None
 
     monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy_server.server_address[1]}")
     monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy_server.server_address[1]}")
@@ -92,6 +103,7 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
         response_body = bridge._post_to_loopback_daemon(
             f"http://127.0.0.1:{daemon_port}/v1/hooks/claude-code?guard-home=%2Ftmp",
             "{}",
+            state_path=state_path,
         )
     finally:
         proxy_server.shutdown()
@@ -102,6 +114,7 @@ def test_post_to_loopback_daemon_ignores_http_proxy(monkeypatch: pytest.MonkeyPa
     payload = json.loads(response_body)
     assert payload["marker"] == _DaemonHandler.response_marker
     assert _CapturingProxyHandler.captured_paths == []
+    assert _DaemonHandler.captured_guard_token == auth_token
 
 
 def test_loopback_redirect_handler_rejects_remote_redirect() -> None:
