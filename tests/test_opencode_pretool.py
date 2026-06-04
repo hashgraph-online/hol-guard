@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_pretool import (
+    _HOOK_ARGV_ENV,
+    _pretool_hook_env,
+    _pretool_hook_launcher_code,
     global_plugin_path,
     install_pretool_plugin,
     managed_plugin_path,
@@ -40,8 +47,45 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     assert "stdoutPromise" in source
     assert "try {" in source
     assert 'source_scope: directory?.trim() ? "project" : "global"' in source
-    assert "codex_plugin_scanner.cli" in source
-    assert "guard" in source
+    assert "GUARD_HOOK_LAUNCHER" in source
+    assert "HOL_GUARD_HOOK_ARGV" in source
+    assert "cwd: GUARD_HOME" in source
+    spawn_block = source.split("Bun.spawn(", 1)[1].split("});", 1)[0]
+    assert "cwd: workspace" not in spawn_block
+    assert '"-m",' not in source
+    assert '-m",' not in source
+
+
+def test_pretool_hook_launcher_ignores_workspace_package_hijack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: workspace must not precede trusted Guard on sys.path."""
+    import subprocess
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    fake_pkg = workspace / "codex_plugin_scanner"
+    fake_pkg.mkdir()
+    (fake_pkg / "__init__.py").write_text("", encoding="utf-8")
+    (fake_pkg / "cli.py").write_text("import sys\nsys.stderr.write('hijacked')\nraise SystemExit(99)\n", encoding="utf-8")
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    ctx = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=guard_home)
+    launcher = _pretool_hook_launcher_code()
+    env = {**_pretool_hook_env(), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
+    completed = subprocess.run(
+        [sys.executable, "-c", launcher],
+        cwd=workspace,
+        env={**os.environ, **env},
+        input="{}",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert "hijacked" not in completed.stderr
+    assert completed.returncode != 99
 
 
 def test_install_pretool_plugin_writes_managed_and_global_copies(tmp_path: Path) -> None:

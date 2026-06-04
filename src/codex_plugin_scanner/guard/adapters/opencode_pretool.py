@@ -2,44 +2,46 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
+from ..launcher import merge_guard_launcher_env
 from .base import HarnessContext
 
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
 _INTERCEPT_TOOLS = ("bash", "shell", "sh", "zsh", "terminal")
+_HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
 
 _PLUGIN_TEMPLATE = """// Managed by HOL Guard. Re-run `hol-guard install opencode` after moving Guard home.
 const GUARD_HOME = __GUARD_HOME__;
 const GUARD_PYTHON = __GUARD_PYTHON__;
+const GUARD_HOOK_LAUNCHER = __GUARD_HOOK_LAUNCHER__;
+const GUARD_HOOK_ENV = __GUARD_HOOK_ENV__;
 const INTERCEPT_TOOLS = new Set(__INTERCEPT_TOOLS__);
 
 async function runGuardHook(directory: string, payload: Record<string, unknown>) {
   const workspace = directory?.trim() || process.cwd();
-  const proc = Bun.spawn(
-    [
-      GUARD_PYTHON,
-      "-m",
-      "codex_plugin_scanner.cli",
-      "guard",
-      "hook",
-      "--guard-home",
-      GUARD_HOME,
-      "--harness",
-      "opencode",
-      "--workspace",
-      workspace,
-      "--json",
-    ],
-    {
-      cwd: workspace,
-      stdin: new Blob([JSON.stringify(payload)]).stream(),
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
+  const guardArgv = [
+    "guard",
+    "hook",
+    "--guard-home",
+    GUARD_HOME,
+    "--harness",
+    "opencode",
+    "--workspace",
+    workspace,
+    "--json",
+  ];
+  const proc = Bun.spawn([GUARD_PYTHON, "-c", GUARD_HOOK_LAUNCHER], {
+    cwd: GUARD_HOME,
+    env: { ...GUARD_HOOK_ENV, __HOOK_ARGV_ENV__: JSON.stringify(guardArgv) },
+    stdin: new Blob([JSON.stringify(payload)]).stream(),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const stdoutPromise = new Response(proc.stdout).text();
   const stderrPromise = new Response(proc.stderr).text();
   const exitCode = await proc.exited;
@@ -118,6 +120,41 @@ export const HolGuardPretoolPlugin = async ({
 """
 
 
+def _trusted_package_root() -> Path:
+    spec = importlib.util.find_spec("codex_plugin_scanner")
+    if spec is None:
+        raise RuntimeError("Guard could not locate the codex_plugin_scanner package")
+    if spec.submodule_search_locations:
+        return Path(next(iter(spec.submodule_search_locations))).resolve().parent
+    if spec.origin is None:
+        raise RuntimeError("Guard could not determine the codex_plugin_scanner package root")
+    return Path(spec.origin).resolve().parent.parent
+
+
+def _trusted_pythonpath_entries() -> list[str]:
+    launcher_env = merge_guard_launcher_env(pin_package=True)
+    path_entries = [entry for entry in launcher_env.get("PYTHONPATH", "").split(os.pathsep) if entry.strip()]
+    package_root = str(_trusted_package_root())
+    if package_root not in path_entries:
+        path_entries.insert(0, package_root)
+    return path_entries
+
+
+def _pretool_hook_launcher_code() -> str:
+    trusted_entries = _trusted_pythonpath_entries()
+    return (
+        "import json,os,sys;"
+        f"sys.path[:0]={json.dumps(trusted_entries)};"
+        "from codex_plugin_scanner.cli import main;"
+        f"raise SystemExit(main(json.loads(os.environ[{_HOOK_ARGV_ENV!r}])))"
+    )
+
+
+def _pretool_hook_env() -> dict[str, str]:
+    env = merge_guard_launcher_env(pin_package=True)
+    return {key: value for key, value in env.items() if key == "PYTHONPATH" and value.strip()}
+
+
 def managed_plugin_path(context: HarnessContext) -> Path:
     return context.guard_home / "opencode" / "plugins" / PLUGIN_FILENAME
 
@@ -127,9 +164,12 @@ def global_plugin_path(context: HarnessContext) -> Path:
 
 
 def pretool_plugin_source(context: HarnessContext) -> str:
+    template = _PLUGIN_TEMPLATE.replace("__HOOK_ARGV_ENV__", _HOOK_ARGV_ENV)
     return (
-        _PLUGIN_TEMPLATE.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
+        template.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
         .replace("__GUARD_PYTHON__", json.dumps(str(Path(sys.executable).resolve())))
+        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code()))
+        .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env()))
         .replace("__INTERCEPT_TOOLS__", json.dumps(list(_INTERCEPT_TOOLS)))
     )
 
