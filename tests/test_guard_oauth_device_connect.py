@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1022,6 +1023,38 @@ def test_loopback_callback_listener_uses_random_high_port_and_loopback_path() ->
         assert 49152 <= parsed.port <= 65535
     finally:
         listener.close()
+
+
+def test_loopback_callback_listener_retries_after_port_conflict(monkeypatch) -> None:
+    occupied_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    occupied_socket.bind(("127.0.0.1", 0))
+    occupied_socket.listen(1)
+    occupied_port = occupied_socket.getsockname()[1]
+
+    probe_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe_socket.bind(("127.0.0.1", 0))
+    retry_port = probe_socket.getsockname()[1]
+    probe_socket.close()
+
+    port_offsets = iter(
+        (
+            occupied_port - connect_flow._LOOPBACK_PORT_MIN,
+            retry_port - connect_flow._LOOPBACK_PORT_MIN,
+        )
+    )
+
+    monkeypatch.setattr(connect_flow, "_LOOPBACK_HOSTS", ("127.0.0.1",))
+    monkeypatch.setattr(connect_flow.secrets, "randbelow", lambda _limit: next(port_offsets))
+
+    listener = connect_flow.start_guard_loopback_callback_listener(expected_state="state-123")
+    try:
+        parsed = urllib.parse.urlparse(listener.redirect_uri)
+        assert parsed.hostname == "127.0.0.1"
+        assert parsed.port == retry_port
+        assert parsed.port != occupied_port
+    finally:
+        listener.close()
+        occupied_socket.close()
 
 
 def test_loopback_callback_listener_rejects_state_mismatch() -> None:
