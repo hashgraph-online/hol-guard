@@ -2842,9 +2842,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return False
         if path == "/v1/connect/state":
             return False
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
-            return False
-        return True
+        return not (len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud")
 
     def _write_json(
         self,

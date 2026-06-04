@@ -178,7 +178,8 @@ def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.re
 
 def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth_token: str) -> bool:
     try:
-        with urllib.request.urlopen(_daemon_health_request(f"{url}/v1/healthz/details", auth_token), timeout=1) as response:
+        request = _daemon_health_request(f"{url}/v1/healthz/details", auth_token)
+        with urllib.request.urlopen(request, timeout=1) as response:
             if response.status != 200:
                 return False
             return _healthz_payload_matches_guard_home(response.read().decode("utf-8"), guard_home)
