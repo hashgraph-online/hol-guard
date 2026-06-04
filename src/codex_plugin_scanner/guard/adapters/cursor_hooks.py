@@ -475,7 +475,7 @@ def _managed_hook_entry(
     entry: dict[str, object] = {
         "command": str(script_path.resolve()),
         "timeout": _MANAGED_HOOK_TIMEOUT_SECONDS,
-        "failClosed": event_name in {"beforeShellExecution", "beforeMCPExecution", "beforeReadFile"},
+        "failClosed": event_name in _MANAGED_HOOK_EVENTS,
     }
     if event_name == "preToolUse":
         entry["matcher"] = _PRETOOL_MATCHER
