@@ -35,6 +35,8 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     source = pretool_plugin_source(ctx)
     assert str(ctx.guard_home.resolve()) in source
     assert "tool.execute.before" in source
+    assert "TextEncoder().encode" in source
+    assert "stdoutPromise" in source
     assert "codex_plugin_scanner.cli" in source
     assert "guard" in source
 
@@ -66,6 +68,24 @@ def test_opencode_install_includes_pretool_plugin_paths(tmp_path: Path) -> None:
     result = OpenCodeHarnessAdapter().install(ctx)
     assert Path(result["managed_plugin_path"]).is_file()
     assert Path(result["global_plugin_path"]).is_file()
+
+
+def test_opencode_config_uses_guard_proxy_parses_jsonc_comments(tmp_path: Path) -> None:
+    config = tmp_path / "opencode.jsonc"
+    config.write_text(
+        """
+        {
+          // Guard-managed MCP proxy
+          "mcp": {
+            "playwright": {
+              "command": ["hol-guard", "guard", "opencode-mcp-proxy"]
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+    assert opencode_config_uses_guard_proxy(config) is True
 
 
 def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path) -> None:

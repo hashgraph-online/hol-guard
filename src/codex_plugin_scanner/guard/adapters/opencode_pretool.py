@@ -35,14 +35,16 @@ async function runGuardHook(directory: string, payload: Record<string, unknown>)
     ],
     {
       cwd: workspace,
-      stdin: JSON.stringify(payload),
+      stdin: new TextEncoder().encode(JSON.stringify(payload)),
       stdout: "pipe",
       stderr: "pipe",
     },
   );
+  const stdoutPromise = new Response(proc.stdout).text();
+  const stderrPromise = new Response(proc.stderr).text();
   const exitCode = await proc.exited;
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
+  const stdout = await stdoutPromise;
+  const stderr = await stderrPromise;
   return { exitCode, stdout, stderr };
 }
 
@@ -148,13 +150,12 @@ def remove_pretool_plugin(context: HarnessContext) -> dict[str, object]:
 
 
 def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
+    from ...ecosystems.opencode import _load_json_or_jsonc
+
     if not config_path.is_file():
         return False
-    try:
-        payload = json.loads(config_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    if not isinstance(payload, dict):
+    payload, parse_error, _ = _load_json_or_jsonc(config_path)
+    if parse_error or not isinstance(payload, dict):
         return False
     mcp = payload.get("mcp")
     if not isinstance(mcp, dict):
