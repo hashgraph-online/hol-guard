@@ -1417,26 +1417,52 @@ def _normalize_explicit_workspace_path(value: str | None) -> Path | None:
         return path
 
 
-def _resolve_guard_workspace(
-    args: argparse.Namespace,
+_INSTALL_WORKSPACE_COMMANDS = frozenset({"install", "uninstall"})
+_PROJECT_ROOT_MARKERS = (
+    ".git",
+    ".cursor",
+    "pyproject.toml",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+)
+
+
+def _requested_install_harness(args: argparse.Namespace) -> str | None:
+    if bool(getattr(args, "all", False)):
+        return None
+    harness = str(getattr(args, "harness", "") or "").strip()
+    return harness or None
+
+
+def _workspace_from_cursor_project_dir() -> Path | None:
+    project_dir = os.environ.get("CURSOR_PROJECT_DIR", "").strip()
+    if not project_dir:
+        return None
+    return _normalize_explicit_workspace_path(project_dir)
+
+
+def _workspace_has_project_markers(path: Path) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return any((resolved / marker).exists() for marker in _PROJECT_ROOT_MARKERS)
+
+
+def _workspace_from_harness_detection(
+    harness: str,
     *,
+    cwd: Path,
     guard_home: Path,
 ) -> Path | None:
-    explicit_workspace = getattr(args, "workspace", None)
-    if explicit_workspace:
-        return _normalize_explicit_workspace_path(str(explicit_workspace))
-    if getattr(args, "guard_command", None) != "apps":
-        return None
-    if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
-        return None
-    harness = str(getattr(args, "harness", "")).strip()
-    if not harness:
-        return None
     try:
         adapter = get_adapter(harness)
     except ValueError:
         return None
-    cwd = Path.cwd().resolve()
     detection = adapter.detect(
         HarnessContext(
             home_dir=Path.home().resolve(),
@@ -1445,9 +1471,61 @@ def _resolve_guard_workspace(
         )
     )
     for config_path in detection.config_paths:
-        if Path(config_path).resolve().is_relative_to(cwd):
+        try:
+            resolved_path = Path(config_path).expanduser().resolve()
+        except OSError:
+            continue
+        if resolved_path.is_relative_to(cwd):
             return cwd
     return None
+
+
+def _resolve_default_install_workspace(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path,
+) -> Path | None:
+    """Pick a project workspace for install/uninstall when --workspace is omitted."""
+
+    cwd = Path.cwd().resolve()
+    harness = _requested_install_harness(args)
+    cursor_project_dir = _workspace_from_cursor_project_dir()
+    if cursor_project_dir is not None and (harness is None or harness == "cursor"):
+        return cursor_project_dir
+
+    git_root = _git_repo_root(cwd)
+    if git_root is not None:
+        return git_root
+
+    if harness is not None:
+        detected = _workspace_from_harness_detection(harness, cwd=cwd, guard_home=guard_home)
+        if detected is not None:
+            return detected
+
+    if _workspace_has_project_markers(cwd):
+        return cwd
+    return None
+
+
+def _resolve_guard_workspace(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path,
+) -> Path | None:
+    explicit_workspace = getattr(args, "workspace", None)
+    if explicit_workspace:
+        return _normalize_explicit_workspace_path(str(explicit_workspace))
+    guard_command = getattr(args, "guard_command", None)
+    if guard_command in _INSTALL_WORKSPACE_COMMANDS:
+        return _resolve_default_install_workspace(args, guard_home=guard_home)
+    if guard_command != "apps":
+        return None
+    if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
+        return None
+    harness = str(getattr(args, "harness", "")).strip()
+    if not harness:
+        return None
+    return _workspace_from_harness_detection(harness, cwd=Path.cwd().resolve(), guard_home=guard_home)
 
 
 def _run_apps_command(
