@@ -28,7 +28,12 @@ from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
-from ..cli.oauth_client import GuardDpopKeyMaterial, resolve_guard_oauth_client_config
+from ..cli.oauth_client import (
+    GuardDpopKeyMaterial,
+    detect_guard_oauth_environment,
+    is_guard_oauth_origin_allowed,
+    resolve_guard_oauth_client_config,
+)
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
@@ -1732,6 +1737,54 @@ def _guard_oauth_reauthorization_message() -> str:
     return "Guard authorization expired. Run `hol-guard connect` to sign in again."
 
 
+def _guard_sync_reconnect_message() -> str:
+    return "Guard Cloud sync endpoint is not trusted. Run `hol-guard connect` to restore Cloud sync."
+
+
+def _guard_sync_origin(sync_url: str) -> str:
+    parsed = urllib.parse.urlsplit(sync_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise GuardSyncNotConfiguredError(
+            f"{_guard_sync_reconnect_message()} Sync URL must be an absolute http(s) URL."
+        )
+    if parsed.username is not None or parsed.password is not None:
+        raise GuardSyncNotConfiguredError(
+            f"{_guard_sync_reconnect_message()} Sync URL userinfo is not allowed."
+        )
+    if parsed.fragment:
+        raise GuardSyncNotConfiguredError(
+            f"{_guard_sync_reconnect_message()} Sync URL fragments are not allowed."
+        )
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+
+def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str:
+    origin = _guard_sync_origin(sync_url)
+    if issuer is not None:
+        try:
+            oauth_client = resolve_guard_oauth_client_config(issuer)
+        except ValueError as error:
+            raise GuardSyncAuthorizationExpiredError(
+                f"{_guard_oauth_reauthorization_message()} {error}"
+            ) from error
+        if origin != oauth_client.issuer:
+            raise GuardSyncAuthorizationExpiredError(
+                f"{_guard_oauth_reauthorization_message()} "
+                "Guard Cloud sync origin no longer matches the configured issuer."
+            )
+        return sync_url
+    if not is_guard_oauth_origin_allowed(origin):
+        raise GuardSyncNotConfiguredError(
+            f"{_guard_sync_reconnect_message()} Sync URL origin is not allowlisted."
+        )
+    environment = detect_guard_oauth_environment(origin)
+    if environment != "local" and urllib.parse.urlsplit(origin).scheme != "https":
+        raise GuardSyncNotConfiguredError(
+            f"{_guard_sync_reconnect_message()} Sync URL must use https outside local loopback."
+        )
+    return sync_url
+
+
 def _refresh_guard_oauth_access_token(
     *,
     token_endpoint: str,
@@ -1845,8 +1898,14 @@ def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
         if issuer is None or client_id is None or refresh_token is None:
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         dpop_key_material = _oauth_dpop_key_material(oauth_credentials)
+        try:
+            oauth_client = resolve_guard_oauth_client_config(issuer)
+        except ValueError as error:
+            raise GuardSyncAuthorizationExpiredError(
+                f"{_guard_oauth_reauthorization_message()} {error}"
+            ) from error
         refreshed = _refresh_guard_oauth_access_token(
-            token_endpoint=resolve_guard_oauth_client_config(issuer).token_endpoint,
+            token_endpoint=oauth_client.token_endpoint,
             client_id=client_id,
             refresh_token=refresh_token,
             dpop_key_material=dpop_key_material,
@@ -1858,8 +1917,12 @@ def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
                 credentials=oauth_credentials,
                 refresh_token=rotated_refresh_token,
             )
+        sync_url = _validate_guard_sync_url(
+            _oauth_sync_url_from_issuer(oauth_client.issuer),
+            issuer=oauth_client.issuer,
+        )
         return {
-            "sync_url": _oauth_sync_url_from_issuer(issuer),
+            "sync_url": sync_url,
             "access_token": str(refreshed["access_token"]),
             "dpop_key_material": dpop_key_material,
         }
@@ -1867,7 +1930,7 @@ def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
     if credentials is None:
         raise GuardSyncNotConfiguredError("Guard is not logged in.")
     return {
-        "sync_url": str(credentials["sync_url"]),
+        "sync_url": _validate_guard_sync_url(str(credentials["sync_url"])),
         "access_token": str(credentials["token"]),
         "dpop_key_material": None,
     }

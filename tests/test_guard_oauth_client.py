@@ -1,3 +1,5 @@
+import pytest
+
 from codex_plugin_scanner.guard.cli.oauth_client import (
     LOCAL_GUARD_OAUTH_CLIENT_ID,
     PRODUCTION_GUARD_OAUTH_CLIENT_ID,
@@ -36,6 +38,11 @@ def test_resolve_guard_oauth_client_config_for_local_loopback() -> None:
     assert config.client_id == LOCAL_GUARD_OAUTH_CLIENT_ID
     assert config.authorize_endpoint == "http://127.0.0.1:3000/api/guard/oauth/authorize"
     assert detect_guard_oauth_environment(config.issuer) == "local"
+
+
+def test_resolve_guard_oauth_client_config_rejects_unallowlisted_host() -> None:
+    with pytest.raises(ValueError, match="allowlisted"):
+        resolve_guard_oauth_client_config("https://evil.example")
 
 
 def test_generate_pkce_verifier_uses_rfc7636_charset() -> None:
