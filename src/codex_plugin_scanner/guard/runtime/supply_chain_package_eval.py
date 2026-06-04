@@ -275,8 +275,11 @@ def evaluate_package_request_artifact(
                 now_value,
             )
         return result
-    oauth_local_credentials = store.get_oauth_local_credentials()
-    if bundle_evaluation is not None and bundle_evaluation.refresh_required and oauth_local_credentials is None:
+    if (
+        bundle_evaluation is not None
+        and bundle_evaluation.refresh_required
+        and store.get_oauth_local_credentials() is None
+    ):
         fallback = _finalize_evaluation(
             bundle_evaluation,
             package_intent_hash=package_intent_hash,
@@ -585,7 +588,14 @@ def _evaluate_with_cloud(
 ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
     if workspace_id is None or workspace_fingerprint is None:
         return None, None
-    fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
+    fail_closed_decision: str | None = None
+
+    def resolve_fail_closed_decision() -> str:
+        nonlocal fail_closed_decision
+        if fail_closed_decision is None:
+            fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
+        return fail_closed_decision
+
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
     except GuardSyncAuthorizationExpiredError:
@@ -598,7 +608,7 @@ def _evaluate_with_cloud(
                 workspace_dir=workspace_dir,
                 workspace_fingerprint=workspace_fingerprint,
                 bundle_meta=bundle_meta,
-                fail_closed_decision=fail_closed_decision,
+                fail_closed_decision=resolve_fail_closed_decision(),
             ),
             None,
         )
@@ -632,7 +642,7 @@ def _evaluate_with_cloud(
             workspace_dir=workspace_dir,
             workspace_fingerprint=workspace_fingerprint,
             bundle_meta=bundle_meta,
-            fail_closed_decision=fail_closed_decision,
+            fail_closed_decision=resolve_fail_closed_decision(),
         )
         if fail_closed is not None:
             return fail_closed, None
@@ -641,7 +651,7 @@ def _evaluate_with_cloud(
             message=(f"Guard cloud evaluation returned HTTP {error.code}, so Guard fell back to local intelligence."),
         )
     except OSError:
-        if fail_closed_decision == "block":
+        if resolve_fail_closed_decision() == "block":
             return (
                 _cloud_fail_closed_evaluation(
                     code="cloud_validation_error",
@@ -651,7 +661,7 @@ def _evaluate_with_cloud(
                     workspace_dir=workspace_dir,
                     workspace_fingerprint=workspace_fingerprint,
                     bundle_meta=bundle_meta,
-                    fail_closed_decision=fail_closed_decision,
+                    fail_closed_decision=resolve_fail_closed_decision(),
                 ),
                 None,
             )
@@ -669,7 +679,7 @@ def _evaluate_with_cloud(
                 workspace_dir=workspace_dir,
                 workspace_fingerprint=workspace_fingerprint,
                 bundle_meta=bundle_meta,
-                fail_closed_decision=fail_closed_decision,
+                fail_closed_decision=resolve_fail_closed_decision(),
             ),
             None,
         )
@@ -683,7 +693,7 @@ def _evaluate_with_cloud(
                 workspace_dir=workspace_dir,
                 workspace_fingerprint=workspace_fingerprint,
                 bundle_meta=bundle_meta,
-                fail_closed_decision=fail_closed_decision,
+                fail_closed_decision=resolve_fail_closed_decision(),
             ),
             None,
         )
@@ -699,7 +709,7 @@ def _evaluate_with_cloud(
                 workspace_dir=workspace_dir,
                 workspace_fingerprint=workspace_fingerprint,
                 bundle_meta=bundle_meta,
-                fail_closed_decision=fail_closed_decision,
+                fail_closed_decision=resolve_fail_closed_decision(),
             ),
             None,
         )
