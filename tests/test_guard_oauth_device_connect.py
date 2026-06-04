@@ -362,6 +362,181 @@ def test_headless_connect_ci_safe_uses_explicit_label_and_restricted_scopes(tmp_
     assert parsed["scope"] == ["guard:runtime.sync guard:offline_access"]
 
 
+def test_disconnect_revokes_cloud_grant_with_runtime_access_token_and_clears_local_oauth_credentials(
+    tmp_path: Path,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-123",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        now="2026-06-01T12:00:00+00:00",
+    )
+    access_token = _fake_access_token(
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+    )
+    requests: list[dict[str, object]] = []
+
+    class _Response:
+        def __init__(self, payload: dict[str, object] | None = None) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            if self._payload is None:
+                return b""
+            return json.dumps(self._payload).encode("utf-8")
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        body = request.data.decode("utf-8") if request.data else ""
+        requests.append(
+            {
+                "authorization": request.get_header("Authorization"),
+                "body": body,
+                "headers": dict(request.header_items()),
+                "url": request.full_url,
+            }
+        )
+        if request.full_url == "https://hol.org/api/guard/oauth/token":
+            return _Response(
+                {
+                    "access_token": access_token,
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                }
+            )
+        if request.full_url == "https://hol.org/api/guard/oauth/revoke/self":
+            return _Response()
+        raise AssertionError(f"Unexpected request URL: {request.full_url}")
+
+    payload = connect_flow.run_guard_disconnect_command(
+        store=store,
+        revoke_cloud_grant=True,
+        urlopen=fake_urlopen,
+        now="2026-06-01T12:05:00+00:00",
+    )
+
+    assert payload["status"] == "disconnected"
+    assert payload["cloud_grant_revoked"] is True
+    assert payload["reconnect_command"] == "hol-guard connect"
+    assert store.get_oauth_local_credentials() is None
+    assert [request["url"] for request in requests] == [
+        "https://hol.org/api/guard/oauth/token",
+        "https://hol.org/api/guard/oauth/revoke/self",
+    ]
+
+    token_body = urllib.parse.parse_qs(str(requests[0]["body"]))
+    revoke_body = urllib.parse.parse_qs(str(requests[1]["body"]))
+    assert token_body["grant_type"] == ["refresh_token"]
+    assert token_body["client_id"] == ["guard-local-daemon"]
+    assert token_body["refresh_token"] == ["refresh-123"]
+    assert revoke_body == {
+        "reason": ["user_disconnect"],
+        "revoke_machine_grant": ["true"],
+        "revoke_runtime_grant": ["true"],
+        "workspace_id": ["workspace-123"],
+    }
+    assert requests[1]["authorization"] == f"Bearer {access_token}"
+    assert isinstance(requests[1]["headers"], dict)
+    assert requests[1]["headers"].get("Dpop")
+    assert "refresh-123" not in str(requests[1]["body"])
+
+
+def test_disconnect_keeps_local_oauth_credentials_when_self_revoke_fails(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-123",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        now="2026-06-01T12:00:00+00:00",
+    )
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": _fake_access_token(
+                        grant_id="grant-123",
+                        machine_id="machine-123",
+                        workspace_id="workspace-123",
+                    ),
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        if request.full_url == "https://hol.org/api/guard/oauth/token":
+            return _Response()
+        raise urllib.error.HTTPError(
+            request.full_url,
+            500,
+            "server_error",
+            hdrs={"Content-Type": "application/json"},
+            fp=io.BytesIO(
+                json.dumps(
+                    {
+                        "error": "server_error",
+                        "error_description": "temporary failure",
+                    }
+                ).encode("utf-8")
+            ),
+        )
+
+    try:
+        connect_flow.run_guard_disconnect_command(
+            store=store,
+            revoke_cloud_grant=True,
+            urlopen=fake_urlopen,
+            now="2026-06-01T12:05:00+00:00",
+        )
+    except RuntimeError as error:
+        assert str(error) == "Guard OAuth disconnect failed: temporary failure"
+    else:
+        raise AssertionError("disconnect should fail when self-revocation fails")
+
+    assert store.get_oauth_local_credentials() is not None
+
+
 def test_headless_connect_polls_until_success_and_persists_oauth_credentials(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)

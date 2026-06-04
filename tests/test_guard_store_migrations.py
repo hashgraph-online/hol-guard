@@ -8,6 +8,7 @@ import os
 import sqlite3
 import subprocess
 
+from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.store import (
     EncryptedFileSecretStore,
     FallbackSecretStore,
@@ -330,6 +331,61 @@ def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path)
         "workspace_id": "workspace-123",
     }
     assert store.get_cloud_workspace_id() == "workspace-123"
+
+
+def test_clear_oauth_local_credentials_preserves_local_receipt_history(tmp_path, monkeypatch):
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
+
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "x-value",
+            "y": "y-value",
+            "alg": "ES256",
+            "use": "sig",
+        },
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        runtime_id="hol-guard",
+        runtime_label="HOL Guard CLI",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-1",
+            timestamp="2026-06-01T00:05:00+00:00",
+            harness="codex",
+            artifact_id="artifact-1",
+            artifact_hash="sha256:artifact",
+            policy_decision="allow",
+            capabilities_summary="safe",
+            changed_capabilities=("stdio",),
+            provenance_summary="known-good",
+        )
+    )
+
+    store.clear_oauth_local_credentials()
+
+    assert store.get_oauth_local_credentials() is None
+    assert store.count_receipts() == 1
+    assert store.get_receipt("receipt-1") is not None
+
+    with sqlite3.connect(store.path) as connection:
+        row = connection.execute(
+            "select payload_json from sync_state where state_key = 'oauth_local_credentials'"
+        ).fetchone()
+
+    assert row is None
+    assert list((guard_home / "secrets").glob("guard-oauth-*.enc")) == []
 
 
 def test_oauth_local_credentials_use_encrypted_file_fallback_when_keychain_write_fails(tmp_path, monkeypatch):

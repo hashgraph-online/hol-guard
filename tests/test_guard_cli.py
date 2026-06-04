@@ -6549,6 +6549,52 @@ url = http://127.0.0.1:8787/guard-canary
             "workspace_id": "workspace-123",
         }
 
+    def test_guard_disconnect_revokes_cloud_grant_through_oauth_disconnect_helper(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+        calls: list[dict[str, object]] = []
+
+        def fake_disconnect(
+            *,
+            store: GuardStore,
+            revoke_cloud_grant: bool,
+            now: str | None = None,
+            urlopen=None,
+        ) -> dict[str, object]:
+            del store, now, urlopen
+            calls.append({"revoke_cloud_grant": revoke_cloud_grant})
+            return {
+                "status": "disconnected",
+                "cloud_grant_revoked": revoke_cloud_grant,
+                "reconnect_command": "hol-guard connect",
+            }
+
+        monkeypatch.setattr(guard_commands_module, "run_guard_disconnect_command", fake_disconnect)
+
+        rc = main(
+            [
+                "guard",
+                "disconnect",
+                "--home",
+                str(home_dir),
+                "--revoke-cloud-grant",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output == {
+            "status": "disconnected",
+            "cloud_grant_revoked": True,
+            "reconnect_command": "hol-guard connect",
+        }
+        assert calls == [{"revoke_cloud_grant": True}]
+
     def test_guard_login_without_manual_credentials_uses_device_code_browser_flow(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)
