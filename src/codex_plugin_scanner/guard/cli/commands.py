@@ -196,6 +196,7 @@ from .connect_flow import (
     connect_recovery_command,
     run_guard_browser_connect_command,
     run_guard_device_connect_command,
+    run_guard_disconnect_command,
 )
 from .docs import build_install_connect_docs_payload
 from .install_commands import (
@@ -245,6 +246,7 @@ _GUARD_HELP_GROUPS = (
     "\n"
     "Team and cloud coordination:\n"
     "  connect      Pair this machine to Guard Cloud\n"
+    "  disconnect   Revoke local Guard Cloud auth and optionally revoke cloud grant state\n"
     "  login        Compatibility alias for browser pairing\n"
     "  sync         Send local decisions, receipts, and policy memory to Guard Cloud\n"
     "  service      Manage hosted-runtime Guard Cloud login and sync\n"
@@ -387,6 +389,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         metavar=(
             "{start,status,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
             "receipts,inventory,abom,approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,"
+            "disconnect,"
             "login,sync,device,bridge}"
         ),
     )
@@ -877,6 +880,18 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         help="Alias for --headless. Start Device Code approval without opening a browser.",
     )
     connect_parser.add_argument("--json", action="store_true")
+
+    disconnect_parser = guard_subparsers.add_parser(
+        "disconnect",
+        help="Revoke local Guard Cloud OAuth credentials and optionally revoke the cloud grant",
+    )
+    _add_guard_common_args(disconnect_parser)
+    disconnect_parser.add_argument(
+        "--revoke-cloud-grant",
+        action="store_true",
+        help="Also revoke the machine and runtime grant state in Guard Cloud.",
+    )
+    disconnect_parser.add_argument("--json", action="store_true")
 
     sync_parser = guard_subparsers.add_parser("sync", help="Sync receipts to the configured Guard endpoint")
     sync_parser.add_argument("--home")
@@ -2410,6 +2425,22 @@ def run_guard_command(
                 return exit_code
             _emit("connect", payload, getattr(args, "json", False))
             return exit_code
+
+    if args.guard_command == "disconnect":
+        try:
+            payload = run_guard_disconnect_command(
+                store=store,
+                revoke_cloud_grant=bool(getattr(args, "revoke_cloud_grant", False)),
+                now=_now(),
+            )
+        except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
+            if getattr(args, "json", False):
+                _emit("disconnect", {"status": "error", "error": str(error)}, True)
+            else:
+                print(str(error), file=sys.stderr)
+            return 1
+        _emit("disconnect", payload, getattr(args, "json", False))
+        return 0
 
     if args.guard_command == "bridge":
         poll_interval = getattr(args, "poll_interval", 10) or 10
