@@ -197,13 +197,14 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
     HarnessProtectionContract(
         harness="cursor",
         install_aliases=("cursor",),
-        config_paths=("~/.cursor/mcp.json",),
-        event_surfaces=("mcp_tool",),
+        config_paths=("~/.cursor/mcp.json", "~/.cursor/hooks.json", ".cursor/hooks.json"),
+        event_surfaces=("shell", "mcp_tool", "file_read"),
         native_approval=False,
         browser_fallback=True,
         resume_support=False,
         known_blind_spots=(
-            "Shell commands issued through Cursor's built-in terminal bypass Guard. Prompt content is not surfaced."
+            "Shell commands issued through Cursor's built-in terminal bypass Guard unless the terminal runs inside "
+            "an agent session. Prompt submission is not surfaced through native Cursor hooks."
         ),
         smoke_command="hol-guard install cursor --dry-run",
         surface_capabilities=("editor", "cli"),

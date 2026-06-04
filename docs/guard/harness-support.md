@@ -31,9 +31,10 @@ Current Guard support in this repo:
   - package-manager shell tool calls now persist package intent, consistent block copy, and pre-execution Guard state before Copilot retries
 - `cursor`
   - detects global and project `mcp.json`
-  - supports wrapper-mode management state
+  - installs native Cursor hooks in `.cursor/hooks.json` for `beforeShellExecution`, `beforeMCPExecution`, `preToolUse`, and `beforeReadFile`
+  - supports wrapper-mode management state and the `guard-cursor-agent` CLI shim
   - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
-  - leaves native Cursor tool approval in place and focuses Guard on artifact trust
+  - leaves native Cursor tool approval in place for `ask` decisions and focuses Guard on artifact trust plus runtime interception
   - managed MCP package-manager tool calls are routed through the supply-chain decision engine before Cursor receives the tool result
   - uses the Cursor local/cloud contract in [cursor-local-cloud-contract.md](cursor-local-cloud-contract.md) to keep editor and CLI status, repair, receipts, and Cloud sync distinct under one Cursor app
 - `antigravity`
@@ -123,7 +124,7 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `claude-code` | `claude-code`, `claude` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read |
 | `opencode` | `opencode` | ❌ | ✅ | ❌ | shell, mcp_tool |
 | `copilot` | `copilot` | ✅ | ✅ | ✅ | shell, prompt |
-| `cursor` | `cursor` | ❌ | ✅ | ❌ | mcp_tool |
+| `cursor` | `cursor` | ❌ | ✅ | ❌ | shell, mcp_tool, file_read |
 | `gemini` | `gemini` | ❌ | ✅ | ❌ | shell, mcp_tool |
 | `hermes` | `hermes` | ❌ | ✅ | ❌ | shell, mcp_tool, prompt |
 | `openclaw` | `openclaw` | ❌ | ✅ | ❌ | mcp_tool |
