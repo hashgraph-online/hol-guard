@@ -53,7 +53,7 @@ class TestDaemonStateStartedAt:
 
 
 class TestHealthzEndpoint:
-    """L306: /healthz must expose pending_approvals and uptime_seconds."""
+    """L306: public /healthz stays redacted; detailed health requires daemon auth."""
 
     def _start_server(self, tmp_path: Path) -> tuple[str, object]:
         from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
@@ -68,6 +68,15 @@ class TestHealthzEndpoint:
 
     def _get_healthz(self, url: str) -> dict:
         with urllib.request.urlopen(f"{url}/healthz", timeout=3) as resp:
+            return json.loads(resp.read())
+
+    def _get_healthz_details(self, url: str, server: object) -> dict:
+        request = urllib.request.Request(
+            f"{url}/v1/healthz/details",
+            headers={"X-Guard-Token": server._server.auth_token},
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=3) as resp:
             return json.loads(resp.read())
 
     def test_healthz_includes_pending_approvals(self, tmp_path: Path) -> None:
@@ -102,28 +111,28 @@ class TestHealthzEndpoint:
         finally:
             server.stop()
 
-    def test_healthz_still_includes_legacy_approvals_field(self, tmp_path: Path) -> None:
+    def test_healthz_redacts_legacy_approvals_field(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
             payload = self._get_healthz(url)
-            assert "approvals" in payload, "legacy approvals field must remain for backward compat"
+            assert "approvals" not in payload
         finally:
             server.stop()
 
-    def test_healthz_still_includes_version_and_tables(self, tmp_path: Path) -> None:
+    def test_healthz_details_includes_version_and_tables(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
-            payload = self._get_healthz(url)
+            payload = self._get_healthz_details(url, server)
             assert "compatibility_version" in payload
             assert "package_version" in payload
             assert "tables" in payload
         finally:
             server.stop()
 
-    def test_healthz_includes_guard_home_for_daemon_identity(self, tmp_path: Path) -> None:
+    def test_healthz_details_includes_guard_home_for_daemon_identity(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
-            payload = self._get_healthz(url)
+            payload = self._get_healthz_details(url, server)
             assert payload["guard_home"] == str((tmp_path / "guard-home").resolve())
         finally:
             server.stop()

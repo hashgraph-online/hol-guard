@@ -81,6 +81,8 @@ def test_load_guard_daemon_url_rejects_live_port_when_state_pid_is_not_guard_dae
 def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_process_daemon(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     daemon_manager_module.write_guard_daemon_state(guard_home, 4833, "secret-token")
+    requested_urls: list[str] = []
+    requested_headers: list[dict[str, str]] = []
 
     class FakeResponse:
         status = 200
@@ -107,13 +109,23 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
         "_guard_daemon_pid_matches_command",
         lambda _pid, expected_guard_home=None: False,
     )
-    monkeypatch.setattr(
-        daemon_manager_module.urllib.request,
-        "urlopen",
-        lambda *_args, **_kwargs: FakeResponse(),
-    )
+    def fake_urlopen(request, *_args, **_kwargs):
+        requested_urls.append(request.full_url if hasattr(request, "full_url") else str(request))
+        if hasattr(request, "header_items"):
+            requested_headers.append(dict(request.header_items()))
+        else:
+            requested_headers.append({})
+        return FakeResponse()
+
+    monkeypatch.setattr(daemon_manager_module.urllib.request, "urlopen", fake_urlopen)
 
     assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:4833"
+    assert requested_urls == [
+        "http://127.0.0.1:4833/healthz",
+        "http://127.0.0.1:4833/v1/healthz/details",
+    ]
+    assert requested_headers[0] == {}
+    assert requested_headers[1]["X-guard-token"] == "secret-token"
 
 
 def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
@@ -129,6 +141,19 @@ def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_pat
 
     assert len(fchmod_calls) == 2
     assert all(mode == 0o600 for _, mode in fchmod_calls)
+
+
+def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:
+    payload = json.dumps(
+        {
+            "ok": True,
+            "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "pending_approvals": 0,
+            "uptime_seconds": 1.2,
+        }
+    )
+
+    assert daemon_manager_module._healthz_payload_is_current(payload) is True
 
 
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
