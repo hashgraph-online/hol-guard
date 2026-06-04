@@ -13936,6 +13936,16 @@ async function runPackageFirewallAction(action, manager) {
   return normalizePackageFirewallAction(response);
 }
 async function runAuditRemediation(input) {
+  if (isGuardDemoMode()) {
+    return {
+      entitlement: { allowed: true, tier: "demo" },
+      operation: input.action,
+      receipt: null,
+      result: `${input.action} completed for ${input.manager}.`,
+      result_detail: { manager: input.manager, demo: true },
+      status: "completed"
+    };
+  }
   const response = await readJson(
     `/v1/audit/remediations/${input.action}`,
     {

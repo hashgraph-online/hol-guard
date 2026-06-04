@@ -560,6 +560,7 @@ function RemediationApprovalModal(props: {
       ...(approvalGate?.totp_enabled === true ? { approval_totp_code: totpCode } : {}),
     });
   }, [approvalGate, onConfirm, password, totpCode]);
+  const confirmDisabled = password.trim() === "" || (approvalGate?.totp_enabled === true && totpCode.trim() === "");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
       <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
@@ -595,7 +596,7 @@ function RemediationApprovalModal(props: {
           <ActionButton variant="outline" onClick={onCancel}>
             Cancel
           </ActionButton>
-          <ActionButton onClick={handleConfirm}>
+          <ActionButton onClick={handleConfirm} disabled={confirmDisabled}>
             Run remediation
           </ActionButton>
         </div>

@@ -375,6 +375,7 @@ function RemediationApprovalModal(props) {
       ...approvalGate?.totp_enabled === true ? { approval_totp_code: totpCode } : {}
     });
   }, [approvalGate, onConfirm, password, totpCode]);
+  const confirmDisabled = password.trim() === "" || approvalGate?.totp_enabled === true && totpCode.trim() === "";
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "mt-2 text-base font-semibold text-brand-dark", children: result.remediationAction?.label }),
@@ -408,7 +409,7 @@ function RemediationApprovalModal(props) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onCancel, children: "Cancel" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConfirm, children: "Run remediation" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConfirm, disabled: confirmDisabled, children: "Run remediation" })
     ] })
   ] }) });
 }
