@@ -1739,14 +1739,13 @@ def _guard_oauth_reauthorization_message() -> str:
 def _guard_sync_reconnect_message() -> str:
     return "Guard Cloud sync endpoint is not trusted. Run `hol-guard connect` to restore Cloud sync."
 
+
 def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str:
     try:
         return validate_guard_sync_endpoint(sync_url, issuer=issuer)
     except ValueError as error:
         if issuer is not None:
-            raise GuardSyncAuthorizationExpiredError(
-                f"{_guard_oauth_reauthorization_message()} {error}"
-            ) from error
+            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
         raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} {error}") from error
 
 
