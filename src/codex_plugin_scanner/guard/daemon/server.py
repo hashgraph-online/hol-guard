@@ -89,6 +89,7 @@ from ..runtime.runner import (
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..shims import (
+    ensure_package_shim_path_in_shell_profile,
     install_package_shims,
     package_shim_status,
     package_shim_supported_managers,
@@ -116,6 +117,7 @@ from .manager import (
 
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
+_AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {"install", "repair", "test", "audit", "sync", "remove", "uninstall"}
 _SUPPLY_CHAIN_PAID_TIERS = {"paid", "premium", "enterprise", "guard_cloud", "guard-cloud"}
 
@@ -813,6 +815,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if (
             len(path_parts) == 4
+            and path_parts[:3] == ["v1", "audit", "remediations"]
+            and path_parts[3] in _AUDIT_REMEDIATION_ACTIONS
+        ):
+            self._handle_audit_remediation(path_parts[3], payload)
+            return
+        if (
+            len(path_parts) == 4
             and path_parts[:3] == ["v1", "supply-chain", "package-shims"]
             and path_parts[3] in _SUPPLY_CHAIN_PACKAGE_ACTIONS
         ):
@@ -1271,6 +1280,72 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "harness": adapter.harness,
                 "operation": "policy_sync",
                 "receipt": receipt,
+                "status": "completed",
+            }
+        )
+
+    def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
+        if action != "package_shim_path":
+            self._write_json({"error": "unsupported_remediation", "operation": action}, status=404)
+            return
+        manager = self._optional_string(payload.get("manager"))
+        if manager is None:
+            self._write_json({"error": "missing_manager", "operation": action}, status=400)
+            return
+        managers, manager_error = self._supply_chain_managers({"managers": [manager]})
+        if manager_error is not None:
+            self._write_json({"error": manager_error, "operation": action}, status=400)
+            return
+        entitlement = self._supply_chain_entitlement()
+        if not bool(entitlement["allowed"]):
+            self._write_json(
+                {
+                    "available_actions": ["status", "education", "cli_fallback"],
+                    "entitlement": entitlement,
+                    "error": "paid_guard_cloud_required",
+                    "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+                    "operation": action,
+                },
+                status=402,
+            )
+            return
+        context = self._supply_chain_context(payload)
+        try:
+            require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="supply_chain_firewall",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+            install_result = install_package_shims(context, managers=managers)
+            profile_result = ensure_package_shim_path_in_shell_profile(context)
+            status = package_shim_status(context)
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        except ValueError as error:
+            self._write_json({"error": str(error), "operation": action}, status=400)
+            return
+        result = {
+            "manager": manager,
+            "install": install_result,
+            "profile": profile_result,
+            "package_shims": status,
+            "restart_shell_required": True,
+        }
+        receipt = self._record_headless_receipt(
+            harness="package-firewall",
+            operation=action,
+            payload=payload,
+            result=result,
+            workspace_id=self._optional_string(payload.get("workspace_id"))
+            or self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
+        )
+        self._write_json(
+            {
+                "entitlement": entitlement,
+                "operation": action,
+                "receipt": receipt,
+                "result": result,
                 "status": "completed",
             }
         )
@@ -2538,6 +2613,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
+        if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
+            return True
         if (
             len(path_parts) == 4
             and path_parts[:2] == ["v1", "requests"]
@@ -2805,6 +2882,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
             return True
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
+            return True
+        if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
             return True

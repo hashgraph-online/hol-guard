@@ -104,16 +104,16 @@ class TestGuardSurfaceServer:
             daemon_server_module._STATIC_DIR / "assets" / "chunks" / "feed-health-workspace.js"
         ).read_text(encoding="utf-8")
 
-        assert "Open Guard connect" in dashboard_bundle
-        assert "Open pairing flow" not in dashboard_bundle
-        assert "Browser sign-in finished. First proof sync has not completed yet." in dashboard_bundle
-        assert "Browser pairing finished. First proof sync has not completed yet." not in dashboard_bundle
-        assert 'label: "Sync pending"' in runtime_overview_chunk
-        assert '"Pairing…"' not in runtime_overview_chunk
-        assert "Cloud connection is complete. Feed sync is in progress. First proof will arrive shortly." in (
+        assert "Open pairing flow" in dashboard_bundle
+        assert "Open Guard connect" not in dashboard_bundle
+        assert "Browser pairing finished. First proof sync has not completed yet." in dashboard_bundle
+        assert "Browser sign-in finished. First proof sync has not completed yet." not in dashboard_bundle
+        assert 'label: "Pairing…"' in runtime_overview_chunk
+        assert '"Sync pending"' not in runtime_overview_chunk
+        assert "Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly." in (
             feed_health_chunk
         )
-        assert "Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly." not in (
+        assert "Cloud connection is complete. Feed sync is in progress. First proof will arrive shortly." not in (
             feed_health_chunk
         )
 

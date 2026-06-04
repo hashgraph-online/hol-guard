@@ -721,14 +721,15 @@ export function App() {
       supplyChainHubContent={
         runtime.kind === "ready" ? (
           <Suspense fallback={<LazyFallback />}>
-            <SupplyChainHubWorkspace
-              activeView={view}
-              snapshot={runtime.snapshot}
-              receipts={receipts.kind === "ready" ? receipts.items : []}
-              policies={policies.kind === "ready" ? policies.items : []}
-              onClearPolicy={handleClearPolicy}
-              onOpenSettings={handleOpenSettings}
-              onGoHome={handleGoHome}
+	            <SupplyChainHubWorkspace
+	              activeView={view}
+	              snapshot={runtime.snapshot}
+	              receipts={receipts.kind === "ready" ? receipts.items : []}
+	              policies={policies.kind === "ready" ? policies.items : []}
+	              approvalGate={approvalGate}
+	              onClearPolicy={handleClearPolicy}
+	              onOpenSettings={handleOpenSettings}
+	              onGoHome={handleGoHome}
               onNavigate={navigate}
             />
           </Suspense>

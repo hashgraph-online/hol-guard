@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback } from "react";
 import { TabBar } from "./approval-center-primitives";
-import type { GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
 const SupplyChainWorkspace = lazy(() =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
@@ -33,10 +33,11 @@ function viewToTab(view: string): HubTab {
 
 export function SupplyChainHubWorkspace(props: {
   activeView: string;
-  snapshot: GuardRuntimeSnapshot;
-  receipts: GuardReceipt[];
-  policies: GuardPolicyDecision[];
-  onClearPolicy: (policy: GuardPolicyDecision) => void;
+	  snapshot: GuardRuntimeSnapshot;
+	  receipts: GuardReceipt[];
+	  policies: GuardPolicyDecision[];
+	  approvalGate: GuardApprovalGatePublicConfig | null;
+	  onClearPolicy: (policy: GuardPolicyDecision) => void;
   onOpenSettings: () => void;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -60,10 +61,10 @@ export function SupplyChainHubWorkspace(props: {
       <Suspense fallback={<LazyFallback />}>
         {tab === "supply-chain" && (
           <SupplyChainWorkspace snapshot={props.snapshot} onGoHome={props.onGoHome} />
-        )}
-        {tab === "audit" && (
-          <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} />
-        )}
+	        )}
+	        {tab === "audit" && (
+	          <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} approvalGate={props.approvalGate} />
+	        )}
         {tab === "policy" && (
           <PolicyWorkspace
             policies={props.policies}
