@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
+import hmac
 
-_STABLE_DIGEST_KEY = b"hol-guard-stable-digest.v2"
+_STABLE_DIGEST_KEY = b"hol-guard-stable-digest.v3"
 
 
 def stable_digest_hex(payload: bytes, *, length: int | None = None) -> str:
-    digest = hashlib.blake2b(payload, key=_STABLE_DIGEST_KEY, digest_size=32).hexdigest()
+    # These digests are used for deterministic Guard cache keys and opaque IDs,
+    # not for password or credential storage.
+    # codeql[py/weak-sensitive-data-hashing]
+    digest = hmac.digest(_STABLE_DIGEST_KEY, payload, "sha512").hex()[:64]
     if length is None:
         return digest
     return digest[:length]
