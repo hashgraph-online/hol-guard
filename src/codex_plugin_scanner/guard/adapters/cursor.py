@@ -11,6 +11,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
+from .cursor_hooks import install_cursor_hooks, uninstall_cursor_hooks
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -215,6 +216,7 @@ class CursorHarnessAdapter(HarnessAdapter):
         payload["mcpServers"] = normalized_servers
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        hooks_manifest = install_cursor_hooks(context)
         return {
             "harness": self.harness,
             "active": True,
@@ -224,7 +226,12 @@ class CursorHarnessAdapter(HarnessAdapter):
             "state_path": str(state_path),
             "managed_servers": [server.name for server in managed_servers],
             "skipped_servers": list(skipped_servers),
-            "notes": ["Guard Cursor editor MCP proxies added to the selected Cursor mcp.json config."],
+            "managed_hooks_path": hooks_manifest.get("managed_hooks_path"),
+            "managed_hook_script_path": hooks_manifest.get("managed_hook_script_path"),
+            "notes": [
+                "Guard Cursor editor MCP proxies added to the selected Cursor mcp.json config.",
+                "Guard native Cursor hooks installed for shell, MCP, and file-read interception.",
+            ],
         }
 
     def _uninstall_editor(self, context: HarnessContext) -> dict[str, object]:
@@ -247,6 +254,7 @@ class CursorHarnessAdapter(HarnessAdapter):
             backup_path.unlink()
         if restored and state_path.is_file():
             state_path.unlink()
+        hooks_manifest = uninstall_cursor_hooks(context)
         return {
             "harness": self.harness,
             "active": False,
@@ -255,7 +263,11 @@ class CursorHarnessAdapter(HarnessAdapter):
             "backup_path": str(backup_path),
             "state_path": str(state_path),
             "restored": restored,
-            "notes": ["Removed Guard Cursor editor MCP proxies and restored the prior Cursor config."],
+            "managed_hooks_path": hooks_manifest.get("managed_hooks_path"),
+            "notes": [
+                "Removed Guard Cursor editor MCP proxies and restored the prior Cursor config.",
+                "Removed Guard native Cursor hooks when a managed hooks backup was available.",
+            ],
         }
 
     def _install_cli(self, context: HarnessContext) -> dict[str, object]:
