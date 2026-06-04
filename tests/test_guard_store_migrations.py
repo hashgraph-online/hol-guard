@@ -225,12 +225,12 @@ def test_fallback_secret_store_logs_delete_failures(caplog):
     fallback = MemoryStore()
     store = FallbackSecretStore(FailingStore(), fallback)
 
-    caplog.set_level(logging.ERROR, logger="codex_plugin_scanner.guard.store")
+    caplog.set_level(logging.WARNING, logger="codex_plugin_scanner.guard.store")
     store.delete_secret("guard-token")
 
     assert fallback.deleted == ["guard-token"]
-    assert "secret_ref_hash=75922f38f3f5" in caplog.text
     assert "Failed to delete Guard secret from FailingStore" in caplog.text
+    assert "guard-token" not in caplog.text
 
 
 def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(tmp_path, monkeypatch):
