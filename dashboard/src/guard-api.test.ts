@@ -782,6 +782,49 @@ assert(remediationBody["approval_password"] === "local-password", "L079c: runAud
 assert(remediationBody["approval_totp_code"] === "123456", "L079c: runAuditRemediation sends approval TOTP code");
 assert(remediation.operation === "package_shim_path", "L079c: runAuditRemediation normalizes response");
 
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const remediationBootstrapCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  remediationBootstrapCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/initialize") {
+    return new Response(JSON.stringify({ auth_token: "fresh-remediate-token" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  if (path === "/v1/audit/remediations/package_shim_path") {
+    const token = headerValue(init, "X-Guard-Token");
+    if (token !== "fresh-remediate-token") {
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }
+    return new Response(JSON.stringify({
+      entitlement: { allowed: true },
+      operation: "package_shim_path",
+      receipt: null,
+      result: { manager: "pnpm" },
+      status: "completed"
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+
+const remediationBootstrap = await runAuditRemediation({
+  action: "package_shim_path",
+  manager: "pnpm",
+});
+assert(remediationBootstrapCalls.length === 3, "L079d: remediation bootstraps token after 401 and retries");
+assert(new URL(remediationBootstrapCalls[1].url).pathname === "/v1/initialize", "L079d: remediation calls initialize after unauthorized");
+assert(
+  headerValue(remediationBootstrapCalls[2].init, "X-Guard-Token") === "fresh-remediate-token",
+  "L079d: remediation retries with refreshed Guard token"
+);
+assert(remediationBootstrap.operation === "package_shim_path", "L079d: remediation succeeds after token bootstrap");
+
 installGuardWindow("?guard-token=token-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchResolveCalls = installFetchStub({
   "/v1/requests/req-active/approve": {

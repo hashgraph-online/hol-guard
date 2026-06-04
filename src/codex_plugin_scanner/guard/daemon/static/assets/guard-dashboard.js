@@ -12706,7 +12706,7 @@ const GUARD_DAEMON_PARAM = "guardDaemon";
 let guardTokenOverride = null;
 let guardTokenLocationKey = null;
 async function readJson(input, init) {
-  const response = await fetch(guardApiInput(input), withGuardAuth(init));
+  const response = await fetchWithGuardAuth(input, init);
   if (!response.ok) {
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
@@ -12840,18 +12840,30 @@ function guardApiInput(input) {
   return `${daemonOrigin}${input}`;
 }
 function withGuardAuth(init) {
-  const guardToken = readGuardToken();
+  return withGuardAuthForToken(init, readGuardToken());
+}
+function withGuardAuthForToken(init, guardToken) {
   if (!guardToken) {
     return init;
   }
   const headers = new Headers(init?.headers);
-  if (!headers.has("X-Guard-Token")) {
-    headers.set("X-Guard-Token", guardToken);
-  }
+  headers.set("X-Guard-Token", guardToken);
   return {
     ...init,
     headers
   };
+}
+async function fetchWithGuardAuth(input, init) {
+  const requestInput = guardApiInput(input);
+  let response = await fetch(requestInput, withGuardAuth(init));
+  if (response.status !== 401) {
+    return response;
+  }
+  const refreshedToken = await refreshGuardToken();
+  if (refreshedToken === null) {
+    return response;
+  }
+  return fetch(requestInput, withGuardAuthForToken(init, refreshedToken));
 }
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
@@ -13579,7 +13591,7 @@ async function fetchDiff(artifactId, harness) {
   return await response.json();
 }
 function fetchGuardApi(input, init) {
-  return fetch(guardApiInput(input), withGuardAuth(init));
+  return fetchWithGuardAuth(input, init);
 }
 async function revokeApprovalGateCooldown(password, totpCode) {
   if (isGuardDemoMode()) {
@@ -13698,13 +13710,7 @@ async function resolveRequestWithQueueResult(input) {
       ...input.approval_gate_use_cooldown !== void 0 ? { approval_gate_use_cooldown: input.approval_gate_use_cooldown } : {}
     })
   });
-  let response = await fetchGuardApi(path, init());
-  if (response.status === 401) {
-    const refreshedToken = await refreshGuardToken();
-    if (refreshedToken !== null) {
-      response = await fetchGuardApi(path, init(refreshedToken));
-    }
-  }
+  const response = await fetchGuardApi(path, init());
   if (!response.ok) {
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
   }
@@ -13724,7 +13730,7 @@ async function exportDiagnostics() {
   if (isGuardDemoMode()) {
     return new Blob([JSON.stringify({ demo: true, generated_at: (/* @__PURE__ */ new Date()).toISOString() })], { type: "application/json" });
   }
-  const response = await fetch(guardApiInput("/v1/evidence/export"), withGuardAuth());
+  const response = await fetchWithGuardAuth("/v1/evidence/export");
   if (!response.ok) {
     throw new Error(`Export diagnostics failed with ${response.status}`);
   }
@@ -13734,7 +13740,7 @@ async function repairApprovalCenter() {
   if (isGuardDemoMode()) {
     return { repaired: true, cleared: ["locator", "daemon_state"] };
   }
-  const response = await fetch(guardApiInput("/v1/daemon/repair"), withGuardAuth({ method: "POST" }));
+  const response = await fetchWithGuardAuth("/v1/daemon/repair", { method: "POST" });
   if (!response.ok) {
     throw new Error(`Repair failed with ${response.status}`);
   }
@@ -13772,13 +13778,7 @@ async function retryResume(requestId) {
     },
     body: JSON.stringify({})
   });
-  let response = await fetchGuardApi(path, init());
-  if (response.status === 401) {
-    const refreshedToken = await refreshGuardToken();
-    if (refreshedToken !== null) {
-      response = await fetchGuardApi(path, init(refreshedToken));
-    }
-  }
+  const response = await fetchGuardApi(path, init());
   if (!response.ok) {
     throw new Error(`Resume retry failed with ${response.status}`);
   }
