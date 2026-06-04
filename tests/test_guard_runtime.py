@@ -9669,6 +9669,7 @@ def test_guard_hook_emits_claude_permission_request_terminal_notice_stderr(
 ):
     import io
     import sys
+
     from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,
@@ -9750,6 +9751,177 @@ def test_guard_hook_emits_claude_permission_request_terminal_notice_stderr(
     assert permission_rc == 0
     assert "HOL Guard" in permission_capture.err
     assert "Bash" in permission_capture.err
+
+
+def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+        PackageRequestEvaluation,
+        SupplyChainUserCopy,
+    )
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        '[risk_actions]\npackage_script = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+    )
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "load_guard_surface_daemon_client",
+        lambda _guard_home: (_ for _ in ()).throw(RuntimeError("no daemon client")),
+    )
+
+    def _package_requires_review(**_kwargs: object) -> PackageRequestEvaluation:
+        return PackageRequestEvaluation(
+            decision="review",
+            policy_action="require-reapproval",
+            enforcement="policy",
+            entitlement_state="offline",
+            cache_status="miss",
+            package_intent_hash="intent-hash",
+            policy_version="policy-v1",
+            bundle_version="bundle-v1",
+            workspace_fingerprint="workspace-fingerprint",
+            reasons=({"code": "package_review", "message": "Review npm install react@18.3.0"},),
+            packages=({"name": "react", "decision": "review", "reasons": ()},),
+            risk_summary="HOL Guard is reviewing npm install react@18.3.0.",
+            user_copy=SupplyChainUserCopy(
+                title="Review package install",
+                summary="react@18.3.0 needs review before install.",
+                next_step="Confirm the exact version in Claude's approval prompt.",
+                dashboard_url="https://hol.org/guard/inbox",
+                harness_message=(
+                    "HOL Guard is reviewing npm install react@18.3.0. "
+                    "Review evidence: https://hol.org/guard/inbox."
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(
+        guard_commands_module,
+        "evaluate_package_request_artifact",
+        _package_requires_review,
+    )
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm install react@18.3.0"},
+            "source_scope": "project",
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    review_url = output["approval_requests"][0]["approval_url"]
+    retry_instruction = (
+        f"Open HOL Guard to approve or keep this blocked: {review_url}. "
+        "After you choose, retry the same Codex action."
+    )
+
+    assert rc == 1
+    assert review_url.startswith("http://127.0.0.1:4455/approvals/")
+    assert review_url in output["review_hint"]
+    assert output["decision_v2_json"]["retry_instruction"] == retry_instruction
+    assert review_url in output["decision_v2_json"]["harness_message"]
+    assert "guard/inbox" not in output["decision_v2_json"]["harness_message"]
+    assert output["supply_chain_evaluation"]["user_copy"]["dashboard_url"] == review_url
+    assert review_url in output["supply_chain_evaluation"]["user_copy"]["harness_message"]
+    assert output["approval_requests"][0]["decision_v2_json"]["retry_instruction"] == retry_instruction
+    assert review_url in output["approval_requests"][0]["decision_v2_json"]["harness_message"]
+
+
+def test_guard_hook_localizes_package_review_copy_with_daemon_client_approval_url(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+        PackageRequestEvaluation,
+        SupplyChainUserCopy,
+    )
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        '[risk_actions]\npackage_script = "require-reapproval"\napproval_wait_timeout_seconds = 0\n',
+    )
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    store = GuardStore(home_dir)
+    _install_fake_guard_surface_daemon(monkeypatch, store)
+
+    def _package_requires_review(**_kwargs: object) -> PackageRequestEvaluation:
+        return PackageRequestEvaluation(
+            decision="review",
+            policy_action="require-reapproval",
+            enforcement="policy",
+            entitlement_state="offline",
+            cache_status="miss",
+            package_intent_hash="intent-hash",
+            policy_version="policy-v1",
+            bundle_version="bundle-v1",
+            workspace_fingerprint="workspace-fingerprint",
+            reasons=({"code": "package_review", "message": "Review npm install react@18.3.0"},),
+            packages=({"name": "react", "decision": "review", "reasons": ()},),
+            risk_summary="HOL Guard is reviewing npm install react@18.3.0.",
+            user_copy=SupplyChainUserCopy(
+                title="Review package install",
+                summary="react@18.3.0 needs review before install.",
+                next_step="Confirm the exact version in Claude's approval prompt.",
+                dashboard_url="https://hol.org/guard/inbox",
+                harness_message="HOL Guard is reviewing npm install react@18.3.0.",
+            ),
+        )
+
+    monkeypatch.setattr(
+        guard_commands_module,
+        "evaluate_package_request_artifact",
+        _package_requires_review,
+    )
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm install react@18.3.0"},
+            "source_scope": "project",
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    review_url = output["approval_requests"][0]["approval_url"]
+    retry_instruction = (
+        f"Open HOL Guard to approve or keep this blocked: {review_url}. "
+        "After you choose, retry the same Codex action."
+    )
+
+    assert rc == 1
+    assert review_url == "http://127.0.0.1:4455/approvals/request-1"
+    assert review_url in output["review_hint"]
+    assert output["decision_v2_json"]["retry_instruction"] == retry_instruction
+    assert review_url in output["decision_v2_json"]["harness_message"]
+    assert output["supply_chain_evaluation"]["user_copy"]["dashboard_url"] == review_url
+    assert review_url in output["supply_chain_evaluation"]["user_copy"]["harness_message"]
 
 
 def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(

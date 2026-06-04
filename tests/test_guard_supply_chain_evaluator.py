@@ -343,9 +343,10 @@ def test_evaluate_package_request_artifact_posts_cloud_request_and_maps_block_re
     assert result.user_copy.title == "Critical install blocked"
     assert result.user_copy.summary == "minimist needs a safer version before you continue."
     assert result.user_copy.next_step == "npm install minimist@1.2.9"
-    assert result.user_copy.dashboard_url == "https://hol.org/guard/inbox"
+    assert result.user_copy.dashboard_url is None
     assert "minimist@1.2.8" in result.user_copy.harness_message
     assert "npm install minimist@1.2.9" in result.user_copy.harness_message
+    assert "Review this request in HOL Guard, then retry." in result.user_copy.harness_message
 
 
 def test_evaluate_package_request_artifact_uses_cached_eval_before_network(
@@ -401,7 +402,9 @@ def test_evaluate_package_request_artifact_uses_cached_eval_before_network(
                 "next_step": "npm install minimist@1.2.9",
                 "dashboard_url": "https://hol.org/guard/inbox",
                 "harness_message": (
-                    "HOL Guard blocked `minimist@1.2.8` before install. Fix: install `npm install minimist@1.2.9`."
+                    "HOL Guard blocked `minimist@1.2.8` before install. "
+                    "Fix: install `npm install minimist@1.2.9`. "
+                    "Review evidence: https://hol.org/guard/inbox."
                 ),
             },
         },
@@ -422,6 +425,10 @@ def test_evaluate_package_request_artifact_uses_cached_eval_before_network(
     assert result.decision == "block"
     assert result.cache_status == "hit"
     assert result.user_copy.next_step == "npm install minimist@1.2.9"
+    assert result.user_copy.dashboard_url is None
+    assert "guard/inbox" not in result.user_copy.harness_message
+    assert "Review evidence:" not in result.user_copy.harness_message
+    assert "Review this request in HOL Guard, then retry." in result.user_copy.harness_message
 
 
 def test_evaluate_package_request_artifact_skips_cached_eval_when_workspace_fingerprint_changes(

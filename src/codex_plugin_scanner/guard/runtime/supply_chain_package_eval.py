@@ -63,7 +63,8 @@ _DECISION_RANK = {"allow": 0, "monitor": 1, "warn": 2, "ask": 3, "block": 4}
 _SEVERITY_RANK = {"unknown": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 _TIMEOUT_SECONDS = 1
 _RETRY_TIMEOUT_SECONDS = 1
-_CLOUD_DASHBOARD_URL = "https://hol.org/guard/inbox"
+_CLOUD_INBOX_URL_RE = re.compile(r"https?://[^\s]+/guard/inbox/?", re.IGNORECASE)
+_LOCAL_REVIEW_INSTRUCTION = "Review this request in HOL Guard, then retry."
 _LOCKFILE_PARSE_BUDGET_SECONDS = 0.2
 _TRANSITIVE_BLOCK_CONFIDENCE_THRESHOLD = 900
 _NPM_REGISTRY_METADATA_BASE_URL = "https://registry.npmjs.org"
@@ -155,9 +156,20 @@ class PackageRequestEvaluation:
         cached_packages = tuple(
             _with_support_metadata(item) for item in payload.get("packages", []) if isinstance(item, dict)
         )
+        policy_action = str(payload.get("policy_action") or "allow")
+        normalized_user_copy = _normalize_package_user_copy(
+            SupplyChainUserCopy(
+                title=str(user_copy_map.get("title") or "Monitoring this package"),
+                summary=str(user_copy_map.get("summary") or "HOL Guard recorded this package request."),
+                next_step=_optional_string(user_copy_map.get("next_step")),
+                dashboard_url=_optional_string(user_copy_map.get("dashboard_url")),
+                harness_message=str(user_copy_map.get("harness_message") or payload.get("risk_summary") or ""),
+            ),
+            policy_action=policy_action,
+        )
         return cls(
             decision=str(payload.get("decision") or "monitor"),
-            policy_action=str(payload.get("policy_action") or "allow"),
+            policy_action=policy_action,
             enforcement=str(payload.get("enforcement") or "offline_cached"),
             entitlement_state=str(payload.get("entitlement_state") or "premium"),
             cache_status=str(payload.get("cache_status") or "hit"),
@@ -168,13 +180,7 @@ class PackageRequestEvaluation:
             reasons=tuple(item for item in payload.get("reasons", []) if isinstance(item, dict)),
             packages=cached_packages,
             risk_summary=str(payload.get("risk_summary") or "HOL Guard recorded this package request."),
-            user_copy=SupplyChainUserCopy(
-                title=str(user_copy_map.get("title") or "Monitoring this package"),
-                summary=str(user_copy_map.get("summary") or "HOL Guard recorded this package request."),
-                next_step=_optional_string(user_copy_map.get("next_step")),
-                dashboard_url=_optional_string(user_copy_map.get("dashboard_url")),
-                harness_message=str(user_copy_map.get("harness_message") or payload.get("risk_summary") or ""),
-            ),
+            user_copy=normalized_user_copy,
             matched_rule_id=_optional_string(payload.get("matched_rule_id")),
             exception_id=_optional_string(payload.get("exception_id")),
             refresh_required=bool(payload.get("refresh_required")),
@@ -517,13 +523,21 @@ def _finalize_evaluation(
         harness_parts.append(f"Reason: {reason_message}.")
     if fix_command:
         harness_parts.append(f"Fix: install `{fix_command}` or choose a team exception.")
-    harness_parts.append(f"Review evidence: {_CLOUD_DASHBOARD_URL}.")
-    user_copy = SupplyChainUserCopy(
-        title=title,
-        summary=summary,
-        next_step=fix_command,
-        dashboard_url=_CLOUD_DASHBOARD_URL,
-        harness_message=" ".join(part.strip() for part in harness_parts if part.strip()),
+    user_copy = _normalize_package_user_copy(
+        SupplyChainUserCopy(
+            title=title,
+            summary=summary,
+            next_step=fix_command,
+            dashboard_url=None,
+            harness_message=" ".join(part.strip() for part in harness_parts if part.strip()),
+        ),
+        policy_action={
+            "allow": "allow",
+            "monitor": "allow",
+            "warn": "warn",
+            "ask": "require-reapproval",
+            "block": "block",
+        }[draft.decision],
     )
     return PackageRequestEvaluation(
         decision=draft.decision,
@@ -709,18 +723,49 @@ def _evaluate_with_cloud(
             harness_parts = [evaluation.risk_summary, updated_summary]
             if evaluation.user_copy.next_step:
                 harness_parts.append(f"Fix: run `{evaluation.user_copy.next_step}`.")
-            harness_parts.append(f"Review evidence: {_CLOUD_DASHBOARD_URL}.")
             evaluation = replace(
                 evaluation,
-                user_copy=SupplyChainUserCopy(
-                    title=title or evaluation.user_copy.title,
-                    summary=updated_summary,
-                    next_step=evaluation.user_copy.next_step,
-                    dashboard_url=evaluation.user_copy.dashboard_url,
-                    harness_message=" ".join(harness_parts),
+                user_copy=_normalize_package_user_copy(
+                    SupplyChainUserCopy(
+                        title=title or evaluation.user_copy.title,
+                        summary=updated_summary,
+                        next_step=evaluation.user_copy.next_step,
+                        dashboard_url=evaluation.user_copy.dashboard_url,
+                        harness_message=" ".join(harness_parts),
+                    ),
+                    policy_action=evaluation.policy_action,
                 ),
             )
     return evaluation, None
+
+
+def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_action: str) -> SupplyChainUserCopy:
+    dashboard_url = user_copy.dashboard_url
+    if _looks_like_cloud_inbox_url(dashboard_url):
+        dashboard_url = None
+    harness_message = _CLOUD_INBOX_URL_RE.sub("", user_copy.harness_message or "").strip()
+    harness_message = " ".join(harness_message.split())
+    harness_message = _strip_review_evidence_tail(harness_message)
+    needs_local_review = policy_action in {"require-reapproval", "block"}
+    if needs_local_review and _LOCAL_REVIEW_INSTRUCTION.lower() not in harness_message.lower():
+        harness_message = f"{harness_message} {_LOCAL_REVIEW_INSTRUCTION}".strip()
+    return replace(user_copy, dashboard_url=dashboard_url, harness_message=harness_message)
+
+
+def _strip_review_evidence_tail(message: str) -> str:
+    stripped = message.strip()
+    lower_stripped = stripped.lower()
+    for suffix in ("Review evidence: .", "Review evidence:.", "Review evidence:"):
+        if lower_stripped.endswith(suffix.lower()):
+            return stripped[: -len(suffix)].rstrip()
+    return stripped
+
+
+def _looks_like_cloud_inbox_url(url: str | None) -> bool:
+    if url is None or not url.strip():
+        return False
+    parsed = urllib.parse.urlparse(url.strip())
+    return parsed.path.rstrip("/") == "/guard/inbox"
 
 
 def _cloud_http_fail_closed_evaluation(
