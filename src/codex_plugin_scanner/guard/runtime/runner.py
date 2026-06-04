@@ -30,8 +30,8 @@ from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.oauth_client import (
     GuardDpopKeyMaterial,
-    is_guard_oauth_origin_allowed,
     resolve_guard_oauth_client_config,
+    validate_guard_sync_endpoint,
 )
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
@@ -1740,35 +1740,13 @@ def _guard_sync_reconnect_message() -> str:
     return "Guard Cloud sync endpoint is not trusted. Run `hol-guard connect` to restore Cloud sync."
 
 
-def _guard_sync_origin(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(sync_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise GuardSyncNotConfiguredError(
-            f"{_guard_sync_reconnect_message()} Sync URL must be an absolute http(s) URL."
-        )
-    if parsed.username is not None or parsed.password is not None:
-        raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} Sync URL userinfo is not allowed.")
-    if parsed.fragment:
-        raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} Sync URL fragments are not allowed.")
-    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
-
-
 def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str:
-    origin = _guard_sync_origin(sync_url)
-    if issuer is not None:
-        try:
-            oauth_client = resolve_guard_oauth_client_config(issuer)
-        except ValueError as error:
+    try:
+        return validate_guard_sync_endpoint(sync_url, issuer=issuer)
+    except ValueError as error:
+        if issuer is not None:
             raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
-        if origin != oauth_client.issuer:
-            raise GuardSyncAuthorizationExpiredError(
-                f"{_guard_oauth_reauthorization_message()} "
-                "Guard Cloud sync origin no longer matches the configured issuer."
-            )
-        return sync_url
-    if not is_guard_oauth_origin_allowed(origin):
-        raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} Sync URL origin is not allowlisted.")
-    return sync_url
+        raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} {error}") from error
 
 
 def _refresh_guard_oauth_access_token(
