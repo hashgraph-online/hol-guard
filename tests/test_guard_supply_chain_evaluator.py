@@ -20,6 +20,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
+from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
+from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
@@ -1775,6 +1777,62 @@ def test_evaluate_package_request_artifact_stale_bundle_requests_refresh_and_rec
     evidence = store.list_evidence()
     assert evidence
     assert evidence[0]["category"] == "supply-chain"
+
+
+def test_evaluate_package_request_artifact_fails_closed_when_stale_bundle_needs_cloud_refresh_but_auth_expired(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id=WORKSPACE_ID,
+        now="2026-05-19T00:00:00Z",
+    )
+    stale_response = _bundle_response(
+        packages=[
+            _package(
+                ecosystem="npm",
+                name="left-pad",
+                version="1.0.0",
+                default_action="monitor",
+                normalized_severity="low",
+                exploit_level="none",
+                known_exploited=False,
+                malware_state="none",
+                risk_score=220,
+            )
+        ],
+        generated_at=datetime(2026, 5, 18, tzinfo=timezone.utc),
+        expires_at=datetime(2026, 5, 18, 1, tzinfo=timezone.utc),
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, stale_response, "2026-05-18T01:00:00Z")
+
+    def raise_auth_expired(_store: GuardStore) -> dict[str, object]:
+        raise GuardSyncAuthorizationExpiredError(
+            "Guard authorization expired. Run `hol-guard connect` to sign in again."
+        )
+
+    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_auth_expired)
+    result = evaluate_package_request_artifact(
+        artifact=_artifact_for_targets("left-pad@1.0.0"),
+        store=store,
+        workspace_dir=tmp_path / "workspace",
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert result.decision == "ask"
+    assert result.policy_action == "require-reapproval"
+    assert result.enforcement == "premium_cloud"
+    assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
 
 
 def test_with_additional_reason_updates_all_packages() -> None:
