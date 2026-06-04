@@ -229,7 +229,7 @@ def test_fallback_secret_store_logs_delete_failures(caplog):
     store.delete_secret("guard-token")
 
     assert fallback.deleted == ["guard-token"]
-    assert "guard-token" in caplog.text
+    assert "secret_ref_hash=75922f38f3f5" in caplog.text
     assert "Failed to delete Guard secret from FailingStore" in caplog.text
 
 

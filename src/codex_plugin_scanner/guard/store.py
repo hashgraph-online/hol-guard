@@ -421,10 +421,11 @@ class FallbackSecretStore:
             try:
                 store.delete_secret(secret_id)
             except Exception:
+                secret_id_fingerprint = sha256(secret_id.encode("utf-8")).hexdigest()[:12]
                 _store_logger.exception(
-                    "Failed to delete Guard secret from %s for secret_id=%s",
+                    "Failed to delete Guard secret from %s for secret_ref_hash=%s",
                     type(store).__name__,
-                    secret_id,
+                    secret_id_fingerprint,
                 )
                 continue
 
