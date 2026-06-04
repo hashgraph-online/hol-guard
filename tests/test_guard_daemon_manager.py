@@ -143,6 +143,19 @@ def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_pat
     assert all(mode == 0o600 for _, mode in fchmod_calls)
 
 
+def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:
+    payload = json.dumps(
+        {
+            "ok": True,
+            "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "pending_approvals": 0,
+            "uptime_seconds": 1.2,
+        }
+    )
+
+    assert daemon_manager_module._healthz_payload_is_current(payload) is True
+
+
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     responses = iter((None, None, "http://127.0.0.1:5409"))

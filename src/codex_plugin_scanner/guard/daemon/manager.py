@@ -844,6 +844,8 @@ def _healthz_payload_is_current(raw_payload: str) -> bool:
     if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
         return False
     tables = payload.get("tables")
+    if tables is None:
+        return True
     if not isinstance(tables, list):
         return False
     table_names = {table for table in tables if isinstance(table, str)}
