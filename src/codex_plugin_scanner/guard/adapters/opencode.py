@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import sys
 from pathlib import Path
 
 from ...ecosystems.opencode import _load_json_or_jsonc
@@ -13,8 +12,10 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _run_command_probe
+from .hook_python import resolve_guard_hook_python
 from .mcp_servers import (
     ManagedMcpServer,
+    is_guard_proxy_command,
     managed_stdio_servers,
     proxy_cli_args,
     proxy_process_env,
@@ -22,6 +23,7 @@ from .mcp_servers import (
 )
 from .opencode_artifacts import (
     CONFIG_FILENAMES,
+    _command_parts,
     append_config_artifacts,
     append_directory_artifacts,
     append_found_path,
@@ -181,12 +183,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             servers=managed_servers,
             existing_workspace_server_names=existing_workspace_server_names,
         )
-        target_payload["mcp"] = self._managed_mcp_payload(
-            target_payload.get("mcp"),
-            context=context,
-            servers=managed_servers,
-            existing_workspace_server_names=existing_workspace_server_names,
-        )
+        target_payload["mcp"] = _persisted_mcp_payload(target_payload.get("mcp"))
         target_config_path.parent.mkdir(parents=True, exist_ok=True)
         target_config_path.write_text(json.dumps(target_payload, indent=2) + "\n", encoding="utf-8")
         shim_manifest = install_guard_shim(self.harness, context)
@@ -329,7 +326,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             entry: dict[str, object] = {
                 "type": "local",
                 "command": [
-                    sys.executable,
+                    str(resolve_guard_hook_python(context)),
                     *proxy_cli_args(
                         proxy_command="opencode-mcp-proxy",
                         guard_home=str(context.guard_home),
@@ -572,24 +569,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         )
         return permission
 
-    def _managed_mcp_payload(
-        self,
-        current_mcp: object,
-        *,
-        context: HarnessContext,
-        servers: tuple[ManagedMcpServer, ...],
-        existing_workspace_server_names: set[str],
-    ) -> dict[str, object]:
-        payload = _object_dict(current_mcp) or {}
-        payload.update(
-            self._proxy_mcp_overrides(
-                context,
-                servers,
-                existing_workspace_server_names,
-            )
-        )
-        return payload
-
     @staticmethod
     def _coerce_permission_payload(current_permission: object) -> dict[str, object]:
         payload = _object_dict(current_permission)
@@ -601,6 +580,59 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
 
 
 __all__ = ["OpenCodeHarnessAdapter"]
+
+
+def _restore_local_server_from_guard_proxy(server_config: dict[str, object]) -> dict[str, object] | None:
+    """Rebuild the original local MCP entry from a persisted Guard proxy wrapper."""
+
+    command_value = server_config.get("command")
+    if not isinstance(command_value, list):
+        return None
+    tokens = [token for token in command_value if isinstance(token, str)]
+    if "opencode-mcp-proxy" not in tokens:
+        return None
+    underlying_command: str | None = None
+    underlying_args: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--command" and index + 1 < len(tokens):
+            underlying_command = tokens[index + 1]
+            index += 2
+            continue
+        if token.startswith("--arg="):
+            underlying_args.append(token.split("=", 1)[1])
+        index += 1
+    if underlying_command is None:
+        return None
+    restored: dict[str, object] = {
+        "type": server_config.get("type", "local"),
+        "command": [underlying_command, *underlying_args],
+        "enabled": server_config.get("enabled", True),
+    }
+    environment = server_config.get("environment")
+    if isinstance(environment, dict):
+        restored["environment"] = environment
+    return restored
+
+
+def _persisted_mcp_payload(current_mcp: object) -> dict[str, object]:
+    """Keep user MCP servers on disk; Guard proxies belong in the runtime overlay only."""
+
+    payload = _object_dict(current_mcp) or {}
+    persisted: dict[str, object] = {}
+    for name, entry in payload.items():
+        if not isinstance(name, str) or not isinstance(entry, dict):
+            continue
+        restored = _restore_local_server_from_guard_proxy(entry)
+        if restored is not None:
+            persisted[name] = restored
+            continue
+        command, args = _command_parts(entry)
+        if is_guard_proxy_command(command, args):
+            continue
+        persisted[name] = dict(entry)
+    return persisted
 
 
 def _inline_config(raw_content: str | None) -> dict[str, object]:
