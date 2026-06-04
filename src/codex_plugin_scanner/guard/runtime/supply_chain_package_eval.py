@@ -37,6 +37,7 @@ from .package_manifest_diff import (
     parse_manifest_dependencies,
 )
 from .runner import (
+    GuardSyncAuthorizationExpiredError,
     GuardSyncNotConfiguredError,
     _guard_sync_headers,
     _normalized_receipts_sync_url,
@@ -274,7 +275,8 @@ def evaluate_package_request_artifact(
                 now_value,
             )
         return result
-    if bundle_evaluation is not None and bundle_evaluation.refresh_required:
+    oauth_local_credentials = store.get_oauth_local_credentials()
+    if bundle_evaluation is not None and bundle_evaluation.refresh_required and oauth_local_credentials is None:
         fallback = _finalize_evaluation(
             bundle_evaluation,
             package_intent_hash=package_intent_hash,
@@ -583,8 +585,23 @@ def _evaluate_with_cloud(
 ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
     if workspace_id is None or workspace_fingerprint is None:
         return None, None
+    fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
+    except GuardSyncAuthorizationExpiredError:
+        return (
+            _cloud_fail_closed_evaluation(
+                code="cloud_auth_error",
+                message="Guard cloud evaluation was not authorized, so this package request needs review.",
+                artifact=artifact,
+                targets=targets,
+                workspace_dir=workspace_dir,
+                workspace_fingerprint=workspace_fingerprint,
+                bundle_meta=bundle_meta,
+                fail_closed_decision=fail_closed_decision,
+            ),
+            None,
+        )
     except GuardSyncNotConfiguredError:
         return None, None
     evaluate_url = _normalized_supply_chain_evaluate_url(auth_context["sync_url"], workspace_id)
@@ -601,7 +618,6 @@ def _evaluate_with_cloud(
         headers=_guard_sync_headers(auth_context, request_url=evaluate_url, method="POST"),
         method="POST",
     )
-    fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
     try:
         response_payload = _urlopen_json_with_timeout_retry(
             request=request,
