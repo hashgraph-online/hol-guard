@@ -145,6 +145,8 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
         return None
     if _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
         return url
+    # In-process or wrapped daemons may not expose a command line we can bind
+    # back to guard_home, so fall back to authenticated detailed health.
     auth_token = load_guard_daemon_auth_token(guard_home)
     if auth_token and _daemon_healthz_details_match_guard_home(url, guard_home, auth_token=auth_token):
         return url
