@@ -2427,6 +2427,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             },
             _now(),
         )
+
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")
         path = urlparse(self.path).path
@@ -2911,9 +2912,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 raise _HookPathValidationError(parameter, "path_stat_failed") from None
             if stat.S_ISLNK(metadata.st_mode):
                 raise _HookPathValidationError(parameter, "symlink_component")
-            if stat.S_ISFIFO(metadata.st_mode) or stat.S_ISSOCK(metadata.st_mode) or stat.S_ISCHR(
-                metadata.st_mode
-            ) or stat.S_ISBLK(metadata.st_mode):
+            if (
+                stat.S_ISFIFO(metadata.st_mode)
+                or stat.S_ISSOCK(metadata.st_mode)
+                or stat.S_ISCHR(metadata.st_mode)
+                or stat.S_ISBLK(metadata.st_mode)
+            ):
                 raise _HookPathValidationError(parameter, "special_file")
             if not stat.S_ISDIR(metadata.st_mode):
                 raise _HookPathValidationError(parameter, "non_directory")
