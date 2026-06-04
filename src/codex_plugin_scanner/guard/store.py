@@ -21,6 +21,7 @@ from uuid import uuid4
 from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
+from .cli.oauth_client import resolve_guard_oauth_client_config, validate_guard_sync_endpoint
 from .edge_events import build_receipt_event
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .runtime.scanner_cache import scanner_cache_key
@@ -2999,6 +3000,7 @@ class GuardStore:
         runtime_id: str | None = None,
         runtime_label: str | None = None,
     ) -> None:
+        normalized_issuer = resolve_guard_oauth_client_config(issuer).issuer
         secret_payload = {
             "refresh_token": refresh_token,
             "dpop_private_key_pem": dpop_private_key_pem,
@@ -3008,7 +3010,7 @@ class GuardStore:
         secret_json = json.dumps(secret_payload, sort_keys=True, separators=(",", ":"))
         secret_hash = _secret_fingerprint(secret_json)
         payload: dict[str, object] = {
-            "issuer": issuer,
+            "issuer": normalized_issuer,
             "client_id": client_id,
             _OAUTH_LOCAL_CREDENTIALS_REF_KEY: self._oauth_local_credentials_ref,
             _OAUTH_LOCAL_CREDENTIALS_HASH_KEY: secret_hash,
@@ -3211,6 +3213,7 @@ class GuardStore:
         *,
         workspace_id: str | None = None,
     ) -> None:
+        validated_sync_url = validate_guard_sync_endpoint(sync_url)
         token_hash = _secret_fingerprint(token)
         normalized_workspace_id = (
             workspace_id.strip() if isinstance(workspace_id, str) and workspace_id.strip() else None
@@ -3235,7 +3238,7 @@ class GuardStore:
         )
         effective_workspace_id = normalized_workspace_id
         can_preserve_workspace = (
-            previous_sync_url == sync_url
+            previous_sync_url == validated_sync_url
             and previous_token_hash is not None
             and previous_token_hash == token_hash
             and isinstance(previous_workspace_id, str)
@@ -3249,7 +3252,7 @@ class GuardStore:
             and previous_workspace != effective_workspace_id
         )
         payload = {
-            "sync_url": sync_url,
+            "sync_url": validated_sync_url,
             "token_ref": self._sync_token_ref,
             _SYNC_TOKEN_HASH_KEY: token_hash,
         }
@@ -3259,7 +3262,7 @@ class GuardStore:
             credentials_changed = True
         else:
             credentials_changed = (
-                previous_sync_url != sync_url
+                previous_sync_url != validated_sync_url
                 or previous_token_hash is None
                 or previous_token_hash != token_hash
                 or workspace_changed

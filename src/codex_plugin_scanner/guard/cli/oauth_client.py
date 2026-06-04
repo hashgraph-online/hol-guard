@@ -115,6 +115,25 @@ def resolve_guard_oauth_client_config(issuer: str) -> GuardOAuthClientConfig:
     return _oauth_endpoints(_require_allowlisted_guard_oauth_origin(issuer))
 
 
+def validate_guard_sync_endpoint(sync_url: str, *, issuer: str | None = None) -> str:
+    parsed = urllib.parse.urlsplit(sync_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Guard Cloud sync URL must be an absolute http(s) URL.")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Guard Cloud sync URL userinfo is not allowed.")
+    if parsed.fragment:
+        raise ValueError("Guard Cloud sync URL fragments are not allowed.")
+    origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    if issuer is not None:
+        oauth_client = resolve_guard_oauth_client_config(issuer)
+        if origin != oauth_client.issuer:
+            raise ValueError("Guard Cloud sync origin no longer matches the configured issuer.")
+        return sync_url
+    if not is_guard_oauth_origin_allowed(origin):
+        raise ValueError("Guard Cloud sync URL must use an allowlisted HOL origin or local loopback.")
+    return sync_url
+
+
 def _base64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
