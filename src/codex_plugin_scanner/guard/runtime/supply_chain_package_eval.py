@@ -594,7 +594,8 @@ def _evaluate_with_cloud(
         nonlocal fail_closed_decision
         if fail_closed_decision is None:
             fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
-        return fail_closed_decision
+        result: str = fail_closed_decision
+        return result
 
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
