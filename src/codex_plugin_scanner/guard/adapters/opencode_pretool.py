@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
-import sys
 from pathlib import Path
 
-from ..launcher import merge_guard_launcher_env
 from .base import HarnessContext
+from .hook_python import (
+    filter_worktree_path_entries,
+    package_root_from_python,
+    resolve_guard_hook_python,
+)
 
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
 _INTERCEPT_TOOLS = ("bash", "shell", "sh", "zsh", "terminal")
@@ -144,31 +146,14 @@ export const HolGuardPretoolPlugin = async ({
 """
 
 
-def _trusted_package_root() -> Path:
-    spec = importlib.util.find_spec("codex_plugin_scanner")
-    if spec is None:
-        raise RuntimeError("Guard could not locate the codex_plugin_scanner package")
-    if spec.submodule_search_locations:
-        locations = tuple(spec.submodule_search_locations)
-        if not locations:
-            raise RuntimeError("Guard could not resolve codex_plugin_scanner package locations")
-        return Path(locations[0]).resolve().parent
-    if spec.origin is None:
-        raise RuntimeError("Guard could not determine the codex_plugin_scanner package root")
-    return Path(spec.origin).resolve().parent.parent
+def _trusted_pythonpath_entries(context: HarnessContext) -> list[str]:
+    python = resolve_guard_hook_python(context)
+    package_root = package_root_from_python(python)
+    return filter_worktree_path_entries([package_root])
 
 
-def _trusted_pythonpath_entries() -> list[str]:
-    launcher_env = merge_guard_launcher_env(pin_package=True)
-    path_entries = [entry for entry in launcher_env.get("PYTHONPATH", "").split(os.pathsep) if entry.strip()]
-    package_root = str(_trusted_package_root())
-    if package_root not in path_entries:
-        path_entries.insert(0, package_root)
-    return path_entries
-
-
-def _pretool_hook_launcher_code() -> str:
-    trusted_entries = _trusted_pythonpath_entries()
+def _pretool_hook_launcher_code(context: HarnessContext) -> str:
+    trusted_entries = _trusted_pythonpath_entries(context)
     return (
         "import json,os,sys;"
         f"sys.path[:0]={json.dumps(trusted_entries)};"
@@ -177,9 +162,11 @@ def _pretool_hook_launcher_code() -> str:
     )
 
 
-def _pretool_hook_env() -> dict[str, str]:
-    env = merge_guard_launcher_env(pin_package=True)
-    return {key: value for key, value in env.items() if key == "PYTHONPATH" and value.strip()}
+def _pretool_hook_env(context: HarnessContext) -> dict[str, str]:
+    entries = _trusted_pythonpath_entries(context)
+    if not entries:
+        return {}
+    return {"PYTHONPATH": os.pathsep.join(entries)}
 
 
 def managed_plugin_path(context: HarnessContext) -> Path:
@@ -191,12 +178,13 @@ def global_plugin_path(context: HarnessContext) -> Path:
 
 
 def pretool_plugin_source(context: HarnessContext) -> str:
+    guard_python = resolve_guard_hook_python(context)
     template = _PLUGIN_TEMPLATE.replace("__HOOK_ARGV_ENV__", _HOOK_ARGV_ENV)
     return (
         template.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
-        .replace("__GUARD_PYTHON__", json.dumps(str(Path(sys.executable).resolve())))
-        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code()))
-        .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env()))
+        .replace("__GUARD_PYTHON__", json.dumps(str(guard_python)))
+        .replace("__GUARD_HOOK_LAUNCHER__", json.dumps(_pretool_hook_launcher_code(context)))
+        .replace("__GUARD_HOOK_ENV__", json.dumps(_pretool_hook_env(context)))
         .replace("__GUARD_INHERIT_ENV_KEYS__", json.dumps(list(_INHERIT_ENV_KEYS)))
         .replace("__INTERCEPT_TOOLS__", json.dumps(list(_INTERCEPT_TOOLS)))
     )

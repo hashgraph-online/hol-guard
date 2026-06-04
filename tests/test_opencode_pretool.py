@@ -82,9 +82,9 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     ctx = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=guard_home)
-    launcher = _pretool_hook_launcher_code()
+    launcher = _pretool_hook_launcher_code(ctx)
     inherit_env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
-    env = {**inherit_env, **_pretool_hook_env(), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
+    env = {**inherit_env, **_pretool_hook_env(ctx), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
     completed = subprocess.run(
         [sys.executable, "-c", launcher],
         cwd=workspace,
