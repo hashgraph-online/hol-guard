@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -567,10 +568,7 @@ class TestGuardSurfaceServer:
 
         try:
             request = urllib.request.Request(
-                (
-                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
-                    "workspace=relative-workspace"
-                ),
+                (f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?workspace=relative-workspace"),
                 data=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hi"}).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
@@ -616,15 +614,15 @@ class TestGuardSurfaceServer:
         assert response.status == 200
         assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
-    def test_guard_daemon_claude_hook_endpoint_rejects_symlinked_workspace_path_and_records_audit(
+    def test_guard_daemon_claude_hook_endpoint_rejects_workspace_path_outside_safe_roots_and_records_audit(
         self, tmp_path
     ) -> None:
         home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        linked_workspace = tmp_path / "linked-workspace"
-        workspace_dir.mkdir(parents=True, exist_ok=True)
+        linked_workspace = home_dir / "linked-workspace"
+        home_dir.mkdir(parents=True, exist_ok=True)
+        workspace_target = Path(home_dir.anchor)
         try:
-            linked_workspace.symlink_to(workspace_dir, target_is_directory=True)
+            linked_workspace.symlink_to(workspace_target, target_is_directory=True)
         except (NotImplementedError, OSError):
             pytest.skip("symlinks are not supported in this environment")
 
@@ -655,11 +653,41 @@ class TestGuardSurfaceServer:
         assert payload["error"] == "invalid_hook_workspace_path"
         events = store.list_events(event_name="daemon.hook.path_rejected")
         assert events[-1]["payload"]["parameter"] == "workspace"
-        assert events[-1]["payload"]["reason"] == "symlink_component"
+        assert events[-1]["payload"]["reason"] == "unexpected_root"
 
-    def test_guard_daemon_claude_hook_endpoint_rejects_unexpected_guard_home_and_records_audit(
-        self, tmp_path
-    ) -> None:
+    def test_guard_daemon_claude_hook_endpoint_accepts_guard_home_symlink_alias(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        guard_home_alias = tmp_path / "guard-home-alias"
+        try:
+            guard_home_alias.symlink_to(store.guard_home, target_is_directory=True)
+        except (NotImplementedError, OSError):
+            pytest.skip("symlinks are not supported in this environment")
+
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"guard-home={urllib.parse.quote(str(guard_home_alias))}&workspace=none"
+                ),
+                data=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hi"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
+
+    def test_guard_daemon_claude_hook_endpoint_rejects_unexpected_guard_home_and_records_audit(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -724,7 +752,7 @@ class TestGuardSurfaceServer:
         assert payload["error"] == "invalid_hook_guard_home_path"
         events = store.list_events(event_name="daemon.hook.path_rejected")
         assert events[-1]["payload"]["parameter"] == "guard-home"
-        assert events[-1]["payload"]["reason"] == "special_file"
+        assert events[-1]["payload"]["reason"] == "non_directory"
 
     def test_guard_daemon_runtime_snapshot_exposes_cloud_handoff_state(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
