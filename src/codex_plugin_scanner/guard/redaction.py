@@ -90,6 +90,15 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
 )
 
+_SENSITIVE_INLINE_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r'(?i)"?sync_state\.credentials"?\s*[:=]\s*',
+    ),
+    re.compile(
+        r'(?i)"?(?:access[_-]?token|refresh[_-]?token|authorization[_-]?code|user[_-]?code|'
+        r'dpop[_-]?private[_-]?key(?:[_-]?(?:pem|ref))?)"?\s*[:=]\s*',
+    ),
+)
 _SENSITIVE_TEXT_PATTERN = re.compile(r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)")
 _POSIX_USER_PATH_PATTERN = re.compile(
     r"(?P<prefix>^|[\s\"'=({\[])(?P<root>/(?:Users|home)/[^/\s\"'`,;:)}\]]+)(?P<rest>(?:/[^\s\"'`,;:)}\]]*)?)"
@@ -121,7 +130,87 @@ def redact_text(value: str) -> RedactedText:
 
 
 def redact_sensitive_text(value: str) -> str:
-    return _SENSITIVE_TEXT_PATTERN.sub("[redacted]", value)
+    redacted = value
+    for pattern in _SENSITIVE_INLINE_PREFIX_PATTERNS:
+        redacted = _redact_inline_secret_assignments(redacted, pattern)
+    return _SENSITIVE_TEXT_PATTERN.sub("[redacted]", redacted)
+
+
+def _redact_inline_secret_assignments(value: str, pattern: re.Pattern[str]) -> str:
+    redacted: list[str] = []
+    search_start = 0
+    while True:
+        match = pattern.search(value, search_start)
+        if match is None:
+            redacted.append(value[search_start:])
+            return "".join(redacted)
+        redacted.append(value[search_start : match.start()])
+        redacted.append("[redacted]")
+        search_start = _consume_inline_secret_value(value, match.end())
+
+
+def _consume_inline_secret_value(value: str, start: int) -> int:
+    if start >= len(value):
+        return start
+
+    opening = value[start]
+    if opening in {'"', "'"}:
+        return _consume_quoted_secret_value(value, start, opening)
+    if opening in {"{", "["}:
+        return _consume_balanced_secret_value(value, start)
+
+    end = start
+    while end < len(value) and value[end] not in ", \t\r\n;}]":
+        end += 1
+    return end
+
+
+def _consume_quoted_secret_value(value: str, start: int, quote: str) -> int:
+    index = start + 1
+    while index < len(value):
+        character = value[index]
+        if character == "\\":
+            index += 2
+            continue
+        index += 1
+        if character == quote:
+            return index
+    return len(value)
+
+
+def _consume_balanced_secret_value(value: str, start: int) -> int:
+    closing_for_opening = {"{": "}", "[": "]"}
+    stack = [closing_for_opening[value[start]]]
+    index = start + 1
+    active_quote: str | None = None
+
+    while index < len(value):
+        character = value[index]
+        if active_quote is not None:
+            if character == "\\":
+                index += 2
+                continue
+            index += 1
+            if character == active_quote:
+                active_quote = None
+            continue
+
+        if character in {'"', "'"}:
+            active_quote = character
+            index += 1
+            continue
+        if character in closing_for_opening:
+            stack.append(closing_for_opening[character])
+            index += 1
+            continue
+
+        index += 1
+        if character == stack[-1]:
+            stack.pop()
+            if not stack:
+                return index
+
+    return len(value)
 
 
 def redact_local_path(value: str, *, home_dir: Path | None = None) -> str:

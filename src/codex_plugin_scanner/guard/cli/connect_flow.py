@@ -338,21 +338,34 @@ def build_device_authorization_request_body(
     *,
     machine_id: str,
     machine_label: str,
+    machine_location_label: str | None = None,
     runtime_id: str,
     runtime_label: str,
     client_id: str,
     scopes: tuple[str, ...] = DEFAULT_GUARD_DEVICE_SCOPES,
 ) -> str:
-    return urllib.parse.urlencode(
-        {
-            "client_id": client_id,
-            "scope": " ".join(scopes),
-            "requested_machine_id": machine_id,
-            "requested_machine_label": machine_label,
-            "requested_runtime_id": runtime_id,
-            "requested_runtime_label": runtime_label,
-        }
-    )
+    payload = {
+        "client_id": client_id,
+        "scope": " ".join(scopes),
+        "requested_machine_id": machine_id,
+        "requested_machine_label": machine_label,
+        "requested_runtime_id": runtime_id,
+        "requested_runtime_label": runtime_label,
+    }
+    if isinstance(machine_location_label, str) and machine_location_label.strip():
+        payload["requested_machine_location_label"] = machine_location_label.strip()
+    return urllib.parse.urlencode(payload)
+
+
+def resolve_machine_location_label() -> str | None:
+    tzinfo = datetime.now().astimezone().tzinfo
+    timezone_key = getattr(tzinfo, "key", None)
+    if isinstance(timezone_key, str) and timezone_key.strip():
+        return timezone_key.strip()
+    timezone_name = datetime.now().astimezone().tzname()
+    if isinstance(timezone_name, str) and timezone_name.strip():
+        return timezone_name.strip()
+    return None
 
 
 def _resolve_guard_device_scopes(*, ci_safe: bool) -> tuple[str, ...]:
@@ -581,6 +594,7 @@ def run_guard_device_connect_command(
     request_body = build_device_authorization_request_body(
         machine_id=str(device["installation_id"]),
         machine_label=resolved_machine_label or str(device["device_label"]),
+        machine_location_label=resolve_machine_location_label(),
         runtime_id=HEADLESS_RUNTIME_ID,
         runtime_label=HEADLESS_RUNTIME_LABEL,
         client_id=oauth_client.client_id,

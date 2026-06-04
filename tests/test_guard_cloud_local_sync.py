@@ -555,6 +555,89 @@ def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(t
     }
 
 
+@pytest.mark.parametrize(
+    ("status", "milestone", "expected_state", "expected_label", "expected_detail"),
+    [
+        (
+            "connected",
+            "first_sync_pending",
+            "pending",
+            "First proof pending",
+            "Browser sign-in finished. First proof sync has not completed yet.",
+        ),
+        (
+            "waiting",
+            "waiting_for_browser",
+            "waiting",
+            "Waiting for browser sign-in",
+            "Open the sign-in link to register this local Guard device.",
+        ),
+        (
+            "expired",
+            "expired",
+            "expired",
+            "Sign-in expired",
+            "The sign-in link expired. Run hol-guard connect again.",
+        ),
+    ],
+)
+def test_runtime_snapshot_uses_oauth_connect_copy_for_proof_statuses(
+    tmp_path: Path,
+    status: str,
+    milestone: str,
+    expected_state: str,
+    expected_label: str,
+    expected_detail: str,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    request_id = f"connect-{expected_state}"
+    with store._connect() as connection:
+        connection.execute(
+            """
+            insert into guard_connect_states (
+              request_id,
+              sync_url,
+              allowed_origin,
+              status,
+              milestone,
+              reason,
+              created_at,
+              updated_at,
+              expires_at,
+              completed_at,
+              proof_json
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                request_id,
+                "https://hol.org/api/guard/receipts/sync",
+                "https://hol.org",
+                status,
+                milestone,
+                None,
+                "2026-04-24T00:00:00+00:00",
+                "2026-04-24T00:00:30+00:00",
+                "2026-04-24T00:05:00+00:00",
+                None,
+                json.dumps({}),
+            ),
+        )
+
+    snapshot = build_runtime_snapshot(
+        store=store,
+        approval_center_url=None,
+        now="2026-04-24T00:01:00+00:00",
+    )
+    proof_status = snapshot["proof_status"]
+
+    assert proof_status["state"] == expected_state
+    assert proof_status["label"] == expected_label
+    assert proof_status["detail"] == expected_detail
+    assert "pairing" not in expected_label.lower()
+    assert "pairing" not in expected_detail.lower()
+
+
 def test_runtime_snapshot_counts_large_history_without_shipping_every_receipt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
