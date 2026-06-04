@@ -2343,11 +2343,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._optional_string(params.get("home", [None])[-1]),
                 roots=self._hook_safe_roots(),
             )
-            guard_home = self._validated_hook_directory_string(
-                "guard-home",
-                self._optional_string(params.get("guard-home", [None])[-1]),
-            )
-            guard_home = self._validated_hook_guard_home(guard_home)
+            guard_home = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
             workspace = self._validated_hook_directory_string(
                 "workspace",
                 self._normalized_hook_workspace_string(params.get("workspace", [None])[-1]),
@@ -2911,31 +2907,38 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         roots: tuple[Path, ...] | None = None,
     ) -> Path:
-        candidate = Path(value).expanduser()
-        if not candidate.is_absolute():
+        expanded = os.path.expanduser(value)
+        if not os.path.isabs(expanded):
             raise _HookPathValidationError(parameter, "relative_path")
         try:
-            resolved = candidate.resolve(strict=False)
+            candidate = os.path.realpath(expanded)
         except OSError:
             raise _HookPathValidationError(parameter, "path_resolve_failed") from None
         effective_roots = roots
         if parameter in {"home", "workspace"} and effective_roots is None:
             effective_roots = self._hook_safe_roots()
         if effective_roots is not None and not any(
-            self._path_is_within_root(resolved, root) for root in effective_roots
+            self._path_is_within_root(candidate, os.fspath(root)) for root in effective_roots
         ):
             raise _HookPathValidationError(parameter, "unexpected_root")
-        if resolved.exists() and not resolved.is_dir():
+        if os.path.exists(candidate) and not os.path.isdir(candidate):
             raise _HookPathValidationError(parameter, "non_directory")
-        return resolved
+        return Path(candidate)
 
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
             return None
-        expected = self._daemon_server().store.guard_home.expanduser().resolve()
-        if Path(value) != expected:
+        expanded = os.path.expanduser(value)
+        if not os.path.isabs(expanded):
+            raise _HookPathValidationError("guard-home", "relative_path")
+        try:
+            candidate = os.path.realpath(expanded)
+        except OSError:
+            raise _HookPathValidationError("guard-home", "path_resolve_failed") from None
+        expected = os.path.realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
+        if candidate != expected:
             raise _HookPathValidationError("guard-home", "unexpected_guard_home")
-        return os.fspath(expected)
+        return expected
 
     def _hook_safe_roots(self) -> tuple[Path, ...]:
         current_home = Path.home().resolve()
@@ -2946,10 +2949,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return tuple(roots)
 
     @staticmethod
-    def _path_is_within_root(candidate: Path, root: Path) -> bool:
+    def _path_is_within_root(candidate: str, root: str) -> bool:
         try:
-            candidate.relative_to(root)
-            return True
+            return os.path.commonpath([candidate, root]) == root
         except ValueError:
             return False
 

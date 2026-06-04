@@ -794,7 +794,7 @@ class TestGuardSurfaceServer:
         assert payload["error"] == "invalid_hook_guard_home_path"
         events = store.list_events(event_name="daemon.hook.path_rejected")
         assert events[-1]["payload"]["parameter"] == "guard-home"
-        assert events[-1]["payload"]["reason"] == "non_directory"
+        assert events[-1]["payload"]["reason"] == "unexpected_guard_home"
 
     def test_guard_daemon_runtime_snapshot_exposes_cloud_handoff_state(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
