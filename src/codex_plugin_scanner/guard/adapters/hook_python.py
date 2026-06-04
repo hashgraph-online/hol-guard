@@ -35,7 +35,7 @@ def _guard_hook_python_candidates(context: HarnessContext) -> list[Path]:
     candidates: list[Path] = []
     if context.workspace_dir is not None:
         for name in (".venv", "venv"):
-            python_path = (context.workspace_dir / name / "bin" / "python")
+            python_path = context.workspace_dir / name / "bin" / "python"
             if python_path.is_file() and not _path_looks_like_worktree(python_path):
                 candidates.append(python_path.resolve())
     pipx_python = Path.home() / ".local" / "pipx" / "venvs" / "hol-guard" / "bin" / "python"
@@ -60,12 +60,18 @@ def _guard_hook_python_candidates(context: HarnessContext) -> list[Path]:
 
 def _python_from_launcher_shim(shim: Path) -> Path | None:
     try:
-        first_line = shim.read_text(encoding="utf-8").splitlines()[0]
+        lines = shim.read_text(encoding="utf-8").splitlines()
+        if not lines:
+            return None
+        first_line = lines[0]
     except OSError:
         return None
     if not first_line.startswith("#!"):
         return None
-    interpreter = Path(first_line[2:].strip().split(maxsplit=1)[0])
+    parts = first_line[2:].strip().split(maxsplit=1)
+    if not parts:
+        return None
+    interpreter = Path(parts[0])
     return interpreter if interpreter.is_file() else None
 
 
