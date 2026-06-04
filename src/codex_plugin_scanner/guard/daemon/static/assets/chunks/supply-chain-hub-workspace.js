@@ -25,10 +25,7 @@ function viewToTab(view) {
   return "supply-chain";
 }
 function SupplyChainHubWorkspace(props) {
-  const [tab, setTab] = reactExports.useState(viewToTab(props.activeView));
-  reactExports.useEffect(() => {
-    setTab(viewToTab(props.activeView));
-  }, [props.activeView]);
+  const tab = viewToTab(props.activeView);
   const handleTabChange = reactExports.useCallback(
     (value) => {
       const path = value === "supply-chain" ? "/supply-chain" : `/${value}`;

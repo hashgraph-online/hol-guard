@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback } from "react";
 import { TabBar } from "./approval-center-primitives";
 import type { GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
@@ -41,11 +41,7 @@ export function SupplyChainHubWorkspace(props: {
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
 }) {
-  const [tab, setTab] = useState<HubTab>(viewToTab(props.activeView));
-
-  useEffect(() => {
-    setTab(viewToTab(props.activeView));
-  }, [props.activeView]);
+  const tab = viewToTab(props.activeView);
 
   const handleTabChange = useCallback(
     (value: HubTab) => {
