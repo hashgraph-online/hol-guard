@@ -6595,6 +6595,43 @@ url = http://127.0.0.1:8787/guard-canary
         }
         assert calls == [{"revoke_cloud_grant": True}]
 
+    def test_guard_disconnect_reports_network_layer_errors_in_json_mode(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+
+        def fake_disconnect(
+            *,
+            store: GuardStore,
+            revoke_cloud_grant: bool,
+            now: str | None = None,
+            urlopen=None,
+        ) -> dict[str, object]:
+            del store, revoke_cloud_grant, now, urlopen
+            raise urllib.error.URLError("loopback refused")
+
+        monkeypatch.setattr(guard_commands_module, "run_guard_disconnect_command", fake_disconnect)
+
+        rc = main(
+            [
+                "guard",
+                "disconnect",
+                "--home",
+                str(home_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output == {
+            "status": "error",
+            "error": "<urlopen error loopback refused>",
+        }
+
     def test_guard_login_without_manual_credentials_uses_device_code_browser_flow(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         store = GuardStore(home_dir)

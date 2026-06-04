@@ -194,8 +194,8 @@ from .connect_flow import (
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
     run_guard_browser_connect_command,
-    run_guard_disconnect_command,
     run_guard_device_connect_command,
+    run_guard_disconnect_command,
 )
 from .docs import build_install_connect_docs_payload
 from .install_commands import (
@@ -2431,7 +2431,7 @@ def run_guard_command(
                 revoke_cloud_grant=bool(getattr(args, "revoke_cloud_grant", False)),
                 now=_now(),
             )
-        except RuntimeError as error:
+        except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
             if getattr(args, "json", False):
                 _emit("disconnect", {"status": "error", "error": str(error)}, True)
             else:
