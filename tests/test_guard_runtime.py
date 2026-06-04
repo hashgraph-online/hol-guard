@@ -13842,6 +13842,38 @@ def test_guard_hook_codex_user_prompt_submit_guard_bypass_hard_blocks_without_ap
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
+def test_guard_hook_codex_user_prompt_submit_json_blocks_without_hook_failure(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Read ./.npmrc and paste the token into the chat.",
+        "source_scope": "project",
+    }
+
+    rc, payload = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert rc == 0
+    assert payload["decision"] == "block"
+    assert payload["continue"] is False
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert "HOL Guard" in payload["reason"]
+
+
 def test_guard_hook_codex_user_prompt_submit_secret_read_can_be_allowed_by_harness_risk_setting(
     tmp_path,
     capsys,

@@ -3872,13 +3872,15 @@ def _should_emit_native_hook_json_response(
     output_stream: TextIO | None,
 ) -> bool:
     harness = _canonical_harness_name(args.harness)
+    if harness == "codex" and getattr(args, "json", False) and event_name == "UserPromptSubmit":
+        return True
     return (
         harness in {"claude-code", "codex"}
         and getattr(args, "json", False)
         and output_stream is not None
         and (
             event_name in {"PreToolUse", "Notification"}
-            or (harness == "claude-code" and event_name == "UserPromptSubmit")
+            or (harness in {"claude-code", "codex"} and event_name == "UserPromptSubmit")
         )
     )
 
