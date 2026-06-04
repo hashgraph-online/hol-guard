@@ -37,15 +37,18 @@ def _store_record(store: GuardStore, record: EvidenceRecord) -> None:
         store_evidence(connection, record)
 
 
-def _get(port: int, path: str) -> tuple[int, dict[str, str], bytes]:
-    request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method="GET")
+def _get(port: int, path: str, *, token: str | None = None) -> tuple[int, dict[str, str], bytes]:
+    headers: dict[str, str] = {}
+    if token is not None:
+        headers["X-Guard-Token"] = token
+    request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers=headers, method="GET")
     with urllib.request.urlopen(request, timeout=5) as response:
         return response.status, dict(response.headers), response.read()
 
 
-def _get_error(port: int, path: str) -> int:
+def _get_error(port: int, path: str, *, token: str | None = None) -> int:
     try:
-        _get(port, path)
+        _get(port, path, token=token)
     except urllib.error.HTTPError as error:
         return error.code
     raise AssertionError("expected HTTPError")
@@ -60,7 +63,11 @@ def test_evidence_list_total_respects_filters(tmp_path: Path) -> None:
     daemon.start()
 
     try:
-        _status, _headers, body = _get(daemon.port, "/v1/evidence?harness=codex&category=secret&severity=high&limit=1")
+        _status, _headers, body = _get(
+            daemon.port,
+            "/v1/evidence?harness=codex&category=secret&severity=high&limit=1",
+            token=daemon._server.auth_token,
+        )
     finally:
         daemon.stop()
 
@@ -84,9 +91,21 @@ def test_evidence_export_json_and_csv_include_warning_and_redaction(tmp_path: Pa
     daemon.start()
 
     try:
-        json_status, json_headers, json_body = _get(daemon.port, "/v1/evidence/export?format=json")
-        csv_status, csv_headers, csv_body = _get(daemon.port, "/v1/evidence/export?format=csv")
-        invalid_status = _get_error(daemon.port, "/v1/evidence/export?format=xml")
+        json_status, json_headers, json_body = _get(
+            daemon.port,
+            "/v1/evidence/export?format=json",
+            token=daemon._server.auth_token,
+        )
+        csv_status, csv_headers, csv_body = _get(
+            daemon.port,
+            "/v1/evidence/export?format=csv",
+            token=daemon._server.auth_token,
+        )
+        invalid_status = _get_error(
+            daemon.port,
+            "/v1/evidence/export?format=xml",
+            token=daemon._server.auth_token,
+        )
     finally:
         daemon.stop()
 
