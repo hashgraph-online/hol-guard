@@ -61,6 +61,8 @@ Current Guard support in this repo:
 - `opencode`
   - detects global and project config, MCP servers, config-defined commands, markdown commands, npm plugins, local
     plugin files, and OpenCode-compatible skill directories
+  - installs a Guard-owned pretool plugin in `~/.config/opencode/plugins/` that calls `hol-guard hook --harness opencode`
+    before bash and shell tools run, so package installs and secret-read commands are evaluated during the session
   - supports wrapper-mode management state plus a Guard-owned runtime overlay for native skill approval prompts
   - supports wrapper-mode `guard run opencode`
   - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
