@@ -12,7 +12,6 @@ import mimetypes
 import os
 import platform
 import secrets
-import stat
 import threading
 import time
 import uuid
@@ -20,7 +19,7 @@ import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
@@ -2342,6 +2341,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             home_dir = self._validated_hook_directory_string(
                 "home",
                 self._optional_string(params.get("home", [None])[-1]),
+                roots=self._hook_safe_roots(),
             )
             guard_home = self._validated_hook_directory_string(
                 "guard-home",
@@ -2351,6 +2351,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace = self._validated_hook_directory_string(
                 "workspace",
                 self._normalized_hook_workspace_string(params.get("workspace", [None])[-1]),
+                roots=self._hook_safe_roots(),
             )
         except _HookPathValidationError as error:
             self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
@@ -2402,13 +2403,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self._record_auth_audit_event()
         self._write_json({"error": "unauthorized"}, status=401, extra_headers=extra_headers)
 
+    def _daemon_server(self) -> _GuardDaemonHttpServer:
+        return cast(_GuardDaemonHttpServer, self.server)
+
     def _record_auth_audit_event(self) -> None:
-        self.server.store.add_event(  # type: ignore[attr-defined]
+        origin = self.headers.get("Origin")
+        self._daemon_server().store.add_event(
             "daemon.auth.unauthorized",
             {
                 "method": self.command,
                 "path": urlparse(self.path).path,
-                "origin": self._normalize_origin(self.headers.get("Origin")),
+                "origin": self._normalize_origin(origin),
+                "origin_header": origin if isinstance(origin, str) and origin.strip() else None,
                 "has_authorization": isinstance(self.headers.get("Authorization"), str),
                 "has_dashboard_session": isinstance(self.headers.get("X-Guard-Dashboard-Session"), str),
                 "has_guard_token": isinstance(self.headers.get("X-Guard-Token"), str),
@@ -2417,7 +2423,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _record_hook_path_rejection(self, *, parameter: str, reason: str) -> None:
-        self.server.store.add_event(  # type: ignore[attr-defined]
+        self._daemon_server().store.add_event(
             "daemon.hook.path_rejected",
             {
                 "method": self.command,
@@ -2871,10 +2877,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
         return min(value, maximum)
 
-    def _validated_hook_directory_string(self, parameter: str, value: str | None) -> str | None:
+    def _validated_hook_directory_string(
+        self,
+        parameter: str,
+        value: str | None,
+        *,
+        roots: tuple[Path, ...] | None = None,
+    ) -> str | None:
         if value is None:
             return None
-        return self._validate_hook_directory_path(parameter, value)
+        return os.fspath(self._validate_hook_directory_path(parameter, value, roots=roots))
 
     @staticmethod
     def _normalized_hook_workspace_string(value: object) -> str | None:
@@ -2883,6 +2895,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         stripped = value.strip()
         if not stripped or stripped.lower() in {"none", "null"}:
             return None
+        # Mirror the CLI hook contract until runtime callers stop emitting `/None`
+        # as the explicit "no workspace" sentinel.
         candidate = os.path.expanduser(stripped)
         if os.path.basename(candidate) == "None":
             candidate = os.path.dirname(candidate)
@@ -2890,61 +2904,54 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return None
         return os.path.normpath(candidate)
 
-    def _validate_hook_directory_path(self, parameter: str, value: str) -> str:
-        candidate = os.path.normpath(os.path.expanduser(value))
-        if not os.path.isabs(candidate):
+    def _validate_hook_directory_path(
+        self,
+        parameter: str,
+        value: str,
+        *,
+        roots: tuple[Path, ...] | None = None,
+    ) -> Path:
+        candidate = Path(value).expanduser()
+        if not candidate.is_absolute():
             raise _HookPathValidationError(parameter, "relative_path")
-        if parameter in {"home", "workspace"} and not any(
-            self._path_is_within_root(candidate, root) for root in self._hook_safe_roots()
+        try:
+            resolved = candidate.resolve(strict=False)
+        except OSError:
+            raise _HookPathValidationError(parameter, "path_resolve_failed") from None
+        effective_roots = roots
+        if parameter in {"home", "workspace"} and effective_roots is None:
+            effective_roots = self._hook_safe_roots()
+        if effective_roots is not None and not any(
+            self._path_is_within_root(resolved, root) for root in effective_roots
         ):
             raise _HookPathValidationError(parameter, "unexpected_root")
-        drive, tail = os.path.splitdrive(candidate)
-        anchor = f"{drive}{os.path.sep}" if drive else os.path.sep
-        current = anchor
-        parts = [part for part in tail.split(os.path.sep) if part]
-        for part in parts:
-            current = os.path.join(current, part)
-            try:
-                metadata = os.lstat(current)
-            except FileNotFoundError:
-                continue
-            except OSError:
-                raise _HookPathValidationError(parameter, "path_stat_failed") from None
-            if stat.S_ISLNK(metadata.st_mode):
-                raise _HookPathValidationError(parameter, "symlink_component")
-            if (
-                stat.S_ISFIFO(metadata.st_mode)
-                or stat.S_ISSOCK(metadata.st_mode)
-                or stat.S_ISCHR(metadata.st_mode)
-                or stat.S_ISBLK(metadata.st_mode)
-            ):
-                raise _HookPathValidationError(parameter, "special_file")
-            if not stat.S_ISDIR(metadata.st_mode):
-                raise _HookPathValidationError(parameter, "non_directory")
-        return candidate
+        if resolved.exists() and not resolved.is_dir():
+            raise _HookPathValidationError(parameter, "non_directory")
+        return resolved
 
     def _validated_hook_guard_home(self, value: str | None) -> str | None:
         if value is None:
             return None
-        expected = os.path.normpath(os.fspath(self.server.store.guard_home.expanduser().resolve()))  # type: ignore[attr-defined]
-        if value != expected:
+        expected = self._daemon_server().store.guard_home.expanduser().resolve()
+        if Path(value) != expected:
             raise _HookPathValidationError("guard-home", "unexpected_guard_home")
-        return value
+        return os.fspath(expected)
 
-    def _hook_safe_roots(self) -> tuple[str, ...]:
-        current_home = os.path.normpath(os.fspath(Path.home().resolve()))
-        guard_home_root = os.path.normpath(
-            os.fspath(self.server.store.guard_home.expanduser().resolve().parent)  # type: ignore[attr-defined]
-        )
-        roots = []
-        for root in (current_home, guard_home_root):
-            if root not in roots:
-                roots.append(root)
+    def _hook_safe_roots(self) -> tuple[Path, ...]:
+        current_home = Path.home().resolve()
+        roots: list[Path] = [current_home]
+        guard_home_root = self._daemon_server().store.guard_home.expanduser().resolve().parent
+        if not self._path_is_within_root(guard_home_root, current_home):
+            roots.append(guard_home_root)
         return tuple(roots)
 
     @staticmethod
-    def _path_is_within_root(candidate: str, root: str) -> bool:
-        return candidate == root or candidate.startswith(f"{root}{os.path.sep}")
+    def _path_is_within_root(candidate: Path, root: Path) -> bool:
+        try:
+            candidate.relative_to(root)
+            return True
+        except ValueError:
+            return False
 
     @staticmethod
     def _scope_target_is_valid(
