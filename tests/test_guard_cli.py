@@ -3000,22 +3000,20 @@ args = ["workspace-skill.js", "--changed"]
         assert output["managed_install"]["active"] is True
         assert manifest["shim_command"] == "guard-opencode"
         assert "skill" not in runtime_payload["permission"]
-        assert runtime_payload["permission"]["hol-guard/danger_lab_*"] == "ask"
-        proxy_entry = runtime_payload["mcp"]["hol-guard/danger_lab"]
-        assert proxy_entry["type"] == "local"
-        assert proxy_entry["command"][0]
-        assert proxy_entry["command"][3] == "guard"
-        assert proxy_entry["command"][4] == "opencode-mcp-proxy"
-        assert proxy_entry["environment"]["API_BASE"] == "https://hol.org"
+        assert runtime_payload["permission"]["danger_lab_*"] == "ask"
+        assert runtime_payload["mcp"]["danger_lab"]["type"] == "local"
+        assert runtime_payload["mcp"]["danger_lab"]["command"][0]
+        assert runtime_payload["mcp"]["danger_lab"]["command"][3] == "guard"
+        assert runtime_payload["mcp"]["danger_lab"]["command"][4] == "opencode-mcp-proxy"
+        assert runtime_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
         assert manifest["managed_config_path"] == str(workspace_dir / "opencode.json")
         assert Path(str(manifest["backup_path"])).is_file()
-        assert managed_payload["permission"]["hol-guard/danger_lab_*"] == "ask"
-        assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
-        managed_proxy = managed_payload["mcp"]["hol-guard/danger_lab"]
-        assert managed_proxy["command"][2] == "codex_plugin_scanner.cli"
-        assert managed_proxy["command"][3] == "guard"
-        assert managed_proxy["command"][4] == "opencode-mcp-proxy"
-        assert managed_proxy["environment"]["API_BASE"] == "https://hol.org"
+        assert managed_payload["permission"]["danger_lab_*"] == "ask"
+        assert managed_payload["mcp"]["danger_lab"]["type"] == "local"
+        assert managed_payload["mcp"]["danger_lab"]["command"][2] == "codex_plugin_scanner.cli"
+        assert managed_payload["mcp"]["danger_lab"]["command"][3] == "guard"
+        assert managed_payload["mcp"]["danger_lab"]["command"][4] == "opencode-mcp-proxy"
+        assert managed_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
 
     def test_guard_reinstall_does_not_double_wrap_opencode_mcp_proxies(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3061,12 +3059,11 @@ args = ["workspace-skill.js", "--changed"]
         second_output = json.loads(capsys.readouterr().out)
         managed_config_path = Path(str(second_output["managed_install"]["manifest"]["managed_config_path"]))
         managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
-        proxy_command = managed_payload["mcp"]["hol-guard/danger_lab"]["command"]
+        proxy_command = managed_payload["mcp"]["danger_lab"]["command"]
 
         assert first_rc == 0
         assert second_rc == 0
         assert proxy_command.count("opencode-mcp-proxy") == 1
-        assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
         assert proxy_command[proxy_command.index("--command") + 1] == "python3"
         assert "--arg=danger-server.py" in proxy_command
 
@@ -3105,7 +3102,7 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert managed_config_path == jsonc_path
         assert managed_payload["provider"] == {"openai": {}}
-        assert managed_payload["permission"]["hol-guard/danger_lab_*"] == "ask"
+        assert managed_payload["permission"]["danger_lab_*"] == "ask"
 
     def test_guard_install_prefers_opencode_environment_config_target(self, monkeypatch, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3157,9 +3154,9 @@ args = ["workspace-skill.js", "--changed"]
         managed_config_path = Path(str(output["managed_install"]["manifest"]["managed_config_path"]))
 
         assert rc == 0
-        assert managed_config_path == global_config_path
-        assert (workspace_dir / "opencode.json").exists() is False
-        assert global_config_path.read_text(encoding="utf-8") != global_text
+        assert managed_config_path == workspace_dir / "opencode.json"
+        assert managed_config_path.exists() is True
+        assert global_config_path.read_text(encoding="utf-8") == global_text
 
     def test_guard_uninstall_restores_opencode_project_config(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3247,7 +3244,7 @@ args = ["workspace-skill.js", "--changed"]
         runtime_payload = json.loads(runtime_config_path.read_text(encoding="utf-8"))
 
         assert rc == 0
-        assert runtime_payload["mcp"]["hol-guard/danger_lab"]["environment"]["PYTHONPATH"] == str(tmp_path / "src")
+        assert runtime_payload["mcp"]["danger_lab"]["environment"]["PYTHONPATH"] == str(tmp_path / "src")
 
     def test_guard_uninstall_removes_generated_opencode_config_when_no_original_exists(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3662,8 +3659,8 @@ args = ["workspace-skill.js", "--changed"]
         runtime_payload = json.loads(Path(str(manifest["runtime_config_path"])).read_text(encoding="utf-8"))
 
         assert rc == 0
-        assert runtime_payload["mcp"]["hol-guard/sleep_lab"]["enabled"] is False
-        assert "hol-guard/sleep_lab_*" not in runtime_payload["permission"]
+        assert runtime_payload["mcp"]["sleep_lab"]["enabled"] is False
+        assert "sleep_lab_*" not in runtime_payload["permission"]
 
     def test_guard_install_opencode_preserves_workspace_server_name_collisions(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3715,8 +3712,8 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert "shared_lab" not in runtime_payload["mcp"]
         assert "shared_lab_*" not in runtime_payload["permission"]
-        assert runtime_payload["mcp"]["hol-guard/global_only_lab"]["type"] == "local"
-        assert runtime_payload["permission"]["hol-guard/global_only_lab_*"] == "ask"
+        assert runtime_payload["mcp"]["global_only_lab"]["type"] == "local"
+        assert runtime_payload["permission"]["global_only_lab_*"] == "ask"
 
     def test_opencode_launch_command_treats_debug_tokens_as_interactive_prompt(self, tmp_path):
         adapter = OpenCodeHarnessAdapter()

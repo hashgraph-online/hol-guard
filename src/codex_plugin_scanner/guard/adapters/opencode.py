@@ -15,11 +15,7 @@ from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _run_command_probe
 from .mcp_servers import (
     ManagedMcpServer,
-    is_guard_proxy_command,
-    is_managed_opencode_mcp_proxy_key,
-    managed_opencode_mcp_proxy_key,
     managed_stdio_servers,
-    native_opencode_server_from_proxy_config,
     proxy_cli_args,
     proxy_process_env,
     skipped_stdio_server_names,
@@ -179,26 +175,20 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         if parse_error or not isinstance(target_payload, dict):
             target_payload = {}
         existing_workspace_server_names = self._workspace_server_names(context)
-        target_managed_servers = self._managed_servers_for_target(managed_servers, target_config_path)
         target_payload["permission"] = self._managed_permission_payload(
             target_payload.get("permission"),
             context=context,
-            servers=target_managed_servers,
+            servers=managed_servers,
             existing_workspace_server_names=existing_workspace_server_names,
         )
         target_payload["mcp"] = self._managed_mcp_payload(
             target_payload.get("mcp"),
             context=context,
-            servers=target_managed_servers,
+            servers=managed_servers,
             existing_workspace_server_names=existing_workspace_server_names,
         )
         target_config_path.parent.mkdir(parents=True, exist_ok=True)
         target_config_path.write_text(json.dumps(target_payload, indent=2) + "\n", encoding="utf-8")
-        self._remove_managed_mcp_from_alternate_configs(
-            context,
-            managed_servers=target_managed_servers,
-            skip_config_path=target_config_path,
-        )
         shim_manifest = install_guard_shim(self.harness, context)
         plugin_manifest = install_pretool_plugin(context)
         overlay_path = runtime_config_path(context)
@@ -353,7 +343,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             environment = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
             if environment:
                 entry["environment"] = environment
-            overrides[managed_opencode_mcp_proxy_key(server.name)] = entry
+            overrides[server.name] = entry
         return overrides
 
     @staticmethod
@@ -372,7 +362,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                 continue
             if not server.enabled:
                 continue
-            rules[f"{managed_opencode_mcp_proxy_key(server.name)}_*"] = "ask"
+            rules[f"{server.name}_*"] = "ask"
         return rules
 
     @staticmethod
@@ -417,6 +407,8 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         configured_path = configured_config_path(context)
         if configured_path is not None:
             return configured_path
+        if workspace_dir is not None:
+            return workspace_dir / CONFIG_FILENAMES[0]
         global_dir = context.home_dir / ".config" / "opencode"
         for name in CONFIG_FILENAMES:
             candidate = global_dir / name
@@ -580,80 +572,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         )
         return permission
 
-    @staticmethod
-    def _managed_servers_for_target(
-        servers: tuple[ManagedMcpServer, ...],
-        target_config_path: Path,
-    ) -> tuple[ManagedMcpServer, ...]:
-        target_path = target_config_path.resolve()
-        filtered: list[ManagedMcpServer] = []
-        for server in servers:
-            if Path(server.config_path).resolve() == target_path:
-                filtered.append(server)
-        return tuple(filtered)
-
-    @staticmethod
-    def _restore_native_mcp_entries(payload: dict[str, object]) -> dict[str, object]:
-        restored = dict(payload)
-        for name, server_config in list(restored.items()):
-            if not isinstance(name, str) or not isinstance(server_config, dict):
-                continue
-            if is_managed_opencode_mcp_proxy_key(name):
-                continue
-            native_entry = native_opencode_server_from_proxy_config(server_config)
-            if native_entry is not None:
-                restored[name] = native_entry
-        return restored
-
-    def _remove_managed_mcp_from_alternate_configs(
-        self,
-        context: HarnessContext,
-        *,
-        managed_servers: tuple[ManagedMcpServer, ...],
-        skip_config_path: Path,
-    ) -> None:
-        skip_path = skip_config_path.resolve()
-        for config_path in config_paths(context):
-            resolved_path = config_path.resolve()
-            if resolved_path == skip_path or not config_path.is_file():
-                continue
-            payload, parse_error, _parse_reason = _load_json_or_jsonc(config_path)
-            if parse_error or not isinstance(payload, dict):
-                continue
-            mcp = payload.get("mcp")
-            if not isinstance(mcp, dict):
-                continue
-            changed = False
-            cleaned: dict[str, object] = {}
-            for name, server_config in mcp.items():
-                if not isinstance(name, str) or not isinstance(server_config, dict):
-                    cleaned[name] = server_config
-                    continue
-                if is_managed_opencode_mcp_proxy_key(name):
-                    changed = True
-                    continue
-                command_value = server_config.get("command")
-                command = None
-                args: tuple[str, ...] = ()
-                if isinstance(command_value, list):
-                    command_parts = [str(value) for value in command_value if isinstance(value, str)]
-                    if command_parts:
-                        command = command_parts[0]
-                        args = tuple(command_parts[1:])
-                elif isinstance(command_value, str):
-                    command = command_value
-                if is_guard_proxy_command(command, args):
-                    changed = True
-                    continue
-                cleaned[name] = server_config
-            if not changed:
-                continue
-            if cleaned:
-                payload["mcp"] = cleaned
-            else:
-                payload.pop("mcp", None)
-            config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
     def _managed_mcp_payload(
         self,
         current_mcp: object,
@@ -662,7 +580,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         servers: tuple[ManagedMcpServer, ...],
         existing_workspace_server_names: set[str],
     ) -> dict[str, object]:
-        payload = self._restore_native_mcp_entries(_object_dict(current_mcp) or {})
+        payload = _object_dict(current_mcp) or {}
         payload.update(
             self._proxy_mcp_overrides(
                 context,
@@ -670,10 +588,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                 existing_workspace_server_names,
             )
         )
-        managed_proxy_keys = {managed_opencode_mcp_proxy_key(server.name) for server in servers}
-        for name in list(payload.keys()):
-            if isinstance(name, str) and is_managed_opencode_mcp_proxy_key(name) and name not in managed_proxy_keys:
-                payload.pop(name, None)
         return payload
 
     @staticmethod
