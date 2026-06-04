@@ -13,7 +13,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from hashlib import sha256
+from hashlib import pbkdf2_hmac, sha256
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
@@ -146,11 +146,29 @@ _SCOPED_HARNESS_FAMILIES = frozenset(
 )
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
+_SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
+_SECRET_FINGERPRINT_SALT = b"hol-guard-secret-fingerprint:v1"
+_SECRET_FINGERPRINT_ITERATIONS = 200_000
 
 
-def _token_sha256(value: str) -> str:
-    # Guard stores high-entropy local token fingerprints for integrity checks, not password verifiers.
+def _secret_fingerprint(value: str) -> str:
+    digest = pbkdf2_hmac(
+        "sha256",
+        value.encode("utf-8"),
+        _SECRET_FINGERPRINT_SALT,
+        _SECRET_FINGERPRINT_ITERATIONS,
+    ).hex()
+    return f"{_SECRET_FINGERPRINT_PREFIX}{digest}"
+
+
+def _legacy_secret_sha256(value: str) -> str:
     return sha256(value.encode("utf-8")).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
+
+
+def _secret_matches_hash(value: str, expected_hash: str) -> bool:
+    if expected_hash.startswith(_SECRET_FINGERPRINT_PREFIX):
+        return _secret_fingerprint(value) == expected_hash
+    return _legacy_secret_sha256(value) == expected_hash
 
 
 class SecretStore(Protocol):
@@ -570,7 +588,7 @@ class GuardStore:
         if isinstance(secret_store, FallbackSecretStore):
             primary_token = self._get_secret_from_store(secret_store.primary, secret_id)
             if primary_token is not None:
-                if expected_hash_value is None or _token_sha256(primary_token) == expected_hash_value:
+                if expected_hash_value is None or _secret_matches_hash(primary_token, expected_hash_value):
                     return [primary_token]
                 fallback_token = self._get_secret_from_store(secret_store.fallback, secret_id)
                 if fallback_token is None or fallback_token == primary_token:
@@ -2958,7 +2976,7 @@ class GuardStore:
             expected_hash_value = expected_hash if isinstance(expected_hash, str) and expected_hash else None
 
             for token in self._get_secret_candidates(self._secret_store, self._sync_token_ref, expected_hash_value):
-                if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
+                if expected_hash_value is not None and not _secret_matches_hash(token, expected_hash_value):
                     continue
                 self._promote_secret_to_primary(self._secret_store, self._sync_token_ref, token)
                 return {"sync_url": sync_url, "token": token}
@@ -2988,7 +3006,7 @@ class GuardStore:
             "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
         }
         secret_json = json.dumps(secret_payload, sort_keys=True, separators=(",", ":"))
-        secret_hash = _token_sha256(secret_json)
+        secret_hash = _secret_fingerprint(secret_json)
         payload: dict[str, object] = {
             "issuer": issuer,
             "client_id": client_id,
@@ -3087,7 +3105,7 @@ class GuardStore:
         if not isinstance(secret_hash, str) or not secret_hash:
             return None
         for candidate in self._get_secret_candidates(self._oauth_secret_store, secret_ref, secret_hash):
-            if _token_sha256(candidate) != secret_hash:
+            if not _secret_matches_hash(candidate, secret_hash):
                 continue
             try:
                 secret_payload = json.loads(candidate)
@@ -3176,12 +3194,12 @@ class GuardStore:
             return token_hash
         legacy_token = payload.get("token")
         if isinstance(legacy_token, str) and legacy_token:
-            return _token_sha256(legacy_token)
+            return _secret_fingerprint(legacy_token)
         token_reference = payload.get("token_ref")
         if isinstance(token_reference, str) and token_reference:
             token = self._secret_store.get_secret(token_reference)
             if isinstance(token, str) and token:
-                return _token_sha256(token)
+                return _secret_fingerprint(token)
         return None
 
     def _set_sync_credentials_in_connection(
@@ -3193,7 +3211,7 @@ class GuardStore:
         *,
         workspace_id: str | None = None,
     ) -> None:
-        token_hash = _token_sha256(token)
+        token_hash = _secret_fingerprint(token)
         normalized_workspace_id = (
             workspace_id.strip() if isinstance(workspace_id, str) and workspace_id.strip() else None
         )
