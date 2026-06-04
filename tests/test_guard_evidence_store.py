@@ -446,3 +446,59 @@ class TestExportRedaction:
         assert "/Users/alice" not in encoded
         assert "secret-value" not in encoded
         assert "sk-test-secret-value" not in encoded
+
+    def test_export_redacts_oauth_secret_fields_from_evidence_strings(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        oauth_blob = (
+            'sync_state.credentials={"access_token":"eyJtest.payload.signature",'
+            '"refresh_token":"refresh-secret-value",'
+            '"authorization_code":"auth-code-secret",'
+            '"user_code":"ABCD-EFGH",'
+            '"dpop_private_key_pem":"dpop-private-key-secret"}'
+        )
+        store_evidence(
+            conn,
+            _rec(
+                evidence_id="ex-oauth-redaction",
+                summary=f"oauth debug dump {oauth_blob}",
+                details={"oauth_blob": oauth_blob},
+            ),
+        )
+
+        exported = json.loads(export_evidence_json(conn, redact_fields=()))
+        encoded = json.dumps(exported)
+
+        assert "sync_state.credentials" not in encoded
+        assert "eyJtest.payload.signature" not in encoded
+        assert "refresh-secret-value" not in encoded
+        assert "auth-code-secret" not in encoded
+        assert "ABCD-EFGH" not in encoded
+        assert "dpop-private-key-secret" not in encoded
+
+    def test_export_redacts_nested_oauth_secret_fields_from_evidence_strings(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        oauth_blob = (
+            'sync_state.credentials={"access_token":"eyJtest.payload.signature",'
+            '"metadata":{"refresh_token":"refresh-secret-value",'
+            '"nested":{"authorization_code":"auth-code-secret",'
+            '"dpop_private_key_pem":"dpop-private-key-secret"}},'
+            '"user_code":"ABCD-EFGH"}'
+        )
+        store_evidence(
+            conn,
+            _rec(
+                evidence_id="ex-oauth-redaction-nested",
+                summary=f"nested oauth debug dump {oauth_blob}",
+                details={"oauth_blob": oauth_blob},
+            ),
+        )
+
+        exported = json.loads(export_evidence_json(conn, redact_fields=()))
+        encoded = json.dumps(exported)
+
+        assert "sync_state.credentials" not in encoded
+        assert "eyJtest.payload.signature" not in encoded
+        assert "refresh-secret-value" not in encoded
+        assert "auth-code-secret" not in encoded
+        assert "ABCD-EFGH" not in encoded
+        assert "dpop-private-key-secret" not in encoded

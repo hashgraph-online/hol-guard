@@ -83,6 +83,40 @@ class TestGuardSurfaceServer:
         assert favicon_response.status == 200
         assert favicon_response.headers.get("Cache-Control") == "no-store, max-age=0"
 
+    def test_guard_daemon_dashboard_assets_use_oauth_connect_copy(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/assets/guard-dashboard.js",
+                timeout=5,
+            ) as response:
+                dashboard_bundle = response.read().decode("utf-8")
+        finally:
+            daemon.stop()
+
+        runtime_overview_chunk = (
+            daemon_server_module._STATIC_DIR / "assets" / "chunks" / "runtime-overview.js"
+        ).read_text(encoding="utf-8")
+        feed_health_chunk = (
+            daemon_server_module._STATIC_DIR / "assets" / "chunks" / "feed-health-workspace.js"
+        ).read_text(encoding="utf-8")
+
+        assert "Open Guard connect" in dashboard_bundle
+        assert "Open pairing flow" not in dashboard_bundle
+        assert "Browser sign-in finished. First proof sync has not completed yet." in dashboard_bundle
+        assert "Browser pairing finished. First proof sync has not completed yet." not in dashboard_bundle
+        assert 'label: "Sync pending"' in runtime_overview_chunk
+        assert '"Pairing…"' not in runtime_overview_chunk
+        assert "Cloud connection is complete. Feed sync is in progress. First proof will arrive shortly." in (
+            feed_health_chunk
+        )
+        assert "Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly." not in (
+            feed_health_chunk
+        )
+
     def test_guard_daemon_dashboard_shell_omits_local_auth_token(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         store.add_approval_request(

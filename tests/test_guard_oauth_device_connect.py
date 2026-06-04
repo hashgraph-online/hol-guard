@@ -131,6 +131,7 @@ def test_device_authorization_request_uses_oauth_scopes_without_token_material()
     encoded = connect_flow.build_device_authorization_request_body(
         machine_id="machine-123",
         machine_label="Michaels MacBook",
+        machine_location_label="America/New_York",
         runtime_id="hol-guard",
         runtime_label="HOL Guard CLI",
         client_id="guard-local-daemon",
@@ -143,6 +144,7 @@ def test_device_authorization_request_uses_oauth_scopes_without_token_material()
     ]
     assert parsed["requested_machine_id"] == ["machine-123"]
     assert parsed["requested_machine_label"] == ["Michaels MacBook"]
+    assert parsed["requested_machine_location_label"] == ["America/New_York"]
     assert parsed["requested_runtime_id"] == ["hol-guard"]
     assert parsed["requested_runtime_label"] == ["HOL Guard CLI"]
     assert "token" not in encoded
@@ -153,6 +155,7 @@ def test_ci_safe_device_authorization_request_uses_restricted_scopes() -> None:
     encoded = connect_flow.build_device_authorization_request_body(
         machine_id="machine-123",
         machine_label="CI Runner",
+        machine_location_label=None,
         runtime_id="hol-guard",
         runtime_label="HOL Guard CLI",
         client_id="guard-local-daemon",
@@ -163,6 +166,7 @@ def test_ci_safe_device_authorization_request_uses_restricted_scopes() -> None:
     assert parsed["scope"] == ["guard:runtime.sync guard:offline_access"]
     assert "guard:receipt.write" not in encoded
     assert "guard:runtime.session.write" not in encoded
+    assert "requested_machine_location_label" not in parsed
 
 
 def test_device_authorization_copy_payload_hides_device_code_secret() -> None:
@@ -1041,6 +1045,39 @@ def test_loopback_callback_listener_rejects_state_mismatch() -> None:
         listener.close()
 
 
+def test_loopback_callback_listener_rejects_raw_runtime_credentials_without_code() -> None:
+    listener = connect_flow.start_guard_loopback_callback_listener(expected_state="state-123")
+    try:
+        legacy_query_url = (
+            f"{listener.redirect_uri}?state=state-123"
+            "&token=guard_live_secret"
+            "&pairing_secret=pair-secret"
+            "&sync_token=sync-secret"
+        )
+        response_body = ""
+        try:
+            urllib.request.urlopen(legacy_query_url, timeout=5)
+        except urllib.error.HTTPError as error:
+            assert error.code == 400
+            response_body = error.read().decode("utf-8")
+        else:
+            raise AssertionError("raw runtime credentials must not satisfy OAuth callback")
+
+        assert "authorization code" in response_body
+        assert "guard_live_secret" not in response_body
+        assert "pair-secret" not in response_body
+        assert "sync-secret" not in response_body
+
+        try:
+            listener.wait_for_callback(timeout_seconds=0.05)
+        except TimeoutError as error:
+            assert "timed out" in str(error)
+        else:
+            raise AssertionError("legacy runtime credentials must not be accepted as callback state")
+    finally:
+        listener.close()
+
+
 def test_loopback_callback_listener_surfaces_oauth_denial_without_timeout() -> None:
     listener = connect_flow.start_guard_loopback_callback_listener(expected_state="state-123")
     try:
@@ -1353,3 +1390,5 @@ def test_connect_browser_reports_loopback_timeout_without_traceback(
     assert "Guard authorization failed" in captured.err
     assert "timed out" in captured.err
     assert "Traceback" not in captured.err
+    assert store.get_sync_credentials() is None
+    assert store.get_oauth_local_credentials() is None

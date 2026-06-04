@@ -712,8 +712,8 @@ def _runtime_proof_status_label(state: str) -> str:
         "sync_unavailable": "Local connected, cloud sync gated",
         "failed": "First proof needs retry",
         "pending": "First proof pending",
-        "expired": "Pairing expired",
-        "waiting": "Waiting for browser pairing",
+        "expired": "Sign-in expired",
+        "waiting": "Waiting for browser sign-in",
         "not_connected": "Cloud proof not started",
     }
     return labels.get(state, "Cloud proof not started")
@@ -724,9 +724,9 @@ def _runtime_proof_status_detail(state: str) -> str:
         "synced": "This device completed its first Guard Cloud proof sync.",
         "sync_unavailable": "Local Guard is connected. Shared cloud sync needs a paid Guard plan.",
         "failed": "Run hol-guard connect again to finish first proof sync.",
-        "pending": "Browser pairing finished. First proof sync has not completed yet.",
-        "expired": "The pairing link expired. Run hol-guard connect again.",
-        "waiting": "Open the pairing link to register this local Guard device.",
+        "pending": "Browser sign-in finished. First proof sync has not completed yet.",
+        "expired": "The sign-in link expired. Run hol-guard connect again.",
+        "waiting": "Open the sign-in link to register this local Guard device.",
         "not_connected": "Connect Guard Cloud to sync this device proof.",
     }
     return details.get(state, "Connect Guard Cloud to sync this device proof.")
