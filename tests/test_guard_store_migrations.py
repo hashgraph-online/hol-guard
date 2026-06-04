@@ -15,9 +15,40 @@ from codex_plugin_scanner.guard.store import (
     FallbackSecretStore,
     GuardStore,
     KeychainSecretStore,
+    SystemKeyringSecretStore,
     _build_oauth_secret_store,
     _build_secret_store,
 )
+
+
+class _FakeSystemKeyringModule:
+    def __init__(self) -> None:
+        self._secrets: dict[tuple[str, str], str] = {}
+        self.fail_on_set = False
+
+    @staticmethod
+    def get_keyring():
+        class _Backend:
+            priority = 1
+
+        return _Backend()
+
+    def set_password(self, service_name: str, secret_id: str, value: str) -> None:
+        if self.fail_on_set:
+            raise RuntimeError("system keyring unavailable")
+        self._secrets[(service_name, secret_id)] = value
+
+    def get_password(self, service_name: str, secret_id: str) -> str | None:
+        return self._secrets.get((service_name, secret_id))
+
+    def delete_password(self, service_name: str, secret_id: str) -> None:
+        self._secrets.pop((service_name, secret_id), None)
+
+
+def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
+    module = _FakeSystemKeyringModule()
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    return module
 
 
 def test_sync_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
@@ -244,15 +275,15 @@ def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(
     assert isinstance(secret_store.fallback, KeychainSecretStore)
 
 
-def test_oauth_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(tmp_path, monkeypatch):
+def test_oauth_secret_store_prefers_system_keyring_backend_when_available(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    _install_fake_system_keyring(monkeypatch)
 
     secret_store = _build_oauth_secret_store(guard_home)
 
     assert isinstance(secret_store, FallbackSecretStore)
-    assert isinstance(secret_store.primary, EncryptedFileSecretStore)
-    assert isinstance(secret_store.fallback, KeychainSecretStore)
+    assert isinstance(secret_store.primary, SystemKeyringSecretStore)
+    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
 def test_encrypted_file_secret_store_secures_secret_directory_permissions(tmp_path):
@@ -293,9 +324,9 @@ def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_availa
     GuardStore(guard_home)
 
 
-def test_oauth_local_credentials_do_not_shell_out_to_keychain_when_file_store_is_available(tmp_path, monkeypatch):
+def test_oauth_local_credentials_do_not_shell_out_to_keychain_when_system_keyring_is_available(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    _install_fake_system_keyring(monkeypatch)
 
     def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         raise AssertionError("keychain should not be used for OAuth credential writes")
@@ -349,14 +380,12 @@ def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path)
     assert payload["grant_id"] == "grant-123"
     assert payload["machine_id"] == "machine-123"
     assert payload["workspace_id"] == "workspace-123"
-    assert isinstance(payload.get("refresh_token_ref"), str)
-    assert isinstance(payload.get("refresh_token_sha256"), str)
-    assert isinstance(payload.get("dpop_private_key_ref"), str)
-    assert isinstance(payload.get("dpop_private_key_sha256"), str)
-    assert payload["dpop_public_jwk"]["kty"] == "EC"
-    assert payload["dpop_public_jwk_thumbprint"] == "thumbprint-123"
+    assert payload["credentials_ref"].startswith("guard-oauth-local-credentials:")
+    assert isinstance(payload.get("credentials_sha256"), str)
     assert "refresh_token" not in payload
     assert "dpop_private_key_pem" not in payload
+    assert "dpop_public_jwk" not in payload
+    assert "dpop_public_jwk_thumbprint" not in payload
 
     assert store.get_oauth_local_credentials() == {
         "issuer": "https://hol.org",
@@ -434,14 +463,10 @@ def test_clear_oauth_local_credentials_preserves_local_receipt_history(tmp_path,
     assert list((guard_home / "secrets").glob("guard-oauth-*.enc")) == []
 
 
-def test_oauth_local_credentials_use_encrypted_file_fallback_when_keychain_write_fails(tmp_path, monkeypatch):
+def test_oauth_local_credentials_use_encrypted_file_fallback_when_system_keyring_write_fails(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-
-    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.CalledProcessError(returncode=1, cmd=["security"], stderr="keychain unavailable")
-
-    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
+    fake_keyring = _install_fake_system_keyring(monkeypatch)
+    fake_keyring.fail_on_set = True
     store = GuardStore(guard_home)
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
@@ -461,7 +486,6 @@ def test_oauth_local_credentials_use_encrypted_file_fallback_when_keychain_write
 
 def test_oauth_local_credential_health_reports_backend_and_metadata(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
     store = GuardStore(guard_home)
 
     assert store.get_oauth_local_credential_health() == {
@@ -504,6 +528,36 @@ def test_oauth_local_credential_health_reports_backend_and_metadata(tmp_path, mo
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
 
 
+def test_oauth_local_credential_health_reports_system_keyring_backend(tmp_path, monkeypatch):
+    _install_fake_system_keyring(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    assert store.get_oauth_local_credential_health() == {
+        "configured": True,
+        "state": "healthy",
+        "backend": "system-keyring",
+        "fallback_backend": "encrypted-file",
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "grant_id": "grant-123",
+        "machine_id": "machine-123",
+        "workspace_id": "workspace-123",
+    }
+
+
 def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_write_failure(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     store.set_oauth_local_credentials(
@@ -521,13 +575,13 @@ def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_wr
     original_set_secret = store._oauth_secret_store.set_secret
     write_calls: list[str] = []
 
-    def fail_on_second_write(secret_id: str, value: str) -> None:
+    def fail_on_first_write(secret_id: str, value: str) -> None:
         write_calls.append(secret_id)
-        if len(write_calls) == 2:
-            raise RuntimeError("second write failed")
+        if len(write_calls) == 1:
+            raise RuntimeError("secret write failed")
         original_set_secret(secret_id, value)
 
-    monkeypatch.setattr(store._oauth_secret_store, "set_secret", fail_on_second_write)
+    monkeypatch.setattr(store._oauth_secret_store, "set_secret", fail_on_first_write)
 
     try:
         store.set_oauth_local_credentials(
@@ -543,9 +597,9 @@ def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_wr
             now="2026-06-01T00:05:00+00:00",
         )
     except RuntimeError as error:
-        assert str(error) == "second write failed"
+        assert str(error) == "secret write failed"
     else:
-        raise AssertionError("second OAuth secret write should fail in this regression test")
+        raise AssertionError("OAuth secret write should fail in this regression test")
 
     assert store.get_oauth_local_credentials() == {
         "issuer": "https://hol.org",
@@ -559,110 +613,6 @@ def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_wr
         "workspace_id": "workspace-old",
     }
 
-
-def test_validated_keychain_fallback_oauth_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
-
-    refresh_token = "legacy-refresh-token"
-    dpop_private_key_pem = "-----BEGIN PRIVATE KEY-----\nlegacy-key-material\n-----END PRIVATE KEY-----"
-    refresh_token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
-    dpop_private_key_hash = hashlib.sha256(dpop_private_key_pem.encode("utf-8")).hexdigest()
-    keychain_reads: list[str] = []
-
-    def keychain_lookup(args: list[str], *other_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        del other_args, kwargs
-        secret_id = str(args[args.index("-a") + 1])
-        keychain_reads.append(secret_id)
-        if secret_id.endswith(refresh_token_hash[:16]):
-            return subprocess.CompletedProcess(args=args, returncode=0, stdout=f"{refresh_token}\n", stderr="")
-        if secret_id.endswith(dpop_private_key_hash[:16]):
-            return subprocess.CompletedProcess(args=args, returncode=0, stdout=dpop_private_key_pem, stderr="")
-        return subprocess.CompletedProcess(args=args, returncode=44, stdout="", stderr="not found")
-
-    monkeypatch.setattr(subprocess, "run", keychain_lookup)
-    store = GuardStore(guard_home)
-    refresh_token_ref = store._versioned_secret_ref(store._oauth_refresh_token_ref, refresh_token_hash)
-    dpop_private_key_ref = store._versioned_secret_ref(store._oauth_dpop_private_key_ref, dpop_private_key_hash)
-
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('oauth_local_credentials', ?, ?)
-            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
-            """,
-            (
-                json.dumps(
-                    {
-                        "issuer": "https://hol.org",
-                        "client_id": "guard-local-daemon",
-                        "refresh_token_ref": refresh_token_ref,
-                        "refresh_token_sha256": refresh_token_hash,
-                        "dpop_private_key_ref": dpop_private_key_ref,
-                        "dpop_private_key_sha256": dpop_private_key_hash,
-                        "dpop_public_jwk": {
-                            "kty": "EC",
-                            "crv": "P-256",
-                            "x": "x-value",
-                            "y": "y-value",
-                            "alg": "ES256",
-                            "use": "sig",
-                        },
-                        "dpop_public_jwk_thumbprint": "thumbprint-123",
-                        "grant_id": "grant-123",
-                        "machine_id": "machine-123",
-                        "workspace_id": "workspace-123",
-                    }
-                ),
-                "2026-06-01T00:00:00+00:00",
-            ),
-        )
-
-    assert store.get_oauth_local_credentials() == {
-        "issuer": "https://hol.org",
-        "client_id": "guard-local-daemon",
-        "refresh_token": refresh_token,
-        "dpop_private_key_pem": dpop_private_key_pem,
-        "dpop_public_jwk": {
-            "kty": "EC",
-            "crv": "P-256",
-            "x": "x-value",
-            "y": "y-value",
-            "alg": "ES256",
-            "use": "sig",
-        },
-        "dpop_public_jwk_thumbprint": "thumbprint-123",
-        "grant_id": "grant-123",
-        "machine_id": "machine-123",
-        "workspace_id": "workspace-123",
-    }
-    assert len(keychain_reads) == 2
-    assert any((guard_home / "secrets").glob("*.enc"))
-
-    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("OAuth keychain fallback should not run after migration")
-
-    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
-
-    assert store.get_oauth_local_credentials() == {
-        "issuer": "https://hol.org",
-        "client_id": "guard-local-daemon",
-        "refresh_token": refresh_token,
-        "dpop_private_key_pem": dpop_private_key_pem,
-        "dpop_public_jwk": {
-            "kty": "EC",
-            "crv": "P-256",
-            "x": "x-value",
-            "y": "y-value",
-            "alg": "ES256",
-            "use": "sig",
-        },
-        "dpop_public_jwk_thumbprint": "thumbprint-123",
-        "grant_id": "grant-123",
-        "machine_id": "machine-123",
-        "workspace_id": "workspace-123",
-    }
 
 
 def test_validated_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import importlib
 import json
 import logging
 import os
@@ -131,10 +132,11 @@ from .store_threat_intel import (
 from .types import CapabilitySet
 
 _SYNC_TOKEN_REF = "guard-cloud-token"
-_OAUTH_REFRESH_TOKEN_REF = "guard-oauth-refresh-token"
-_OAUTH_DPOP_PRIVATE_KEY_REF = "guard-oauth-dpop-private-key"
+_OAUTH_LOCAL_CREDENTIALS_REF = "guard-oauth-local-credentials"
 _SYNC_TOKEN_HASH_KEY = "token_sha256"
 _OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
+_OAUTH_LOCAL_CREDENTIALS_HASH_KEY = "credentials_sha256"
+_OAUTH_LOCAL_CREDENTIALS_REF_KEY = "credentials_ref"
 _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
@@ -143,6 +145,7 @@ _SCOPED_HARNESS_FAMILIES = frozenset(
     {"file-read", "mcp-tool", "prompt", "prompt-env-read", "prompt-file", "tool-action"}
 )
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
+_SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
 
 
 def _token_sha256(value: str) -> str:
@@ -233,13 +236,52 @@ class KeychainSecretStore:
         )
 
 
-class EncryptedFileSecretStore:
-    """Encrypted file-based secret store for predictable cross-platform Guard credentials.
+class SystemKeyringSecretStore:
+    """Cross-platform OS credential store backed by the Python keyring library."""
 
-    This keeps sync tokens out of plaintext SQLite and avoids OS-specific keychain prompts
-    during CLI flows. The Fernet key and encrypted payloads both live inside the same
-    per-user Guard directory, so this is a portability and encrypted-at-rest improvement,
-    not stronger isolation than an OS keychain against same-user local compromise.
+    def __init__(self, service_name: str) -> None:
+        self.service_name = service_name
+
+    @staticmethod
+    def _load_keyring_module():
+        return importlib.import_module("keyring")
+
+    @classmethod
+    def _is_available(cls) -> bool:
+        try:
+            keyring_module = cls._load_keyring_module()
+            backend = keyring_module.get_keyring()
+        except Exception:
+            return False
+        backend_name = type(backend).__name__.lower()
+        if backend_name == "failkeyring":
+            return False
+        priority = getattr(backend, "priority", None)
+        return not (isinstance(priority, (int, float)) and priority <= 0)
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        keyring_module = self._load_keyring_module()
+        keyring_module.set_password(self.service_name, secret_id, value)
+
+    def get_secret(self, secret_id: str) -> str | None:
+        keyring_module = self._load_keyring_module()
+        value = keyring_module.get_password(self.service_name, secret_id)
+        return value if isinstance(value, str) and value else None
+
+    def delete_secret(self, secret_id: str) -> None:
+        keyring_module = self._load_keyring_module()
+        try:
+            keyring_module.delete_password(self.service_name, secret_id)
+        except Exception:
+            return
+
+
+class EncryptedFileSecretStore:
+    """Encrypted file-based secret store for Guard credentials.
+
+    The Fernet key and encrypted payloads both live inside the same per-user Guard
+    directory, so this is encrypted-at-rest fallback storage rather than a substitute
+    for an OS credential manager.
     """
 
     def __init__(self, guard_home: Path) -> None:
@@ -450,19 +492,17 @@ def _build_secret_store(guard_home: Path) -> SecretStore:
 
 def _build_oauth_secret_store(guard_home: Path) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
-    if KeychainSecretStore._is_available():
-        # Device connect persists a refresh token plus multiline DPoP key material.
-        # Keep writes on the encrypted file backend so normal CLI pairing never drops
-        # the user into repeated macOS keychain password prompts, while still reading
-        # legacy keychain-backed installs through the fallback path and migrating them forward.
+    if SystemKeyringSecretStore._is_available():
         return FallbackSecretStore(
+            SystemKeyringSecretStore(service_name="hol-guard.oauth"),
             fallback_store,
-            KeychainSecretStore(service_name="hol-guard.oauth"),
         )
     return fallback_store
 
 
 def _secret_store_backend_name(secret_store: SecretStore) -> str:
+    if isinstance(secret_store, SystemKeyringSecretStore):
+        return "system-keyring"
     if isinstance(secret_store, KeychainSecretStore):
         return "keychain"
     if isinstance(secret_store, EncryptedFileSecretStore):
@@ -478,6 +518,11 @@ def _secret_store_fallback_backend_name(secret_store: SecretStore) -> str | None
     return None
 
 
+def _should_warn_on_slow_store_transactions() -> bool:
+    value = os.environ.get(_SLOW_STORE_WARNING_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
 _SLOW_QUERY_THRESHOLD_MS: int = 200
 _store_logger = logging.getLogger(__name__)
 
@@ -491,8 +536,7 @@ class GuardStore:
         self._secret_store = _build_secret_store(self.guard_home)
         self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
         self._sync_token_ref = self._build_scoped_secret_ref(_SYNC_TOKEN_REF)
-        self._oauth_refresh_token_ref = self._build_scoped_secret_ref(_OAUTH_REFRESH_TOKEN_REF)
-        self._oauth_dpop_private_key_ref = self._build_scoped_secret_ref(_OAUTH_DPOP_PRIVATE_KEY_REF)
+        self._oauth_local_credentials_ref = self._build_scoped_secret_ref(_OAUTH_LOCAL_CREDENTIALS_REF)
         self._guard_event_queue_limit = max(1, guard_event_queue_limit)
         self.path = self.guard_home / "guard.db"
         self._initialize()
@@ -552,7 +596,8 @@ class GuardStore:
             connection.close()
             elapsed_ms = (time.monotonic() - start) * 1000
             if elapsed_ms >= _SLOW_QUERY_THRESHOLD_MS:
-                _store_logger.warning(
+                log = _store_logger.warning if _should_warn_on_slow_store_transactions() else _store_logger.debug
+                log(
                     "Guard store slow transaction (%.0fms); consider indexing hot query paths.",
                     elapsed_ms,
                 )
@@ -2935,19 +2980,19 @@ class GuardStore:
         runtime_id: str | None = None,
         runtime_label: str | None = None,
     ) -> None:
-        refresh_token_hash = _token_sha256(refresh_token)
-        dpop_private_key_hash = _token_sha256(dpop_private_key_pem)
-        refresh_token_ref = self._versioned_secret_ref(self._oauth_refresh_token_ref, refresh_token_hash)
-        dpop_private_key_ref = self._versioned_secret_ref(self._oauth_dpop_private_key_ref, dpop_private_key_hash)
+        secret_payload = {
+            "refresh_token": refresh_token,
+            "dpop_private_key_pem": dpop_private_key_pem,
+            "dpop_public_jwk": dpop_public_jwk,
+            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
+        }
+        secret_json = json.dumps(secret_payload, sort_keys=True, separators=(",", ":"))
+        secret_hash = _token_sha256(secret_json)
         payload: dict[str, object] = {
             "issuer": issuer,
             "client_id": client_id,
-            "refresh_token_ref": refresh_token_ref,
-            "refresh_token_sha256": refresh_token_hash,
-            "dpop_private_key_ref": dpop_private_key_ref,
-            "dpop_private_key_sha256": dpop_private_key_hash,
-            "dpop_public_jwk": dpop_public_jwk,
-            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
+            _OAUTH_LOCAL_CREDENTIALS_REF_KEY: self._oauth_local_credentials_ref,
+            _OAUTH_LOCAL_CREDENTIALS_HASH_KEY: secret_hash,
         }
         if grant_id:
             payload["grant_id"] = grant_id
@@ -2959,96 +3004,27 @@ class GuardStore:
             payload["runtime_id"] = runtime_id
         if runtime_label:
             payload["runtime_label"] = runtime_label
-        self._oauth_secret_store.set_secret(refresh_token_ref, refresh_token)
-        self._oauth_secret_store.set_secret(dpop_private_key_ref, dpop_private_key_pem)
+        self._oauth_secret_store.set_secret(self._oauth_local_credentials_ref, secret_json)
         self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
 
     def get_oauth_local_credentials(self) -> dict[str, object] | None:
         payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if not isinstance(payload, dict):
             return None
-        issuer = payload.get("issuer")
-        client_id = payload.get("client_id")
-        refresh_token_ref = payload.get("refresh_token_ref")
-        refresh_token_hash = payload.get("refresh_token_sha256")
-        dpop_private_key_ref = payload.get("dpop_private_key_ref")
-        dpop_private_key_hash = payload.get("dpop_private_key_sha256")
-        dpop_public_jwk = payload.get("dpop_public_jwk")
-        dpop_public_jwk_thumbprint = payload.get("dpop_public_jwk_thumbprint")
-        if not isinstance(issuer, str) or not issuer:
+        metadata = self._oauth_local_credentials_metadata(payload)
+        if metadata is None:
             return None
-        if not isinstance(client_id, str) or not client_id:
+        secret_payload = self._load_oauth_secret_payload(payload)
+        if secret_payload is None:
             return None
-        if not isinstance(refresh_token_ref, str) or not refresh_token_ref:
-            return None
-        if not isinstance(dpop_private_key_ref, str) or not dpop_private_key_ref:
-            return None
-        if not isinstance(refresh_token_hash, str) or not refresh_token_hash:
-            return None
-        if not isinstance(dpop_private_key_hash, str) or not dpop_private_key_hash:
-            return None
-        if not isinstance(dpop_public_jwk, dict):
-            return None
-        if not isinstance(dpop_public_jwk_thumbprint, str) or not dpop_public_jwk_thumbprint:
-            return None
-        refresh_token: str | None = None
-        for candidate in self._get_secret_candidates(
-            self._oauth_secret_store,
-            refresh_token_ref,
-            refresh_token_hash,
-        ):
-            if _token_sha256(candidate) != refresh_token_hash:
-                continue
-            refresh_token = candidate
-            self._promote_secret_to_primary(self._oauth_secret_store, refresh_token_ref, candidate)
-            break
-        if refresh_token is None:
-            return None
-        dpop_private_key_pem: str | None = None
-        for candidate in self._get_secret_candidates(
-            self._oauth_secret_store,
-            dpop_private_key_ref,
-            dpop_private_key_hash,
-        ):
-            if _token_sha256(candidate) != dpop_private_key_hash:
-                continue
-            dpop_private_key_pem = candidate
-            self._promote_secret_to_primary(self._oauth_secret_store, dpop_private_key_ref, candidate)
-            break
-        if dpop_private_key_pem is None:
-            return None
-        result: dict[str, object] = {
-            "issuer": issuer,
-            "client_id": client_id,
-            "refresh_token": refresh_token,
-            "dpop_private_key_pem": dpop_private_key_pem,
-            "dpop_public_jwk": dpop_public_jwk,
-            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
-        }
-        grant_id = payload.get("grant_id")
-        machine_id = payload.get("machine_id")
-        workspace_id = payload.get("workspace_id")
-        runtime_id = payload.get("runtime_id")
-        runtime_label = payload.get("runtime_label")
-        if isinstance(grant_id, str) and grant_id:
-            result["grant_id"] = grant_id
-        if isinstance(machine_id, str) and machine_id:
-            result["machine_id"] = machine_id
-        if isinstance(workspace_id, str) and workspace_id:
-            result["workspace_id"] = workspace_id
-        if isinstance(runtime_id, str) and runtime_id:
-            result["runtime_id"] = runtime_id
-        if isinstance(runtime_label, str) and runtime_label:
-            result["runtime_label"] = runtime_label
-        return result
+        return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
 
     def clear_oauth_local_credentials(self) -> None:
         payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if isinstance(payload, dict):
-            for key in ("refresh_token_ref", "dpop_private_key_ref"):
-                secret_ref = payload.get(key)
-                if isinstance(secret_ref, str) and secret_ref:
-                    self._oauth_secret_store.delete_secret(secret_ref)
+            secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
+            if isinstance(secret_ref, str) and secret_ref:
+                self._oauth_secret_store.delete_secret(secret_ref)
         self.delete_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
 
     def get_oauth_local_credential_health(self) -> dict[str, object]:
@@ -3061,50 +3037,99 @@ class GuardStore:
         }
         if not isinstance(payload, dict):
             return health
-
-        refresh_token_ref = payload.get("refresh_token_ref")
-        refresh_token_hash = payload.get("refresh_token_sha256")
-        dpop_private_key_ref = payload.get("dpop_private_key_ref")
-        dpop_private_key_hash = payload.get("dpop_private_key_sha256")
-        if not isinstance(refresh_token_ref, str) or not refresh_token_ref:
+        metadata = self._oauth_local_credentials_metadata(payload)
+        if metadata is None:
             health["state"] = "degraded"
             return health
-        if not isinstance(refresh_token_hash, str) or not refresh_token_hash:
+        secret_payload = self._load_oauth_secret_payload(payload, promote=False)
+        if secret_payload is None:
             health["state"] = "degraded"
             return health
-        if not isinstance(dpop_private_key_ref, str) or not dpop_private_key_ref:
+        if self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload) is None:
             health["state"] = "degraded"
             return health
-        if not isinstance(dpop_private_key_hash, str) or not dpop_private_key_hash:
-            health["state"] = "degraded"
-            return health
-
-        refresh_token_present = any(
-            _token_sha256(candidate) == refresh_token_hash
-            for candidate in self._get_secret_candidates(
-                self._oauth_secret_store,
-                refresh_token_ref,
-                refresh_token_hash,
-            )
-        )
-        dpop_private_key_present = any(
-            _token_sha256(candidate) == dpop_private_key_hash
-            for candidate in self._get_secret_candidates(
-                self._oauth_secret_store,
-                dpop_private_key_ref,
-                dpop_private_key_hash,
-            )
-        )
-        if not refresh_token_present or not dpop_private_key_present:
-            health["state"] = "degraded"
-            return health
-
         health["state"] = "healthy"
         for key in ("issuer", "client_id", "grant_id", "machine_id", "workspace_id"):
             value = payload.get(key)
             if isinstance(value, str) and value:
                 health[key] = value
         return health
+
+    @staticmethod
+    def _oauth_local_credentials_metadata(payload: dict[str, object]) -> dict[str, object] | None:
+        issuer = payload.get("issuer")
+        client_id = payload.get("client_id")
+        if not isinstance(issuer, str) or not issuer:
+            return None
+        if not isinstance(client_id, str) or not client_id:
+            return None
+        result: dict[str, object] = {
+            "issuer": issuer,
+            "client_id": client_id,
+        }
+        for key in ("grant_id", "machine_id", "workspace_id", "runtime_id", "runtime_label"):
+            value = payload.get(key)
+            if isinstance(value, str) and value:
+                result[key] = value
+        return result
+
+    def _load_oauth_secret_payload(
+        self,
+        payload: dict[str, object],
+        *,
+        promote: bool = True,
+    ) -> dict[str, object] | None:
+        secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
+        secret_hash = payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
+        if not isinstance(secret_ref, str) or not secret_ref:
+            return None
+        if not isinstance(secret_hash, str) or not secret_hash:
+            return None
+        for candidate in self._get_secret_candidates(self._oauth_secret_store, secret_ref, secret_hash):
+            if _token_sha256(candidate) != secret_hash:
+                continue
+            try:
+                secret_payload = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(secret_payload, dict):
+                continue
+            if promote:
+                self._promote_secret_to_primary(self._oauth_secret_store, secret_ref, candidate)
+            return secret_payload
+        return None
+
+    @staticmethod
+    def _build_oauth_local_credentials_result(
+        *,
+        metadata: dict[str, object],
+        secret_payload: dict[str, object],
+    ) -> dict[str, object] | None:
+        refresh_token = secret_payload.get("refresh_token")
+        dpop_private_key_pem = secret_payload.get("dpop_private_key_pem")
+        dpop_public_jwk = secret_payload.get("dpop_public_jwk")
+        dpop_public_jwk_thumbprint = secret_payload.get("dpop_public_jwk_thumbprint")
+        if not isinstance(refresh_token, str) or not refresh_token:
+            return None
+        if not isinstance(dpop_private_key_pem, str) or not dpop_private_key_pem:
+            return None
+        if not isinstance(dpop_public_jwk, dict):
+            return None
+        if not isinstance(dpop_public_jwk_thumbprint, str) or not dpop_public_jwk_thumbprint:
+            return None
+        result: dict[str, object] = {
+            "issuer": metadata["issuer"],
+            "client_id": metadata["client_id"],
+            "refresh_token": refresh_token,
+            "dpop_private_key_pem": dpop_private_key_pem,
+            "dpop_public_jwk": {str(key): str(value) for key, value in dpop_public_jwk.items()},
+            "dpop_public_jwk_thumbprint": dpop_public_jwk_thumbprint,
+        }
+        for key in ("grant_id", "machine_id", "workspace_id", "runtime_id", "runtime_label"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value:
+                result[key] = value
+        return result
 
     def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
         with self._connect() as connection:

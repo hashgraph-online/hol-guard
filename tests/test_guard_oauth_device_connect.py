@@ -14,7 +14,34 @@ from codex_plugin_scanner.guard.cli import connect_flow
 from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.store import GuardStore, KeychainSecretStore
+from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
+
+
+class _FakeSystemKeyringModule:
+    def __init__(self) -> None:
+        self._secrets: dict[tuple[str, str], str] = {}
+
+    @staticmethod
+    def get_keyring():
+        class _Backend:
+            priority = 1
+
+        return _Backend()
+
+    def set_password(self, service_name: str, secret_id: str, value: str) -> None:
+        self._secrets[(service_name, secret_id)] = value
+
+    def get_password(self, service_name: str, secret_id: str) -> str | None:
+        return self._secrets.get((service_name, secret_id))
+
+    def delete_password(self, service_name: str, secret_id: str) -> None:
+        self._secrets.pop((service_name, secret_id), None)
+
+
+def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
+    module = _FakeSystemKeyringModule()
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    return module
 
 
 class _Args:
@@ -749,12 +776,12 @@ def test_headless_connect_slows_down_polling_when_server_requests_it(tmp_path: P
     assert sleeps == [7]
 
 
-def test_headless_connect_avoids_keychain_password_prompts_when_file_store_is_available(
+def test_headless_connect_avoids_keychain_password_prompts_when_system_keyring_is_available(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    _install_fake_system_keyring(monkeypatch)
 
     def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         raise AssertionError("device connect should not shell out to macOS keychain prompts")
