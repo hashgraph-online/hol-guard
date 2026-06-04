@@ -2904,7 +2904,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         for part in parts:
             current = os.path.join(current, part)
             try:
-                # codeql[py/path-injection] current is a validated hook path probe before runtime use.
                 metadata = os.lstat(current)
             except FileNotFoundError:
                 continue
