@@ -150,10 +150,7 @@ type LayoutProps = {
   fleetContent: ReactNode;
   settingsContent: ReactNode;
   appDetailContent: ReactNode;
-  supplyChainContent?: ReactNode;
-  auditContent?: ReactNode;
-  policyContent?: ReactNode;
-  feedHealthContent?: ReactNode;
+  supplyChainHubContent?: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
@@ -255,14 +252,8 @@ export function ApprovalCenterLayout(props: LayoutProps) {
               props.appDetailContent
             ) : props.view === "settings" ? (
               props.settingsContent
-            ) : props.view === "supply-chain" ? (
-              props.supplyChainContent ?? null
-            ) : props.view === "audit" ? (
-              props.auditContent ?? null
-            ) : props.view === "policy" ? (
-              props.policyContent ?? null
-            ) : props.view === "feed-health" ? (
-              props.feedHealthContent ?? null
+            ) : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? (
+              props.supplyChainHubContent ?? null
             ) : props.view === "inbox" ? (
               <ReviewWorkspace
                 requests={props.requests.kind === "ready" ? props.requests.items : []}

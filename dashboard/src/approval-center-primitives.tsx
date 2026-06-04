@@ -23,6 +23,7 @@ import {
   HiMiniLink,
   HiMiniBugAnt,
   HiMiniCog6Tooth,
+  HiMiniSquares2X2,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -96,7 +97,7 @@ export function ShellHeader(props: {
             aria-label="Navigate Guard sections"
             className="h-11 w-full rounded-full border border-white/25 bg-white/95 px-4 text-sm font-medium text-brand-dark shadow-none transition-colors duration-150 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40"
             onChange={handleMobileNavigationChange}
-            value={sidebarLinks.find((item) => item.view === props.view)?.href ?? "/"}
+            value={sidebarLinks.find((item) => item.view === props.view)?.href ?? (hubViews.has(props.view) ? "/supply-chain" : "/")}
           >
             {sidebarLinks.map((item) => (
               <option key={item.href} value={item.href}>
@@ -135,15 +136,14 @@ export function ShellHeader(props: {
   );
 }
 
+const hubViews = new Set(["audit", "policy", "feed-health"]);
+
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
-  { href: "/supply-chain", label: "Supply Chain", view: "supply-chain", icon: HiMiniLink },
-  { href: "/audit", label: "Audit", view: "audit", icon: HiMiniBugAnt },
-  { href: "/policy", label: "Policy", view: "policy", icon: HiMiniMagnifyingGlass },
-  { href: "/feed-health", label: "Feed Health", view: "feed-health", icon: HiMiniCog6Tooth },
+  { href: "/supply-chain", label: "Trust Center", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
 ] as const;
 
@@ -196,7 +196,7 @@ export function ShellSidebar(props: {
               <SidebarLink
                 key={item.href}
                 href={item.href}
-                active={props.view === item.view || (props.view === "app-detail" && item.view === "fleet")}
+                active={props.view === item.view || (props.view === "app-detail" && item.view === "fleet") || (item.view === "supply-chain" && hubViews.has(props.view))}
                 icon={<Icon className="h-4 w-4" />}
                 badgeCount={item.view === "inbox" ? props.queuedCount : 0}
                 collapsed={collapsed}
@@ -879,11 +879,13 @@ export function TabBar<T extends string>(props: {
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+    <div role="tablist" className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
       {props.tabs.map((tab) => (
         <button
           key={tab.value}
           type="button"
+          role="tab"
+          aria-selected={props.active === tab.value}
           onClick={() => props.onChange(tab.value)}
           className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             props.active === tab.value

@@ -28,10 +28,9 @@ const FleetWorkspace = lazy(() => import("./fleet-workspace").then((m) => ({ def
 const SettingsWorkspace = lazy(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
 const AppDetailWorkspace = lazy(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
-const SupplyChainWorkspace = lazy(() => import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace })));
-const AuditWorkspace = lazy(() => import("./audit-workspace").then((m) => ({ default: m.AuditWorkspace })));
-const PolicyWorkspace = lazy(() => import("./policy-workspace").then((m) => ({ default: m.PolicyWorkspace })));
-const FeedHealthWorkspace = lazy(() => import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace })));
+const SupplyChainHubWorkspace = lazy(() =>
+  import("./supply-chain-hub-workspace").then((m) => ({ default: m.SupplyChainHubWorkspace }))
+);
 
 function LazyFallback() {
   return (
@@ -369,9 +368,6 @@ export function App() {
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
-  const handleOpenAudit = useCallback(() => navigate("/audit"), []);
-  const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
-  const handleOpenFeedHealth = useCallback(() => navigate("/feed-health"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
   const handleCloseHelp = useCallback(() => setHelpOpen(false), []);
   const handleGoHome = useCallback(() => navigate("/"), []);
@@ -651,7 +647,7 @@ export function App() {
         Skip to content
       </a>
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : view === "supply-chain" ? "Supply Chain" : view === "audit" ? "Audit" : view === "policy" ? "Policy" : view === "feed-health" ? "Feed Health" : "App detail"}
+        {view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : view === "supply-chain" || view === "audit" || view === "policy" || view === "feed-health" ? "Trust Center" : "App detail"}
       </div>
     <ApprovalCenterLayout
       view={view}
@@ -722,44 +718,18 @@ export function App() {
           <SettingsWorkspace onApprovalGateChange={setApprovalGate} />
         </Suspense>
       }
-      supplyChainContent={
+      supplyChainHubContent={
         runtime.kind === "ready" ? (
           <Suspense fallback={<LazyFallback />}>
-            <SupplyChainWorkspace
-              snapshot={runtime.snapshot}
-              onGoHome={handleGoHome}
-            />
-          </Suspense>
-        ) : null
-      }
-      auditContent={
-        runtime.kind === "ready" ? (
-          <Suspense fallback={<LazyFallback />}>
-            <AuditWorkspace
+            <SupplyChainHubWorkspace
+              activeView={view}
               snapshot={runtime.snapshot}
               receipts={receipts.kind === "ready" ? receipts.items : []}
-            />
-          </Suspense>
-        ) : null
-      }
-      policyContent={
-        runtime.kind === "ready" ? (
-          <Suspense fallback={<LazyFallback />}>
-            <PolicyWorkspace
               policies={policies.kind === "ready" ? policies.items : []}
-              snapshot={runtime.snapshot}
               onClearPolicy={handleClearPolicy}
               onOpenSettings={handleOpenSettings}
-            />
-          </Suspense>
-        ) : null
-      }
-      feedHealthContent={
-        runtime.kind === "ready" ? (
-          <Suspense fallback={<LazyFallback />}>
-            <FeedHealthWorkspace
-              snapshot={runtime.snapshot}
-              onOpenSettings={handleOpenSettings}
+              onGoHome={handleGoHome}
+              onNavigate={navigate}
             />
           </Suspense>
         ) : null
