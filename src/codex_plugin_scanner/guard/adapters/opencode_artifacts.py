@@ -9,6 +9,11 @@ from pathlib import Path
 
 from ..models import GuardArtifact
 from .base import HarnessContext
+from .mcp_servers import (
+    is_guard_proxy_command,
+    is_managed_opencode_mcp_proxy_key,
+    parse_guard_proxy_args,
+)
 
 CONFIG_FILENAMES = ("opencode.json", "opencode.jsonc")
 PLUGIN_SUFFIXES = {".js", ".ts", ".mjs", ".cjs"}
@@ -243,7 +248,23 @@ def _append_mcp_artifacts(
     for name, server_config in mcp_config.items():
         if not isinstance(name, str) or not isinstance(server_config, dict):
             continue
+        if is_managed_opencode_mcp_proxy_key(name):
+            continue
         command, args = _command_parts(server_config)
+        if is_guard_proxy_command(command, args):
+            parsed = parse_guard_proxy_args(args)
+            server_name = parsed.get("server-name")
+            upstream_command = parsed.get("command")
+            if not isinstance(server_name, str) or not isinstance(upstream_command, str):
+                continue
+            upstream_args = parsed.get("arg", ())
+            if isinstance(upstream_args, str):
+                upstream_args = (upstream_args,)
+            elif not isinstance(upstream_args, tuple):
+                upstream_args = ()
+            command = upstream_command
+            args = upstream_args
+            name = server_name
         transport = server_config.get("type") if isinstance(server_config.get("type"), str) else None
         url = server_config.get("url") if isinstance(server_config.get("url"), str) else None
         environment = server_config.get("environment")

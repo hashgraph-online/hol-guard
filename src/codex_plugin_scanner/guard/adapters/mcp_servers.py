@@ -37,6 +37,8 @@ _GUARD_PROXY_COMMANDS = frozenset(
     }
 )
 
+MANAGED_OPENCODE_MCP_PROXY_PREFIX = "hol-guard/"
+
 _STABLE_SLASH_FLAG_TOKENS = frozenset(
     {
         "/?",
@@ -155,12 +157,99 @@ def proxy_process_env(server_env: dict[str, str]) -> dict[str, str]:
     return filtered
 
 
+def managed_opencode_mcp_proxy_key(server_name: str) -> str:
+    """Return the OpenCode MCP config key Guard uses for a managed proxy entry."""
+
+    return f"{MANAGED_OPENCODE_MCP_PROXY_PREFIX}{server_name}"
+
+
+def is_managed_opencode_mcp_proxy_key(name: str) -> bool:
+    return name.startswith(MANAGED_OPENCODE_MCP_PROXY_PREFIX)
+
+
+def parse_guard_proxy_args(args: tuple[str, ...]) -> dict[str, str | tuple[str, ...]]:
+    parsed: dict[str, str | tuple[str, ...]] = {}
+    repeated: dict[str, list[str]] = {"arg": [], "server-env-key": []}
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if not token.startswith("--"):
+            index += 1
+            continue
+        key_value = token[2:]
+        if "=" in key_value:
+            key, value = key_value.split("=", 1)
+            if key in repeated:
+                repeated[key].append(value)
+            else:
+                parsed[key] = value
+            index += 1
+            continue
+        key = key_value
+        if key in repeated:
+            if index + 1 < len(args):
+                repeated[key].append(args[index + 1])
+                index += 2
+            else:
+                index += 1
+            continue
+        if index + 1 < len(args) and not args[index + 1].startswith("--"):
+            parsed[key] = args[index + 1]
+            index += 2
+        else:
+            index += 1
+    for key, values in repeated.items():
+        parsed[key] = tuple(values)
+    return parsed
+
+
+def native_opencode_server_from_proxy_config(server_config: dict[str, object]) -> dict[str, object] | None:
+    """Rebuild a native OpenCode MCP entry from an inline Guard proxy command."""
+
+    command_value = server_config.get("command")
+    if not isinstance(command_value, list):
+        return None
+    command_parts = [str(value) for value in command_value if isinstance(value, str)]
+    if not command_parts:
+        return None
+    command = command_parts[0]
+    args = tuple(command_parts[1:])
+    if not is_guard_proxy_command(command, args):
+        return None
+    parsed = parse_guard_proxy_args(args)
+    upstream_command = parsed.get("command")
+    if not isinstance(upstream_command, str) or not upstream_command.strip():
+        return None
+    upstream_args = parsed.get("arg", ())
+    if isinstance(upstream_args, str):
+        upstream_args = (upstream_args,)
+    elif not isinstance(upstream_args, tuple):
+        upstream_args = ()
+    native_entry: dict[str, object] = {
+        "type": server_config.get("type") if isinstance(server_config.get("type"), str) else "local",
+        "command": [upstream_command, *upstream_args],
+        "enabled": bool(server_config.get("enabled", True)),
+    }
+    environment = server_config.get("environment")
+    if isinstance(environment, dict):
+        native_env = {
+            str(key): str(value)
+            for key, value in environment.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+        if native_env:
+            native_entry["environment"] = native_env
+    return native_entry
+
+
 def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
     if artifact.artifact_type != "mcp_server":
         return None
     if _bool_metadata(artifact.metadata.get("guard_managed_proxy"), default=False):
         return None
     if artifact.command is None or not artifact.name.strip():
+        return None
+    if is_managed_opencode_mcp_proxy_key(artifact.name):
         return None
     if is_guard_proxy_command(artifact.command, artifact.args):
         return None
@@ -258,9 +347,14 @@ def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
 
 
 __all__ = [
+    "MANAGED_OPENCODE_MCP_PROXY_PREFIX",
     "ManagedMcpServer",
     "is_guard_proxy_command",
+    "is_managed_opencode_mcp_proxy_key",
+    "managed_opencode_mcp_proxy_key",
     "managed_stdio_servers",
+    "native_opencode_server_from_proxy_config",
+    "parse_guard_proxy_args",
     "proxy_cli_args",
     "proxy_process_env",
     "skipped_stdio_server_names",
