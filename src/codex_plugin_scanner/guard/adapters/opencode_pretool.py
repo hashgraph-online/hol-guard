@@ -7,11 +7,7 @@ import os
 from pathlib import Path
 
 from .base import HarnessContext
-from .hook_python import (
-    filter_worktree_path_entries,
-    package_root_from_python,
-    resolve_guard_hook_python,
-)
+from .hook_python import package_root_from_python, resolve_guard_hook_python
 
 PLUGIN_FILENAME = "hol-guard-pretool.ts"
 _INTERCEPT_TOOLS = ("bash", "shell", "sh", "zsh", "terminal")
