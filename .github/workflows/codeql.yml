@@ -24,13 +24,13 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       - name: Provide legacy workspace alias for CodeQL default setup state
         run: |
           LEGACY_ROOT="/home/runner/work/codex-plugin-scanner"
           mkdir -p "$LEGACY_ROOT"
           ln -sfn "$GITHUB_WORKSPACE" "$LEGACY_ROOT/codex-plugin-scanner"
-      - uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225
+      - uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
           languages: ${{ matrix.language }}
           build-mode: none
@@ -38,6 +38,6 @@ jobs:
           config: |
             paths-ignore:
               - src/codex_plugin_scanner/guard/stable_digest.py
-      - uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225
+      - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
           category: /language:${{ matrix.language }}
