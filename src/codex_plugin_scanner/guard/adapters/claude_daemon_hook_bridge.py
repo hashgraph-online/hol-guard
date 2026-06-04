@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from ..daemon.manager import load_guard_daemon_auth_token
 from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -47,7 +48,7 @@ def main(
     try:
         endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
         _assert_loopback_http_url(endpoint)
-        response_body = _post_to_loopback_daemon(endpoint, data)
+        response_body = _post_to_loopback_daemon(endpoint, data, state_path=state_path)
     except ValueError as error:
         sys.stdout.write(_run_local_fallback(str(error), data, fallback_command))
         return 0
@@ -95,11 +96,15 @@ def _assert_loopback_http_url(url: str) -> None:
         raise ValueError("daemon URL must include an explicit port")
 
 
-def _post_to_loopback_daemon(endpoint: str, data: str) -> str:
+def _post_to_loopback_daemon(endpoint: str, data: str, *, state_path: str | Path) -> str:
+    auth_token = load_guard_daemon_auth_token(Path(state_path).parent)
+    headers = {"Content-Type": "application/json"}
+    if isinstance(auth_token, str) and auth_token.strip():
+        headers["X-Guard-Token"] = auth_token
     request = urllib.request.Request(
         endpoint,
         data=data.encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     opener = _build_loopback_opener()

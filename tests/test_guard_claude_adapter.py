@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
+from codex_plugin_scanner.guard.adapters import claude_code, claude_daemon_hook_bridge, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
@@ -366,6 +366,42 @@ def test_claude_daemon_hook_command_uses_python_not_node(tmp_path):
     assert command_parts[0] == sys.executable
     assert command_parts[0] != "node"
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command_parts[2]
+
+
+def test_claude_daemon_hook_bridge_sends_guard_token_header(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    (guard_home / "daemon-auth-token").write_text("secret-token", encoding="utf-8")
+    captured_headers: dict[str, str] = {}
+
+    class FakeResponse:
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def geturl(self) -> str:
+            return "http://127.0.0.1:5999/v1/hooks/claude-code?guard-home=x"
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    class FakeOpener:
+        def open(self, request, timeout=30):
+            captured_headers.update(dict(request.header_items()))
+            return FakeResponse()
+
+    monkeypatch.setattr(claude_daemon_hook_bridge, "_build_loopback_opener", lambda: FakeOpener())
+
+    response = claude_daemon_hook_bridge._post_to_loopback_daemon(
+        "http://127.0.0.1:5999/v1/hooks/claude-code?guard-home=x",
+        "{}",
+        state_path=guard_home / "daemon-state.json",
+    )
+
+    assert response == "{}"
+    assert captured_headers["X-guard-token"] == "secret-token"
 
 
 def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
