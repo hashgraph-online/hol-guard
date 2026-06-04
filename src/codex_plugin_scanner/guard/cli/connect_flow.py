@@ -43,6 +43,7 @@ CI_SAFE_GUARD_DEVICE_SCOPES = (
 CONNECT_COMMAND = "hol-guard connect"
 CONNECT_STATUS_COMMAND = "hol-guard connect status"
 CONNECT_REPAIR_COMMAND = "hol-guard connect repair"
+DISCONNECT_COMMAND = "hol-guard disconnect"
 HEADLESS_CONNECT_COMMAND = "hol-guard connect --headless"
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEVICE_CODE_SLOW_DOWN_SECONDS = 5
@@ -50,6 +51,7 @@ HEADLESS_RUNTIME_ID = "hol-guard"
 HEADLESS_RUNTIME_LABEL = "HOL Guard CLI"
 _GUARD_OAUTH_USER_AGENT = f"hol-guard/{__version__}"
 _LOOPBACK_REDIRECT_PATH = "/oauth/callback"
+_SELF_REVOKE_PATH = "/api/guard/oauth/revoke/self"
 
 
 def _guard_oauth_request_headers(*, dpop: str | None = None) -> dict[str, str]:
@@ -428,6 +430,31 @@ def _device_token_request_body(*, client_id: str, device_code: str) -> bytes:
     ).encode("utf-8")
 
 
+def _refresh_token_request_body(*, client_id: str, refresh_token: str) -> bytes:
+    return urllib.parse.urlencode(
+        {
+            "grant_type": "refresh_token",
+            "client_id": client_id,
+            "refresh_token": refresh_token,
+        }
+    ).encode("utf-8")
+
+
+def _self_revoke_request_body(
+    *,
+    workspace_id: str,
+    revoke_cloud_grant: bool,
+) -> bytes:
+    return urllib.parse.urlencode(
+        {
+            "workspace_id": workspace_id,
+            "reason": "user_disconnect",
+            "revoke_machine_grant": "true" if revoke_cloud_grant else "false",
+            "revoke_runtime_grant": "true" if revoke_cloud_grant else "false",
+        }
+    ).encode("utf-8")
+
+
 def _load_error_payload(error: urllib.error.HTTPError) -> dict[str, object] | None:
     try:
         raw_body = error.read().decode("utf-8")
@@ -570,6 +597,175 @@ def exchange_guard_authorization_code(
     if not isinstance(payload, dict):
         raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
     return _parse_guard_token_exchange_payload(payload)
+
+
+def refresh_guard_access_token(
+    *,
+    token_endpoint: str,
+    client_id: str,
+    refresh_token: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+    urlopen=urllib.request.urlopen,
+    now: datetime | None = None,
+) -> GuardOAuthTokenExchangeResult:
+    request = urllib.request.Request(
+        token_endpoint,
+        data=_refresh_token_request_body(
+            client_id=client_id,
+            refresh_token=refresh_token,
+        ),
+        method="POST",
+        headers=_guard_oauth_request_headers(
+            dpop=_sign_dpop_proof(
+                token_endpoint=token_endpoint,
+                dpop_key_material=dpop_key_material,
+                now=now or datetime.now(timezone.utc),
+            ),
+        ),
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        payload = _load_error_payload(error)
+        message = (
+            str(payload.get("error_description") or payload.get("error") or error.reason)
+            if isinstance(payload, dict)
+            else str(error.reason)
+        )
+        raise RuntimeError(f"Guard OAuth token exchange failed: {message}") from error
+    if not isinstance(payload, dict):
+        raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
+    return _parse_guard_token_exchange_payload(payload)
+
+
+def revoke_guard_self_oauth_grant(
+    *,
+    issuer: str,
+    access_token: str,
+    workspace_id: str,
+    revoke_cloud_grant: bool,
+    dpop_key_material: GuardDpopKeyMaterial,
+    urlopen=urllib.request.urlopen,
+    now: datetime | None = None,
+) -> None:
+    revoke_url = f"{resolve_guard_oauth_client_config(issuer).issuer}{_SELF_REVOKE_PATH}"
+    request = urllib.request.Request(
+        revoke_url,
+        data=_self_revoke_request_body(
+            workspace_id=workspace_id,
+            revoke_cloud_grant=revoke_cloud_grant,
+        ),
+        method="POST",
+        headers={
+            **_guard_oauth_request_headers(
+                dpop=_sign_dpop_proof(
+                    token_endpoint=revoke_url,
+                    dpop_key_material=dpop_key_material,
+                    now=now or datetime.now(timezone.utc),
+                ),
+            ),
+            "Authorization": f"Bearer {access_token}",
+        },
+    )
+    try:
+        with urlopen(request, timeout=20):
+            return
+    except urllib.error.HTTPError as error:
+        payload = _load_error_payload(error)
+        message = (
+            str(payload.get("error_description") or payload.get("error") or error.reason)
+            if isinstance(payload, dict)
+            else str(error.reason)
+        )
+        raise RuntimeError(f"Guard OAuth disconnect failed: {message}") from error
+
+
+def _require_oauth_credential_string(credentials: dict[str, object], key: str) -> str:
+    value = credentials.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    raise RuntimeError("Guard Cloud is not connected yet. Run `hol-guard connect`.")
+
+
+def _oauth_dpop_key_material_from_credentials(
+    credentials: dict[str, object],
+) -> GuardDpopKeyMaterial:
+    dpop_private_key_pem = _require_oauth_credential_string(credentials, "dpop_private_key_pem")
+    dpop_public_jwk = credentials.get("dpop_public_jwk")
+    if not isinstance(dpop_public_jwk, dict):
+        raise RuntimeError("Guard Cloud is not connected yet. Run `hol-guard connect`.")
+    return GuardDpopKeyMaterial(
+        algorithm="ES256",
+        private_key_pem=dpop_private_key_pem,
+        public_jwk={str(key): str(value) for key, value in dpop_public_jwk.items()},
+        public_jwk_thumbprint=_require_oauth_credential_string(
+            credentials,
+            "dpop_public_jwk_thumbprint",
+        ),
+    )
+
+
+def run_guard_disconnect_command(
+    *,
+    store: GuardStore,
+    revoke_cloud_grant: bool,
+    now: str | None = None,
+    urlopen=urllib.request.urlopen,
+) -> dict[str, object]:
+    credentials = store.get_oauth_local_credentials()
+    if credentials is None:
+        return {
+            "status": "not_connected",
+            "cloud_grant_revoked": False,
+            "reconnect_command": CONNECT_COMMAND,
+        }
+
+    issuer = _require_oauth_credential_string(credentials, "issuer")
+    client_id = _require_oauth_credential_string(credentials, "client_id")
+    refresh_token = _require_oauth_credential_string(credentials, "refresh_token")
+    workspace_id = _require_oauth_credential_string(credentials, "workspace_id")
+    dpop_key_material = _oauth_dpop_key_material_from_credentials(credentials)
+    exchange_now = datetime.fromisoformat(now) if isinstance(now, str) else datetime.now(timezone.utc)
+    token_result = refresh_guard_access_token(
+        token_endpoint=resolve_guard_oauth_client_config(issuer).token_endpoint,
+        client_id=client_id,
+        refresh_token=refresh_token,
+        dpop_key_material=dpop_key_material,
+        urlopen=urlopen,
+        now=exchange_now,
+    )
+    rotated_refresh_token = token_result.refresh_token
+    if rotated_refresh_token and rotated_refresh_token != refresh_token:
+        store.set_oauth_local_credentials(
+            issuer=issuer,
+            client_id=client_id,
+            refresh_token=rotated_refresh_token,
+            dpop_private_key_pem=dpop_key_material.private_key_pem,
+            dpop_public_jwk=dpop_key_material.public_jwk,
+            dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+            grant_id=_read_nested_string(credentials, "grant_id"),
+            machine_id=_read_nested_string(credentials, "machine_id"),
+            workspace_id=workspace_id,
+            runtime_id=_read_nested_string(credentials, "runtime_id"),
+            runtime_label=_read_nested_string(credentials, "runtime_label"),
+            now=now or datetime.now(timezone.utc).isoformat(),
+        )
+    revoke_guard_self_oauth_grant(
+        issuer=issuer,
+        access_token=token_result.access_token,
+        workspace_id=workspace_id,
+        revoke_cloud_grant=revoke_cloud_grant,
+        dpop_key_material=dpop_key_material,
+        urlopen=urlopen,
+        now=exchange_now,
+    )
+    store.clear_oauth_local_credentials()
+    return {
+        "status": "disconnected",
+        "cloud_grant_revoked": revoke_cloud_grant,
+        "reconnect_command": CONNECT_COMMAND,
+    }
 
 
 def run_guard_device_connect_command(
