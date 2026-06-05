@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
 import shlex
-import shutil
 import subprocess
 import urllib.error
 import urllib.parse
@@ -696,7 +694,7 @@ def _coerce_command_error_output(error: subprocess.TimeoutExpired | OSError) -> 
 
 def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
     context = HarnessContext(
-        home_dir=store.guard_home,
+        home_dir=Path.home().resolve(),
         workspace_dir=None,
         guard_home=store.guard_home,
     )
@@ -706,20 +704,15 @@ def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
     active_managers = sorted({str(item) for item in status.get("active_managers", []) if isinstance(item, str)})
     missing_shims = sorted({str(item) for item in status.get("missing_managers", []) if isinstance(item, str)})
     supported_managers = list(package_shim_supported_managers())
-    path_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
-    path_contains_shim_dir = any(_paths_match(entry, shim_dir) for entry in path_entries)
-    protected_managers: list[str] = []
-    unprotected_managers: list[str] = []
-    for manager in supported_managers:
-        shim_target = shim_dir / manager
-        resolved = shutil.which(manager)
-        if resolved is not None and _paths_match(resolved, shim_target):
-            protected_managers.append(manager)
-        else:
-            unprotected_managers.append(manager)
+    protected_managers = sorted({str(item) for item in status.get("protected_managers", []) if isinstance(item, str)})
+    protected_set = set(protected_managers)
+    unprotected_managers = [manager for manager in supported_managers if manager not in protected_set]
     return {
-        "path_status": "in_path" if path_contains_shim_dir else "missing_from_path",
-        "path_contains_shim_dir": path_contains_shim_dir,
+        "path_status": str(status.get("path_status") or "missing_from_path"),
+        "path_contains_shim_dir": bool(status.get("path_contains_shim_dir")),
+        "restart_shell_required": bool(status.get("restart_shell_required")),
+        "shell_profile_configured": bool(status.get("shell_profile_configured")),
+        "shell_profile_path": str(status.get("shell_profile_path") or ""),
         "shim_dir": str(shim_dir),
         "supported_managers": supported_managers,
         "installed_managers": installed_managers,
@@ -728,19 +721,6 @@ def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
         "protected_managers": protected_managers,
         "unprotected_managers": unprotected_managers,
     }
-
-
-def _paths_match(left: str | Path, right: str | Path) -> bool:
-    try:
-        left_path = Path(str(left)).expanduser().resolve()
-        right_path = Path(str(right)).expanduser().resolve()
-        return left_path == right_path
-    except (OSError, RuntimeError):
-        left_path = Path(str(left)).expanduser()
-        right_path = Path(str(right)).expanduser()
-        return os.path.normcase(os.path.abspath(left_path)) == os.path.normcase(os.path.abspath(right_path))
-
-
 def _workspace_scan_intent(
     workspace_dir: Path,
     *,

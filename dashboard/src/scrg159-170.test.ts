@@ -19,6 +19,9 @@ const makeProtection = (
   unprotected_managers,
   path_status: "in_path",
   path_contains_shim_dir: true,
+  restart_shell_required: false,
+  shell_profile_configured: true,
+  shell_profile_path: "/mock-home/.zshrc",
   shim_dir: "/usr/local/hol-guard/shims",
   supported_managers: [...protected_managers, ...unprotected_managers],
   installed_managers: [...protected_managers, ...unprotected_managers],
@@ -147,6 +150,22 @@ assert(
   "SCRG159-C: partial protection should return partial",
 );
 
+const stagedSnapshot = {
+  ...baseSnapshot,
+  supply_chain: {
+    package_manager_protection: {
+      ...makeProtection([], ["pnpm"]),
+      installed_managers: ["pnpm"],
+      path_status: "restart_required" as const,
+      restart_shell_required: true,
+    },
+  },
+};
+assert(
+  resolveHomeProtectionStatus(stagedSnapshot) === "staged",
+  "SCRG159-C2: restart-required protection should return staged",
+);
+
 assert(
   resolveLastBlockedInstall([]) === null,
   "SCRG159-D: no installs should return null",
@@ -186,6 +205,25 @@ assert(statsWithInstalls.preventedInstalls === 1, "SCRG160-E: 1 prevented instal
 assert(statsWithInstalls.protectedManagers === 1, "SCRG160-F: 1 protected manager");
 assert(statsWithInstalls.unprotectedManagers === 1, "SCRG160-G: 1 unprotected manager");
 
+const restartRequiredStats = buildSupplyChainStats({
+  ...baseSnapshot,
+  supply_chain: {
+    package_manager_protection: {
+      ...makeProtection([], ["npm", "pip"]),
+      path_status: "restart_required",
+      restart_shell_required: true,
+      installed_managers: ["pnpm"],
+      active_managers: [],
+      protected_managers: [],
+      supported_managers: ["pnpm", "npm", "pip"],
+      unprotected_managers: ["npm", "pip"],
+      missing_shims: [],
+    },
+  },
+});
+assert(restartRequiredStats.stagedManagers === 1, "SCRG160-H: staged manager count tracks restart-required installs");
+assert(restartRequiredStats.unprotectedManagers === 2, "SCRG160-I: restart-required manager should not count as unprotected");
+
 const auditEmpty = deriveFrontendAuditResults([], baseSnapshot);
 assert(Array.isArray(auditEmpty), "SCRG162-A: audit should return array");
 
@@ -206,7 +244,7 @@ const auditWithUnprotected = deriveFrontendAuditResults(
 const pipIssue = auditWithUnprotected.find((r) => r.id === "unprotected-pip");
 assert(pipIssue !== undefined, "SCRG162-D: unprotected pip should be flagged");
 assert(pipIssue!.severity === "high", "SCRG162-E: unprotected manager should be high severity");
-assert(pipIssue!.remediation.includes("PATH"), "SCRG162-F: remediation should mention PATH");
+assert(pipIssue!.remediation.includes("Guard"), "SCRG162-F: remediation should point back to Guard action");
 
 const receiptNow = new Date().toISOString();
 const blockedReceipt = makeReceipt("block", receiptNow);

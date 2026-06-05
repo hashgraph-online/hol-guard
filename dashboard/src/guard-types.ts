@@ -277,8 +277,11 @@ export type GuardProofStatus = GuardConnectProof & {
 };
 
 export type PackageManagerProtection = {
-  path_status: "in_path" | "missing_from_path";
+  path_status: "in_path" | "restart_required" | "missing_from_path";
   path_contains_shim_dir: boolean;
+  restart_shell_required: boolean;
+  shell_profile_configured: boolean;
+  shell_profile_path: string | null;
   shim_dir: string;
   supported_managers: string[];
   installed_managers: string[];
@@ -535,6 +538,7 @@ export type PackageFirewallEntitlement = {
 
 export type PackageShimEntry = {
   active: boolean;
+  activation_state: "protected" | "restart_required" | "repair_required" | "uninstalled";
   installed: boolean;
   integrity: string;
   manager: string;
@@ -562,6 +566,7 @@ export type PackageFirewallStatusResponse = {
   operation: string;
   status: string;
   supported_managers: string[];
+  protection: PackageManagerProtection | null;
   package_shims: PackageShimEntry[];
   entitlement: PackageFirewallEntitlement;
   actions: Partial<Record<PackageFirewallActionType | PackageFirewallGlobalActionType, PackageFirewallActionState>>;

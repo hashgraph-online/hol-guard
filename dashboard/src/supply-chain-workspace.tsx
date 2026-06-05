@@ -18,13 +18,27 @@ import type {
   GuardRuntimeSnapshot,
   PackageManagerProtection,
 } from "./guard-types";
-import { resolvePackageManagerProtectionCopy } from "./runtime-overview";
 import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
 
 export type SupplyChainFilterState = {
   statusFilter: "all" | "protected" | "unprotected";
   managerFilter: string;
 };
+
+type ManagerCoverageStatus = "protected" | "restart_required" | "path_repair" | "unprotected";
+
+function resolveManagerCoverageStatus(
+  protection: PackageManagerProtection | undefined,
+  manager: string,
+): ManagerCoverageStatus {
+  if (!protection) return "unprotected";
+  if (protection.protected_managers.includes(manager)) return "protected";
+  if (protection.installed_managers.includes(manager)) {
+    if (protection.path_status === "restart_required") return "restart_required";
+    if (protection.path_status === "missing_from_path") return "path_repair";
+  }
+  return "unprotected";
+}
 
 export function buildSupplyChainStats(
   snapshot: GuardRuntimeSnapshot,
@@ -33,16 +47,33 @@ export function buildSupplyChainStats(
   activeApps: number;
   preventedInstalls: number;
   protectedManagers: number;
+  stagedManagers: number;
+  repairRequiredManagers: number;
   unprotectedManagers: number;
 } {
   const managedInstalls = snapshot.managed_installs ?? [];
   const protection = snapshot.supply_chain?.package_manager_protection;
+  const supportedManagers = protection?.supported_managers ?? [];
+  const protectedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "protected",
+  ).length;
+  const stagedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required",
+  ).length;
+  const repairRequiredManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair",
+  ).length;
+  const unprotectedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected",
+  ).length;
   return {
     totalApps: managedInstalls.length,
     activeApps: managedInstalls.filter((i) => i.active).length,
     preventedInstalls: managedInstalls.filter((i) => !i.active).length,
-    protectedManagers: protection?.protected_managers.length ?? 0,
-    unprotectedManagers: protection?.unprotected_managers.length ?? 0,
+    protectedManagers,
+    stagedManagers,
+    repairRequiredManagers,
+    unprotectedManagers,
   };
 }
 
@@ -143,9 +174,15 @@ type SupplyChainWorkspaceProps = {
   snapshot: GuardRuntimeSnapshot;
   approvalGate: GuardApprovalGatePublicConfig | null;
   onGoHome: () => void;
+  onRuntimeRefresh?: () => Promise<void> | void;
 };
 
-export function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }: SupplyChainWorkspaceProps) {
+export function SupplyChainWorkspace({
+  snapshot,
+  approvalGate,
+  onGoHome,
+  onRuntimeRefresh,
+}: SupplyChainWorkspaceProps) {
   const [filter, setFilter] = useState<SupplyChainFilterState>({
     statusFilter: "all",
     managerFilter: "",
@@ -161,7 +198,6 @@ export function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }: Suppl
 
   const stats = useMemo(() => buildSupplyChainStats(snapshot), [snapshot]);
   const protection = snapshot.supply_chain?.package_manager_protection;
-  const copy = useMemo(() => resolvePackageManagerProtectionCopy(protection), [protection]);
 
   const allManagers = useMemo(() => {
     if (!protection) return [];
@@ -174,7 +210,7 @@ export function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }: Suppl
       const matchesText =
         filter.managerFilter === "" ||
         mgr.toLowerCase().includes(filter.managerFilter.toLowerCase());
-      const isProtected = protection?.protected_managers.includes(mgr) ?? false;
+      const isProtected = resolveManagerCoverageStatus(protection, mgr) === "protected";
       const matchesStatus =
         filter.statusFilter === "all" ||
         (filter.statusFilter === "protected" && isProtected) ||
@@ -204,21 +240,40 @@ export function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }: Suppl
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active apps" value={stats.activeApps} tone="green" />
         <StatCard label="Prevented installs" value={stats.preventedInstalls} tone={stats.preventedInstalls > 0 ? "attention" : "slate"} />
-        <StatCard label="Protected managers" value={stats.protectedManagers} tone="green" />
+        <StatCard
+          label={
+            stats.stagedManagers > 0
+              ? "Ready after restart"
+              : stats.repairRequiredManagers > 0
+              ? "Needs PATH repair"
+              : "Protected managers"
+          }
+          value={
+            stats.stagedManagers > 0
+              ? stats.stagedManagers
+              : stats.repairRequiredManagers > 0
+              ? stats.repairRequiredManagers
+              : stats.protectedManagers
+          }
+          tone={
+            stats.stagedManagers > 0
+              ? "blue"
+              : stats.repairRequiredManagers > 0
+              ? "attention"
+              : "green"
+          }
+        />
         <StatCard label="Unprotected managers" value={stats.unprotectedManagers} tone={stats.unprotectedManagers > 0 ? "attention" : "slate"} />
       </div>
 
-      <PackageFirewallPanel approvalGate={approvalGate} />
+      <PackageFirewallPanel approvalGate={approvalGate} onStateChanged={onRuntimeRefresh} />
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <SectionLabel>Package manager firewall</SectionLabel>
-            <Tag tone={copy.pathTone === "green" ? "green" : copy.pathTone === "attention" ? "attention" : "slate"}>
-              {copy.pathLabel}
-            </Tag>
-          </div>
-          <p className="mt-1 text-sm text-slate-500">{copy.pathDetail}</p>
+          <SectionLabel>Coverage by manager</SectionLabel>
+          <p className="mt-1 text-sm text-slate-500">
+            Live protection state and next activation step for each supported package manager.
+          </p>
         </div>
 
         <div className="border-b border-slate-100 px-4 py-3">
@@ -270,7 +325,7 @@ export function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }: Suppl
             </div>
             <div role="rowgroup">
               {filteredManagers.map((mgr) => {
-                const isProtected = protection?.protected_managers.includes(mgr) ?? false;
+                const status = resolveManagerCoverageStatus(protection, mgr);
                 return (
                   <div
                     key={mgr}
@@ -281,10 +336,20 @@ export function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }: Suppl
                       {mgr}
                     </span>
                     <span role="cell">
-                      {isProtected ? (
+                      {status === "protected" ? (
                         <Tag tone="green">
                           <HiMiniCheckCircle className="h-3.5 w-3.5 mr-1 inline" aria-hidden="true" />
                           Protected
+                        </Tag>
+                      ) : status === "restart_required" ? (
+                        <Tag tone="blue">
+                          <HiMiniArrowPath className="h-3.5 w-3.5 mr-1 inline" aria-hidden="true" />
+                          Restart required
+                        </Tag>
+                      ) : status === "path_repair" ? (
+                        <Tag tone="attention">
+                          <HiMiniExclamationTriangle className="h-3.5 w-3.5 mr-1 inline" aria-hidden="true" />
+                          Needs PATH repair
                         </Tag>
                       ) : (
                         <Tag tone="attention">

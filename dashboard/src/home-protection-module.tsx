@@ -13,13 +13,16 @@ import { ActionButton, SectionLabel, Tag } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
 import type { GuardManagedInstall, GuardRuntimeSnapshot } from "./guard-types";
 
-export type HomeProtectionStatus = "protected" | "partial" | "unprotected" | "unknown";
+export type HomeProtectionStatus = "protected" | "partial" | "staged" | "unprotected" | "unknown";
 
 export function resolveHomeProtectionStatus(
   snapshot: GuardRuntimeSnapshot,
 ): HomeProtectionStatus {
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (!protection) return "unknown";
+  if (protection.path_status === "restart_required" && protection.installed_managers.length > 0) {
+    return "staged";
+  }
   if (protection.unprotected_managers.length === 0 && protection.protected_managers.length > 0) {
     return "protected";
   }
@@ -111,6 +114,8 @@ export function HomeProtectionModule({
   const statusBorderClass =
     status === "protected"
       ? "border-brand-green/20 bg-brand-green/[0.04]"
+      : status === "staged"
+      ? "border-brand-blue/20 bg-brand-blue/[0.04]"
       : status === "partial"
       ? "border-brand-attention/20 bg-brand-attention/[0.04]"
       : status === "unprotected"
@@ -120,6 +125,8 @@ export function HomeProtectionModule({
   const StatusIcon =
     status === "protected"
       ? HiMiniShieldCheck
+      : status === "staged"
+      ? HiMiniInformationCircle
       : status === "partial" || status === "unprotected"
       ? HiMiniExclamationTriangle
       : HiMiniInformationCircle;
@@ -127,6 +134,8 @@ export function HomeProtectionModule({
   const statusIconClass =
     status === "protected"
       ? "text-brand-green"
+      : status === "staged"
+      ? "text-brand-blue"
       : status === "partial" || status === "unprotected"
       ? "text-brand-attention"
       : "text-slate-400";
@@ -134,6 +143,8 @@ export function HomeProtectionModule({
   const statusLabel =
     status === "protected"
       ? "Package managers protected"
+      : status === "staged"
+      ? "Protection staged — restart shell or apps"
       : status === "partial"
       ? "Some package managers unprotected"
       : status === "unprotected"
@@ -185,12 +196,33 @@ export function HomeProtectionModule({
             </div>
           )}
 
+          {status === "staged" && onOpenSupplyChain && (
+            <div className="flex items-center gap-3">
+              <ActionButton onClick={onOpenSupplyChain} variant="secondary">
+                Finish activation
+                <HiMiniArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              </ActionButton>
+            </div>
+          )}
+
           {hasManagers && (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Tag tone={protectedCount === totalCount ? "green" : protectedCount > 0 ? "attention" : "slate"}>
-                    {protectedCount} of {totalCount} protected
+                  <Tag
+                    tone={
+                      status === "staged"
+                        ? "blue"
+                        : protectedCount === totalCount
+                        ? "green"
+                        : protectedCount > 0
+                        ? "attention"
+                        : "slate"
+                    }
+                  >
+                    {status === "staged"
+                      ? `${protection?.installed_managers.length ?? totalCount} ready after restart`
+                      : `${protectedCount} of ${totalCount} protected`}
                   </Tag>
                   {lastBlocked && (
                     <span className="text-xs text-slate-500">

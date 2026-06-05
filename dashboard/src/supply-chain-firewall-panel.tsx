@@ -18,7 +18,7 @@ import {
   runPackageAudit,
   runPackageSync,
 } from "./guard-api";
-import { FreeUserView, ActionResultPanel } from "./supply-chain-firewall-views";
+import { FreeUserView, ActionResultPanel, ActivationSummary } from "./supply-chain-firewall-views";
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import { ManagerActionCard } from "./supply-chain-manager-card";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
@@ -193,7 +193,7 @@ function PaidUserView({
   return (
     <div className="space-y-4 px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <SectionLabel>Package manager actions</SectionLabel>
+        <p className="text-sm font-medium text-brand-dark">Per-manager controls</p>
         <GlobalActionsBar
           anyPending={anyPending}
           pendingOp={pendingOp}
@@ -201,6 +201,8 @@ function PaidUserView({
           onSync={onSync}
         />
       </div>
+
+      <ActivationSummary protection={data.protection} />
 
       {lastFailed !== null && <FailureBanner failed={lastFailed} />}
 
@@ -262,8 +264,9 @@ function RefreshButton({ disabled, spinning, onRefresh }: RefreshButtonProps) {
 
 export function PackageFirewallPanel(props: {
   approvalGate: GuardApprovalGatePublicConfig | null;
+  onStateChanged?: () => Promise<void> | void;
 }) {
-  const { approvalGate } = props;
+  const { approvalGate, onStateChanged } = props;
   const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
   const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
@@ -311,6 +314,7 @@ export function PackageFirewallPanel(props: {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
         await refreshAfterOp();
+        await onStateChanged?.();
       } catch (err) {
         if (
           credentials === undefined &&
@@ -328,7 +332,7 @@ export function PackageFirewallPanel(props: {
         setPendingOp(null);
       }
     },
-    [refreshAfterOp, resolveApprovalGate],
+    [onStateChanged, refreshAfterOp, resolveApprovalGate],
   );
 
   const handleGlobalOp = useCallback(
@@ -339,6 +343,7 @@ export function PackageFirewallPanel(props: {
         const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
         setLastCompleted({ op, manager: null, response });
         await refreshAfterOp();
+        await onStateChanged?.();
       } catch (err) {
         const message = err instanceof Error ? err.message : "Operation failed.";
         setLastFailed({ op, manager: null, message });
@@ -346,7 +351,7 @@ export function PackageFirewallPanel(props: {
         setPendingOp(null);
       }
     },
-    [refreshAfterOp],
+    [onStateChanged, refreshAfterOp],
   );
 
   const handleInstall = useCallback(
@@ -393,9 +398,9 @@ export function PackageFirewallPanel(props: {
     <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
         <div>
-          <SectionLabel>Package firewall actions</SectionLabel>
+          <SectionLabel>Package manager firewall</SectionLabel>
           <p className="mt-0.5 text-sm text-slate-500">
-            Protect, repair, test, or remove package manager shims.
+            Install Guard shims, activate PATH routing, and verify protection on this machine.
           </p>
         </div>
         {panelLoad.phase === "loaded" && (

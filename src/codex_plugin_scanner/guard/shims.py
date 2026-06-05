@@ -253,6 +253,34 @@ def get_path_order_status(
     }
 
 
+def _package_shim_profile_status(context: HarnessContext) -> dict[str, object]:
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    profile_path, _export_line = _package_shim_profile_target(context.home_dir, shim_dir)
+    try:
+        existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
+    except OSError:
+        existing = ""
+    configured = _profile_already_references_path(existing, shim_dir)
+    return {
+        "shell_profile_configured": configured,
+        "shell_profile_path": str(profile_path),
+    }
+
+
+def _package_shim_activation_path_status(
+    *,
+    installed_managers: list[str],
+    protected_managers: list[str],
+    path_contains_shim_dir: bool,
+    shell_profile_configured: bool,
+) -> str:
+    if installed_managers and len(protected_managers) == len(installed_managers):
+        return "in_path"
+    if installed_managers and shell_profile_configured and not path_contains_shim_dir:
+        return "restart_required"
+    return "missing_from_path"
+
+
 def install_package_shims(
     context: HarnessContext,
     *,
@@ -311,6 +339,28 @@ def install_package_shims(
     }
 
 
+def activate_package_shims(
+    context: HarnessContext,
+    *,
+    managers: tuple[str, ...] | None = None,
+    repair: bool = False,
+) -> dict[str, object]:
+    result = (
+        repair_package_shims(context, managers=managers)
+        if repair
+        else install_package_shims(context, managers=managers)
+    )
+    profile = ensure_package_shim_path_in_shell_profile(context)
+    status = package_shim_status(context)
+    return {
+        **result,
+        "activation_state": status["path_status"],
+        "package_shims": status,
+        "profile": profile,
+        "restart_shell_required": bool(status["restart_shell_required"]),
+    }
+
+
 def package_shim_status(context: HarnessContext) -> dict[str, object]:
     manifest = _load_package_shim_manifest(context)
     installed_managers = [
@@ -325,6 +375,10 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
     missing_managers: list[str] = []
     bypasses: list[dict[str, str]] = []
     manager_details: list[dict[str, object]] = []
+    path_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+    path_contains_shim_dir = any(
+        Path(entry).expanduser() == shim_dir.expanduser() for entry in path_entries
+    )
     for manager in installed_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
         shim_path = shim_dir / command
@@ -365,15 +419,27 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
                     "reason": "path_inactive",
                 }
             )
+    profile_status = _package_shim_profile_status(context)
+    activation_path_status = _package_shim_activation_path_status(
+        installed_managers=installed_managers,
+        protected_managers=protected_managers,
+        path_contains_shim_dir=path_contains_shim_dir,
+        shell_profile_configured=bool(profile_status["shell_profile_configured"]),
+    )
     return {
         "active_managers": active_managers,
         "installed_managers": installed_managers,
         "protected_managers": protected_managers,
         "path_active": bool(installed_managers) and len(protected_managers) == len(installed_managers),
+        "path_contains_shim_dir": path_contains_shim_dir,
+        "path_status": activation_path_status,
         "bypasses": bypasses,
         "manager_details": manager_details,
         "manifest_path": str(_package_shim_manifest_path(context)),
         "missing_managers": missing_managers,
+        "restart_shell_required": activation_path_status == "restart_required",
+        "shell_profile_configured": bool(profile_status["shell_profile_configured"]),
+        "shell_profile_path": profile_status["shell_profile_path"],
         "shell_hints": _path_export_hints(shim_dir),
         "shim_dir": str(shim_dir),
     }
@@ -656,6 +722,7 @@ def _path_export_hints(shim_dir: Path) -> dict[str, str]:
 
 
 __all__ = [
+    "activate_package_shims",
     "ensure_package_shim_path_in_shell_profile",
     "install_guard_shim",
     "install_package_shims",

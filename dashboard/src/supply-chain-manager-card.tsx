@@ -104,7 +104,8 @@ function ActionButtonRow({
   const removeBlocked = removeState === "paid_required" || removeState === "reconnect_required";
 
   const showInstall = !shim.installed && installState !== "disabled";
-  const showRepair = shim.installed && repairState !== "disabled";
+  const showRepair =
+    shim.installed && shim.activation_state !== "restart_required" && repairState !== "disabled";
   const showTest = testState !== "disabled";
   const showRemove = removeState !== "disabled" && shim.installed;
 
@@ -205,15 +206,20 @@ export function ManagerActionCard({
           )}
         </div>
         <div className="shrink-0">
-          {shim.active ? (
+          {shim.activation_state === "protected" ? (
             <Tag tone="green">
               <HiMiniCheckCircle className="mr-0.5 inline h-3 w-3" aria-hidden="true" />
               Protected
             </Tag>
-          ) : shim.installed ? (
+          ) : shim.activation_state === "restart_required" ? (
+            <Tag tone="blue">
+              <HiMiniArrowPath className="mr-0.5 inline h-3 w-3" aria-hidden="true" />
+              Restart required
+            </Tag>
+          ) : shim.activation_state === "repair_required" ? (
             <Tag tone="attention">
               <HiMiniExclamationTriangle className="mr-0.5 inline h-3 w-3" aria-hidden="true" />
-              Inactive
+              Needs PATH repair
             </Tag>
           ) : (
             <Tag tone="slate">Uninstalled</Tag>
@@ -238,6 +244,12 @@ export function ManagerActionCard({
           onTest={handleTest}
           onRemoveRequest={handleRemoveRequest}
         />
+      )}
+
+      {shim.activation_state === "restart_required" && (
+        <p className="text-xs text-slate-500">
+          Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim.
+        </p>
       )}
 
       {shim.shim_path !== null && (
