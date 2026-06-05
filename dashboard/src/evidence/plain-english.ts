@@ -94,8 +94,19 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
     return signals[0].title;
   }
 
-  // artifact_name when it is human-readable
+  // provenance_summary for hook events is more descriptive than a generic tool name like "Bash"
+  const provenance = receipt.provenance_summary?.trim();
   const artifactName = receipt.artifact_name?.trim();
+  if (
+    provenance &&
+    provenance.toLowerCase().startsWith("hook event for") &&
+    artifactName &&
+    provenance.toLowerCase().endsWith(artifactName.toLowerCase())
+  ) {
+    return provenance;
+  }
+
+  // artifact_name when it is human-readable
   if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
     return artifactName;
   }
@@ -106,9 +117,8 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
     return caps;
   }
 
-  // provenance_summary for hook events is more descriptive than the raw tool name
-  const provenance = receipt.provenance_summary?.trim();
-  if (provenance && provenance.toLowerCase().startsWith("hook event for")) {
+  // provenance_summary when it is descriptive
+  if (provenance && provenance.length > 0 && !provenance.toLowerCase().startsWith("hook event for")) {
     return provenance;
   }
 
@@ -153,7 +163,7 @@ export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
 
   if (isCapsUseful) {
     parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase()) {
+  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
     parts.push(provenance);
   }
 

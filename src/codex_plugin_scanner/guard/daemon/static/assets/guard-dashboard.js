@@ -16371,7 +16371,11 @@ function resolveActionTitle(receipt) {
   if (signals.length > 0 && signals[0]?.title) {
     return signals[0].title;
   }
+  const provenance = receipt.provenance_summary?.trim();
   const artifactName = receipt.artifact_name?.trim();
+  if (provenance && provenance.toLowerCase().startsWith("hook event for") && artifactName && provenance.toLowerCase().endsWith(artifactName.toLowerCase())) {
+    return provenance;
+  }
   if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
     return artifactName;
   }
@@ -16379,8 +16383,7 @@ function resolveActionTitle(receipt) {
   if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
     return caps;
   }
-  const provenance = receipt.provenance_summary?.trim();
-  if (provenance && provenance.toLowerCase().startsWith("hook event for")) {
+  if (provenance && provenance.length > 0 && !provenance.toLowerCase().startsWith("hook event for")) {
     return provenance;
   }
   const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
@@ -16413,7 +16416,7 @@ function resolveActionSubtitle(receipt) {
   const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
   if (isCapsUseful) {
     parts.push(caps);
-  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase()) {
+  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase() && provenance !== resolveActionTitle(receipt)) {
     parts.push(provenance);
   }
   if (parts.length > 0) {
