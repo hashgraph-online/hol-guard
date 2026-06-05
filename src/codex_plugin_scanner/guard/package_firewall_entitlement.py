@@ -97,7 +97,7 @@ def _oauth_entitlement(credentials: dict[str, object] | None, *, now: datetime) 
             "tier": normalized_tier,
             "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
         }
-    if expires_at is not None and expires_at <= now:
+    if firewall_allowed and expires_at is not None and expires_at <= now:
         return {
             "allowed": False,
             "reason": "guard_cloud_reconnect_required",
@@ -119,6 +119,35 @@ def _oauth_entitlement(credentials: dict[str, object] | None, *, now: datetime) 
     }
 
 
+def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str, object] | None:
+    oauth_health = store.get_oauth_local_credential_health()
+    if not isinstance(oauth_health, dict) or not bool(oauth_health.get("configured")):
+        return None
+    oauth_credentials = store.get_oauth_local_credentials()
+    if isinstance(oauth_credentials, dict):
+        plan_id = _optional_string(oauth_credentials.get("supply_chain_plan_id"))
+        if plan_id is not None and plan_id.lower() not in PACKAGE_FIREWALL_PAID_TIERS:
+            return None
+    latest_state = store.get_effective_guard_connect_state(now=now.isoformat())
+    if not isinstance(latest_state, dict):
+        return None
+    status = _optional_string(latest_state.get("status"))
+    milestone = _optional_string(latest_state.get("milestone"))
+    if status not in {"retry_required", "expired"} and milestone not in {"first_sync_failed", "expired", "sync_not_available"}:
+        return None
+    tier = "unknown"
+    if isinstance(oauth_credentials, dict):
+        tier = _optional_string(oauth_credentials.get("supply_chain_plan_id")) or tier
+    elif isinstance(oauth_health.get("workspace_id"), str):
+        tier = "unknown"
+    return {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": tier,
+        "upgrade_cta": PACKAGE_FIREWALL_RECONNECT_CTA,
+    }
+
+
 def resolve_package_firewall_entitlement(
     store: GuardStore,
     *,
@@ -127,12 +156,15 @@ def resolve_package_firewall_entitlement(
     resolved_now = now or datetime.now(timezone.utc)
     bundle = _bundle_entitlement(store.get_sync_payload("supply_chain_bundle_entitlement"))
     oauth = _oauth_entitlement(store.get_oauth_local_credentials(), now=resolved_now)
+    connect_state = _connect_state_entitlement(store, now=resolved_now)
     if bundle is not None and bool(bundle.get("allowed")):
         return bundle
     if oauth is not None and bool(oauth.get("allowed")):
         return oauth
     if oauth is not None and oauth.get("reason") == "guard_cloud_reconnect_required":
         return oauth
+    if connect_state is not None:
+        return connect_state
     if bundle is not None:
         return bundle
     if oauth is not None:

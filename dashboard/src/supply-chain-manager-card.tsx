@@ -98,6 +98,10 @@ function ActionButtonRow({
   const repairState = actions.repair ?? "disabled";
   const testState = actions.test ?? "disabled";
   const removeState = actions.remove ?? "disabled";
+  const installBlocked = installState === "paid_required" || installState === "reconnect_required";
+  const repairBlocked = repairState === "paid_required" || repairState === "reconnect_required";
+  const testBlocked = testState === "paid_required" || testState === "reconnect_required";
+  const removeBlocked = removeState === "paid_required" || removeState === "reconnect_required";
 
   const showInstall = !shim.installed && installState !== "disabled";
   const showRepair = shim.installed && repairState !== "disabled";
@@ -112,7 +116,7 @@ function ActionButtonRow({
           icon={<HiMiniShieldCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
           variant="primary"
           onClick={onInstall}
-          disabled={anyPending || installState === "paid_required"}
+          disabled={anyPending || installBlocked}
         />
       )}
       {showRepair && (
@@ -121,7 +125,7 @@ function ActionButtonRow({
           icon={<HiMiniWrenchScrewdriver className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
           variant="secondary"
           onClick={onRepair}
-          disabled={anyPending || repairState === "paid_required"}
+          disabled={anyPending || repairBlocked}
         />
       )}
       {showTest && (
@@ -130,7 +134,7 @@ function ActionButtonRow({
           icon={<HiMiniBeaker className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
           variant="outline"
           onClick={onTest}
-          disabled={anyPending || testState === "paid_required"}
+          disabled={anyPending || testBlocked}
         />
       )}
       {showRemove && (
@@ -139,7 +143,7 @@ function ActionButtonRow({
           icon={<HiMiniTrash className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
           variant="danger"
           onClick={onRemoveRequest}
-          disabled={anyPending || removeState === "paid_required"}
+          disabled={anyPending || removeBlocked}
         />
       )}
     </div>
