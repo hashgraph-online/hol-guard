@@ -170,3 +170,68 @@ def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path
         "tier": "pro",
         "upgrade_cta": None,
     }
+
+
+def test_retry_required_connect_state_prefers_reconnect_over_false_paywall(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-05T01:39:51+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-05T01:39:51+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-06-05T01:40:10+00:00",
+        reason="Guard authorization expired. Run `hol-guard connect` again.",
+    )
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement == {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "unknown",
+        "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+    }
+
+
+def test_free_oauth_entitlement_does_not_turn_into_reconnect_prompt_when_expired(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        supply_chain_entitlement_expires_at="2026-06-01T01:39:51+00:00",
+        supply_chain_firewall=False,
+        supply_chain_plan_id="free",
+        workspace_id="workspace-1",
+        now="2026-05-05T01:39:51+00:00",
+    )
+
+    entitlement = resolve_package_firewall_entitlement(store)
+
+    assert entitlement == {
+        "allowed": False,
+        "reason": "paid_guard_cloud_required",
+        "tier": "free",
+        "upgrade_cta": "Upgrade to HOL Guard Cloud to run package firewall actions.",
+    }

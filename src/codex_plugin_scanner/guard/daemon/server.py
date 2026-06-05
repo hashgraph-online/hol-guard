@@ -1362,10 +1362,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_supply_chain_package_firewall_status(self) -> None:
         entitlement = self._supply_chain_entitlement()
         status = package_shim_status(self._harness_context({}))
-        allowed = bool(entitlement["allowed"])
         self._write_json(
             {
-                "actions": self._supply_chain_action_states(allowed),
+                "actions": self._supply_chain_action_states(entitlement),
                 "cli_fallback": {
                     "install": "hol-guard package-shims install --json",
                     "status": "hol-guard package-shims status --json",
@@ -1491,8 +1490,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
 
     @staticmethod
-    def _supply_chain_action_states(allowed: bool) -> dict[str, str]:
-        state = "available" if allowed else "paid_required"
+    def _supply_chain_action_states(entitlement: dict[str, object]) -> dict[str, str]:
+        allowed = bool(entitlement.get("allowed"))
+        reason = str(entitlement.get("reason") or "").strip().lower()
+        if allowed:
+            state = "available"
+        elif reason == "guard_cloud_reconnect_required":
+            state = "reconnect_required"
+        else:
+            state = "paid_required"
         return {
             "install": state,
             "repair": state,

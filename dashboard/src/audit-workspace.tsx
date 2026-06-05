@@ -14,7 +14,7 @@ import {
 } from "react-icons/hi2";
 import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
 import { formatRelativeTime, harnessDisplayName } from "./approval-center-utils";
-import { runAuditRemediation } from "./guard-api";
+import { GuardHarnessActionError, runAuditRemediation } from "./guard-api";
 import type { AuditRemediationAction } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
@@ -258,25 +258,36 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
           [result.id]: "Remediation completed. Restart your shell before retrying package installs.",
         }));
       } catch (error) {
+        if (
+          credentials === undefined &&
+          error instanceof GuardHarnessActionError &&
+          error.payload?.error === "approval_gate_required" &&
+          approvalGate?.enabled === true &&
+          approvalGate.configured === true
+        ) {
+          setPendingRemediation(result);
+          setRemediationMessages((prev) => {
+            const next = { ...prev };
+            delete next[result.id];
+            return next;
+          });
+          return;
+        }
         const message = error instanceof Error ? error.message : "Unable to run remediation.";
         setRemediationMessages((prev) => ({ ...prev, [result.id]: message }));
       } finally {
         setRunningRemediationId(null);
       }
     },
-    [],
+    [approvalGate],
   );
 
   const handleRunRemediation = useCallback(
     (result: AuditResult) => {
       if (result.remediationAction === null) return;
-      if (approvalGate?.enabled === true && approvalGate.configured === true) {
-        setPendingRemediation(result);
-        return;
-      }
       void executeRemediation(result);
     },
-    [approvalGate, executeRemediation],
+    [executeRemediation],
   );
 
   const handleCancelRemediationGate = useCallback(() => setPendingRemediation(null), []);

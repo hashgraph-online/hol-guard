@@ -12735,7 +12735,7 @@ class GuardHarnessActionError extends Error {
   status;
   payload;
   constructor(status, payload) {
-    super(payload?.error ?? `Harness action failed with ${status}`);
+    super(payload?.message ?? payload?.error ?? `Harness action failed with ${status}`);
     this.name = "GuardHarnessActionError";
     this.status = status;
     this.payload = payload;
@@ -13821,7 +13821,7 @@ function normalizePackageFirewallActions(value) {
   if (!isRecord(value)) {
     return {};
   }
-  const allowedStates = /* @__PURE__ */ new Set(["available", "paid_required", "pending", "disabled"]);
+  const allowedStates = /* @__PURE__ */ new Set(["available", "paid_required", "reconnect_required", "pending", "disabled"]);
   const entries = Object.entries(value).filter(
     (entry) => typeof entry[1] === "string" && allowedStates.has(entry[1])
   );
@@ -13946,7 +13946,7 @@ async function runAuditRemediation(input) {
       status: "completed"
     };
   }
-  const response = await readJson(
+  const response = await fetchGuardApi(
     `/v1/audit/remediations/${input.action}`,
     {
       method: "POST",
@@ -13961,7 +13961,14 @@ async function runAuditRemediation(input) {
       })
     }
   );
-  return normalizePackageFirewallAction(response);
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payload) ? payload : null
+    );
+  }
+  return normalizePackageFirewallAction(payload);
 }
 async function runPackageAudit() {
   const response = await readJson("/v1/supply-chain/audit", {

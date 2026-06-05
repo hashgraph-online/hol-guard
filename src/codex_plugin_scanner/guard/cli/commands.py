@@ -1153,8 +1153,15 @@ def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _package_firewall_action_states(allowed: bool) -> dict[str, str]:
-    state = "available" if allowed else "paid_required"
+def _package_firewall_action_states(entitlement: dict[str, object]) -> dict[str, str]:
+    allowed = bool(entitlement.get("allowed"))
+    reason = str(entitlement.get("reason") or "").strip().lower()
+    if allowed:
+        state = "available"
+    elif reason == "guard_cloud_reconnect_required":
+        state = "reconnect_required"
+    else:
+        state = "paid_required"
     return {
         "install": state,
         "repair": state,
@@ -2089,7 +2096,7 @@ def run_guard_command(
         entitlement = resolve_package_firewall_entitlement(store)
         if shim_command == "status":
             payload = package_shim_status(context)
-            payload["actions"] = _package_firewall_action_states(bool(entitlement["allowed"]))
+            payload["actions"] = _package_firewall_action_states(entitlement)
             payload["entitlement"] = entitlement
             payload["generated_at"] = _now()
             _emit("package-shims", payload, getattr(args, "json", False))

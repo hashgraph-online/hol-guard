@@ -427,6 +427,7 @@ export type GuardHarnessActionResult = {
 
 export type GuardHarnessActionErrorPayload = {
   error: string;
+  message?: string;
   harness?: string;
   confirmation_phrase?: string;
   confirm_command?: string;
@@ -513,7 +514,12 @@ export type PackageFirewallActionType = (typeof PACKAGE_FIREWALL_ACTION_TYPES)[n
 export const PACKAGE_FIREWALL_GLOBAL_ACTION_TYPES = ["audit", "sync"] as const;
 export type PackageFirewallGlobalActionType = (typeof PACKAGE_FIREWALL_GLOBAL_ACTION_TYPES)[number];
 
-export type PackageFirewallActionState = "available" | "paid_required" | "pending" | "disabled";
+export type PackageFirewallActionState =
+  | "available"
+  | "paid_required"
+  | "reconnect_required"
+  | "pending"
+  | "disabled";
 
 export type PackageFirewallEntitlement = {
   allowed: boolean;

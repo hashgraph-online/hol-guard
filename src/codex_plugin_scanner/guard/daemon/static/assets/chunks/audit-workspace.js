@@ -1,4 +1,4 @@
-import { r as reactExports, ap as runAuditRemediation, j as jsxRuntimeExports, B as Badge, S as SectionLabel, W as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, a as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton, v as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
+import { r as reactExports, ap as runAuditRemediation, a9 as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, W as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, a as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton, v as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
 function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -155,24 +155,29 @@ function AuditWorkspace({ snapshot, receipts, approvalGate }) {
           [result.id]: "Remediation completed. Restart your shell before retrying package installs."
         }));
       } catch (error) {
+        if (credentials === void 0 && error instanceof GuardHarnessActionError && error.payload?.error === "approval_gate_required" && approvalGate?.enabled === true && approvalGate.configured === true) {
+          setPendingRemediation(result);
+          setRemediationMessages((prev) => {
+            const next = { ...prev };
+            delete next[result.id];
+            return next;
+          });
+          return;
+        }
         const message = error instanceof Error ? error.message : "Unable to run remediation.";
         setRemediationMessages((prev) => ({ ...prev, [result.id]: message }));
       } finally {
         setRunningRemediationId(null);
       }
     },
-    []
+    [approvalGate]
   );
   const handleRunRemediation = reactExports.useCallback(
     (result) => {
       if (result.remediationAction === null) return;
-      if (approvalGate?.enabled === true && approvalGate.configured === true) {
-        setPendingRemediation(result);
-        return;
-      }
       void executeRemediation(result);
     },
-    [approvalGate, executeRemediation]
+    [executeRemediation]
   );
   const handleCancelRemediationGate = reactExports.useCallback(() => setPendingRemediation(null), []);
   const handleConfirmRemediationGate = reactExports.useCallback(

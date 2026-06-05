@@ -1,7 +1,8 @@
 import { j as jsxRuntimeExports, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, ab as HiMiniArrowPath, T as Tag, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, am as runPackageAudit, an as runPackageSync, S as SectionLabel, E as EmptyState, ao as HiMiniBugAnt, b as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 function UpgradeCta({ entitlement }) {
-  const upgradeUrl = entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
+  const reconnectRequired = entitlement.reason === "guard_cloud_reconnect_required";
+  const upgradeUrl = reconnectRequired ? "https://hol.org/guard/connect" : entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 rounded-xl border border-brand-blue/20 bg-gradient-to-br from-brand-blue/[0.04] to-brand-dark/[0.02] px-4 py-4 sm:flex-row sm:items-center sm:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-2.5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -12,12 +13,12 @@ function UpgradeCta({ entitlement }) {
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Upgrade to enable active protection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: reconnectRequired ? "Reconnect to restore active protection" : "Upgrade to enable active protection" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-slate-500", children: entitlement.upgrade_cta ?? entitlement.reason ?? "Package firewall actions require a Guard Cloud subscription." })
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: upgradeUrl, variant: "primary", children: [
-      "Upgrade",
+      reconnectRequired ? "Reconnect" : "Upgrade",
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
     ] })
   ] });
@@ -176,6 +177,10 @@ function ActionButtonRow({
   const repairState = actions.repair ?? "disabled";
   const testState = actions.test ?? "disabled";
   const removeState = actions.remove ?? "disabled";
+  const installBlocked = installState === "paid_required" || installState === "reconnect_required";
+  const repairBlocked = repairState === "paid_required" || repairState === "reconnect_required";
+  const testBlocked = testState === "paid_required" || testState === "reconnect_required";
+  const removeBlocked = removeState === "paid_required" || removeState === "reconnect_required";
   const showInstall = !shim.installed && installState !== "disabled";
   const showRepair = shim.installed && repairState !== "disabled";
   const showTest = testState !== "disabled";
@@ -188,7 +193,7 @@ function ActionButtonRow({
         icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
         variant: "primary",
         onClick: onInstall,
-        disabled: anyPending || installState === "paid_required"
+        disabled: anyPending || installBlocked
       }
     ),
     showRepair && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -198,7 +203,7 @@ function ActionButtonRow({
         icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
         variant: "secondary",
         onClick: onRepair,
-        disabled: anyPending || repairState === "paid_required"
+        disabled: anyPending || repairBlocked
       }
     ),
     showTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -208,7 +213,7 @@ function ActionButtonRow({
         icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
         variant: "outline",
         onClick: onTest,
-        disabled: anyPending || testState === "paid_required"
+        disabled: anyPending || testBlocked
       }
     ),
     showRemove && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -218,7 +223,7 @@ function ActionButtonRow({
         icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
         variant: "danger",
         onClick: onRemoveRequest,
-        disabled: anyPending || removeState === "paid_required"
+        disabled: anyPending || removeBlocked
       }
     )
   ] });
