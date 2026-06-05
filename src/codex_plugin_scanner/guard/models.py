@@ -148,7 +148,7 @@ class GuardReceipt:
     source_scope: str | None = None
     diff_summary: str | None = None
     approval_source: str | None = None
-    action_envelope_json: dict[str, object] | None = None
+    approval_request_id: str | None = None
     scanner_evidence: tuple[dict[str, object], ...] = ()
 
     def to_dict(self) -> dict[str, object]:

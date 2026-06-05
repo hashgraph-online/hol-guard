@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from pathlib import Path
 
@@ -41,7 +42,7 @@ def _make_receipt(
     diff_summary: str | None = None,
     approval_source: str | None = None,
     timestamp: str = "2025-01-01T00:00:00Z",
-    action_envelope_json: dict[str, object] | None = None,
+    approval_request_id: str | None = None,
 ) -> GuardReceipt:
     return GuardReceipt(
         receipt_id=receipt_id or str(uuid.uuid4()),
@@ -55,7 +56,7 @@ def _make_receipt(
         diff_summary=diff_summary,
         approval_source=approval_source,
         timestamp=timestamp,
-        action_envelope_json=action_envelope_json,
+        approval_request_id=approval_request_id,
     )
 
 
@@ -217,20 +218,168 @@ class TestReceiptFieldRoundtrip:
 
     def test_action_envelope_json_roundtrip(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
-        envelope: dict[str, object] = {"action_type": "shell_command", "command": "ls -la"}
-        receipt = _make_receipt(
-            receipt_id="r-env-01",
-            action_envelope_json=envelope,
+        from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+        envelope = GuardActionEnvelope(
+            schema_version=1,
+            action_id="action-01",
+            harness="codex",
+            event_name="PreToolUse",
+            action_type="shell_command",
+            workspace=None,
+            workspace_hash=None,
+            tool_name="bash",
+            command="ls -la",
+            prompt_excerpt=None,
+            prompt_text=None,
+            target_paths=(),
+            network_hosts=(),
+            mcp_server=None,
+            mcp_tool=None,
+            package_manager=None,
+            package_name=None,
         )
-        store.add_receipt(receipt)
+        receipt = _make_receipt(receipt_id="r-env-01")
+        store.add_receipt(receipt, action_envelope=envelope)
 
         result = store.get_receipt("r-env-01")
         assert result is not None
-        assert result["action_envelope_json"] == envelope
+        assert result["action_envelope_json"] == envelope.to_dict()
+        assert isinstance(result["envelope_redacted_json"], dict)
+        assert result["envelope_redacted_json"]["command_length"] == len("ls -la")
+        assert "command" not in result["envelope_redacted_json"]
+        assert "package_name" not in result["envelope_redacted_json"]
 
         receipts = store.list_receipts(harness="codex", limit=10)
         assert len(receipts) == 1
-        assert receipts[0]["action_envelope_json"] == envelope
+        assert receipts[0]["action_envelope_json"] == envelope.to_dict()
+
+    def test_approval_request_id_joins_envelope_from_approval_table(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        from codex_plugin_scanner.guard.models import GuardApprovalRequest
+        from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+        envelope = GuardActionEnvelope(
+            schema_version=1,
+            action_id="action-02",
+            harness="codex",
+            event_name="PreToolUse",
+            action_type="shell_command",
+            workspace=None,
+            workspace_hash=None,
+            tool_name="bash",
+            command="rm -rf node_modules",
+            prompt_excerpt=None,
+            prompt_text=None,
+            target_paths=(),
+            network_hosts=(),
+            mcp_server=None,
+            mcp_tool=None,
+            package_manager=None,
+            package_name=None,
+        )
+        request = GuardApprovalRequest(
+            request_id="req-01",
+            harness="codex",
+            artifact_id="codex:project:bash",
+            artifact_name="Bash",
+            artifact_hash="sha256:abc",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("shell_command",),
+            source_scope="project",
+            config_path="/tmp",
+            review_command="Review",
+            approval_url="http://localhost/approvals/req-01",
+            action_envelope_json=envelope.to_dict(),
+        )
+        store.add_approval_request(request, now="2025-01-01T00:00:00Z")
+        receipt = _make_receipt(receipt_id="r-join-01", approval_request_id="req-01")
+        store.add_receipt(receipt)
+
+        result = store.get_receipt("r-join-01")
+        assert result is not None
+        assert result["approval_request_id"] == "req-01"
+        assert result["action_envelope_json"] == envelope.to_dict()
+
+
+class TestV5MigrationPreservesRowids:
+    def test_v5_migration_preserves_rowids_and_envelopes(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "guard" / "guard.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "create table schema_migrations ("
+            "  version integer primary key,"
+            "  applied_at text not null"
+            ")"
+        )
+        conn.execute(
+            """
+            create table runtime_receipts (
+              receipt_id text primary key,
+              harness text not null,
+              artifact_id text not null,
+              artifact_hash text not null,
+              policy_decision text not null,
+              capabilities_summary text not null default '',
+              changed_capabilities_json text not null,
+              provenance_summary text not null,
+              user_override text,
+              artifact_name text,
+              source_scope text,
+              scanner_evidence_json text not null default '[]',
+              timestamp text not null,
+              diff_summary text,
+              approval_source text,
+              action_envelope_json text
+            )
+            """
+        )
+        conn.execute(
+            "insert into schema_migrations (version, applied_at) values (4, '2025-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            """
+            insert into runtime_receipts (
+              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+              changed_capabilities_json, provenance_summary, timestamp, action_envelope_json
+            ) values (10, 'r-10', 'codex', 'a', 'h', 'allow', '[]', 'npm', '2025-01-01T00:00:00Z', '{"command":"ls"}')
+            """
+        )
+        conn.execute(
+            """
+            insert into runtime_receipts (
+              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+              changed_capabilities_json, provenance_summary, timestamp, action_envelope_json
+            ) values (25, 'r-25', 'codex', 'a', 'h', 'allow', '[]', 'npm', '2025-01-01T00:00:00Z', '{"command":"cat"}')
+            """
+        )
+        conn.execute(
+            """
+            insert into runtime_receipts (
+              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+              changed_capabilities_json, provenance_summary, timestamp
+            ) values (50, 'r-50', 'codex', 'a', 'h', 'allow', '[]', 'npm', '2025-01-01T00:00:00Z')
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        store = GuardStore(tmp_path / "guard")
+        rows = store.list_receipts_since_rowid(after_rowid=0, limit=10)
+        rowids = {r["receipt_rowid"] for r in rows}
+        assert rowids == {10, 25, 50}
+
+        since_10 = store.list_receipts_since_rowid(after_rowid=10, limit=10)
+        assert {r["receipt_rowid"] for r in since_10} == {25, 50}
+
+        r10 = store.get_receipt("r-10")
+        assert r10 is not None
+        assert r10["action_envelope_json"] == {"command": "ls"}
+
+        r50 = store.get_receipt("r-50")
+        assert r50 is not None
+        assert r50["action_envelope_json"] is None
 
 
 class TestMapApprovalSource:
