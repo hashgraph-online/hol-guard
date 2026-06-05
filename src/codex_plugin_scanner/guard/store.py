@@ -417,7 +417,8 @@ class EncryptedFileSecretStore:
         if self._fernet is not None:
             return
         self.base_dir.mkdir(parents=True, exist_ok=True)
-        os.chmod(self.base_dir, 0o700)
+        # Owner-only directory access is required for encrypted secret material.
+        os.chmod(self.base_dir, 0o700)  # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions  # noqa: E501
         if not self.key_path.exists():
             self._atomic_write_bytes(self.key_path, Fernet.generate_key(), 0o600)
         self._fernet = Fernet(self._load_fernet_key())
