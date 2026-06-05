@@ -864,9 +864,7 @@ _POLICY_BUNDLE_RULE_ACTIONS = frozenset({"allow", "block", "review", "ignore"})
 _POLICY_BUNDLE_ROLLOUT_STATES = frozenset(
     {"draft", "simulated", "pending_approval", "enforcing", "enforced", "rollback_available"}
 )
-_POLICY_BUNDLE_SCOPE_KEYS = frozenset(
-    {"agents", "devices", "ecosystems", "environments", "harnesses", "locations"}
-)
+_POLICY_BUNDLE_SCOPE_KEYS = frozenset({"agents", "devices", "ecosystems", "environments", "harnesses", "locations"})
 _POLICY_BUNDLE_RULE_MATCHER_FAMILIES = frozenset(
     {"file-read", "mcp", "package-request", "prompt", "prompt-env-read", "tool-action"}
 )
@@ -877,10 +875,14 @@ def _stable_serialize(value: object) -> str:
     if isinstance(value, list):
         return f"[{','.join(_stable_serialize(item) for item in value)}]"
     if isinstance(value, dict):
-        return "{" + ",".join(
-            f"{json.dumps(key, separators=(',', ':'), ensure_ascii=False)}:{_stable_serialize(value[key])}"
-            for key in sorted(value)
-        ) + "}"
+        return (
+            "{"
+            + ",".join(
+                f"{json.dumps(key, separators=(',', ':'), ensure_ascii=False)}:{_stable_serialize(value[key])}"
+                for key in sorted(value)
+            )
+            + "}"
+        )
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
 
@@ -1060,9 +1062,7 @@ def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
     explicit = rule.get("matcherFamilies")
     if isinstance(explicit, list):
         values = [
-            family
-            for family in explicit
-            if isinstance(family, str) and family in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
+            family for family in explicit if isinstance(family, str) and family in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
         ]
         return list(dict.fromkeys(values))
 
@@ -1102,8 +1102,10 @@ def _policy_bundle_rule_matches_local_scope(
     if isinstance(devices, list) and devices and device_id not in devices and device_name not in devices:
         return False
     environments = scope.get("environments")
-    if isinstance(environments, list) and environments and not any(
-        isinstance(item, str) and item in _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments
+    if (
+        isinstance(environments, list)
+        and environments
+        and not any(isinstance(item, str) and item in _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments)
     ):
         return False
     locations = scope.get("locations")
