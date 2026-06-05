@@ -1929,7 +1929,7 @@ def _refresh_guard_oauth_access_token(
             with urllib.request.urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            payload = _http_error_payload(error)
+            payload = _http_error_payload(error) if error.code in {400, 401} else None
             challenge_nonce = _dpop_nonce_from_http_error(error, payload)
             if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
                 dpop_nonce = challenge_nonce
@@ -2271,7 +2271,7 @@ def _urlopen_json_with_timeout_retry(
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            error_payload = _http_error_payload(error)
+            error_payload = _http_error_payload(error) if error.code in {400, 401} else None
             dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
             retry_request = (
                 None
@@ -2311,7 +2311,7 @@ def _urlopen_with_timeout_retry(
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds):
                 return
         except urllib.error.HTTPError as error:
-            error_payload = _http_error_payload(error)
+            error_payload = _http_error_payload(error) if error.code in {400, 401} else None
             dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
             retry_request = (
                 None
