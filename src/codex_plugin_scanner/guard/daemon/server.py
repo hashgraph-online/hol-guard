@@ -358,10 +358,6 @@ def _run_headless_cloud_sync(
     recorded_at = _now()
     try:
         sync_payload = sync_local_guard_cloud_proof(store)
-        store.record_latest_guard_connect_sync_success(
-            sync_payload=sync_payload,
-            now=str(sync_payload.get("synced_at") or recorded_at),
-        )
         summary = {
             "status": "synced",
             "synced_at": sync_payload.get("synced_at"),

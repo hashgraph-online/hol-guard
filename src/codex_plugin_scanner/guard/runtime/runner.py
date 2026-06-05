@@ -2563,9 +2563,7 @@ def _receipt_sync_context(store: GuardStore, *, local_guard_online_at: str) -> d
         else None
     )
     runtime_harness = (
-        _optional_string(runtime_summary.get("runtime_harness"))
-        if isinstance(runtime_summary, dict)
-        else None
+        _optional_string(runtime_summary.get("runtime_harness")) if isinstance(runtime_summary, dict) else None
     )
     sync_health = "healthy" if runtime_synced_at is not None else "degraded"
     context: dict[str, object] = {
@@ -2661,11 +2659,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         workspace=workspace,
         generated_at=updated_at,
     )
-    local_identity = _cloud_local_identity_payload(
-        device_id,
-        daemon_version=_optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
-        observed_at=updated_at,
-    )
+    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
     return {
         "sessionId": session_id,
         "harness": _optional_string(session.get("harness")) or "hol-guard",
@@ -2688,17 +2682,11 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     }
 
 
-def _cloud_local_identity_payload(
-    device_id: str,
-    *,
-    daemon_version: str,
-    observed_at: str,
-) -> dict[str, object]:
+def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:
     hostname = _safe_hostname()
     private_ip = _safe_private_ip()
     if private_ip is None:
         private_ip = _safe_private_ipv6()
-    del device_id, daemon_version
     payload: dict[str, object] = {"lastSyncedAt": observed_at}
     if hostname is not None:
         payload["hostname"] = hostname
