@@ -13,6 +13,9 @@ import { harnessDisplayName, isDisplayableHarness, formatRelativeTime } from "..
 import { plainEnglishDescription, humanFileName } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
+import { Sparkline } from "./sparkline";
+import { DecisionBadge } from "./decision-badge";
+import { Badge } from "../approval-center-primitives";
 
 interface AppTabProps {
   receipts: GuardReceipt[];
@@ -36,31 +39,6 @@ function harnessColor(harness: string): string {
   return `hsl(${hue} 70% 45%)`;
 }
 
-function DecisionBadge({ decision }: { decision: string }) {
-  if (decision === "allow") {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700 ring-1 ring-green-200">
-        <HiMiniShieldCheck className="h-3 w-3" aria-hidden="true" />
-        Allowed
-      </span>
-    );
-  }
-  if (decision === "block") {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
-        <HiMiniNoSymbol className="h-3 w-3" aria-hidden="true" />
-        Stopped
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 ring-1 ring-blue-200">
-      <HiMiniQuestionMarkCircle className="h-3 w-3" aria-hidden="true" />
-      Reviewed
-    </span>
-  );
-}
-
 interface AppListCardProps {
   harness: string;
   items: GuardReceipt[];
@@ -77,7 +55,7 @@ function AppListCard({ harness, items, onSelect }: AppListCardProps) {
   return (
     <button
       onClick={handleClick}
-      className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-300"
+      className="w-full rounded-2xl border border-slate-100 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-200 shadow-sm"
     >
       <div className="flex items-center gap-3">
         <span
@@ -200,7 +178,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
           </a>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <span
               className="inline-flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold text-white"
@@ -216,7 +194,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
             </div>
           </div>
 
-          <AppSparkline items={allItems} />
+          <Sparkline items={allItems} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -262,11 +240,11 @@ function AppTabRaw({ receipts }: AppTabProps) {
             <p className="text-sm text-slate-500">No actions match the selected filters.</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-sm" aria-label={`${harnessDisplayName(selectedApp)} actions`}>
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <tr className="border-b border-slate-100 bg-slate-50/80">
                     <th scope="col" className="w-8 px-3 py-2.5" />
                     <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Artifact</th>
                     <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden md:table-cell">Category</th>
@@ -337,40 +315,6 @@ function AppTabRaw({ receipts }: AppTabProps) {
           <p className="text-sm text-slate-500">No apps match your search.</p>
         </div>
       )}
-    </div>
-  );
-}
-
-function AppSparkline({ items }: { items: GuardReceipt[] }) {
-  const buckets = useMemo(() => {
-    const days = 7;
-    const now = new Date();
-    const counts: number[] = new Array(days).fill(0);
-    for (const item of items) {
-      const d = new Date(item.timestamp);
-      const diff = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-      if (diff >= 0 && diff < days) {
-        counts[days - 1 - diff] += 1;
-      }
-    }
-    return counts;
-  }, [items]);
-
-  const max = Math.max(...buckets, 1);
-
-  return (
-    <div className="mt-4 pt-4 border-t border-slate-100">
-      <p className="text-[11px] font-medium text-slate-400 mb-2">Last 7 days</p>
-      <div className="flex h-10 w-full items-end gap-1">
-        {buckets.map((count, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-sm bg-brand-blue/20 transition-all hover:bg-brand-blue/30"
-            style={{ height: `${Math.max((count / max) * 100, count > 0 ? 8 : 4)}%` }}
-            title={`${count} action${count !== 1 ? "s" : ""}`}
-          />
-        ))}
-      </div>
     </div>
   );
 }

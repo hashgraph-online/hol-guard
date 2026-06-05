@@ -1,7 +1,7 @@
-import { useCallback } from "react";
+import { useState } from "react";
 import type { EvidenceMetrics, TrendBucket, PeriodComparison } from "./evidence-metrics";
-import { harnessDisplayName } from "../approval-center-utils";
-import { getCategoryInfo } from "./categories";
+import { SectionLabel, Badge } from "../approval-center-primitives";
+import { AppBreakdownCard, CategoryBreakdownCard } from "./breakdown-card";
 import type { ReceiptCategory } from "./categories";
 
 interface EvidenceAnalyticsPanelProps {
@@ -9,14 +9,6 @@ interface EvidenceAnalyticsPanelProps {
   onFilterHarness: (harness: string) => void;
   onFilterCategory: (category: string) => void;
 }
-
-const TONE_STYLES: Record<string, { bg: string; text: string; accent: string }> = {
-  blue: { bg: "bg-brand-blue/[0.04]", text: "text-brand-blue", accent: "bg-brand-blue" },
-  green: { bg: "bg-emerald-50", text: "text-emerald-700", accent: "bg-emerald-500" },
-  amber: { bg: "bg-amber-50", text: "text-amber-700", accent: "bg-amber-500" },
-  purple: { bg: "bg-purple-50", text: "text-purple-700", accent: "bg-purple-500" },
-  slate: { bg: "bg-slate-50", text: "text-slate-700", accent: "bg-slate-500" },
-};
 
 function StatCard({
   label,
@@ -29,80 +21,113 @@ function StatCard({
   subtext?: string;
   tone: "blue" | "green" | "amber" | "purple" | "slate";
 }) {
-  const style = TONE_STYLES[tone];
+  const toneColor = tone === "blue" ? "text-brand-blue" : tone === "green" ? "text-emerald-600" : tone === "amber" ? "text-amber-600" : tone === "purple" ? "text-brand-purple" : "text-slate-600";
 
   return (
-    <div className={`rounded-2xl ${style.bg} p-5`}>
-      <p className={`text-[11px] font-semibold uppercase tracking-wider ${style.text} opacity-70`}>
-        {label}
-      </p>
-      <p className={`mt-1 text-3xl font-bold tabular-nums ${style.text}`}>{value}</p>
+    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <SectionLabel>{label}</SectionLabel>
+      <p className={`mt-2 text-3xl font-bold tabular-nums tracking-tight ${toneColor}`}>{value}</p>
       {subtext && <p className="mt-1 text-xs text-slate-500">{subtext}</p>}
     </div>
   );
 }
 
 function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
+  const [hoveredBucket, setHoveredBucket] = useState<string | null>(null);
   const maxTotal = Math.max(...buckets.map((b) => b.allowed + b.blocked + b.reviewed), 1);
+  const hasAnyData = buckets.some((b) => b.allowed + b.blocked + b.reviewed > 0);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-4">
-        7-Day Activity
-      </p>
-      <div className="flex gap-2 h-40">
-        {buckets.map((bucket) => {
-          const total = bucket.allowed + bucket.blocked + bucket.reviewed;
-          const heightPct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-          const blockedHeight = total > 0 ? (bucket.blocked / total) * heightPct : 0;
-          const allowedHeight = total > 0 ? (bucket.allowed / total) * heightPct : 0;
+    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <SectionLabel>7-Day Activity</SectionLabel>
 
-          return (
-            <div key={bucket.dateKey} className="flex-1 flex flex-col justify-end gap-1.5 min-w-0">
-              <div className="w-full flex-1 flex flex-col-reverse rounded-lg overflow-hidden bg-slate-50">
-                {bucket.blocked > 0 && (
-                  <div
-                    className="w-full bg-amber-400"
-                    style={{ height: `${Math.max(blockedHeight, 2)}%`, minHeight: total > 0 ? "2%" : "0" }}
-                  />
-                )}
-                {bucket.allowed > 0 && (
-                  <div
-                    className="w-full bg-emerald-400"
-                    style={{ height: `${Math.max(allowedHeight, 2)}%`, minHeight: total > 0 ? "2%" : "0" }}
-                  />
-                )}
-                {bucket.reviewed > 0 && (
-                  <div
-                    className="w-full bg-brand-blue"
-                    style={{
-                      height: `${Math.max(heightPct - blockedHeight - allowedHeight, 2)}%`,
-                      minHeight: total > 0 ? "2%" : "0",
-                    }}
-                  />
-                )}
-              </div>
-              <span className="text-[10px] text-slate-400 truncate w-full text-center">
-                {bucket.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-3 flex items-center gap-4 text-[11px] text-slate-500">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
-          Allowed
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
-          Stopped
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2 w-2 rounded-full bg-brand-blue" />
-          Reviewed
-        </span>
-      </div>
+      {!hasAnyData ? (
+        <div className="flex flex-col items-center justify-center h-40 text-center">
+          <p className="text-sm text-slate-400">No activity in the last 7 days</p>
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-2 h-40 mt-4">
+            {buckets.map((bucket) => {
+              const total = bucket.allowed + bucket.blocked + bucket.reviewed;
+              const heightPct = maxTotal > 0 ? Math.max((total / maxTotal) * 100, 4) : 0;
+              const blockedPct = total > 0 ? (bucket.blocked / total) * 100 : 0;
+              const allowedPct = total > 0 ? (bucket.allowed / total) * 100 : 0;
+              const reviewedPct = total > 0 ? (bucket.reviewed / total) * 100 : 0;
+              const isHovered = hoveredBucket === bucket.dateKey;
+
+              return (
+                <div
+                  key={bucket.dateKey}
+                  className="relative flex-1 flex flex-col justify-end gap-1.5 min-w-0"
+                  onMouseEnter={() => setHoveredBucket(bucket.dateKey)}
+                  onMouseLeave={() => setHoveredBucket(null)}
+                >
+                  <div className="relative w-full flex-1 flex items-end rounded-lg overflow-hidden bg-slate-50">
+                    {total > 0 ? (
+                      <div className="w-full flex flex-col-reverse">
+                        {bucket.blocked > 0 && (
+                          <div
+                            className="w-full bg-amber-400 transition-all"
+                            style={{ height: `${Math.max(blockedPct, 4)}%` }}
+                          />
+                        )}
+                        {bucket.allowed > 0 && (
+                          <div
+                            className="w-full bg-emerald-400 transition-all"
+                            style={{ height: `${Math.max(allowedPct, 4)}%` }}
+                          />
+                        )}
+                        {bucket.reviewed > 0 && (
+                          <div
+                            className="w-full bg-brand-blue transition-all"
+                            style={{ height: `${Math.max(reviewedPct, 4)}%` }}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="w-full h-full bg-slate-100/50" />
+                    )}
+                    {isHovered && total > 0 && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/5" />
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400 truncate w-full text-center">
+                    {bucket.label}
+                  </span>
+                  {isHovered && total > 0 && (
+                    <div
+                      className="absolute z-10 bg-brand-dark text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap mb-2"
+                      style={{ bottom: "100%", left: "50%", transform: "translateX(-50%)" }}
+                    >
+                      <div className="font-semibold">{bucket.label}</div>
+                      <div className="flex gap-3 mt-1">
+                        {bucket.allowed > 0 && <span className="text-emerald-300">{bucket.allowed} allowed</span>}
+                        {bucket.blocked > 0 && <span className="text-amber-300">{bucket.blocked} stopped</span>}
+                        {bucket.reviewed > 0 && <span className="text-blue-300">{bucket.reviewed} reviewed</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex items-center gap-4 text-[11px] text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+              Allowed
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
+              Stopped
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-brand-blue" />
+              Reviewed
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -114,20 +139,18 @@ function PeriodComparisonCard({ comparison, label }: { comparison: PeriodCompari
   const totalColor = comparison.totalDelta > 0 ? "text-brand-blue" : comparison.totalDelta < 0 ? "text-slate-400" : "text-slate-400";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-3">
-        {label}
-      </p>
-      <div className="grid grid-cols-2 gap-4">
+    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <SectionLabel>{label}</SectionLabel>
+      <div className="grid grid-cols-2 gap-4 mt-3">
         <div>
-          <p className="text-2xl font-bold text-brand-dark tabular-nums">{comparison.currentTotal}</p>
+          <p className="text-2xl font-bold text-brand-dark tabular-nums tracking-tight">{comparison.currentTotal}</p>
           <p className="text-xs text-slate-500 mt-0.5">Total actions</p>
           <p className={`text-xs font-medium mt-1 ${totalColor}`}>
             {totalDeltaSign}{comparison.totalDelta} from prior period
           </p>
         </div>
         <div>
-          <p className="text-2xl font-bold text-brand-dark tabular-nums">{comparison.currentBlocked}</p>
+          <p className="text-2xl font-bold text-brand-dark tabular-nums tracking-tight">{comparison.currentBlocked}</p>
           <p className="text-xs text-slate-500 mt-0.5">Stopped</p>
           <p className={`text-xs font-medium mt-1 ${blockedColor}`}>
             {blockedDeltaSign}{comparison.blockedDelta} from prior period
@@ -135,89 +158,6 @@ function PeriodComparisonCard({ comparison, label }: { comparison: PeriodCompari
         </div>
       </div>
     </div>
-  );
-}
-
-function AppBreakdownCard({
-  harness,
-  total,
-  blocked,
-  allowed,
-  maxTotal,
-  onFilter,
-}: {
-  harness: string;
-  total: number;
-  blocked: number;
-  allowed: number;
-  maxTotal: number;
-  onFilter: (harness: string) => void;
-}) {
-  const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-  const handleClick = useCallback(() => onFilter(harness), [harness, onFilter]);
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-300"
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-brand-dark">{harnessDisplayName(harness)}</span>
-        <span className="text-xs tabular-nums text-slate-500">{total} actions</span>
-      </div>
-      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-2">
-        <div
-          className="bg-brand-blue h-2 rounded-full transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <div className="flex items-center gap-3 text-[11px] text-slate-500">
-        <span className="text-emerald-600">{allowed} allowed</span>
-        {blocked > 0 && <span className="text-amber-600">{blocked} stopped</span>}
-      </div>
-    </button>
-  );
-}
-
-function CategoryBreakdownCard({
-  categoryKey,
-  total,
-  blocked,
-  maxTotal,
-  onFilter,
-}: {
-  categoryKey: string;
-  total: number;
-  blocked: number;
-  maxTotal: number;
-  onFilter: (category: string) => void;
-}) {
-  const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-  const catInfo = getCategoryInfo(categoryKey as ReceiptCategory);
-  const handleClick = useCallback(() => onFilter(categoryKey), [categoryKey, onFilter]);
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-300"
-    >
-      <div className="flex items-center gap-3 mb-2">
-        <span className={`${catInfo.color}`} aria-hidden="true">{catInfo.icon}</span>
-        <span className="text-sm font-semibold text-brand-dark">{catInfo.label}</span>
-        <span className="ml-auto text-xs tabular-nums text-slate-500">{total} actions</span>
-      </div>
-      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-2">
-        <div
-          className="bg-purple-500 h-2 rounded-full transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      {blocked > 0 && (
-        <p className="text-[11px] text-amber-600">{blocked} stopped</p>
-      )}
-    </button>
   );
 }
 
@@ -268,9 +208,9 @@ export function EvidenceAnalyticsPanel({
 
       {sortedHarnesses.length > 0 && (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-3 px-1">
-            By App
-          </p>
+          <div className="px-1 mb-3">
+            <SectionLabel>By App</SectionLabel>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {sortedHarnesses.map(([harness, counts]) => (
               <AppBreakdownCard
@@ -289,18 +229,18 @@ export function EvidenceAnalyticsPanel({
 
       {sortedCategories.length > 0 && (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-3 px-1">
-            By Category
-          </p>
+          <div className="px-1 mb-3">
+            <SectionLabel>By Category</SectionLabel>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {sortedCategories.map(([cat, counts]) => (
               <CategoryBreakdownCard
                 key={cat}
-                categoryKey={cat}
+                categoryKey={cat as ReceiptCategory}
                 total={counts.total}
                 blocked={counts.blocked}
                 maxTotal={maxCatTotal}
-                onFilter={onFilterCategory}
+                onFilter={(c) => onFilterCategory(c as string)}
               />
             ))}
           </div>
@@ -308,11 +248,9 @@ export function EvidenceAnalyticsPanel({
       )}
 
       {metrics.topRecurring.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-3">
-            Top Recurring Actions
-          </p>
-          <div className="divide-y divide-slate-100">
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <SectionLabel>Top Recurring Actions</SectionLabel>
+          <div className="divide-y divide-slate-100 mt-3">
             {metrics.topRecurring.slice(0, 5).map((action) => (
               <div
                 key={action.name}
@@ -320,9 +258,9 @@ export function EvidenceAnalyticsPanel({
               >
                 <span className="text-sm text-brand-dark truncate pr-4">{action.name}</span>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs tabular-nums text-slate-500">{action.total}×</span>
+                  <Badge tone="default">{action.total}×</Badge>
                   {action.blocked > 0 && (
-                    <span className="text-[10px] font-medium text-amber-600">{action.blocked} stopped</span>
+                    <Badge tone="attention">{action.blocked} stopped</Badge>
                   )}
                 </div>
               </div>
