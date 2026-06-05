@@ -16767,6 +16767,41 @@ def test_simulate_policy_bundle_receipts_reports_event_freshness(tmp_path):
     }
 
 
+def test_simulate_policy_bundle_receipts_clamps_unknown_actions_to_review(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-warn",
+            timestamp="2026-06-05T13:25:00+00:00",
+            harness="codex",
+            artifact_id="codex:project:file-read:warn",
+            artifact_hash="sha256:warn",
+            policy_decision="warn",
+            capabilities_summary="warn receipt",
+            changed_capabilities=("file-read",),
+            provenance_summary="warn fallback",
+            artifact_name="warn receipt",
+            source_scope="project",
+        )
+    )
+
+    simulation = guard_runner_module.simulate_policy_bundle_receipts(
+        store,
+        {"bundleVersion": "policy-2026-06-05.3", "bundleHash": "sha256:bundle-proof", "rules": []},
+        now="2026-06-05T13:30:00+00:00",
+    )
+
+    assert simulation["summary"] == {
+        "allow": 0,
+        "block": 0,
+        "review": 1,
+        "ignore": 0,
+        "matched": 0,
+        "unchanged": 1,
+    }
+    assert simulation["matches"][0]["simulated_action"] == "review"
+
+
 def test_policy_bundle_version_persists_after_store_reopen(tmp_path):
     home = tmp_path / "guard-home"
     store = GuardStore(home)
