@@ -835,6 +835,7 @@ def _prompt_config_candidates(detection: HarnessDetection, context: HarnessConte
 
 _POLICY_BUNDLE_CORE_KEYS = (
     "contractVersion",
+    "bundleVersion",
     "issuedAt",
     "expiresAt",
     "verifier",
@@ -873,6 +874,9 @@ def _stable_serialize(value: object) -> str:
 
 def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
     bundle_core = {key: policy_bundle[key] for key in _POLICY_BUNDLE_CORE_KEYS}
+    min_daemon_version = _non_empty_string(policy_bundle.get("minDaemonVersion"))
+    if min_daemon_version is not None:
+        bundle_core["minDaemonVersion"] = min_daemon_version
     return f"sha256:{hashlib.sha256(_stable_serialize(bundle_core).encode('utf-8')).hexdigest()}"
 
 
