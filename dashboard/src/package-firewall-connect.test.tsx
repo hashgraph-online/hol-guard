@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { ConnectFlowCard, FreeUserView } from "./supply-chain-firewall-views";
+import { ConnectFlowCard, EntitlementNotice } from "./supply-chain-firewall-views";
 import type { PackageFirewallStatusResponse } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
@@ -67,7 +67,20 @@ const connectRequiredStatus: PackageFirewallStatusResponse = {
   status: "completed",
   supported_managers: ["npm", "pnpm"],
   protection: null,
-  package_shims: [],
+  package_shims: [
+    {
+      active: false,
+      activation_state: "repair_required",
+      installed: true,
+      integrity: "ok",
+      manager: "pnpm",
+      path_index: null,
+      real_binary_found: true,
+      real_binary_path: "/opt/homebrew/bin/pnpm",
+      real_binary_path_index: 2,
+      shim_path: "/guard-home/package-shims/bin/pnpm",
+    },
+  ],
   entitlement: {
     allowed: false,
     reason: "guard_cloud_connect_required",
@@ -100,7 +113,7 @@ const connectRequiredStatus: PackageFirewallStatusResponse = {
 };
 
 const freeViewMarkup = renderToStaticMarkup(
-  <FreeUserView
+  <EntitlementNotice
     connectError={null}
     connectStarting={false}
     data={connectRequiredStatus}
@@ -117,8 +130,8 @@ assert(
   "PF2: connect-required free view should not render upgrade upsell",
 );
 assert(
-  freeViewMarkup.includes("Protected after connect"),
-  "PF2: connect-required free view should explain coverage after connect",
+  freeViewMarkup.includes("Existing shims on this machine can still be fixed or removed locally."),
+  "PF2: connect-required view should explain that local recovery still works",
 );
 
 const upgradeRequiredStatus: PackageFirewallStatusResponse = {
@@ -142,7 +155,7 @@ const upgradeRequiredStatus: PackageFirewallStatusResponse = {
 };
 
 const upgradeMarkup = renderToStaticMarkup(
-  <FreeUserView
+  <EntitlementNotice
     connectError={null}
     connectStarting={false}
     data={upgradeRequiredStatus}
@@ -151,10 +164,10 @@ const upgradeMarkup = renderToStaticMarkup(
 );
 
 assert(
-  upgradeMarkup.includes("Would be protected"),
-  "PF3: upgrade-required free view should keep neutral supported-manager label",
-);
-assert(
   !upgradeMarkup.includes("Protected after connect"),
   "PF3: upgrade-required free view should not imply connect alone unlocks protection",
+);
+assert(
+  upgradeMarkup.includes("Upgrade to enable active protection"),
+  "PF3: upgrade-required view should render the upgrade CTA",
 );

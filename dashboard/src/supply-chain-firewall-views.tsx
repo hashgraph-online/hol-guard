@@ -54,6 +54,7 @@ type ConnectFlowCardProps = {
   connectError: string | null;
   connectStarting: boolean;
   connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>;
+  localRecoveryHint?: string | null;
   mode: "connect" | "repair";
   onStartConnect: () => void;
 };
@@ -128,6 +129,7 @@ export function ConnectFlowCard({
   connectError,
   connectStarting,
   connectFlow,
+  localRecoveryHint,
   mode,
   onStartConnect,
 }: ConnectFlowCardProps) {
@@ -145,10 +147,10 @@ export function ConnectFlowCard({
   const statusLabel = mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
   return (
-    <div className="rounded-[24px] border border-brand-blue/20 bg-gradient-to-br from-brand-blue/[0.05] via-white to-brand-purple/[0.04] px-4 py-4 shadow-[0_18px_45px_-34px_rgba(39,80,180,0.5)]">
+    <div className="space-y-4">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
+          <div className="space-y-2.5">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue">
                 HOL Guard Cloud
@@ -164,7 +166,7 @@ export function ConnectFlowCard({
               </p>
             </div>
           </div>
-          <div className="rounded-[18px] border border-slate-200 bg-white/85 px-3.5 py-3 sm:max-w-xs">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
               Security
             </p>
@@ -174,7 +176,7 @@ export function ConnectFlowCard({
           </div>
         </div>
 
-        <div className="grid gap-2.5 sm:grid-cols-3">
+        <div className="grid gap-2.5 md:grid-cols-3">
           {steps.map((step, index) => (
             <ConnectStep
               key={step.title}
@@ -186,6 +188,15 @@ export function ConnectFlowCard({
             />
           ))}
         </div>
+
+        {localRecoveryHint !== null && (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Available now
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">{localRecoveryHint}</p>
+          </div>
+        )}
 
         {connectError !== null && (
           <div className="rounded-[18px] border border-brand-attention/25 bg-brand-attention/[0.05] px-3.5 py-3">
@@ -240,24 +251,28 @@ export function CliFallback({ commands }: CliFallbackProps) {
   );
 }
 
-type FreeUserViewProps = {
+type EntitlementNoticeProps = {
   connectError: string | null;
   connectStarting: boolean;
   data: PackageFirewallStatusResponse;
   onStartConnect: () => void;
 };
 
-export function FreeUserView({
+export function EntitlementNotice({
   connectError,
   connectStarting,
   data,
   onStartConnect,
-}: FreeUserViewProps) {
+}: EntitlementNoticeProps) {
   const connectRequired =
     data.entitlement.reason === "guard_cloud_connect_required" ||
     data.entitlement.reason === "guard_cloud_reconnect_required";
   const connectMode = data.entitlement.reason === "guard_cloud_reconnect_required" ? "repair" : "connect";
-  const supportedManagersLabel = connectRequired ? "Protected after connect" : "Would be protected";
+  const localRecoveryHint = data.package_shims.some((shim) => shim.installed)
+    ? connectRequired
+      ? "Existing shims on this machine can still be fixed or removed locally. Connect is only needed for new installs and cloud-gated verification."
+      : null
+    : null;
   return (
     <div className="space-y-4 px-4 py-4">
       {connectRequired && data.connect_flow !== null ? (
@@ -265,31 +280,13 @@ export function FreeUserView({
           connectError={connectError}
           connectStarting={connectStarting}
           connectFlow={data.connect_flow}
+          localRecoveryHint={localRecoveryHint}
           mode={connectMode}
           onStartConnect={onStartConnect}
         />
       ) : (
         <UpgradeCta entitlement={data.entitlement} />
       )}
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">
-          {supportedManagersLabel}
-        </p>
-        {data.supported_managers.length === 0 ? (
-          <p className="text-xs text-slate-500">No supported managers detected on this machine.</p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {data.supported_managers.map((mgr) => (
-              <span
-                key={mgr}
-                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 font-mono text-xs text-slate-600"
-              >
-                {mgr}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
       {data.cli_fallback !== null && <CliFallback commands={data.cli_fallback} />}
     </div>
   );
@@ -299,7 +296,7 @@ function activationHeadline(protection: PackageManagerProtection | null): string
   if (protection === null) return "Activation status unavailable";
   if (protection.path_status === "in_path") return "Protection live now";
   if (protection.path_status === "restart_required") return "Restart shell or apps to finish activation";
-  return "PATH repair still needed";
+  return "Fix PATH to finish activation";
 }
 
 type ActivationSummaryProps = {
