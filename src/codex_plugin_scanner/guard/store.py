@@ -1866,6 +1866,13 @@ class GuardStore:
                 ),
             )
 
+    def set_receipt_action_envelope(self, receipt_id: str, action_envelope: dict[str, object]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "update runtime_receipts set action_envelope_json = ? where receipt_id = ?",
+                (json.dumps(action_envelope, sort_keys=True), receipt_id),
+            )
+
     def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
         if harness is not None:
             query = """

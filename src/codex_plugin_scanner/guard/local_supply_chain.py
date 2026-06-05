@@ -549,7 +549,10 @@ def build_package_protect_payload(
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
     )
-    receipt = replace(receipt, action_envelope_json=receipt_policy_metadata)
+    receipt_payload = {
+        **receipt.to_dict(),
+        "action_envelope_json": receipt_policy_metadata,
+    }
     payload: dict[str, object] = {
         "generated_at": now,
         "request": {
@@ -573,7 +576,7 @@ def build_package_protect_payload(
         },
         "executed": False,
         "dry_run": dry_run,
-        "receipt": receipt.to_dict(),
+        "receipt": receipt_payload,
         "matched_advisories": _matched_advisories(evaluation),
         "supply_chain_evaluation": evaluation.to_dict(),
     }
@@ -581,6 +584,7 @@ def build_package_protect_payload(
         payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=now)
     if evaluation.decision in {"block", "ask"} or dry_run:
         store.add_receipt(receipt)
+        store.set_receipt_action_envelope(receipt.receipt_id, receipt_policy_metadata)
         store.add_event(
             f"install_time_{verdict_action}",
             {
@@ -633,6 +637,7 @@ def build_package_protect_payload(
     )
     if execution.returncode == 0:
         store.add_receipt(receipt)
+        store.set_receipt_action_envelope(receipt.receipt_id, receipt_policy_metadata)
         store.add_event(
             "install_time_allow",
             {
