@@ -7204,8 +7204,6 @@ def _codex_source_inspection_can_skip_secret_output(
         return all(
             match.classifier == "pem-private-key" for match in non_medium_matches
         ) and _codex_output_uses_placeholder_private_key_fixture(response_text)
-    if any(match.sensitivity != "medium" for match in content_matches):
-        return False
     if _codex_command_references_benign_source_dotfile(command_text):
         return _codex_output_is_only_benign_secret_fixture(response_text)
     return True
@@ -9376,6 +9374,24 @@ def _finalize_guard_connect_payload(
             }
         )
         return payload
+    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=now,
+            reason=str(error),
+        )
+        payload.update(
+            {
+                "status": "retry_required",
+                "milestone": "first_sync_failed",
+                "sync_succeeded": False,
+                "sync_error": str(error),
+                "repair_message": "Run hol-guard connect again to refresh Guard Cloud authorization.",
+                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
+            }
+        )
+        return payload
     except RuntimeError as error:
         repair_message = (
             "Guard Cloud pairing finished, but the first proof sync is still pending. "
@@ -9394,24 +9410,6 @@ def _finalize_guard_connect_payload(
                 "sync_succeeded": False,
                 "sync_error": str(error),
                 "repair_message": repair_message,
-                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
-            }
-        )
-        return payload
-    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
-        store.record_latest_guard_connect_sync_result(
-            status="retry_required",
-            milestone="first_sync_failed",
-            now=now,
-            reason=str(error),
-        )
-        payload.update(
-            {
-                "status": "retry_required",
-                "milestone": "first_sync_failed",
-                "sync_succeeded": False,
-                "sync_error": str(error),
-                "repair_message": "Run hol-guard connect again to refresh Guard Cloud authorization.",
                 "latest_connect_state": store.get_latest_guard_connect_state(now=now),
             }
         )

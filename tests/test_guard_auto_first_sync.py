@@ -82,3 +82,41 @@ def test_guard_daemon_start_queues_pending_first_sync(tmp_path, monkeypatch) -> 
         assert calls == [str(store.guard_home)]
     finally:
         daemon.stop()
+
+
+def test_finalize_guard_connect_payload_keeps_reauth_failures_in_retry_required_state(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    connect_url = "https://hol.org/guard/connect"
+    now = "2026-06-04T12:00:00+00:00"
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_auth_expired(_store: GuardStore) -> dict[str, object]:
+        raise guard_commands_module.GuardSyncAuthorizationExpiredError("reauth required")
+
+    monkeypatch.setattr(guard_commands_module, "sync_receipts", _raise_auth_expired)
+
+    payload = guard_commands_module._finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload={"status": "connected"},
+        now=now,
+    )
+
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
+    assert payload["sync_succeeded"] is False
+    assert payload["sync_error"] == "reauth required"
+    assert payload["repair_message"] == "Run hol-guard connect again to refresh Guard Cloud authorization."
