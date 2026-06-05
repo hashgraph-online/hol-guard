@@ -16259,22 +16259,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
             "telemetryEnabled": False,
             "syncEnabled": True,
         },
-        "rules": [
-            {
-                "ruleId": "pkg-block",
-                "action": "block",
-                "reason": "Block risky package installs before execution.",
-                "matcherFamilies": ["package-request"],
-                "scope": {
-                    "agents": [],
-                    "devices": [],
-                    "ecosystems": ["npm"],
-                    "environments": ["development"],
-                    "harnesses": ["codex"],
-                    "locations": [],
-                },
-            }
-        ],
+        "rules": [],
         "acknowledgements": [
             {
                 "deviceId": "device-1",
