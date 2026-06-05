@@ -12,6 +12,7 @@ import {
 	  parseActionEnvelope,
 	  parseDecisionV2,
 	  runPackageFirewallAction,
+	  startPackageFirewallConnect,
 	  runAuditRemediation,
 	  resolveRequestWithQueueResult,
 	  retryResume,
@@ -884,6 +885,55 @@ assert(
   firewallError instanceof GuardHarnessActionError && firewallError.payload?.error === "approval_gate_required",
   "L079db: runPackageFirewallAction preserves daemon error code for approval modal fallback"
 );
+
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const connectCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  connectCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/initialize") {
+    return new Response(JSON.stringify({ auth_token: "fresh-connect-token" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  if (path === "/v1/supply-chain/package-shims/connect") {
+    const token = headerValue(init, "X-Guard-Token");
+    if (token !== "fresh-connect-token") {
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }
+    return new Response(JSON.stringify({
+      state: "running",
+      title: "Finish Guard Cloud sign-in in your browser",
+      detail: "HOL Guard opened the secure sign-in flow in your browser.",
+      action_label: "Connect HOL Guard Cloud",
+      connect_url: "https://hol.org/guard/connect",
+      authorize_url: "https://hol.org/mock-authorize",
+      browser_opened: true,
+      request_id: "guard-connect-1",
+      poll_after_ms: 1500
+    }), {
+      status: 202,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+
+const connectFlow = await startPackageFirewallConnect();
+assert(connectCalls.length === 3, "L079dc: connect flow bootstraps token after 401 and retries");
+assert(
+  new URL(connectCalls[0].url).pathname === "/v1/supply-chain/package-shims/connect",
+  "L079dc: connect flow posts to daemon connect route"
+);
+assert(new URL(connectCalls[1].url).pathname === "/v1/initialize", "L079dc: connect flow refreshes token after unauthorized");
+assert(
+  headerValue(connectCalls[2].init, "X-Guard-Token") === "fresh-connect-token",
+  "L079dc: connect flow retries with refreshed Guard token"
+);
+assert(connectFlow?.state === "running", "L079dc: connect flow normalizes running daemon response");
+assert(connectFlow?.authorize_url === "https://hol.org/mock-authorize", "L079dc: connect flow preserves authorize URL");
 
 installGuardWindow("?guard-token=token-remediate-error&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
