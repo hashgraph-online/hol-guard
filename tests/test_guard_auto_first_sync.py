@@ -30,7 +30,7 @@ def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_transient_sy
     def _raise_runtime_error(_store: GuardStore) -> dict[str, object]:
         raise RuntimeError("temporary receipt sync failure")
 
-    monkeypatch.setattr(guard_commands_module, "sync_receipts", _raise_runtime_error)
+    monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_runtime_error)
 
     payload = guard_commands_module._finalize_guard_connect_payload(
         store=store,
@@ -121,7 +121,7 @@ def test_finalize_guard_connect_payload_keeps_reauth_failures_in_retry_required_
     def _raise_auth_expired(_store: GuardStore) -> dict[str, object]:
         raise guard_commands_module.GuardSyncAuthorizationExpiredError("reauth required")
 
-    monkeypatch.setattr(guard_commands_module, "sync_receipts", _raise_auth_expired)
+    monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", _raise_auth_expired)
 
     payload = guard_commands_module._finalize_guard_connect_payload(
         store=store,
@@ -165,7 +165,7 @@ def test_headless_first_sync_auth_expiry_marks_connect_state_for_repair(tmp_path
         queued_calls.append(str(store.guard_home))
         return {"status": "queued", "message": "Guard Cloud sync started."}
 
-    monkeypatch.setattr(daemon_server_module, "sync_receipts", _raise_auth_expired)
+    monkeypatch.setattr(daemon_server_module, "sync_local_guard_cloud_proof", _raise_auth_expired)
     monkeypatch.setattr(daemon_server_module, "_queue_headless_cloud_sync", _record_queue)
 
     daemon_server_module._run_headless_cloud_sync(store=store)
