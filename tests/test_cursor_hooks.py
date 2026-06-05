@@ -134,7 +134,8 @@ def test_install_cursor_hooks_writes_hooks_json_and_script(tmp_path: Path) -> No
     manifest = install_cursor_hooks(context)
     hooks_path = Path(str(manifest["managed_hooks_path"]))
     script_path = Path(str(manifest["managed_hook_script_path"]))
-    assert hooks_path == context.workspace_dir / ".cursor" / "hooks.json"
+    assert hooks_path == context.home_dir / ".cursor" / "hooks.json"
+    assert not (context.workspace_dir / ".cursor" / "hooks.json").exists()
     assert script_path.name == HOOK_SCRIPT_NAME
     assert script_path.is_file()
     assert script_path.stat().st_mode & stat.S_IXUSR
@@ -171,3 +172,35 @@ def test_cursor_editor_install_includes_native_hooks(tmp_path: Path) -> None:
     hooks_path = Path(str(manifest["managed_hooks_path"]))
     assert hooks_path.is_file()
     assert manifest["managed_hook_script_path"]
+    assert hooks_path == context.home_dir / ".cursor" / "hooks.json"
+    assert not (context.workspace_dir / ".cursor" / "hooks.json").exists()
+
+
+def test_install_cursor_hooks_removes_legacy_project_hooks(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    assert context.workspace_dir is not None
+    legacy_hooks = context.workspace_dir / ".cursor" / "hooks.json"
+    legacy_script = context.workspace_dir / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    legacy_hooks.parent.mkdir(parents=True, exist_ok=True)
+    legacy_script.parent.mkdir(parents=True, exist_ok=True)
+    legacy_hooks.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {
+                    "beforeShellExecution": [
+                        {"command": str(legacy_script.resolve()), "timeout": 35, "failClosed": True}
+                    ]
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    legacy_script.write_text(f'"""Managed by HOL Guard."""\n{HOOK_SCRIPT_NAME}\n', encoding="utf-8")
+
+    install_cursor_hooks(context)
+
+    assert not legacy_hooks.exists()
+    assert not legacy_script.exists()
+    assert (context.home_dir / ".cursor" / "hooks.json").is_file()

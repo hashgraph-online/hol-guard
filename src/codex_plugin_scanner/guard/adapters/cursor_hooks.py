@@ -106,16 +106,21 @@ def cursor_hook_should_block(*, policy_action: str) -> bool:
 
 
 def cursor_hooks_path(context: HarnessContext) -> Path:
-    if context.workspace_dir is not None:
-        return context.workspace_dir / ".cursor" / "hooks.json"
+    """Cursor hooks are always installed in the global Cursor config."""
+
     return context.home_dir / ".cursor" / "hooks.json"
 
 
 def cursor_hook_script_path(context: HarnessContext) -> Path:
-    hooks_path = cursor_hooks_path(context)
-    if context.workspace_dir is not None and hooks_path.is_relative_to(context.workspace_dir):
-        return context.workspace_dir / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
     return context.home_dir / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+
+
+def _legacy_project_cursor_hooks_path(workspace_dir: Path) -> Path:
+    return workspace_dir / ".cursor" / "hooks.json"
+
+
+def _legacy_project_cursor_hook_script_path(workspace_dir: Path) -> Path:
+    return workspace_dir / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
 
 
 def managed_hook_script_path(context: HarnessContext) -> Path:
@@ -169,6 +174,7 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     payload["hooks"] = hooks
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
     hooks_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    _cleanup_legacy_project_cursor_hooks(context)
     return {
         "managed_hooks_path": str(hooks_path),
         "managed_hook_script_path": str(script_path),
@@ -181,10 +187,23 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
 def uninstall_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     """Remove Guard-managed Cursor hooks and restore prior hooks.json."""
 
-    hooks_path = cursor_hooks_path(context)
+    return _uninstall_cursor_hooks_at_paths(
+        hooks_path=cursor_hooks_path(context),
+        script_path=cursor_hook_script_path(context),
+        context=context,
+        remove_managed_copy=True,
+    )
+
+
+def _uninstall_cursor_hooks_at_paths(
+    *,
+    hooks_path: Path,
+    script_path: Path,
+    context: HarnessContext,
+    remove_managed_copy: bool,
+) -> dict[str, object]:
     backup_path = _hooks_backup_path(hooks_path, context)
     state_path = _hooks_state_path(hooks_path, context)
-    script_path = cursor_hook_script_path(context)
     backup_payload = _backup_payload(backup_path)
     restored = False
     if backup_payload["readable"] is True:
@@ -201,16 +220,81 @@ def uninstall_cursor_hooks(context: HarnessContext) -> dict[str, object]:
         backup_path.unlink()
     if restored and state_path.is_file():
         state_path.unlink()
+    if (
+        not restored
+        and hooks_path.is_file()
+        and script_path.is_file()
+        and _is_managed_hook_script(script_path.read_text(encoding="utf-8"))
+    ):
+        hooks_path.unlink()
+        restored = True
+        if state_path.is_file():
+            state_path.unlink()
     if script_path.is_file() and _is_managed_hook_script(script_path.read_text(encoding="utf-8")):
         script_path.unlink()
-    managed_script_path = managed_hook_script_path(context)
-    if managed_script_path.is_file():
-        managed_script_path.unlink()
+    if remove_managed_copy:
+        managed_script_path = managed_hook_script_path(context)
+        if managed_script_path.is_file():
+            managed_script_path.unlink()
     return {
         "managed_hooks_path": str(hooks_path),
         "restored": restored,
         "removed_hook_script": not script_path.is_file(),
     }
+
+
+def _cleanup_legacy_project_cursor_hooks(context: HarnessContext) -> None:
+    if context.workspace_dir is None:
+        return
+    hooks_path = _legacy_project_cursor_hooks_path(context.workspace_dir)
+    script_path = _legacy_project_cursor_hook_script_path(context.workspace_dir)
+    if not hooks_path.is_file() and not script_path.is_file():
+        return
+    managed = script_path.is_file() and _is_managed_hook_script(script_path.read_text(encoding="utf-8"))
+    if hooks_path.is_file() and not managed:
+        try:
+            payload = json.loads(hooks_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        hooks = payload.get("hooks")
+        if isinstance(hooks, dict):
+            for entries in hooks.values():
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    if _is_managed_hook_entry(entry, command=str(script_path.resolve())):
+                        managed = True
+                        break
+                if managed:
+                    break
+    if not managed:
+        return
+    _uninstall_cursor_hooks_at_paths(
+        hooks_path=hooks_path,
+        script_path=script_path,
+        context=context,
+        remove_managed_copy=False,
+    )
+    _prune_empty_project_cursor_dir(context.workspace_dir)
+
+
+def _prune_empty_project_cursor_dir(workspace_dir: Path) -> None:
+    hooks_dir = workspace_dir / ".cursor" / "hooks"
+    cursor_dir = workspace_dir / ".cursor"
+    if hooks_dir.is_dir():
+        try:
+            if not any(hooks_dir.iterdir()):
+                hooks_dir.rmdir()
+        except OSError:
+            return
+    if not cursor_dir.is_dir():
+        return
+    try:
+        remaining = list(cursor_dir.iterdir())
+    except OSError:
+        return
+    if not remaining:
+        cursor_dir.rmdir()
 
 
 def _resolve_guard_cli_command() -> list[str]:
@@ -237,8 +321,6 @@ def _embedded_guard_hook_argv(context: HarnessContext) -> list[str]:
     ]
     if context.home_dir.resolve() != Path.home().resolve():
         guard_argv.extend(["--home", str(context.home_dir)])
-    if context.workspace_dir is not None:
-        guard_argv.extend(["--workspace", str(context.workspace_dir)])
     return guard_argv
 
 
