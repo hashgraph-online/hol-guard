@@ -1218,11 +1218,7 @@ def simulate_policy_bundle_receipts(
             continue
         harness = _non_empty_string(receipt.get("harness")) or "*"
         matched = next(
-            (
-                item
-                for item in decisions
-                if item.artifact_id == f"family:{family}" and item.harness in {harness, "*"}
-            ),
+            (item for item in decisions if item.artifact_id == f"family:{family}" and item.harness in {harness, "*"}),
             None,
         )
         simulated_action = matched.action if matched is not None else str(receipt.get("policy_decision") or "review")
