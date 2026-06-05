@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-HOOK_SCRIPT = REPO_ROOT / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+HOOK_SCRIPT = Path.home() / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
 
 
 def main() -> int:
