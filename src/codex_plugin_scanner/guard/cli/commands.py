@@ -102,6 +102,7 @@ from ..desktop_notifications import (
 )
 from ..harness_usage import record_harness_usage_events
 from ..incident import build_incident_context
+from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
     build_local_supply_chain_posture,
     build_supply_chain_explain_payload,
@@ -1748,6 +1749,7 @@ def _guard_cloud_app_urls(
     browser_url = _browser_url_with_guard_params(
         public_url,
         auth_token=auth_token,
+        surface="cloud-dashboard",
         daemon_url=daemon_url,
     )
     return public_url, browser_url
@@ -6257,13 +6259,14 @@ def _open_approval_center(
 def _approval_center_browser_url(approval_center_url: str, auth_token: str | None) -> str | None:
     if auth_token is None:
         return None
-    return _browser_url_with_guard_params(approval_center_url, auth_token=auth_token)
+    return _browser_url_with_guard_params(approval_center_url, auth_token=auth_token, surface="approval-center")
 
 
 def _browser_url_with_guard_params(
     url: str,
     *,
     auth_token: str,
+    surface: str,
     daemon_url: str | None = None,
 ) -> str:
     parsed = urllib.parse.urlparse(url)
@@ -6274,7 +6277,12 @@ def _browser_url_with_guard_params(
     ]
     if daemon_url:
         fragment_pairs.append(("guardDaemon", daemon_url))
-    fragment_pairs.append(("guard-token", auth_token))
+    fragment_pairs.append(
+        (
+            "guard-token",
+            build_local_dashboard_session_token(auth_token=auth_token, surface=surface),
+        )
+    )
     return urllib.parse.urlunparse(parsed._replace(fragment=urllib.parse.urlencode(fragment_pairs)))
 
 

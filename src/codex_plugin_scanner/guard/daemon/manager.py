@@ -255,29 +255,9 @@ def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> dict[str, 
             raw_payload = response.read().decode("utf-8")
             if response.status != 200 or not _healthz_payload_is_current(raw_payload):
                 return None
-        request = urllib.request.Request(
-            f"{url}/v1/initialize",
-            data=json.dumps(
-                {
-                    "client_name": "guard-daemon-manager",
-                    "client_title": "HOL Guard daemon manager",
-                    "surface": "cli",
-                    "capabilities": ["daemon-adoption"],
-                    "supported_protocol_versions": [1],
-                }
-            ).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=2) as response:
-            if response.status != 200:
-                return None
-            payload = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
         return None
-    if not isinstance(payload, dict):
-        return None
-    auth_token = payload.get("auth_token")
+    auth_token = load_guard_daemon_auth_token(guard_home)
     if not isinstance(auth_token, str) or not auth_token.strip():
         return None
     details_payload = _daemon_healthz_details_payload(url, auth_token)
