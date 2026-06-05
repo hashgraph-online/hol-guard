@@ -881,7 +881,7 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
     sync_started = threading.Event()
     sync_release = threading.Event()
 
-    def blocking_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+    def blocking_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
         assert current_store is store
         sync_calls.append(1)
         sync_started.set()
@@ -891,7 +891,12 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
             "receipts_stored": 1,
         }
 
-    monkeypatch.setattr(daemon_server, "sync_receipts", blocking_sync_receipts, raising=False)
+    monkeypatch.setattr(
+        daemon_server,
+        "sync_local_guard_cloud_proof",
+        blocking_sync_local_guard_cloud_proof,
+        raising=False,
+    )
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

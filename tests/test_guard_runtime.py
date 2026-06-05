@@ -15781,7 +15781,7 @@ def test_sync_receipts_uses_rowid_cursor_and_sync_context(tmp_path, monkeypatch)
     assert second_summary["receipts"] == 1
     assert len(sync_payloads) == 2
     assert sync_payloads[1]["receipts"][0]["receiptId"] == "receipt-late"
-    assert sync_payloads[1]["syncContext"]["lastReceiptSyncAt"] == "2026-04-19T00:00:10+00:00"
+    assert "lastReceiptSyncAt" not in sync_payloads[1]["syncContext"]
     latest_cursor = store.get_sync_payload("receipt_sync_cursor")
     assert isinstance(latest_cursor, dict)
     assert isinstance(latest_cursor["last_rowid"], int)

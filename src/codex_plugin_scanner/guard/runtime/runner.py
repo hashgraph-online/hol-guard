@@ -861,7 +861,12 @@ def sync_receipts(
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
     local_guard_online_at = _now()
-    sync_context = _receipt_sync_context(store=store, local_guard_online_at=local_guard_online_at)
+    sync_context = _receipt_sync_context(
+        store=store,
+        local_guard_online_at=local_guard_online_at,
+        device_id=device_id,
+        device_name=device_name,
+    )
     latest_uploaded_rowid: int | None = None
     for receipt_batch in _iter_receipt_sync_batches(receipts):
         body = json.dumps(
@@ -2554,8 +2559,17 @@ def _receipt_sync_rows_for_upload(store: GuardStore, *, cursor_rowid: int | None
     return store.list_receipts_since_rowid(after_rowid=cursor_rowid, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
 
 
-def _receipt_sync_context(store: GuardStore, *, local_guard_online_at: str) -> dict[str, object]:
-    device_id, device_name = _guard_device_metadata(store)
+def _receipt_sync_context(
+    store: GuardStore,
+    *,
+    local_guard_online_at: str,
+    device_id: str | None = None,
+    device_name: str | None = None,
+) -> dict[str, object]:
+    resolved_device_id = device_id
+    resolved_device_name = device_name
+    if resolved_device_id is None or resolved_device_name is None:
+        resolved_device_id, resolved_device_name = _guard_device_metadata(store)
     runtime_summary = store.get_sync_payload("runtime_session_summary")
     runtime_synced_at = (
         _optional_string(runtime_summary.get("runtime_session_synced_at"))
@@ -2567,8 +2581,8 @@ def _receipt_sync_context(store: GuardStore, *, local_guard_online_at: str) -> d
     )
     sync_health = "healthy" if runtime_synced_at is not None else "degraded"
     context: dict[str, object] = {
-        "deviceId": device_id,
-        "deviceName": device_name,
+        "deviceId": resolved_device_id,
+        "deviceName": resolved_device_name,
         "harness": runtime_harness or "hol-guard",
         "localGuardOnlineAt": local_guard_online_at,
         "syncHealth": sync_health,
