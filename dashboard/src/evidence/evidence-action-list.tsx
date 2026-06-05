@@ -13,6 +13,8 @@ import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils
 import { detectCategory, getCategoryInfo } from "./categories";
 import { humanFileName } from "./plain-english";
 import { hasMore } from "./evidence-pagination";
+import { SectionLabel } from "../approval-center-primitives";
+import { DecisionBadge } from "./decision-badge";
 
 interface EvidenceActionListProps {
   receipts: GuardReceipt[];
@@ -25,35 +27,6 @@ interface EvidenceActionListProps {
   page: number;
   pageSize: number;
   onLoadMore: () => void;
-}
-
-interface DecisionChipProps {
-  decision: string;
-}
-
-function DecisionChip({ decision }: DecisionChipProps) {
-  if (decision === "allow") {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700 ring-1 ring-green-200">
-        <HiMiniShieldCheck className="h-3 w-3" aria-hidden="true" />
-        Allowed
-      </span>
-    );
-  }
-  if (decision === "block") {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
-        <HiMiniNoSymbol className="h-3 w-3" aria-hidden="true" />
-        Stopped
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 ring-1 ring-blue-200">
-      <HiMiniQuestionMarkCircle className="h-3 w-3" aria-hidden="true" />
-      Reviewed
-    </span>
-  );
 }
 
 const SORT_TOGGLE_MAP: Record<EvidenceSortKey, EvidenceSortKey> = {
@@ -143,16 +116,14 @@ export function EvidenceActionList({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium text-slate-500">
-          {receipts.length} action{receipts.length !== 1 ? "s" : ""}
-        </span>
+        <SectionLabel>{receipts.length} action{receipts.length !== 1 ? "s" : ""}</SectionLabel>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" aria-label="Evidence actions">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/60">
+              <tr className="border-b border-slate-100 bg-slate-50/80">
                 <th scope="col" className="w-8 px-3 py-2.5" />
                 <SortHeader
                   label="Artifact"
@@ -312,7 +283,7 @@ function ActionRow({
         </button>
       </td>
       <td className="px-3 py-2.5">
-        <DecisionChip decision={receipt.policy_decision} />
+        <DecisionBadge decision={receipt.policy_decision} />
       </td>
       <td className="px-3 py-2.5 hidden lg:table-cell">
         <span className="text-xs text-slate-400 whitespace-nowrap">
