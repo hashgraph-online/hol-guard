@@ -6,9 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from .store import GuardStore
 
-PACKAGE_FIREWALL_PAID_TIERS = frozenset(
-    {"paid", "premium", "pro", "team", "enterprise", "guard_cloud", "guard-cloud"}
-)
+PACKAGE_FIREWALL_PAID_TIERS = frozenset({"paid", "premium", "pro", "team", "enterprise", "guard_cloud", "guard-cloud"})
 PACKAGE_FIREWALL_RECONNECT_CTA = "Reconnect HOL Guard Cloud to refresh package firewall access."
 PACKAGE_FIREWALL_UPGRADE_CTA = "Upgrade to HOL Guard Cloud to run package firewall actions."
 _OAUTH_ENTITLEMENT_FALLBACK_TTL = timedelta(days=30)
