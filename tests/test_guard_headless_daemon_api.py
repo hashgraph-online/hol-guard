@@ -818,13 +818,18 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         sync_calls.append("runtime")
         sync_calls.append("receipts")
         sync_finished.set()
-        return {
+        summary = {
             "synced_at": "2026-05-23T17:18:40.061Z",
             "receipts_stored": 1,
             "runtime_session_synced_at": "2026-05-23T17:18:35.000Z",
             "runtime_session_id": "runtime-session-1",
             "runtime_sessions_visible": 1,
         }
+        current_store.record_latest_guard_connect_sync_success(
+            sync_payload=summary,
+            now="2026-05-23T17:18:40.061Z",
+        )
+        return summary
 
     monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
 
