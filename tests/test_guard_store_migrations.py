@@ -614,6 +614,36 @@ def test_oauth_local_credentials_mirror_secret_into_encrypted_fallback_store(tmp
     assert headless_store.get_oauth_local_credential_health()["state"] == "healthy"
 
 
+def test_set_oauth_local_credentials_does_not_use_generic_secret_promotion(tmp_path, monkeypatch):
+    _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+
+    monkeypatch.setattr(
+        store,
+        "_promote_secret_to_primary",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("OAuth writes must not use generic promotion")),
+    )
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: None))
+    headless_store = GuardStore(guard_home)
+
+    assert headless_store.get_oauth_local_credentials() is not None
+
+
 def test_get_oauth_local_credentials_backfills_encrypted_fallback_for_legacy_keyring_only_state(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch)
     guard_home = tmp_path / "guard-home"
