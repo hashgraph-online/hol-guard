@@ -16720,6 +16720,112 @@ def test_sync_local_guard_cloud_proof_refreshes_oauth_once(tmp_path, monkeypatch
     assert payload["runtime_session_id"] == expected_session_id
 
 
+def test_sync_local_guard_cloud_proof_serializes_concurrent_oauth_refresh(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    token_refreshes: list[str] = []
+    sync_errors: list[Exception] = []
+    sync_results: list[dict[str, object]] = []
+    start_barrier = threading.Barrier(2)
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        del timeout
+        if request.full_url == "https://hol.org/api/guard/oauth/token":
+            body = urllib.parse.parse_qs(request.data.decode("utf-8"))
+            refresh_token = body["refresh_token"][0]
+            token_refreshes.append(refresh_token)
+            threading.Event().wait(0.05)
+            rotated_refresh_token = {
+                "refresh-token-1": "refresh-token-2",
+                "refresh-token-2": "refresh-token-3",
+            }.get(refresh_token)
+            if rotated_refresh_token is None:
+                raise AssertionError(f"unexpected refresh token: {refresh_token}")
+            return _Response(
+                {
+                    "access_token": f"oauth-access-token-for-{refresh_token}",
+                    "refresh_token": rotated_refresh_token,
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                }
+            )
+        if request.full_url == "https://hol.org/api/guard/runtime/sessions/sync":
+            return _Response(
+                {
+                    "syncedAt": "2026-06-01T00:00:05+00:00",
+                    "items": [{"sessionId": "runtime-session-1"}],
+                }
+            )
+        if request.full_url == "https://hol.org/api/guard/receipts/sync":
+            return _Response(
+                {
+                    "syncedAt": "2026-06-01T00:00:06+00:00",
+                    "receiptsStored": 0,
+                    "advisories": [],
+                    "policy": {},
+                    "alertPreferences": {},
+                    "teamPolicyPack": {},
+                    "exceptions": [],
+                }
+            )
+        if request.full_url == "https://hol.org/api/v1/guard/events":
+            return _Response(
+                {
+                    "syncedAt": "2026-06-01T00:00:07+00:00",
+                    "accepted": 1,
+                    "events": 1,
+                }
+            )
+        raise AssertionError(f"unexpected request: {request.full_url}")
+
+    def _run_sync() -> None:
+        try:
+            start_barrier.wait(timeout=5)
+            sync_results.append(guard_runner_module.sync_local_guard_cloud_proof(store))
+        except Exception as error:  # pragma: no cover - assertion captured below
+            sync_errors.append(error)
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    threads = [threading.Thread(target=_run_sync) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert sync_errors == []
+    assert len(sync_results) == 2
+    assert token_refreshes == ["refresh-token-1", "refresh-token-2"]
+    stored_credentials = store.get_oauth_local_credentials()
+    assert isinstance(stored_credentials, dict)
+    assert stored_credentials["refresh_token"] == "refresh-token-3"
+
+
 def test_sync_pain_signals_raises_when_oauth_refresh_is_revoked(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
