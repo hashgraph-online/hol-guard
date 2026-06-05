@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import urllib.request
+
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
@@ -49,7 +52,7 @@ def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_transient_sy
     assert latest_state["milestone"] == "first_sync_pending"
 
 
-def test_guard_daemon_start_queues_pending_first_sync(tmp_path, monkeypatch) -> None:
+def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     now = "2026-06-04T12:00:00+00:00"
     store.record_guard_connect_pairing_completed(
@@ -79,6 +82,10 @@ def test_guard_daemon_start_queues_pending_first_sync(tmp_path, monkeypatch) -> 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     try:
         daemon.start()
+        assert calls == []
+        with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        assert payload["cloud_state"] == "paired_waiting"
         assert calls == [str(store.guard_home)]
     finally:
         daemon.stop()

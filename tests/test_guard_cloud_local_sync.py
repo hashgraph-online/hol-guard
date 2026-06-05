@@ -563,7 +563,10 @@ def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(t
             "first_sync_pending",
             "pending",
             "First proof pending",
-            "Browser sign-in finished. First proof sync has not completed yet.",
+            (
+                "Browser sign-in finished. Local Guard will retry the first proof sync automatically "
+                "while the daemon is running, or you can run hol-guard sync now."
+            ),
         ),
         (
             "waiting",
