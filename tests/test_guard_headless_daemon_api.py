@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
+from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -1122,6 +1123,127 @@ def test_headless_policy_sync_persists_policy_and_receipt(tmp_path: Path) -> Non
     assert decisions[0]["action"] == "review"
     assert decisions[0]["expires_at"] == "2099-01-01T00:00:00+00:00"
     assert store.list_receipts(limit=5, harness="codex")
+
+
+def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        bundle = {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-04-19.3",
+            "bundleHash": "",
+            "issuedAt": "2026-04-19T00:00:10+00:00",
+            "expiresAt": None,
+            "verifier": {
+                "algorithm": "sha256",
+                "keyId": "guard-policy-bundle-v1",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [
+                {
+                    "ruleId": "pkg-block",
+                    "action": "block",
+                    "reason": "Block risky package installs.",
+                    "matcherFamilies": ["package-request"],
+                    "scope": {
+                        "agents": [],
+                        "devices": [],
+                        "ecosystems": ["npm"],
+                        "environments": ["development"],
+                        "harnesses": ["codex"],
+                        "locations": [],
+                    },
+                }
+            ],
+            "acknowledgements": [],
+        }
+        bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["bundle_version"] == "policy-2026-04-19.3"
+    assert payload["bundle_hash"] == bundle["bundleHash"]
+    assert store.get_sync_payload("policy_bundle")["bundleVersion"] == "policy-2026-04-19.3"
+    assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
+
+
+def test_headless_policy_sync_rejects_unsupported_daemon_version(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        bundle = {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-04-19.4",
+            "bundleHash": "",
+            "issuedAt": "2026-04-19T00:00:10+00:00",
+            "expiresAt": None,
+            "minDaemonVersion": "999.0.0",
+            "verifier": {
+                "algorithm": "sha256",
+                "keyId": "guard-policy-bundle-v1",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [],
+            "acknowledgements": [],
+        }
+        bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "unsupported_daemon_version"
 
 
 def test_headless_policy_sync_rejects_global_allow_and_missing_scope_targets(

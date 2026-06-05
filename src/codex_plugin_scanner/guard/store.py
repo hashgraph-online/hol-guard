@@ -162,7 +162,16 @@ _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
 _WORKSPACE_POLICY_KEY_PREFIX = "workspace:"
 _SCOPED_HARNESS_FAMILIES = frozenset(
-    {"file-read", "mcp-tool", "prompt", "prompt-env-read", "prompt-file", "tool-action"}
+    {
+        "file-read",
+        "mcp",
+        "mcp-tool",
+        "package-request",
+        "prompt",
+        "prompt-env-read",
+        "prompt-file",
+        "tool-action",
+    }
 )
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
@@ -1674,7 +1683,9 @@ class GuardStore:
                 now=now,
             )
         with self._connect() as connection:
-            connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
+            connection.execute(
+                "delete from policy_decisions where source in ('cloud-sync', 'team-policy', 'policy-bundle')"
+            )
             for decision in decisions:
                 artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
                 connection.execute(
@@ -3730,7 +3741,9 @@ class GuardStore:
             connection.execute("delete from guard_supply_chain_bundle_cache")
             connection.execute("delete from guard_supply_chain_eval_cache")
             connection.execute("delete from publisher_cache")
-            connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
+            connection.execute(
+                "delete from policy_decisions where source in ('cloud-sync', 'team-policy', 'policy-bundle')"
+            )
 
     @staticmethod
     def _cloud_workspace_id_from_connection(connection: sqlite3.Connection) -> str | None:
@@ -4376,6 +4389,9 @@ def _stored_workspace_policy_key(workspace: str) -> str:
 def _artifact_family_key(artifact_id: str | None) -> str | None:
     if artifact_id is None or not artifact_id.strip():
         return None
+    if artifact_id.startswith("family:"):
+        family = artifact_id.removeprefix("family:").strip().lower()
+        return artifact_id if family in _SCOPED_HARNESS_FAMILIES else None
     parts = artifact_id.split(":")
     if len(parts) < 3:
         return None

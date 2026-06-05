@@ -9388,6 +9388,21 @@ def _guard_doctor_latest_connect_state_payload(latest_state: dict[str, object]) 
 
 
 def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
+    policy_bundle = store.get_sync_payload("policy_bundle")
+    if isinstance(policy_bundle, dict):
+        policy_defaults = policy_bundle.get("policyDefaults")
+        if isinstance(policy_defaults, dict):
+            payload = dict(policy_defaults)
+            issued_at = _optional_string(policy_bundle.get("issuedAt"))
+            bundle_hash = _optional_string(policy_bundle.get("bundleHash"))
+            bundle_version = _optional_string(policy_bundle.get("bundleVersion"))
+            if issued_at is not None:
+                payload["updatedAt"] = issued_at
+            if bundle_hash is not None:
+                payload["bundleHash"] = bundle_hash
+            if bundle_version is not None:
+                payload["bundleVersion"] = bundle_version
+            return payload
     payload = store.get_sync_payload("policy")
     return payload if isinstance(payload, dict) else None
 
@@ -9395,14 +9410,55 @@ def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
 def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
     if store.get_cloud_sync_profile() is None:
         return
+    now = _now()
     try:
         sync_receipts(store)
-    except (GuardSyncNotConfiguredError, RuntimeError):
+    except GuardSyncAuthorizationExpiredError as error:
+        store.set_sync_payload(
+            "policy_bundle_last_error",
+            {"reason": "auth_expired", "message": str(error)},
+            now,
+        )
+        return
+    except GuardSyncNotConfiguredError:
+        return
+    except RuntimeError as error:
+        store.set_sync_payload(
+            "policy_bundle_last_error",
+            {"reason": "sync_failed", "message": str(error)},
+            now,
+        )
         return
     try:
         sync_supply_chain_bundle(store)
-    except (GuardSyncNotConfiguredError, RuntimeError):
+    except GuardSyncAuthorizationExpiredError as error:
+        store.set_sync_payload(
+            "policy_bundle_last_error",
+            {"reason": "auth_expired", "message": str(error)},
+            now,
+        )
         return
+    except GuardSyncNotConfiguredError:
+        return
+    except RuntimeError as error:
+        store.set_sync_payload(
+            "policy_bundle_last_error",
+            {"reason": "sync_failed", "message": str(error)},
+            now,
+        )
+        return
+    policy_bundle_last_error = store.get_sync_payload("policy_bundle_last_error")
+    policy_bundle_rejection_reason = (
+        _optional_string(policy_bundle_last_error.get("reason"))
+        if isinstance(policy_bundle_last_error, dict)
+        else None
+    )
+    if policy_bundle_rejection_reason not in {
+        "bundle_version_downgrade",
+        "invalid_policy_bundle",
+        "unsupported_daemon_version",
+    }:
+        store.set_sync_payload("policy_bundle_last_error", {}, now)
 
 
 def _guard_cloud_urls_for_connect(connect_url: str) -> dict[str, str]:
