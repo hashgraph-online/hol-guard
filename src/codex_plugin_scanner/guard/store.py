@@ -1160,6 +1160,7 @@ class GuardStore:
               )
             """
         )
+        connection.execute("drop table if exists runtime_receipts_new")
         connection.execute(
             """
             create table runtime_receipts_new (
@@ -1185,14 +1186,16 @@ class GuardStore:
         connection.execute(
             """
             insert into runtime_receipts_new (
-              receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-              changed_capabilities_json, provenance_summary, user_override, artifact_name, source_scope,
-              scanner_evidence_json, timestamp, diff_summary, approval_source, approval_request_id
+              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+              capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
+              artifact_name, source_scope, scanner_evidence_json, timestamp, diff_summary,
+              approval_source, approval_request_id
             )
             select
-              receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-              changed_capabilities_json, provenance_summary, user_override, artifact_name, source_scope,
-              scanner_evidence_json, timestamp, diff_summary, approval_source, null
+              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+              capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
+              artifact_name, source_scope, scanner_evidence_json, timestamp, diff_summary,
+              approval_source, null
             from runtime_receipts
             """
         )
