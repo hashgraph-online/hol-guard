@@ -117,6 +117,10 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
+from ..package_firewall_entitlement import (
+    package_firewall_block_details,
+    resolve_package_firewall_entitlement,
+)
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
 from ..proxy import (
@@ -513,6 +517,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         dest="package_shim_managers",
         default=[],
     )
+    package_shims_parser.add_argument("--approval-password")
+    package_shims_parser.add_argument("--approval-totp")
     _add_guard_common_args(package_shims_parser)
     package_shims_parser.add_argument("--json", action="store_true")
 
@@ -1144,6 +1150,57 @@ def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
         choices=("auto", "on", "off"),
         default="auto",
         help="Control optional Cisco scanner evidence for local consumer-mode artifact scans.",
+    )
+
+
+def _package_firewall_action_states(entitlement: dict[str, object]) -> dict[str, str]:
+    allowed = bool(entitlement.get("allowed"))
+    reason = str(entitlement.get("reason") or "").strip().lower()
+    if allowed:
+        state = "available"
+    elif reason == "guard_cloud_reconnect_required":
+        state = "reconnect_required"
+    else:
+        state = "paid_required"
+    return {
+        "install": state,
+        "repair": state,
+        "test": state,
+        "audit": state,
+        "sync": state,
+        "remove": state,
+    }
+
+
+def _package_firewall_cli_gate_input(args: argparse.Namespace, guard_home: Path) -> ApprovalGateInput | None:
+    password = getattr(args, "approval_password", None)
+    totp_code = getattr(args, "approval_totp", None)
+    if isinstance(password, str) and password:
+        return ApprovalGateInput(password=password, totp_code=totp_code)
+    if isinstance(totp_code, str) and totp_code:
+        return ApprovalGateInput(password=None, totp_code=totp_code)
+    return prompt_for_approval_gate(guard_home, use_cooldown=False)
+
+
+def _package_firewall_block_payload(
+    *,
+    entitlement: dict[str, object],
+    operation: str,
+) -> tuple[int, dict[str, object]]:
+    status, error_code, message = package_firewall_block_details(entitlement)
+    return (
+        status,
+        {
+            "available_actions": ["status", "education", "cli_fallback"],
+            "cli_fallback": {
+                "connect": "hol-guard connect",
+                "status": "hol-guard package-shims status --json",
+            },
+            "entitlement": entitlement,
+            "error": error_code,
+            "message": message,
+            "operation": operation,
+        },
     )
 
 
@@ -2036,14 +2093,42 @@ def run_guard_command(
             if isinstance(manager, str) and manager.strip()
         )
         shim_command = getattr(args, "package_shims_command", "status")
-        if shim_command == "install":
-            payload = install_package_shims(context, managers=requested_managers or None)
-        elif shim_command == "repair":
-            payload = repair_package_shims(context, managers=requested_managers or None)
-        elif shim_command == "uninstall":
-            payload = uninstall_package_shims(context, managers=requested_managers or None)
-        else:
+        entitlement = resolve_package_firewall_entitlement(store)
+        if shim_command == "status":
             payload = package_shim_status(context)
+            payload["actions"] = _package_firewall_action_states(entitlement)
+            payload["entitlement"] = entitlement
+            payload["generated_at"] = _now()
+            _emit("package-shims", payload, getattr(args, "json", False))
+            return 0
+        if not bool(entitlement["allowed"]):
+            status, payload = _package_firewall_block_payload(
+                entitlement=entitlement,
+                operation="remove" if shim_command == "uninstall" else shim_command,
+            )
+            payload["generated_at"] = _now()
+            _emit("package-shims", payload, getattr(args, "json", False))
+            return 2
+        try:
+            if shim_command in {"install", "repair", "uninstall"}:
+                gate_input = _package_firewall_cli_gate_input(args, store.guard_home)
+                require_high_risk(
+                    store.guard_home,
+                    purpose="supply_chain_firewall",
+                    approval_gate_input=gate_input,
+                )
+            if shim_command == "install":
+                payload = install_package_shims(context, managers=requested_managers or None)
+            elif shim_command == "repair":
+                payload = repair_package_shims(context, managers=requested_managers or None)
+            elif shim_command == "uninstall":
+                payload = uninstall_package_shims(context, managers=requested_managers or None)
+            else:
+                payload = package_shim_status(context)
+        except ApprovalGateError as error:
+            _emit("package-shims", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 2
+        payload["entitlement"] = entitlement
         payload["generated_at"] = _now()
         _emit("package-shims", payload, getattr(args, "json", False))
         return 0

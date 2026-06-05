@@ -17,7 +17,10 @@ type UpgradeCtaProps = {
 };
 
 export function UpgradeCta({ entitlement }: UpgradeCtaProps) {
-  const upgradeUrl = entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
+  const reconnectRequired = entitlement.reason === "guard_cloud_reconnect_required";
+  const upgradeUrl = reconnectRequired
+    ? "https://hol.org/guard/connect"
+    : entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-brand-blue/20 bg-gradient-to-br from-brand-blue/[0.04] to-brand-dark/[0.02] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-start gap-2.5">
@@ -27,7 +30,7 @@ export function UpgradeCta({ entitlement }: UpgradeCtaProps) {
         />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-brand-dark">
-            Upgrade to enable active protection
+            {reconnectRequired ? "Reconnect to restore active protection" : "Upgrade to enable active protection"}
           </p>
           <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
             {entitlement.upgrade_cta ??
@@ -37,7 +40,7 @@ export function UpgradeCta({ entitlement }: UpgradeCtaProps) {
         </div>
       </div>
       <ActionButton href={upgradeUrl} variant="primary">
-        Upgrade
+        {reconnectRequired ? "Reconnect" : "Upgrade"}
         <HiMiniArrowTopRightOnSquare className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
       </ActionButton>
     </div>

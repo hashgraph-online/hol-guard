@@ -220,6 +220,152 @@ def test_supply_chain_package_firewall_install_requires_paid_entitlement(tmp_pat
     assert payload["available_actions"] == ["status", "education", "cli_fallback"]
 
 
+def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired_cloud_auth(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-05T01:39:51+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-05T01:39:51+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-06-05T01:40:10+00:00",
+        reason="Guard authorization expired. Run `hol-guard connect` again.",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["entitlement"] == {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "unknown",
+        "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+    }
+    assert payload["actions"]["install"] == "reconnect_required"
+
+
+def test_supply_chain_package_firewall_install_requires_reconnect_when_cloud_auth_expired(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-05T01:39:51+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-05T01:39:51+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-06-05T01:40:10+00:00",
+        reason="Guard authorization expired. Run `hol-guard connect` again.",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                token=token,
+                payload={"managers": ["npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 403
+    assert payload["error"] == "guard_cloud_reconnect_required"
+    assert payload["entitlement"]["tier"] == "unknown"
+
+
+def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        supply_chain_entitlement_expires_at="2026-07-05T01:39:51+00:00",
+        supply_chain_firewall=True,
+        supply_chain_plan_id="pro",
+        workspace_id="workspace-1",
+        now="2026-06-05T01:39:51+00:00",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["entitlement"] == {
+        "allowed": True,
+        "reason": "paid_oauth_entitlement_active",
+        "tier": "pro",
+        "upgrade_cta": None,
+    }
+    assert payload["actions"] == {
+        "install": "available",
+        "repair": "available",
+        "test": "available",
+        "audit": "available",
+        "sync": "available",
+        "remove": "available",
+    }
+
+
 def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
