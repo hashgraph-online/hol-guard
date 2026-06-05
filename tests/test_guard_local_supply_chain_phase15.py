@@ -82,7 +82,7 @@ def _package(
     }
 
 
-def _bundle_response(*, packages: list[dict[str, object]]) -> dict[str, object]:
+def _bundle_response(*, packages: list[dict[str, object]], policy_rules: list[dict[str, object]] | None = None) -> dict[str, object]:
     generated_at = datetime.now(timezone.utc)
     expires_at = generated_at + timedelta(days=7)
     bundle = {
@@ -108,7 +108,7 @@ def _bundle_response(*, packages: list[dict[str, object]]) -> dict[str, object]:
         "keyId": "guard-bundle-key-2026-05",
         "packages": packages,
         "policyHash": "policy-hash-1",
-        "policyRules": [],
+        "policyRules": policy_rules or [],
         "scoringVersion": "scf-v1",
         "sourceHashes": [{"payloadHash": "ghsa-feed-hash", "sourceKey": "ghsa", "staleStatus": "fresh"}],
         "tier": "premium",
@@ -141,8 +141,14 @@ def _bundle_response(*, packages: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
-def _seed_supply_chain_bundle(store: GuardStore, *, packages: list[dict[str, object]], now: str) -> None:
-    response = _bundle_response(packages=packages)
+def _seed_supply_chain_bundle(
+    store: GuardStore,
+    *,
+    packages: list[dict[str, object]],
+    now: str,
+    policy_rules: list[dict[str, object]] | None = None,
+) -> None:
+    response = _bundle_response(packages=packages, policy_rules=policy_rules)
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync",
         "token-one",
@@ -244,6 +250,65 @@ def test_guard_protect_routes_package_requests_through_supply_chain_eval_and_red
     assert payload["supply_chain_evaluation"]["decision"] == "block"
     assert "super-secret-token" not in serialized
     assert "another-secret-token" not in serialized
+    assert payload["receipt"]["action_envelope_json"]["policy_version"] == "policy-hash-1"
+    redacted_command = payload["receipt"]["action_envelope_json"]["redacted_command"]
+    assert isinstance(redacted_command, str)
+    assert "npm install minimist@1.2.5" in redacted_command
+    assert "super-secret-token" not in redacted_command
+    assert "another-secret-token" not in redacted_command
+    stored_receipt = store.list_receipts(limit=1)[0]
+    assert stored_receipt["action_envelope_json"]["policy_version"] == "policy-hash-1"
+    assert stored_receipt["action_envelope_json"]["matched_rule_id"] is None
+    assert "super-secret-token" not in json.dumps(stored_receipt)
+    assert "another-secret-token" not in json.dumps(stored_receipt)
+
+
+def test_guard_protect_receipt_keeps_matched_policy_rule_metadata(tmp_path: Path) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    _seed_supply_chain_bundle(
+        store,
+        packages=[_package(name="minimist", version="1.2.5", default_action="block")],
+        now="2026-05-19T12:00:00+00:00",
+        policy_rules=[
+            {
+                "action": "warn",
+                "ruleId": "policy-rule-1",
+                "ecosystemSelector": "npm",
+                "enabled": True,
+                "expiresAt": "2099-01-01T00:00:00Z",
+                "harnessSelector": "guard-cli",
+                "packageSelector": "minimist",
+                "priority": 1,
+                "severityThreshold": "low",
+                "versionRangeSelector": "1.2.5",
+            }
+        ],
+    )
+
+    payload, exit_code = build_protect_payload(
+        command=["npm", "install", "minimist@1.2.5"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=True,
+        now="2026-05-19T12:00:00+00:00",
+        unsafe_raw_output=False,
+    )
+
+    assert exit_code == 0
+    assert payload["supply_chain_evaluation"]["matched_rule_id"] == "policy-rule-1"
+    assert payload["receipt"]["action_envelope_json"] == {
+        "bundle_version": "1747612800000-deadbeef",
+        "matched_rule_id": "policy-rule-1",
+        "package_manager": "npm",
+        "package_targets": ["minimist@1.2.5"],
+        "policy_version": "policy-hash-1",
+        "redacted_command": "npm install minimist@1.2.5",
+    }
+    stored_receipt = store.list_receipts(limit=1)[0]
+    assert stored_receipt["action_envelope_json"]["matched_rule_id"] == "policy-rule-1"
 
 
 def test_guard_doctor_includes_supply_chain_posture(tmp_path: Path, capsys) -> None:
