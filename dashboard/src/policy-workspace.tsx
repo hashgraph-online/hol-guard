@@ -180,8 +180,7 @@ export function PolicyWorkspace({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-brand-dark">Policy</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="text-sm text-slate-500">
             Guard rules, exceptions, and remembered decisions.
           </p>
         </div>

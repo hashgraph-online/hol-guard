@@ -12,7 +12,12 @@ import {
 } from "react-icons/hi2";
 import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
-import type { GuardManagedInstall, GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
+import type {
+  GuardApprovalGatePublicConfig,
+  GuardManagedInstall,
+  GuardRuntimeSnapshot,
+  PackageManagerProtection,
+} from "./guard-types";
 import { resolvePackageManagerProtectionCopy } from "./runtime-overview";
 import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
 
@@ -136,10 +141,11 @@ function AppFirewallRow({ install, protection }: AppFirewallRowProps) {
 
 type SupplyChainWorkspaceProps = {
   snapshot: GuardRuntimeSnapshot;
+  approvalGate: GuardApprovalGatePublicConfig | null;
   onGoHome: () => void;
 };
 
-export function SupplyChainWorkspace({ snapshot, onGoHome }: SupplyChainWorkspaceProps) {
+export function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }: SupplyChainWorkspaceProps) {
   const [filter, setFilter] = useState<SupplyChainFilterState>({
     statusFilter: "all",
     managerFilter: "",
@@ -186,8 +192,7 @@ export function SupplyChainWorkspace({ snapshot, onGoHome }: SupplyChainWorkspac
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-brand-dark">Supply Chain</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="text-sm text-slate-500">
             Package manager firewall status, prevented installs, and feed health.
           </p>
         </div>
@@ -203,7 +208,7 @@ export function SupplyChainWorkspace({ snapshot, onGoHome }: SupplyChainWorkspac
         <StatCard label="Unprotected managers" value={stats.unprotectedManagers} tone={stats.unprotectedManagers > 0 ? "attention" : "slate"} />
       </div>
 
-      <PackageFirewallPanel />
+      <PackageFirewallPanel approvalGate={approvalGate} />
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
