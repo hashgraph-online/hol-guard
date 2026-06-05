@@ -860,7 +860,7 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
     proof_status: {
       state: "pending",
       label: "First proof pending",
-      detail: "Browser pairing finished. First proof sync has not completed yet.",
+      detail: "Browser pairing finished. Local Guard will retry the first proof sync automatically while the daemon is running, or you can run hol-guard sync now.",
       request_id: "demo-connect-request",
       pairing_completed_at: now,
       first_synced_at: null,

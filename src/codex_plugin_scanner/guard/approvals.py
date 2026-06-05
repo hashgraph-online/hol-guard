@@ -738,8 +738,11 @@ def _runtime_proof_status_detail(state: str) -> str:
     details = {
         "synced": "This device completed its first Guard Cloud proof sync.",
         "sync_unavailable": "Local Guard is connected. Shared cloud sync needs a paid Guard plan.",
-        "failed": "Run hol-guard connect again to finish first proof sync.",
-        "pending": "Browser sign-in finished. First proof sync has not completed yet.",
+        "failed": "Guard Cloud sign-in on this machine needs repair. Run hol-guard connect again.",
+        "pending": (
+            "Browser sign-in finished. Local Guard will retry the first proof sync automatically "
+            "while the daemon is running, or you can run hol-guard sync now."
+        ),
         "expired": "The sign-in link expired. Run hol-guard connect again.",
         "waiting": "Open the sign-in link to register this local Guard device.",
         "not_connected": "Connect Guard Cloud to sync this device proof.",
@@ -887,8 +890,8 @@ def _runtime_cloud_state_detail(cloud_state: str, *, oauth_repair_required: bool
         )
     if cloud_state == "paired_waiting":
         return (
-            "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. "
-            "Open Fleet while the first sync settles."
+            "This machine is connected to Guard Cloud. Local Guard will finish the first shared proof "
+            "automatically while the daemon is running."
         )
     if cloud_state == "paired_active":
         return (
@@ -948,7 +951,7 @@ def _runtime_headline_detail(headline_state: str) -> str:
         "protected": "This machine is protected and the local queue is clear.",
         "blocked": "A blocked launch is waiting for review in the current request queue.",
         "local_only": "This machine is protected locally and can connect later when shared memory matters.",
-        "connected": "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
+        "connected": "This machine is connected to Guard Cloud. Local Guard is sending the first shared proof now.",
     }
     return details.get(headline_state, "This machine is protected locally.")
 

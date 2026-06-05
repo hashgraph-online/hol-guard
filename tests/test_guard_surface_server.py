@@ -116,14 +116,18 @@ class TestGuardSurfaceServer:
 
         assert "Open pairing flow" in dashboard_bundle
         assert "Open Guard connect" not in dashboard_bundle
-        assert "Browser pairing finished. First proof sync has not completed yet." in dashboard_bundle
-        assert "Browser sign-in finished. First proof sync has not completed yet." not in dashboard_bundle
-        assert 'label: "Pairing…"' in runtime_overview_chunk
+        assert (
+            "Browser pairing finished. Local Guard will retry the first proof sync automatically "
+            "while the daemon is running, or you can run hol-guard sync now."
+        ) in dashboard_bundle
+        assert "Browser pairing finished. First proof sync has not completed yet." not in dashboard_bundle
+        assert 'label: "First sync in progress"' in runtime_overview_chunk
+        assert "Connected to Guard Cloud. Local Guard is sending the first shared proof now." in runtime_overview_chunk
         assert '"Sync pending"' not in runtime_overview_chunk
-        assert "Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly." in (
+        assert "Guard Cloud is connected. Local Guard is finishing the first shared proof automatically." in (
             feed_health_chunk
         )
-        assert "Cloud connection is complete. Feed sync is in progress. First proof will arrive shortly." not in (
+        assert "Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly." not in (
             feed_health_chunk
         )
 

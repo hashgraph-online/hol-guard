@@ -364,11 +364,23 @@ def _run_headless_cloud_sync(
             "receipts_stored": sync_payload.get("receipts_stored", 0),
         }
     except GuardSyncAuthorizationExpiredError as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=recorded_at,
+            reason=str(error),
+        )
         summary = {
             "status": "auth_expired",
             "message": str(error),
         }
     except GuardSyncNotConfiguredError as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=recorded_at,
+            reason=str(error),
+        )
         summary = {
             "status": "not_configured",
             "message": str(error),
@@ -420,6 +432,22 @@ def _queue_headless_cloud_sync(
         "status": "queued",
         "message": "Guard Cloud sync started.",
     }
+
+
+def _maybe_queue_first_cloud_sync(*, store: GuardStore) -> dict[str, object] | None:
+    if store.get_cloud_sync_profile() is None:
+        return None
+    oauth_health = store.get_oauth_local_credential_health()
+    if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":
+        return None
+    latest_state = store.get_effective_guard_connect_state(now=_now())
+    if latest_state is None:
+        return None
+    if str(latest_state.get("status") or "") != "connected":
+        return None
+    if str(latest_state.get("milestone") or "") != "first_sync_pending":
+        return None
+    return _queue_headless_cloud_sync(store=store)
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
@@ -476,6 +504,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"items": store.list_guard_sessions(limit=200)})
             return
         if parsed.path == "/v1/runtime":
+            _maybe_queue_first_cloud_sync(store=store)
             config = load_guard_config(store.guard_home)
             snapshot = build_runtime_snapshot(
                 store=store,

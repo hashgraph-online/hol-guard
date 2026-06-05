@@ -43,7 +43,8 @@ assert(pairedActiveCopy.detail.length > 0, "T508: paired_active detail should no
 assert(pairedActiveCopy.detail.includes("Guard Cloud"), "T508: paired_active detail should mention Guard Cloud");
 
 const pairedWaitingCopy = resolveCloudIntelCopy("paired_waiting");
-assert(pairedWaitingCopy.label === "Pairing…", "T508: paired_waiting label should be 'Pairing…'");
+assert(pairedWaitingCopy.label === "First sync in progress", "T508: paired_waiting label should describe automatic first sync");
+assert(pairedWaitingCopy.detail.includes("first shared proof"), "T508: paired_waiting detail should mention the first shared proof");
 
 const pairedActiveSyncCopy = resolveCloudSyncHealthCopy(healthHealthy);
 assert(pairedActiveSyncCopy.label === healthHealthy.label, "T508: healthy sync label should match");
