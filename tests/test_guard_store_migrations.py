@@ -8,9 +8,12 @@ import logging
 import os
 import sqlite3
 import subprocess
+import sys
+import types
 
 import pytest
 
+from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.store import (
     EncryptedFileSecretStore,
@@ -51,6 +54,34 @@ def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
     module = _FakeSystemKeyringModule()
     monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
     return module
+
+
+def test_windows_oauth_refresh_lock_wraps_permission_error_as_blocking(monkeypatch):
+    class _FakeHandle:
+        def seek(self, _offset: int) -> None:
+            return None
+
+        def read(self, _size: int) -> bytes:
+            raise PermissionError("locked")
+
+        def write(self, _payload: bytes) -> int:
+            return 0
+
+        def flush(self) -> None:
+            return None
+
+        def fileno(self) -> int:
+            return 1
+
+    fake_msvcrt = types.SimpleNamespace(
+        LK_NBLCK=1,
+        locking=lambda _fd, _mode, _size: None,
+    )
+    monkeypatch.setattr(guard_store_module.os, "name", "nt", raising=False)
+    monkeypatch.setitem(sys.modules, "msvcrt", fake_msvcrt)
+
+    with pytest.raises(BlockingIOError):
+        guard_store_module._acquire_advisory_file_lock(_FakeHandle())
 
 
 def test_sync_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):

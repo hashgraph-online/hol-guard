@@ -1,4 +1,5 @@
-import { resolveView } from "./app";
+import { resolveView, viewTitle } from "./app";
+import { hubTitleForTab } from "./supply-chain-hub-workspace";
 import {
   buildDemoRuntimeSnapshot,
   loadStatusPage,
@@ -227,6 +228,22 @@ assert(
 assert(
   resolveView("/feed") !== "feed-health",
   "SCRG171-H: /feed does not match feed-health view",
+);
+
+assert(
+  viewTitle("supply-chain") === "Supply Chain" &&
+    viewTitle("audit") === "Audit" &&
+    viewTitle("policy") === "Policy" &&
+    viewTitle("feed-health") === "Feed Health",
+  "SCRG171-H2: route titles stay specific inside Trust Center views",
+);
+
+assert(
+  hubTitleForTab("supply-chain") === "Supply Chain" &&
+    hubTitleForTab("audit") === "Audit" &&
+    hubTitleForTab("policy") === "Policy" &&
+    hubTitleForTab("feed-health") === "Feed Health",
+  "SCRG171-H3: hub header mirrors active Trust Center tab",
 );
 
 assert(

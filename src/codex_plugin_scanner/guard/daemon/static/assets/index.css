@@ -1543,11 +1543,6 @@
     border-top-right-radius: var(--radius-sm);
   }
 
-  .rounded-b-sm {
-    border-bottom-right-radius: var(--radius-sm);
-    border-bottom-left-radius: var(--radius-sm);
-  }
-
   .border {
     border-style: var(--tw-border-style);
     border-width: 1px;
