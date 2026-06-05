@@ -706,13 +706,18 @@ def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
     supported_managers = list(package_shim_supported_managers())
     protected_managers = sorted({str(item) for item in status.get("protected_managers", []) if isinstance(item, str)})
     protected_set = set(protected_managers)
-    unprotected_managers = [manager for manager in supported_managers if manager not in protected_set]
+    staged_or_repair_set = set(installed_managers) - protected_set
+    unprotected_managers = [
+        manager
+        for manager in supported_managers
+        if manager not in protected_set and manager not in staged_or_repair_set
+    ]
     return {
         "path_status": str(status.get("path_status") or "missing_from_path"),
         "path_contains_shim_dir": bool(status.get("path_contains_shim_dir")),
         "restart_shell_required": bool(status.get("restart_shell_required")),
         "shell_profile_configured": bool(status.get("shell_profile_configured")),
-        "shell_profile_path": str(status.get("shell_profile_path") or ""),
+        "shell_profile_path": status.get("shell_profile_path"),
         "shim_dir": str(shim_dir),
         "supported_managers": supported_managers,
         "installed_managers": installed_managers,

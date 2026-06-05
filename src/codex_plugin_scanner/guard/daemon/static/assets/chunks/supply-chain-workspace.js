@@ -661,7 +661,7 @@ function resolveManagerCoverageStatus(protection, manager) {
   if (protection.protected_managers.includes(manager)) return "protected";
   if (protection.installed_managers.includes(manager)) {
     if (protection.path_status === "restart_required") return "restart_required";
-    if (protection.path_status === "missing_from_path") return "path_repair";
+    return "path_repair";
   }
   return "unprotected";
 }

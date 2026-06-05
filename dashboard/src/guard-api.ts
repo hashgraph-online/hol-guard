@@ -566,8 +566,10 @@ function normalizePackageManagerProtection(raw: unknown): PackageManagerProtecti
     return undefined;
   }
   const pathStatus =
-    raw["path_status"] === "in_path" || raw["path_status"] === "restart_required"
-      ? raw["path_status"]
+    raw["path_status"] === "in_path"
+      ? "in_path"
+      : raw["path_status"] === "restart_required"
+      ? "restart_required"
       : "missing_from_path";
   const shimDir = typeof raw["shim_dir"] === "string" ? raw["shim_dir"] : "";
   return {
@@ -1658,8 +1660,10 @@ function normalizePackageFirewallStatus(value: unknown): PackageFirewallStatusRe
   const activeManagers = normalizeStringArray(shimStatus.active_managers);
   const missingManagers = normalizeStringArray(shimStatus.missing_managers);
   const rawPathStatus =
-    shimStatus["path_status"] === "in_path" || shimStatus["path_status"] === "restart_required"
-      ? shimStatus["path_status"]
+    shimStatus["path_status"] === "in_path"
+      ? "in_path"
+      : shimStatus["path_status"] === "restart_required"
+      ? "restart_required"
       : "missing_from_path";
   const packageShims = normalizePackageShimEntries(record.package_shims, supportedManagers, rawPathStatus);
   const protectedManagers = packageShims

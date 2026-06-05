@@ -46,9 +46,9 @@ const makeProtection = (
   shell_profile_path: "/mock-home/.zshrc",
   shim_dir: "/usr/local/hol-guard/shims",
   supported_managers: [...protected_managers, ...unprotected_managers],
-  installed_managers: [...protected_managers, ...unprotected_managers],
+  installed_managers: protected_managers,
   active_managers: protected_managers,
-  missing_shims: unprotected_managers,
+  missing_shims: [],
 });
 
 const freeSnapshot: GuardRuntimeSnapshot = {

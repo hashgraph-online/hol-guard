@@ -256,6 +256,11 @@ def get_path_order_status(
 def _package_shim_profile_status(context: HarnessContext) -> dict[str, object]:
     shim_dir = context.guard_home / "package-shims" / "bin"
     profile_path, _export_line = _package_shim_profile_target(context.home_dir, shim_dir)
+    if profile_path is None:
+        return {
+            "shell_profile_configured": False,
+            "shell_profile_path": None,
+        }
     try:
         existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
     except OSError:
