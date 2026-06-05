@@ -163,19 +163,21 @@ def _format_notification(request: PendingRequest) -> str:
     emoji = {"high": "🟠", "medium": "🟡", "low": "🟢"}.get(risk_level, "⚪")
     short_id = request.request_id[:8]
 
-    return f"""🚫 *Guard Blocked*
-
-*Artifact:* `{request.artifact_name}`
-*Type:* {request.artifact_type}
-*Action:* {request.policy_action}
-*Risk:* {emoji} {risk_level}
-
-To approve, run:
-`/approve {short_id}`
-
-To deny, run:
-`/deny {short_id}`
-"""
+    lines = [
+        "🚫 *Guard Blocked*",
+        "",
+        f"*Artifact:* `{request.artifact_name}`",
+        f"*Type:* {request.artifact_type}",
+        f"*Action:* {request.policy_action}",
+        f"*Risk:* {emoji} {risk_level}",
+        "",
+        "To approve, run:",
+        f"`/approve {short_id}`",
+        "",
+        "To deny, run:",
+        f"`/deny {short_id}`",
+    ]
+    return "\n".join(lines)
 
 
 class GuardBridge:

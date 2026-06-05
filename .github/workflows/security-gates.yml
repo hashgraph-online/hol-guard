@@ -1,0 +1,92 @@
+name: Security Gates
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: hol-guard-security-gates-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+      - name: Run Semgrep
+        run: uvx --from semgrep semgrep --config p/owasp-top-ten --error src/codex_plugin_scanner/guard
+
+  release-scan:
+    name: Trivy release scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Run Trivy on release surfaces
+        run: >
+          docker run --rm
+          -v "$PWD:/workdir"
+          aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
+          fs
+          --scanners vuln,misconfig,secret
+          --severity HIGH,CRITICAL
+          --skip-dirs /workdir/tests/fixtures
+          --skip-files /workdir/.clusterfuzzlite/Dockerfile
+          --exit-code 1
+          --quiet
+          /workdir
+
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: "1.23"
+      - name: Install Gitleaks
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Determine Gitleaks scope
+        id: gitleaks-scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PR_BASE_SHA" ]; then
+            echo "mode=git" >> "$GITHUB_OUTPUT"
+            echo "log_opts=${PR_BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "merge_group" ] && [ -n "$MERGE_GROUP_BASE_SHA" ]; then
+            echo "mode=git" >> "$GITHUB_OUTPUT"
+            echo "log_opts=${MERGE_GROUP_BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            echo "mode=git" >> "$GITHUB_OUTPUT"
+            echo "log_opts=${BEFORE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=dir" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run Gitleaks on commit range
+        if: steps.gitleaks-scope.outputs.mode == 'git'
+        run: gitleaks git --log-opts="${{ steps.gitleaks-scope.outputs.log_opts }}" --no-banner --redact --exit-code 1 .
+      - name: Run Gitleaks on working tree
+        if: steps.gitleaks-scope.outputs.mode == 'dir'
+        run: gitleaks dir --no-banner --redact --exit-code 1 .
