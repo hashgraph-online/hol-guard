@@ -108,6 +108,7 @@ from ..local_supply_chain import (
     build_supply_chain_status_payload,
     build_workspace_audit_payload,
     build_workspace_scan_payload,
+    resolve_package_firewall_entitlement_with_refresh,
 )
 from ..mcp_tool_calls import (
     allow_tool_call,
@@ -117,10 +118,7 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
-from ..package_firewall_entitlement import (
-    package_firewall_block_details,
-    resolve_package_firewall_entitlement,
-)
+from ..package_firewall_entitlement import package_firewall_block_details
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
 from ..proxy import (
@@ -2094,7 +2092,7 @@ def run_guard_command(
             if isinstance(manager, str) and manager.strip()
         )
         shim_command = getattr(args, "package_shims_command", "status")
-        entitlement = resolve_package_firewall_entitlement(store)
+        entitlement = resolve_package_firewall_entitlement_with_refresh(store)
         if shim_command == "status":
             payload = package_shim_status(context)
             payload["actions"] = _package_firewall_action_states(entitlement)
