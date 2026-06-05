@@ -12,9 +12,8 @@
       --tw-translate-y: 0;
       --tw-translate-z: 0;
       --tw-space-y-reverse: 0;
-      --tw-divide-x-reverse: 0;
-      --tw-border-style: solid;
       --tw-divide-y-reverse: 0;
+      --tw-border-style: solid;
       --tw-gradient-position: initial;
       --tw-gradient-from: #0000;
       --tw-gradient-via: #0000;
@@ -96,7 +95,6 @@
     --color-amber-700: oklch(55.5% .163 48.998);
     --color-amber-800: oklch(47.3% .137 46.201);
     --color-green-50: oklch(98.2% .018 155.826);
-    --color-green-200: oklch(92.5% .084 155.995);
     --color-green-700: oklch(52.7% .154 150.069);
     --color-emerald-50: oklch(97.9% .021 166.113);
     --color-emerald-200: oklch(90.5% .093 164.15);
@@ -666,6 +664,10 @@
 
   .mx-auto {
     margin-inline: auto;
+  }
+
+  .-mt-20 {
+    margin-top: calc(var(--spacing) * -20);
   }
 
   .mt-0\.5 {
@@ -1429,13 +1431,6 @@
     row-gap: calc(var(--spacing) * 4);
   }
 
-  :where(.divide-x > :not(:last-child)) {
-    --tw-divide-x-reverse: 0;
-    border-inline-style: var(--tw-border-style);
-    border-inline-start-width: calc(1px * var(--tw-divide-x-reverse));
-    border-inline-end-width: calc(1px * calc(1 - var(--tw-divide-x-reverse)));
-  }
-
   :where(.divide-y > :not(:last-child)) {
     --tw-divide-y-reverse: 0;
     border-bottom-style: var(--tw-border-style);
@@ -1541,11 +1536,6 @@
   .rounded-t-sm {
     border-top-left-radius: var(--radius-sm);
     border-top-right-radius: var(--radius-sm);
-  }
-
-  .rounded-b-sm {
-    border-bottom-right-radius: var(--radius-sm);
-    border-bottom-left-radius: var(--radius-sm);
   }
 
   .border {
@@ -2025,6 +2015,16 @@
     background-color: var(--color-amber-500);
   }
 
+  .bg-black\/5 {
+    background-color: #0000000d;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-black\/5 {
+      background-color: color-mix(in oklab, var(--color-black) 5%, transparent);
+    }
+  }
+
   .bg-black\/30 {
     background-color: #0000004d;
   }
@@ -2461,10 +2461,6 @@
     background-color: var(--color-orange-50);
   }
 
-  .bg-purple-50 {
-    background-color: var(--color-purple-50);
-  }
-
   .bg-purple-50\/60 {
     background-color: #faf5ff99;
   }
@@ -2557,16 +2553,22 @@
     background-color: var(--color-slate-100);
   }
 
+  .bg-slate-100\/50 {
+    background-color: #f1f5f980;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-slate-100\/50 {
+      background-color: color-mix(in oklab, var(--color-slate-100) 50%, transparent);
+    }
+  }
+
   .bg-slate-200 {
     background-color: var(--color-slate-200);
   }
 
   .bg-slate-300 {
     background-color: var(--color-slate-300);
-  }
-
-  .bg-slate-500 {
-    background-color: var(--color-slate-500);
   }
 
   .bg-slate-950\/40 {
@@ -3384,6 +3386,10 @@
     color: hsl(var(--accent));
   }
 
+  .text-amber-300 {
+    color: var(--color-amber-300);
+  }
+
   .text-amber-500 {
     color: var(--color-amber-500);
   }
@@ -3402,6 +3408,10 @@
 
   .text-blue-200 {
     color: var(--color-blue-200);
+  }
+
+  .text-blue-300 {
+    color: var(--color-blue-300);
   }
 
   .text-blue-700 {
@@ -3504,6 +3514,10 @@
     .text-brand-purple\/80 {
       color: color-mix(in oklab, var(--brand-purple) 80%, transparent);
     }
+  }
+
+  .text-emerald-300 {
+    color: var(--color-emerald-300);
   }
 
   .text-emerald-500 {
@@ -3808,10 +3822,6 @@
     }
   }
 
-  .ring-green-200 {
-    --tw-ring-color: var(--color-green-200);
-  }
-
   .ring-orange-200 {
     --tw-ring-color: var(--color-orange-200);
   }
@@ -3987,6 +3997,10 @@
       .hover\:border-brand-dark\/15:hover {
         border-color: color-mix(in oklab, var(--brand-dark) 15%, transparent);
       }
+    }
+
+    .hover\:border-slate-200:hover {
+      border-color: var(--color-slate-200);
     }
 
     .hover\:border-slate-300:hover {
@@ -5054,7 +5068,7 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   initial-value: 0;
 }
 
-@property --tw-divide-x-reverse {
+@property --tw-divide-y-reverse {
   syntax: "*";
   inherits: false;
   initial-value: 0;
@@ -5064,12 +5078,6 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   syntax: "*";
   inherits: false;
   initial-value: solid;
-}
-
-@property --tw-divide-y-reverse {
-  syntax: "*";
-  inherits: false;
-  initial-value: 0;
 }
 
 @property --tw-gradient-position {

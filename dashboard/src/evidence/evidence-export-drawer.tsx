@@ -8,6 +8,7 @@ import type { EvidenceFilterState } from "./evidence-types";
 import { downloadEvidence } from "./evidence-export";
 import { exportDiagnostics } from "../guard-api";
 import { downloadBlob } from "../history-export";
+import { ActionButton, SectionLabel } from "../approval-center-primitives";
 
 interface EvidenceExportDrawerProps {
   receipts: GuardReceipt[];
@@ -139,35 +140,28 @@ export function EvidenceExportDrawer({
           )}
 
           <div className="flex flex-col gap-2">
-            <button
-              type="button"
+            <ActionButton
               onClick={handleCsvExport}
               disabled={isEmpty}
-              aria-label="Export as CSV"
-              className="flex items-center justify-center gap-2 rounded-xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
               Download CSV
-            </button>
-            <button
-              type="button"
+            </ActionButton>
+            <ActionButton
+              variant="outline"
               onClick={handleJsonExport}
               disabled={isEmpty}
-              aria-label="Export as JSON"
-              className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
               Download JSON
-            </button>
-            <button
-              type="button"
+            </ActionButton>
+            <ActionButton
+              variant="outline"
               onClick={handleDiagnosticsExport}
-              aria-label="Export full diagnostics"
-              className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
             >
               <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
               Download diagnostics
-            </button>
+            </ActionButton>
           </div>
         </div>
       </div>

@@ -11,6 +11,7 @@ import type { GuardReceipt } from "../guard-types";
 import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES, detectCategory } from "./categories";
 import { plainEnglishDescription, humanFileName } from "./plain-english";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
+import { Badge, SectionLabel } from "../approval-center-primitives";
 
 interface CategoryTabProps {
   receipts: GuardReceipt[];
@@ -20,25 +21,25 @@ interface CategoryTabProps {
 function DecisionBadge({ decision }: { decision: string }) {
   if (decision === "allow") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700 ring-1 ring-green-200">
+      <Badge tone="success">
         <HiMiniShieldCheck className="h-3 w-3" aria-hidden="true" />
         Allowed
-      </span>
+      </Badge>
     );
   }
   if (decision === "block") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+      <Badge tone="attention">
         <HiMiniNoSymbol className="h-3 w-3" aria-hidden="true" />
         Stopped
-      </span>
+      </Badge>
     );
   }
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 ring-1 ring-blue-200">
+    <Badge tone="info">
       <HiMiniQuestionMarkCircle className="h-3 w-3" aria-hidden="true" />
       Reviewed
-    </span>
+    </Badge>
   );
 }
 
@@ -58,7 +59,7 @@ function CategoryCard({ cat, count, blocked, onSelect }: CategoryCardProps) {
     <button
       key={cat.key}
       onClick={handleClick}
-      className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-300"
+      className="w-full rounded-2xl border border-slate-100 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-200 shadow-sm"
     >
       <div className="flex items-center gap-3">
         <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 ${cat.color}`}>
@@ -69,7 +70,7 @@ function CategoryCard({ cat, count, blocked, onSelect }: CategoryCardProps) {
           <p className="text-xs text-slate-500">{count} action{count !== 1 ? "s" : ""}</p>
         </div>
         {blocked > 0 && (
-          <span className="text-[10px] font-medium text-amber-600 shrink-0">{blocked} stopped</span>
+          <Badge tone="attention">{blocked} stopped</Badge>
         )}
         <HiMiniChevronRight className="h-4 w-4 text-slate-300 shrink-0" aria-hidden="true" />
       </div>
@@ -129,7 +130,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
           Back to categories
         </button>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <span className={`inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 ${info.color}`}>
               {info.icon}
@@ -184,11 +185,11 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
             <p className="text-sm text-slate-500">No actions match the selected filters.</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-sm" aria-label={`${info.label} actions`}>
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <tr className="border-b border-slate-100 bg-slate-50/80">
                     <th scope="col" className="w-8 px-3 py-2.5" />
                     <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Artifact</th>
                     <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden md:table-cell">App</th>

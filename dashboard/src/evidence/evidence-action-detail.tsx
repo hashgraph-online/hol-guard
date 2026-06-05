@@ -17,6 +17,7 @@ import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { plainEnglishDescription, humanFileName } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
+import { Badge, SectionLabel } from "../approval-center-primitives";
 
 interface EvidenceActionDetailProps {
   receipt: GuardReceipt | null;
@@ -30,25 +31,25 @@ interface DecisionBadgeProps {
 function DecisionBadge({ decision }: DecisionBadgeProps) {
   if (decision === "allow") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-200">
+      <Badge tone="success">
         <HiMiniShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
         Allowed
-      </span>
+      </Badge>
     );
   }
   if (decision === "block") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-brand-attention ring-1 ring-amber-200">
+      <Badge tone="attention">
         <HiMiniNoSymbol className="h-3.5 w-3.5" aria-hidden="true" />
         Stopped
-      </span>
+      </Badge>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-brand-blue ring-1 ring-blue-200">
+    <Badge tone="info">
       <HiMiniQuestionMarkCircle className="h-3.5 w-3.5" aria-hidden="true" />
       Reviewed
-    </span>
+    </Badge>
   );
 }
 
@@ -90,9 +91,7 @@ function ScannerEvidenceSection({ signals }: { signals: RiskSignalV2[] }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-        Scanner findings ({signals.length})
-      </p>
+      <SectionLabel>Scanner findings ({signals.length})</SectionLabel>
       <div className="space-y-2">
         {signals.map((signal) => {
           const isOpen = expanded[signal.signal_id] ?? false;
@@ -125,9 +124,7 @@ function ScannerEvidenceSection({ signals }: { signals: RiskSignalV2[] }) {
                   </p>
                   {signal.technical_detail && (
                     <div className="rounded-md bg-slate-50 px-2.5 py-2">
-                      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 mb-1">
-                        Technical detail
-                      </p>
+                      <SectionLabel>Technical detail</SectionLabel>
                       <p className="text-xs font-mono text-brand-dark/70 break-all leading-relaxed">
                         {signal.technical_detail}
                       </p>
@@ -246,9 +243,7 @@ function NextSafeCommandHint({ receipt }: { receipt: GuardReceipt }) {
   if (!hint) return null;
   return (
     <div className="rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue mb-1">
-        Next safe step
-      </p>
+      <SectionLabel>Next safe step</SectionLabel>
       <p className="text-xs text-brand-dark/80">{hint}</p>
     </div>
   );
@@ -269,9 +264,7 @@ function EvidenceTimeline({ receipt }: { receipt: GuardReceipt }) {
   ];
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
-        Timeline
-      </p>
+      <SectionLabel>Timeline</SectionLabel>
       <ol className="relative border-l border-slate-200 ml-2" aria-label="Evidence timeline">
         {events.map((event, i) => (
           <li key={i} className="mb-2 ml-4 last:mb-0">
@@ -386,9 +379,7 @@ export function EvidenceActionDetail({
 
         {receipt.provenance_summary && (
           <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1">
-              Provenance
-            </p>
+            <SectionLabel>Provenance</SectionLabel>
             <p className="text-xs text-slate-700">{receipt.provenance_summary}</p>
           </div>
         )}
@@ -397,9 +388,7 @@ export function EvidenceActionDetail({
           <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
             <div className="flex items-center gap-1.5 mb-1">
               <HiMiniDocumentText className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                What changed
-              </p>
+              <SectionLabel>What changed</SectionLabel>
             </div>
             <p className="text-xs text-slate-700">{receipt.diff_summary}</p>
           </div>
