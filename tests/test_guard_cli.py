@@ -8420,7 +8420,7 @@ url = http://127.0.0.1:8787/guard-canary
             "policyBundle": {
                 "contractVersion": "guard-policy-bundle.v1",
                 "bundleVersion": "policy-2026-04-09.1",
-                "bundleHash": "sha256:16bf2a9dd5678a80600579f326fe38ed15a6419819a4f2a3eac876c1d95d18ba",
+                "bundleHash": "",
                 "issuedAt": "2026-04-09T00:00:00Z",
                 "expiresAt": None,
                 "verifier": {
@@ -8469,6 +8469,9 @@ url = http://127.0.0.1:8787/guard-canary
                 "auditTrail": [],
             },
         }
+        _SyncRequestHandler.response_payload["policyBundle"]["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(
+            _SyncRequestHandler.response_payload["policyBundle"]
+        )
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -8503,7 +8506,9 @@ url = http://127.0.0.1:8787/guard-canary
         assert store.get_sync_payload("policy_bundle") == {
             "contractVersion": "guard-policy-bundle.v1",
             "bundleVersion": "policy-2026-04-09.1",
-            "bundleHash": "sha256:16bf2a9dd5678a80600579f326fe38ed15a6419819a4f2a3eac876c1d95d18ba",
+            "bundleHash": guard_runner_module._computed_policy_bundle_hash(
+                _SyncRequestHandler.response_payload["policyBundle"]
+            ),
             "issuedAt": "2026-04-09T00:00:00Z",
             "expiresAt": None,
             "verifier": {
