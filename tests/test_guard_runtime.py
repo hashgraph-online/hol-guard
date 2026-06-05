@@ -9358,7 +9358,9 @@ def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, 
     assert rc == 0
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "approve it in hol guard, then retry." in reason
+    assert "open hol guard to approve or keep this blocked" in reason
+    assert "http://127.0.0.1:" in reason
+    assert "approve it in hol guard, then retry." not in reason
 
 
 def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
