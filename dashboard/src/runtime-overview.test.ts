@@ -238,7 +238,7 @@ const restartRequiredProtection: PackageManagerProtection = {
 };
 
 const restartRequiredCopy = resolvePackageManagerProtectionCopy(restartRequiredProtection);
-assert(restartRequiredCopy.pathTone === "attention", "SC2b: restart_required tone should stay attention");
+assert(restartRequiredCopy.pathTone === "blue", "SC2b: restart_required tone should use blue");
 assert(
   restartRequiredCopy.pathLabel.toLowerCase().includes("restart"),
   `SC2b: restart_required label should mention restart — got: "${restartRequiredCopy.pathLabel}"`
