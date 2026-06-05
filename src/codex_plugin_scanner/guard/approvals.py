@@ -577,6 +577,7 @@ def _build_runtime_cloud_context(
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
     connect_retry_required = _connect_retry_required(latest_connect_state)
+    connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
     remote_policy = store.get_sync_payload("policy") or {}
@@ -595,6 +596,7 @@ def _build_runtime_cloud_context(
         cloud_state,
         oauth_repair_required=oauth_repair_required,
         connect_retry_required=connect_retry_required,
+        connect_retry_refresh_race=connect_retry_refresh_race,
     )
     return {
         "sync_configured": cloud_profile is not None,
@@ -604,6 +606,7 @@ def _build_runtime_cloud_context(
             cloud_state,
             oauth_repair_required=oauth_repair_required,
             connect_retry_required=connect_retry_required,
+            connect_retry_refresh_race=connect_retry_refresh_race,
         ),
         "cloud_sync_health": sync_health,
         "cloud_pairing_state": {
@@ -613,6 +616,7 @@ def _build_runtime_cloud_context(
                 cloud_state,
                 oauth_repair_required=oauth_repair_required,
                 connect_retry_required=connect_retry_required,
+                connect_retry_refresh_race=connect_retry_refresh_race,
             ),
             "sync_configured": cloud_profile is not None,
             "dashboard_url": dashboard_url,
@@ -679,6 +683,7 @@ def _build_runtime_proof_status(latest_state: dict[str, object] | None) -> dict[
     status = _runtime_proof_status_name(
         status=_optional_string(latest_state.get("status")),
         milestone=_optional_string(latest_state.get("milestone")),
+        reason=_optional_string(latest_state.get("reason")),
         proof=proof,
     )
     return _runtime_proof_status_payload(
@@ -711,6 +716,7 @@ def _runtime_proof_status_name(
     *,
     status: str | None,
     milestone: str | None,
+    reason: str | None,
     proof: Mapping[str, object],
 ) -> str:
     if milestone == "first_sync_succeeded" or proof.get("first_synced_at"):
@@ -718,6 +724,8 @@ def _runtime_proof_status_name(
     if milestone == "sync_not_available":
         return "sync_unavailable"
     if status == "retry_required" or milestone == "first_sync_failed":
+        if _connect_retry_refresh_race_from_reason(reason):
+            return "stalled"
         return "failed"
     if milestone == "first_sync_pending":
         return "pending"
@@ -733,6 +741,7 @@ def _runtime_proof_status_label(state: str) -> str:
         "synced": "First proof synced",
         "sync_unavailable": "Local connected, cloud sync gated",
         "failed": "First proof needs retry",
+        "stalled": "First proof stalled",
         "pending": "First proof pending",
         "expired": "Sign-in expired",
         "waiting": "Waiting for browser sign-in",
@@ -746,6 +755,10 @@ def _runtime_proof_status_detail(state: str) -> str:
         "synced": "This device completed its first Guard Cloud proof sync.",
         "sync_unavailable": "Local Guard is connected. Shared cloud sync needs a paid Guard plan.",
         "failed": "Guard Cloud sign-in on this machine needs repair. Run hol-guard connect again.",
+        "stalled": (
+            "Local protection stays active. The first shared Guard Cloud proof stalled after a refresh-token race. "
+            "Run hol-guard connect once on this machine when you want shared proof restored."
+        ),
         "pending": (
             "Browser sign-in finished. Local Guard will retry the first proof sync automatically "
             "while the daemon is running, or you can run hol-guard sync now."
@@ -765,6 +778,16 @@ def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
     return status == "retry_required" or milestone == "first_sync_failed"
 
 
+def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None or not _connect_retry_required(latest_state):
+        return False
+    return _connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
+
+
+def _connect_retry_refresh_race_from_reason(reason: str | None) -> bool:
+    return isinstance(reason, str) and "already consumed" in reason.lower()
+
+
 def _build_cloud_sync_health(
     store: GuardStore,
     sync_configured: bool,
@@ -772,6 +795,7 @@ def _build_cloud_sync_health(
     *,
     oauth_repair_required: bool = False,
     connect_retry_required: bool = False,
+    connect_retry_refresh_race: bool = False,
 ) -> dict[str, object]:
     pending_events = store.count_guard_events_v1(uploaded=False)
     event_summary = store.get_sync_payload("guard_events_v1_summary") or {}
@@ -808,6 +832,7 @@ def _build_cloud_sync_health(
             pending_events=pending_events,
             oauth_repair_required=oauth_repair_required,
             connect_retry_required=connect_retry_required,
+            connect_retry_refresh_race=connect_retry_refresh_race,
         ),
         "pending_events": pending_events,
         "last_synced_at": last_synced_at,
@@ -863,10 +888,16 @@ def _cloud_sync_health_detail(
     pending_events: int,
     oauth_repair_required: bool = False,
     connect_retry_required: bool = False,
+    connect_retry_refresh_race: bool = False,
 ) -> str:
     if state == "healthy":
         return "Guard Cloud has the latest local proof from this machine."
     if state == "failed":
+        if connect_retry_refresh_race:
+            return (
+                "Local protection is active. The first shared Guard Cloud proof stalled after a refresh-token race. "
+                "Run hol-guard connect once to mint a fresh Cloud refresh token."
+            )
         if oauth_repair_required or connect_retry_required:
             return (
                 "Guard Cloud authorization on this machine needs repair. Run hol-guard connect again to restore sync."
@@ -910,11 +941,18 @@ def _runtime_cloud_state_detail(
     *,
     oauth_repair_required: bool = False,
     connect_retry_required: bool = False,
+    connect_retry_refresh_race: bool = False,
 ) -> str:
     if oauth_repair_required:
         return (
             "Guard Cloud sign-in on this machine is incomplete. "
             "Run hol-guard connect again to repair local authorization and resume sync."
+        )
+    if connect_retry_refresh_race:
+        return (
+            "This machine stays locally protected. "
+            "The first shared Guard Cloud proof stalled after a refresh-token race. "
+            "Run hol-guard connect once when you want shared proof restored."
         )
     if connect_retry_required:
         return (

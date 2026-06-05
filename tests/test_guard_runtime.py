@@ -16,6 +16,7 @@ import threading
 import urllib.error
 import urllib.request
 from base64 import urlsafe_b64decode
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -16516,6 +16517,97 @@ def test_sync_runtime_session_refreshes_oauth_access_token_and_rotates_refresh_t
     assert payload["runtime_session_id"] == "session-oauth"
     assert credentials is not None
     assert credentials["refresh_token"] == "refresh-token-2"
+
+
+def test_resolve_guard_sync_auth_context_serializes_refresh_token_rotation(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        supply_chain_entitlement_expires_at="2026-07-01T00:00:00+00:00",
+        supply_chain_firewall=True,
+        supply_chain_plan_id="team",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    refresh_lock = threading.Lock()
+    first_refresh_started = threading.Event()
+    allow_first_refresh = threading.Event()
+    observed_refresh_tokens: list[str] = []
+
+    @contextmanager
+    def _fake_refresh_lock(*, timeout_seconds: float = 30.0):
+        del timeout_seconds
+        with refresh_lock:
+            yield
+
+    def _fake_refresh(
+        *,
+        token_endpoint: str,
+        client_id: str,
+        refresh_token: str,
+        dpop_key_material,
+    ) -> dict[str, object]:
+        del token_endpoint, client_id, dpop_key_material
+        observed_refresh_tokens.append(refresh_token)
+        if refresh_token == "refresh-token-1":
+            first_refresh_started.set()
+            assert allow_first_refresh.wait(timeout=3)
+            return {
+                "access_token": "access-token-1",
+                "refresh_token": "refresh-token-2",
+                "package_firewall_entitlement": {
+                    "supply_chain_entitlement_expires_at": "2026-07-05T00:00:00+00:00",
+                    "supply_chain_firewall": True,
+                    "supply_chain_plan_id": "team",
+                },
+            }
+        if refresh_token == "refresh-token-2":
+            return {
+                "access_token": "access-token-2",
+                "refresh_token": "refresh-token-3",
+                "package_firewall_entitlement": {
+                    "supply_chain_entitlement_expires_at": "2026-07-05T00:00:00+00:00",
+                    "supply_chain_firewall": True,
+                    "supply_chain_plan_id": "team",
+                },
+            }
+        raise AssertionError(f"Unexpected refresh token: {refresh_token}")
+
+    monkeypatch.setattr(store, "hold_oauth_refresh_lock", _fake_refresh_lock)
+    monkeypatch.setattr(guard_runner_module, "_refresh_guard_oauth_access_token", _fake_refresh)
+
+    results: list[dict[str, object]] = []
+    errors: list[Exception] = []
+
+    def _worker() -> None:
+        try:
+            results.append(guard_runner_module._resolve_guard_sync_auth_context(store))
+        except Exception as error:  # pragma: no cover - asserted below
+            errors.append(error)
+
+    first = threading.Thread(target=_worker)
+    second = threading.Thread(target=_worker)
+    first.start()
+    assert first_refresh_started.wait(timeout=1)
+    second.start()
+    allow_first_refresh.set()
+    first.join()
+    second.join()
+
+    assert errors == []
+    assert observed_refresh_tokens == ["refresh-token-1", "refresh-token-2"]
+    assert [result["access_token"] for result in results] == ["access-token-1", "access-token-2"]
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-token-3"
 
 
 def test_sign_guard_dpop_proof_sets_access_token_hash_claim() -> None:

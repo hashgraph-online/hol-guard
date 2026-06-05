@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import type { ChangeEvent } from "react";
 import {
   HiMiniExclamationTriangle,
@@ -13,8 +13,9 @@ import {
   HiMiniWrenchScrewdriver,
 } from "react-icons/hi2";
 import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
+import { ApprovalProofModal } from "./approval-proof-modal";
 import { formatRelativeTime, harnessDisplayName } from "./approval-center-utils";
-import { GuardHarnessActionError, runAuditRemediation } from "./guard-api";
+import { fetchSettings, GuardHarnessActionError, runAuditRemediation } from "./guard-api";
 import type { AuditRemediationAction } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
@@ -219,6 +220,26 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
   const [pendingRemediation, setPendingRemediation] = useState<AuditResult | null>(null);
   const [runningRemediationId, setRunningRemediationId] = useState<string | null>(null);
   const [remediationMessages, setRemediationMessages] = useState<Record<string, string>>({});
+  const [resolvedApprovalGate, setResolvedApprovalGate] =
+    useState<GuardApprovalGatePublicConfig | null>(approvalGate);
+
+  useEffect(() => {
+    setResolvedApprovalGate(approvalGate);
+  }, [approvalGate]);
+
+  const resolveApprovalGate = useCallback(async () => {
+    if (resolvedApprovalGate !== null) {
+      return resolvedApprovalGate;
+    }
+    try {
+      const payload = await fetchSettings();
+      const gate = payload.settings.approval_gate ?? null;
+      setResolvedApprovalGate(gate);
+      return gate;
+    } catch {
+      return null;
+    }
+  }, [resolvedApprovalGate]);
 
   const handleSearchChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setFilter((f) => ({ ...f, searchQuery: e.target.value }));
@@ -261,10 +282,9 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
         if (
           credentials === undefined &&
           error instanceof GuardHarnessActionError &&
-          error.payload?.error === "approval_gate_required" &&
-          approvalGate?.enabled === true &&
-          approvalGate.configured === true
+          error.payload?.error === "approval_gate_required"
         ) {
+          await resolveApprovalGate();
           setPendingRemediation(result);
           setRemediationMessages((prev) => {
             const next = { ...prev };
@@ -279,7 +299,7 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
         setRunningRemediationId(null);
       }
     },
-    [approvalGate],
+    [resolveApprovalGate],
   );
 
   const handleRunRemediation = useCallback(
@@ -349,8 +369,7 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-brand-dark">Audit</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="text-sm text-slate-500">
             Workspace audit results, open issues, and remediation queue.
           </p>
         </div>
@@ -461,7 +480,7 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
       {pendingRemediation !== null && (
         <RemediationApprovalModal
           result={pendingRemediation}
-          approvalGate={approvalGate}
+          approvalGate={resolvedApprovalGate}
           onCancel={handleCancelRemediationGate}
           onConfirm={handleConfirmRemediationGate}
         />
@@ -557,61 +576,14 @@ function RemediationApprovalModal(props: {
   onConfirm: (credentials: { approval_password?: string; approval_totp_code?: string }) => void;
 }) {
   const { approvalGate, onCancel, onConfirm, result } = props;
-  const [password, setPassword] = useState("");
-  const [totpCode, setTotpCode] = useState("");
-  const handlePasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setPassword(event.target.value);
-  }, []);
-  const handleTotpChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setTotpCode(event.target.value);
-  }, []);
-  const handleConfirm = useCallback(() => {
-    onConfirm({
-      approval_password: password,
-      ...(approvalGate?.totp_enabled === true ? { approval_totp_code: totpCode } : {}),
-    });
-  }, [approvalGate, onConfirm, password, totpCode]);
-  const confirmDisabled = password.trim() === "" || (approvalGate?.totp_enabled === true && totpCode.trim() === "");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
-        <SectionLabel>Approval required</SectionLabel>
-        <h2 className="mt-2 text-base font-semibold text-brand-dark">{result.remediationAction?.label}</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Enter local approval proof before Guard changes package-manager protection on this device.
-        </p>
-        <label className="mt-4 block">
-          <span className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Approval password</span>
-          <input
-            type="password"
-            value={password}
-            onChange={handlePasswordChange}
-            autoComplete="current-password"
-            className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          />
-        </label>
-        {approvalGate?.totp_enabled === true && (
-          <label className="mt-3 block">
-            <span className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Authenticator code</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={totpCode}
-              onChange={handleTotpChange}
-              className="mt-1 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            />
-          </label>
-        )}
-        <div className="mt-5 flex justify-end gap-2">
-          <ActionButton variant="outline" onClick={onCancel}>
-            Cancel
-          </ActionButton>
-          <ActionButton onClick={handleConfirm} disabled={confirmDisabled}>
-            Run remediation
-          </ActionButton>
-        </div>
-      </div>
-    </div>
+    <ApprovalProofModal
+      title={result.remediationAction?.label ?? "Run remediation"}
+      detail="Enter local approval proof before Guard changes package-manager protection on this device."
+      confirmLabel="Run remediation"
+      approvalGate={approvalGate}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }

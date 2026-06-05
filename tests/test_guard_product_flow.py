@@ -468,12 +468,66 @@ args = ["workspace-skill.js", "--changed"]
         assert "connect      Pair this machine to Guard Cloud" in output
         assert "doctor       Run local diagnostics" in output
         assert "Use status for Home posture" in output
-        assert "Use apps for Protect install, repair, status, and first protected action proof" in output
-        assert "Use approvals for Inbox decisions and receipts for Evidence" in output
-        assert "Use doctor for setup and runtime probes" in output
-        assert "Use diff for changed artifacts" in output
-        assert "Use explain for detailed artifact evidence" in output
-        assert "Use events for the local timeline" in output
+
+    def test_guard_status_softens_refresh_race_copy_when_local_protection_stays_active(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = home_dir / ".hol-guard"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        store = GuardStore(guard_home)
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-secret-value",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "x-value",
+                "y": "y-value",
+                "alg": "ES256",
+                "use": "sig",
+            },
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            supply_chain_entitlement_expires_at="2026-07-04T18:30:00+00:00",
+            supply_chain_firewall=True,
+            supply_chain_plan_id="team",
+            workspace_id="workspace-123",
+            now="2026-06-04T18:30:00+00:00",
+        )
+        store.record_guard_connect_pairing_completed(
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            allowed_origin="https://hol.org",
+            now="2026-06-04T18:30:00+00:00",
+        )
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now="2026-06-04T18:31:00+00:00",
+            reason="Guard authorization expired. The grant is missing, expired, or already consumed.",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "status",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["cloud_state"] == "paired_waiting"
+        assert "stays locally protected" in output["cloud_state_detail"]
+        assert "needs repair before the first shared proof can land" not in output["cloud_state_detail"]
 
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

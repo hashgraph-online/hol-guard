@@ -1661,9 +1661,18 @@ export async function fetchPackageFirewallStatus(): Promise<PackageFirewallStatu
 export async function runPackageFirewallAction(
   action: PackageFirewallActionType,
   manager: string | null,
+  credentials?: { approval_password?: string; approval_totp_code?: string },
 ): Promise<PackageFirewallActionResponse> {
-  const payload = manager !== null ? { managers: [manager] } : {};
-  const response = await readJson<unknown>(
+  const payload = {
+    ...(manager !== null ? { managers: [manager] } : {}),
+    ...(credentials?.approval_password !== undefined
+      ? { approval_password: credentials.approval_password }
+      : {}),
+    ...(credentials?.approval_totp_code !== undefined
+      ? { approval_totp_code: credentials.approval_totp_code }
+      : {}),
+  };
+  const response = await fetchGuardApi(
     `/v1/supply-chain/package-shims/${action}`,
     {
       method: "POST",
@@ -1674,7 +1683,14 @@ export async function runPackageFirewallAction(
       body: JSON.stringify(payload),
     },
   );
-  return normalizePackageFirewallAction(response);
+  const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null,
+    );
+  }
+  return normalizePackageFirewallAction(payloadBody);
 }
 
 export type AuditRemediationAction = "package_shim_path";

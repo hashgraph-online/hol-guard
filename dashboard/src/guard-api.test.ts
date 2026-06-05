@@ -11,6 +11,7 @@ import {
 	  normalizeApprovalRequest,
 	  parseActionEnvelope,
 	  parseDecisionV2,
+	  runPackageFirewallAction,
 	  runAuditRemediation,
 	  resolveRequestWithQueueResult,
 	  retryResume,
@@ -825,6 +826,58 @@ assert(
   "L079d: remediation retries with refreshed Guard token"
 );
 assert(remediationBootstrap.operation === "package_shim_path", "L079d: remediation succeeds after token bootstrap");
+
+installGuardWindow("?guard-token=token-firewall&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const firewallCalls = installFetchStub({
+  "/v1/supply-chain/package-shims/install": {
+    entitlement: { allowed: true },
+    operation: "install",
+    receipt: null,
+    result: { manager: "pnpm" },
+    status: "completed"
+  }
+});
+const firewallAction = await runPackageFirewallAction("install", "pnpm", {
+  approval_password: "local-password",
+  approval_totp_code: "123456"
+});
+const firewallBody = JSON.parse(String(firewallCalls[0].init?.body)) as Record<string, unknown>;
+assert(
+  firewallCalls[0].url === "http://127.0.0.1:4781/v1/supply-chain/package-shims/install",
+  "L079da: runPackageFirewallAction posts to the install route"
+);
+assert(headerValue(firewallCalls[0].init, "X-Guard-Token") === "token-firewall", "L079da: runPackageFirewallAction sends Guard token");
+assert(Array.isArray(firewallBody["managers"]) && (firewallBody["managers"] as unknown[])[0] === "pnpm", "L079da: runPackageFirewallAction sends selected manager");
+assert(firewallBody["approval_password"] === "local-password", "L079da: runPackageFirewallAction sends approval password");
+assert(firewallBody["approval_totp_code"] === "123456", "L079da: runPackageFirewallAction sends approval TOTP code");
+assert(firewallAction.operation === "install", "L079da: runPackageFirewallAction normalizes response");
+
+installGuardWindow("?guard-token=token-firewall-error&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  const parsed = new URL(url, "http://127.0.0.1:4174");
+  if (parsed.pathname === "/v1/supply-chain/package-shims/install") {
+    return new Response(
+      JSON.stringify({
+        error: "approval_gate_required",
+        message: "Approval password is required."
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+let firewallError: unknown = null;
+try {
+  await runPackageFirewallAction("install", "pnpm");
+} catch (error) {
+  firewallError = error;
+}
+assert(firewallError instanceof GuardHarnessActionError, "L079db: runPackageFirewallAction throws GuardHarnessActionError on structured failures");
+assert(
+  firewallError instanceof GuardHarnessActionError && firewallError.payload?.error === "approval_gate_required",
+  "L079db: runPackageFirewallAction preserves daemon error code for approval modal fallback"
+);
 
 installGuardWindow("?guard-token=token-remediate-error&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {

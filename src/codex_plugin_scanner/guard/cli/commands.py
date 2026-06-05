@@ -195,6 +195,7 @@ from .approval_commands import (
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
 from .connect_flow import (
+    CONNECT_SYNC_AUTH_CONTEXT_KEY,
     DEFAULT_GUARD_CONNECT_URL,
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
@@ -9392,6 +9393,7 @@ def _finalize_guard_connect_payload(
     payload: dict[str, object],
     now: str,
 ) -> dict[str, object]:
+    sync_auth_context = payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
     urls = _guard_cloud_urls_for_connect(connect_url)
     for key in ("connect_url", "sync_url", "dashboard_url", "inbox_url", "fleet_url"):
         payload.setdefault(key, urls[key])
@@ -9440,7 +9442,10 @@ def _finalize_guard_connect_payload(
         return payload
     payload["sync_attempted"] = True
     try:
-        sync_payload = sync_local_guard_cloud_proof(store)
+        if isinstance(sync_auth_context, dict):
+            sync_payload = sync_local_guard_cloud_proof(store, auth_context=sync_auth_context)
+        else:
+            sync_payload = sync_local_guard_cloud_proof(store)
     except GuardSyncNotAvailableError as error:
         store.record_latest_guard_connect_sync_result(
             status="connected",
@@ -9557,6 +9562,7 @@ def _run_guard_device_connect_flow(
         open_browser=open_browser,
         ci_safe=ci_safe,
         machine_label=machine_label,
+        include_sync_auth_context=True,
     )
 
 
@@ -9570,6 +9576,7 @@ def _run_guard_browser_connect_flow(
         store=store,
         connect_url=connect_url,
         wait_timeout_seconds=wait_timeout_seconds,
+        include_sync_auth_context=True,
     )
 
 

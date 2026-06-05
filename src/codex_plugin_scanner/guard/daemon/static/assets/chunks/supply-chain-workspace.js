@@ -1,5 +1,6 @@
-import { j as jsxRuntimeExports, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, ab as HiMiniArrowPath, T as Tag, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, am as runPackageAudit, an as runPackageSync, S as SectionLabel, E as EmptyState, ao as HiMiniBugAnt, b as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, ab as HiMiniArrowPath, T as Tag, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, D as fetchSettings, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, S as SectionLabel, E as EmptyState, ao as HiMiniBugAnt, b as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
+import { A as ApprovalProofModal } from "./approval-proof-modal.js";
 function UpgradeCta({ entitlement }) {
   const reconnectRequired = entitlement.reason === "guard_cloud_reconnect_required";
   const upgradeUrl = reconnectRequired ? "https://hol.org/guard/connect" : entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
@@ -470,12 +471,18 @@ function RefreshButton({ disabled, spinning, onRefresh }) {
     }
   );
 }
-function PackageFirewallPanel() {
+function PackageFirewallPanel(props) {
+  const { approvalGate } = props;
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
   const [lastFailed, setLastFailed] = reactExports.useState(null);
   const [confirmRemoveManager, setConfirmRemoveManager] = reactExports.useState(null);
+  const [pendingApprovalOp, setPendingApprovalOp] = reactExports.useState(null);
+  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(approvalGate);
+  reactExports.useEffect(() => {
+    setResolvedApprovalGate(approvalGate);
+  }, [approvalGate]);
   const load = reactExports.useCallback(async () => {
     setPanelLoad({ phase: "loading" });
     try {
@@ -498,22 +505,40 @@ function PackageFirewallPanel() {
       setPanelLoad({ phase: "error", message });
     }
   }, []);
+  const resolveApprovalGate = reactExports.useCallback(async () => {
+    if (resolvedApprovalGate !== null) {
+      return resolvedApprovalGate;
+    }
+    try {
+      const payload = await fetchSettings();
+      const gate = payload.settings.approval_gate ?? null;
+      setResolvedApprovalGate(gate);
+      return gate;
+    } catch {
+      return null;
+    }
+  }, [resolvedApprovalGate]);
   const handleAction = reactExports.useCallback(
-    async (op, manager) => {
+    async (op, manager, credentials) => {
       setPendingOp({ op, manager });
       setLastFailed(null);
       try {
-        const response = await runPackageFirewallAction(op, manager);
+        const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
         await refreshAfterOp();
       } catch (err) {
+        if (credentials === void 0 && manager !== null && err instanceof GuardHarnessActionError && err.payload?.error === "approval_gate_required") {
+          await resolveApprovalGate();
+          setPendingApprovalOp({ op, manager });
+          return;
+        }
         const message = err instanceof Error ? err.message : "Action failed.";
         setLastFailed({ op, manager, message });
       } finally {
         setPendingOp(null);
       }
     },
-    [refreshAfterOp]
+    [refreshAfterOp, resolveApprovalGate]
   );
   const handleGlobalOp = reactExports.useCallback(
     async (op) => {
@@ -560,6 +585,16 @@ function PackageFirewallPanel() {
   const handleSync = reactExports.useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
   const handleDismissResult = reactExports.useCallback(() => setLastCompleted(null), []);
   const handleRetry = reactExports.useCallback(() => void load(), [load]);
+  const handleApprovalCancel = reactExports.useCallback(() => setPendingApprovalOp(null), []);
+  const handleApprovalConfirm = reactExports.useCallback(
+    (credentials) => {
+      const pendingApproval = pendingApprovalOp;
+      if (pendingApproval === null) return;
+      setPendingApprovalOp(null);
+      void handleAction(pendingApproval.op, pendingApproval.manager, credentials);
+    },
+    [handleAction, pendingApprovalOp]
+  );
   const anyPending = pendingOp !== null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3", children: [
@@ -589,8 +624,22 @@ function PackageFirewallPanel() {
         onSync: handleSync,
         onDismissResult: handleDismissResult
       }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(FreeUserView, { data: panelLoad.data }))
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(FreeUserView, { data: panelLoad.data })),
+    pendingApprovalOp !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofModal,
+      {
+        title: `${actionLabel(pendingApprovalOp.op)} ${pendingApprovalOp.manager}`,
+        detail: "Enter local approval proof before Guard changes package-manager protection on this device.",
+        confirmLabel: actionLabel(pendingApprovalOp.op),
+        approvalGate: resolvedApprovalGate,
+        onCancel: handleApprovalCancel,
+        onConfirm: handleApprovalConfirm
+      }
+    )
   ] });
+}
+function actionLabel(op) {
+  return op.charAt(0).toUpperCase() + op.slice(1);
 }
 function buildSupplyChainStats(snapshot) {
   const managedInstalls = snapshot.managed_installs ?? [];
@@ -654,7 +703,7 @@ function AppFirewallRow({ install, protection }) {
     ] })
   ] });
 }
-function SupplyChainWorkspace({ snapshot, onGoHome }) {
+function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }) {
   const [filter, setFilter] = reactExports.useState({
     statusFilter: "all",
     managerFilter: ""
@@ -687,10 +736,7 @@ function SupplyChainWorkspace({ snapshot, onGoHome }) {
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-semibold text-brand-dark", children: "Supply Chain" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-slate-500", children: "Package manager firewall status, prevented installs, and feed health." })
-      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Package manager firewall status, prevented installs, and feed health." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onGoHome, children: "Back to Home" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4", children: [
@@ -699,7 +745,7 @@ function SupplyChainWorkspace({ snapshot, onGoHome }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Protected managers", value: stats.protectedManagers, tone: "green" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Unprotected managers", value: stats.unprotectedManagers, tone: stats.unprotectedManagers > 0 ? "attention" : "slate" })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(PackageFirewallPanel, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PackageFirewallPanel, { approvalGate }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [

@@ -246,6 +246,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
     latest_connect_state = store.get_effective_guard_connect_state(now=_now())
     connect_retry_required = _connect_retry_required(latest_connect_state)
+    connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
     remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
     cloud_state = _resolve_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -261,6 +262,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
             dashboard_url,
             oauth_repair_required=oauth_repair_required,
             connect_retry_required=connect_retry_required,
+            connect_retry_refresh_race=connect_retry_refresh_race,
         ),
         "sync_url": sync_url,
         "dashboard_url": dashboard_url,
@@ -474,11 +476,17 @@ def _cloud_state_detail(
     *,
     oauth_repair_required: bool = False,
     connect_retry_required: bool = False,
+    connect_retry_refresh_race: bool = False,
 ) -> str:
     if oauth_repair_required:
         return (
             "Guard Cloud sign-in on this machine is incomplete. "
             f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair local authorization and resume sync."
+        )
+    if connect_retry_refresh_race:
+        return (
+            "This machine stays locally protected. The first shared Guard Cloud proof stalled after a refresh-token "
+            f"race. Run `{GUARD_COMMAND} connect` or reopen {connect_url} when you want shared proof restored."
         )
     if connect_retry_required:
         return (
@@ -512,6 +520,13 @@ def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
     status = _optional_string(latest_state.get("status"))
     milestone = _optional_string(latest_state.get("milestone"))
     return status == "retry_required" or milestone == "first_sync_failed"
+
+
+def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None or not _connect_retry_required(latest_state):
+        return False
+    reason = _optional_string(latest_state.get("reason"))
+    return isinstance(reason, str) and "already consumed" in reason.lower()
 
 
 def _advisory_headline(advisories: list[dict[str, object]]) -> str | None:
