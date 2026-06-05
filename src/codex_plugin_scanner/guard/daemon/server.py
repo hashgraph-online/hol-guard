@@ -1822,9 +1822,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 manager for manager in tested_managers if manager in installed and manager not in protected
             ]
             return {
-                "blocked_execution": bool(tested_managers) and all(
-                    manager in protected for manager in tested_managers
-                ),
+                "blocked_execution": bool(tested_managers) and all(manager in protected for manager in tested_managers),
                 "missing_managers": [manager for manager in tested_managers if manager not in installed],
                 "package_shims": status,
                 "path_repair_required": path_repair_required,
