@@ -16282,6 +16282,9 @@ function resolveActionType(receipt) {
   if (actionType === "mcp_tool" || artifactType === "tool_action_request" || artifactType.includes("mcp") || artifactType.includes("tool")) return "Tool call";
   if (actionType === "package_script" || artifactType.includes("package") || artifactType.includes("supply_chain")) return "Package";
   if (actionType === "network_request" || artifactType.includes("network")) return "Network request";
+  if (actionType === "config_change" || artifactType.includes("config")) return "Config change";
+  if (actionType === "browser_action" || artifactType.includes("browser")) return "Browser action";
+  if (actionType === "harness_start") return "Harness start";
   if (artifactType.includes("plugin")) return "Plugin";
   return "Action";
 }
@@ -16310,7 +16313,7 @@ function resolveActionTitle(receipt) {
   return type;
 }
 function looksLikeId(text) {
-  if (text.includes(":")) return true;
+  if (/^\w+:[a-f0-9]{8,}$/i.test(text)) return true;
   if (/^[a-f0-9]{8,}$/i.test(text)) return true;
   return false;
 }
@@ -16321,10 +16324,10 @@ function plainEnglishDescription(receipt) {
   const signals = receipt.scanner_evidence ?? [];
   const firstSignal = signals[0];
   if (receipt.policy_decision === "allow") {
-    if (firstSignal?.plain_reason) {
-      return `${app} ${pastTenseVerb(type)} ${title}. Guard reviewed it and allowed it.`;
+    if (receipt.user_override !== null) {
+      return `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
     }
-    return `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it.`;
+    return `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
   }
   if (firstSignal?.plain_reason) {
     return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${firstSignal.plain_reason}`;
@@ -16349,6 +16352,12 @@ function pastTenseVerb(type) {
       return "submitted";
     case "Plugin":
       return "loaded";
+    case "Config change":
+      return "changed";
+    case "Browser action":
+      return "performed";
+    case "Harness start":
+      return "started";
     default:
       return "ran";
   }
@@ -16371,6 +16380,12 @@ function infinitiveVerb(type) {
       return "submit";
     case "Plugin":
       return "load";
+    case "Config change":
+      return "change";
+    case "Browser action":
+      return "perform";
+    case "Harness start":
+      return "start";
     default:
       return "run";
   }
