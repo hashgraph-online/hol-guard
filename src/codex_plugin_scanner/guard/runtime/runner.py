@@ -1222,6 +1222,8 @@ def simulate_policy_bundle_receipts(
             None,
         )
         simulated_action = matched.action if matched is not None else str(receipt.get("policy_decision") or "review")
+        if simulated_action not in {"allow", "block", "review", "ignore"}:
+            simulated_action = "review"
         summary[simulated_action] = summary.get(simulated_action, 0) + 1
         if matched is not None:
             summary["matched"] += 1

@@ -218,7 +218,15 @@ export function PolicyWorkspace({
       </div>
 
       {cloudBundleCopy && (
-        <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 shadow-sm">
+        <div
+          className={`rounded-2xl p-4 shadow-sm ${
+            cloudBundleCopy.tone === "attention"
+              ? "border border-amber-200/70 bg-amber-50/70"
+              : cloudBundleCopy.tone === "slate"
+                ? "border border-slate-200/70 bg-slate-50/70"
+                : "border border-emerald-200/70 bg-emerald-50/70"
+          }`}
+        >
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <SectionLabel>Guard Cloud bundle</SectionLabel>
             <Tag tone={cloudBundleCopy.tone}>{cloudBundleCopy.label}</Tag>
