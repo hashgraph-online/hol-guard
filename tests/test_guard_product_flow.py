@@ -392,6 +392,65 @@ args = ["workspace-skill.js", "--changed"]
         assert output["dashboard_url"] == "https://hol.org/guard"
         assert output["inbox_url"] == "https://hol.org/guard/inbox"
         assert output["fleet_url"] == "https://hol.org/guard/fleet"
+        assert "retry automatically" in output["cloud_state_detail"]
+        assert "finish the pairing loop" not in output["cloud_state_detail"]
+
+    def test_guard_status_json_surfaces_first_sync_repair_over_generic_pending_copy(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        store = GuardStore(guard_home)
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-secret-value",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "x-value",
+                "y": "y-value",
+                "alg": "ES256",
+                "use": "sig",
+            },
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            workspace_id="workspace-123",
+            now="2026-06-04T18:30:00+00:00",
+        )
+        store.record_guard_connect_pairing_completed(
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            allowed_origin="https://hol.org",
+            now="2026-06-04T18:30:00+00:00",
+        )
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now="2026-06-04T18:31:00+00:00",
+            reason="Guard authorization expired.",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "status",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["cloud_state"] == "paired_waiting"
+        assert "needs repair before the first shared proof can land" in output["cloud_state_detail"]
+        assert "retry automatically" not in output["cloud_state_detail"]
 
     def test_guard_help_groups_commands_by_everyday_cloud_and_advanced_work(self, capsys, monkeypatch):
         monkeypatch.setattr(sys, "argv", ["hol-guard"])

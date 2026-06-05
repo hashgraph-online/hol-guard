@@ -88,7 +88,7 @@ from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
-    sync_receipts,
+    sync_local_guard_cloud_proof,
     sync_supply_chain_bundle,
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
@@ -357,11 +357,18 @@ def _run_headless_cloud_sync(
 ) -> None:
     recorded_at = _now()
     try:
-        sync_payload = sync_receipts(store)
+        sync_payload = sync_local_guard_cloud_proof(store)
+        store.record_latest_guard_connect_sync_success(
+            sync_payload=sync_payload,
+            now=str(sync_payload.get("synced_at") or recorded_at),
+        )
         summary = {
             "status": "synced",
             "synced_at": sync_payload.get("synced_at"),
             "receipts_stored": sync_payload.get("receipts_stored", 0),
+            "runtime_session_id": sync_payload.get("runtime_session_id"),
+            "runtime_session_synced_at": sync_payload.get("runtime_session_synced_at"),
+            "runtime_sessions_visible": sync_payload.get("runtime_sessions_visible"),
         }
     except GuardSyncAuthorizationExpiredError as error:
         store.record_latest_guard_connect_sync_result(

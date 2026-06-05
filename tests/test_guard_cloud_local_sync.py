@@ -569,6 +569,13 @@ def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(t
             ),
         ),
         (
+            "retry_required",
+            "first_sync_failed",
+            "failed",
+            "First proof needs retry",
+            "Guard Cloud sign-in on this machine needs repair. Run hol-guard connect again.",
+        ),
+        (
             "waiting",
             "waiting_for_browser",
             "waiting",

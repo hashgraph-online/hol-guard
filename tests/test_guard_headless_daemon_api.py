@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
-from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -804,19 +804,29 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         "2026-05-23T17:18:00.000Z",
         workspace_id="workspace-1",
     )
-    sync_calls: list[bool] = []
+    sync_calls: list[str] = []
     sync_finished = threading.Event()
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-05-23T17:18:20.000Z",
+        request_id="connect-1",
+    )
 
-    def fake_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+    def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
         assert current_store is store
-        sync_calls.append(True)
+        sync_calls.append("runtime")
+        sync_calls.append("receipts")
         sync_finished.set()
         return {
             "synced_at": "2026-05-23T17:18:40.061Z",
             "receipts_stored": 1,
+            "runtime_session_synced_at": "2026-05-23T17:18:35.000Z",
+            "runtime_session_id": "runtime-session-1",
+            "runtime_sessions_visible": 1,
         }
 
-    monkeypatch.setattr(daemon_server, "sync_receipts", fake_sync_receipts, raising=False)
+    monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -844,7 +854,11 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         "message": "Guard Cloud sync started.",
     }
     assert sync_finished.wait(timeout=2)
-    assert sync_calls == [True]
+    assert sync_calls == ["runtime", "receipts"]
+    latest_state = store.get_latest_guard_connect_state(now="2026-05-23T17:18:40.061Z")
+    assert isinstance(latest_state, dict)
+    assert latest_state["proof"]["runtime_session_id"] == "runtime-session-1"
+    assert latest_state["proof"]["runtime_session_synced_at"] == "2026-05-23T17:18:35.000Z"
 
 
 def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
