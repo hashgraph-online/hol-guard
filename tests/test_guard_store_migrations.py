@@ -71,6 +71,51 @@ def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_
     assert isinstance(secret_store, EncryptedFileSecretStore)
 
 
+def test_oauth_secret_store_skips_system_keyring_when_macos_user_keychain_search_list_is_broken(
+    tmp_path,
+    monkeypatch,
+):
+    _install_fake_system_keyring(monkeypatch)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    usable_keychain = tmp_path / "Library" / "Keychains" / "login.keychain-db"
+    usable_keychain.parent.mkdir(parents=True, exist_ok=True)
+    usable_keychain.write_text("", encoding="utf-8")
+    missing_keychain = tmp_path / "Library" / "Keychains" / "legacy.keychain-db"
+
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+    ) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        assert capture_output is True
+        assert text is True
+        assert timeout == 5
+        args = tuple(command[1:])
+        if args == ("default-keychain", "-d", "user"):
+            return subprocess.CompletedProcess(command, 0, stdout=f'"{usable_keychain}"\n', stderr="")
+        if args == ("list-keychains", "-d", "user"):
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=f'    "{usable_keychain}"\n    "{missing_keychain}"\n',
+                stderr="",
+            )
+        if args == ("show-keychain-info", str(usable_keychain)):
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        raise AssertionError(f"Unexpected security command: {command!r}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
+
+    assert SystemKeyringSecretStore._is_available() is False
+    assert isinstance(secret_store, EncryptedFileSecretStore)
+
+
 def test_windows_oauth_refresh_lock_wraps_permission_error_as_blocking(monkeypatch):
     class _FakeHandle:
         def seek(self, _offset: int) -> None:
