@@ -451,7 +451,7 @@ def test_headless_capabilities_rejects_dashboard_session_from_guard_token_header
     assert payload["error"] == "unauthorized"
 
 
-def test_cloud_app_handoff_get_rejects_legacy_local_page(tmp_path: Path) -> None:
+def test_cloud_app_handoff_get_requires_auth_before_legacy_local_page_branch(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -470,8 +470,8 @@ def test_cloud_app_handoff_get_rejects_legacy_local_page(tmp_path: Path) -> None
     finally:
         daemon.stop()
 
-    assert status == 410
-    assert payload["error"] == "legacy_cloud_handoff_disabled"
+    assert status == 401
+    assert payload["error"] == "unauthorized"
     serialized = json.dumps(payload)
     assert "handoffToken" not in serialized
     assert "dashboardSessionToken" not in serialized
@@ -531,7 +531,7 @@ def test_cloud_app_handoff_start_does_not_save_raw_sync_credentials(tmp_path: Pa
     assert store.get_sync_credentials() is None
 
 
-def test_cloud_app_handoff_navigation_does_not_save_raw_sync_credentials(tmp_path: Path) -> None:
+def test_cloud_app_handoff_navigation_requires_auth_before_legacy_sync_query_handling(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     path = (
@@ -557,8 +557,8 @@ def test_cloud_app_handoff_navigation_does_not_save_raw_sync_credentials(tmp_pat
     finally:
         daemon.stop()
 
-    assert status == 410
-    assert payload["error"] == "legacy_cloud_handoff_disabled"
+    assert status == 401
+    assert payload["error"] == "unauthorized"
     assert "guard-runtime-token" not in json.dumps(payload)
     assert store.get_sync_credentials() is None
 

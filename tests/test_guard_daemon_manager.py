@@ -109,6 +109,7 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
         "_guard_daemon_pid_matches_command",
         lambda _pid, expected_guard_home=None: False,
     )
+
     def fake_urlopen(request, *_args, **_kwargs):
         requested_urls.append(request.full_url if hasattr(request, "full_url") else str(request))
         if hasattr(request, "header_items"):
@@ -148,8 +149,6 @@ def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:
         {
             "ok": True,
             "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "pending_approvals": 0,
-            "uptime_seconds": 1.2,
         }
     )
 
