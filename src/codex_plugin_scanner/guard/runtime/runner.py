@@ -1291,7 +1291,17 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
                 {"reason": policy_bundle_rejection_reason or "invalid_policy_bundle"},
                 now,
             )
-    elif not isinstance(store.get_sync_payload("policy_bundle_last_error"), dict):
+    else:
+        existing_bundle_payload = store.get_sync_payload("policy_bundle")
+        if isinstance(existing_bundle_payload, dict) and existing_bundle_payload:
+            remote_decisions.update(
+                _build_policy_bundle_decisions(
+                    existing_bundle_payload,
+                    device_id=device_id,
+                    device_name=device_name,
+                )
+            )
+    if not isinstance(store.get_sync_payload("policy_bundle_last_error"), dict):
         store.set_sync_payload("policy_bundle_last_error", {}, now)
     if alert_preferences_payload is not None:
         store.set_sync_payload("alert_preferences", alert_preferences_payload, now)
