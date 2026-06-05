@@ -4328,6 +4328,49 @@ clearer UX and an implementation plan with technical references.
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert output["hookSpecificOutput"]["permissionDecisionReason"] == message
 
+    def test_guard_hook_codex_native_block_appends_approval_url_for_precomputed_payload(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "hook_event_name": "PreToolUse",
+            "artifact_id": "codex:project:dangerous-command",
+            "artifact_name": "dangerous-command",
+            "policy_action": "block",
+            "permission_decision_reason": "This command sends local secret to network host.",
+            "approval_center_url": "http://127.0.0.1:4455",
+            "approval_requests": [{"approval_url": "http://127.0.0.1:4455/approvals/request-1"}],
+            "changed_capabilities": ["command"],
+            "provenance_summary": "project artifact defined at .codex/config.toml",
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        reason = output["hookSpecificOutput"]["permissionDecisionReason"]
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert "Open HOL Guard to approve or keep this blocked" in reason
+        assert "http://127.0.0.1:4455/approvals/request-1" in reason
+
     def test_guard_hook_fallback_artifact_id_uses_scope(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
