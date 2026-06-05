@@ -548,8 +548,8 @@ def build_package_protect_payload(
         provenance_summary=evaluation.user_copy.harness_message,
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
-        action_envelope_json=receipt_policy_metadata,
     )
+    receipt = replace(receipt, action_envelope_json=receipt_policy_metadata)
     payload: dict[str, object] = {
         "generated_at": now,
         "request": {
