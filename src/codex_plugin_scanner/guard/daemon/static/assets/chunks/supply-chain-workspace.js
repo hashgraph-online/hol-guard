@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, g as HiMiniCheckCircle, ab as HiMiniArrowPath, b as HiMiniExclamationTriangle, T as Tag, A as ActionButton, H as HiMiniShieldCheck, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, ao as startPackageFirewallConnect, S as SectionLabel, E as EmptyState, ap as HiMiniBugAnt, a as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ab as HiMiniArrowPath, H as HiMiniShieldCheck, ai as HiMiniArrowTopRightOnSquare, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, h as HiMiniXCircle, r as reactExports, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, ao as startPackageFirewallConnect, S as SectionLabel, E as EmptyState, ap as HiMiniBugAnt, a as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 function UpgradeCta({ entitlement }) {
@@ -64,6 +64,7 @@ function ConnectFlowCard({
   connectError,
   connectStarting,
   connectFlow,
+  localRecoveryHint,
   mode,
   onStartConnect
 }) {
@@ -76,9 +77,9 @@ function ConnectFlowCard({
   const statusTone = mode === "repair" ? "attention" : "blue";
   const statusLabel = mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-[24px] border border-brand-blue/20 bg-gradient-to-br from-brand-blue/[0.05] via-white to-brand-purple/[0.04] px-4 py-4 shadow-[0_18px_45px_-34px_rgba(39,80,180,0.5)]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "HOL Guard Cloud" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel })
@@ -88,12 +89,12 @@ function ConnectFlowCard({
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: connectFlow.detail })
         ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[18px] border border-slate-200 bg-white/85 px-3.5 py-3 sm:max-w-xs", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Security" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: "Guard does not change package-manager routing until this machine receives signed cloud access." })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2.5 sm:grid-cols-3", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2.5 md:grid-cols-3", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConnectStep,
       {
         index: index + 1,
@@ -104,6 +105,10 @@ function ConnectFlowCard({
       },
       step.title
     )) }),
+    localRecoveryHint != null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-slate-50/80 px-3.5 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Available now" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: localRecoveryHint })
+    ] }),
     connectError !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[18px] border border-brand-attention/25 bg-brand-attention/[0.05] px-3.5 py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Guard could not start local connect" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: connectError })
@@ -130,7 +135,7 @@ function CliFallback({ commands }) {
     ] }, label)) })
   ] });
 }
-function FreeUserView({
+function EntitlementNotice({
   connectError,
   connectStarting,
   data,
@@ -138,7 +143,7 @@ function FreeUserView({
 }) {
   const connectRequired = data.entitlement.reason === "guard_cloud_connect_required" || data.entitlement.reason === "guard_cloud_reconnect_required";
   const connectMode = data.entitlement.reason === "guard_cloud_reconnect_required" ? "repair" : "connect";
-  const supportedManagersLabel = connectRequired ? "Protected after connect" : "Would be protected";
+  const localRecoveryHint = data.package_shims.some((shim) => shim.installed) ? connectRequired ? "Existing shims on this machine can still be fixed or removed locally. Connect is only needed for new installs and cloud-gated verification." : null : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
     connectRequired && data.connect_flow !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConnectFlowCard,
@@ -146,21 +151,11 @@ function FreeUserView({
         connectError,
         connectStarting,
         connectFlow: data.connect_flow,
+        localRecoveryHint,
         mode: connectMode,
         onStartConnect
       }
     ) : /* @__PURE__ */ jsxRuntimeExports.jsx(UpgradeCta, { entitlement: data.entitlement }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400", children: supportedManagersLabel }),
-      data.supported_managers.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "No supported managers detected on this machine." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1.5", children: data.supported_managers.map((mgr) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "span",
-        {
-          className: "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 font-mono text-xs text-slate-600",
-          children: mgr
-        },
-        mgr
-      )) })
-    ] }),
     data.cli_fallback !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CliFallback, { commands: data.cli_fallback })
   ] });
 }
@@ -168,7 +163,7 @@ function activationHeadline(protection) {
   if (protection === null) return "Activation status unavailable";
   if (protection.path_status === "in_path") return "Protection live now";
   if (protection.path_status === "restart_required") return "Restart shell or apps to finish activation";
-  return "PATH repair still needed";
+  return "Fix PATH to finish activation";
 }
 function ActivationSummary({ protection }) {
   if (protection === null) {
@@ -302,6 +297,9 @@ function ActionBtn({ label, icon, variant, onClick, disabled }) {
     label
   ] });
 }
+function actionIsAvailable(state) {
+  return state === "available";
+}
 function ActionButtonRow({
   shim,
   actions,
@@ -315,14 +313,14 @@ function ActionButtonRow({
   const repairState = actions.repair ?? "disabled";
   const testState = actions.test ?? "disabled";
   const removeState = actions.remove ?? "disabled";
-  const installBlocked = installState === "paid_required" || installState === "reconnect_required";
-  const repairBlocked = repairState === "paid_required" || repairState === "reconnect_required";
-  const testBlocked = testState === "paid_required" || testState === "reconnect_required";
-  const removeBlocked = removeState === "paid_required" || removeState === "reconnect_required";
-  const showInstall = !shim.installed && installState !== "disabled";
-  const showRepair = shim.installed && shim.activation_state !== "restart_required" && repairState !== "disabled";
-  const showTest = testState !== "disabled";
-  const showRemove = removeState !== "disabled" && shim.installed;
+  const installAvailable = actionIsAvailable(installState);
+  const repairAvailable = actionIsAvailable(repairState);
+  const testAvailable = actionIsAvailable(testState);
+  const removeAvailable = actionIsAvailable(removeState);
+  const showInstall = !shim.installed && installAvailable;
+  const showRepair = shim.installed && shim.activation_state === "repair_required" && repairAvailable;
+  const showTest = shim.installed && shim.activation_state === "protected" && testAvailable;
+  const showRemove = shim.installed && removeAvailable;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
     showInstall && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ActionBtn,
@@ -331,17 +329,17 @@ function ActionButtonRow({
         icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
         variant: "primary",
         onClick: onInstall,
-        disabled: anyPending || installBlocked
+        disabled: anyPending
       }
     ),
     showRepair && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ActionBtn,
       {
-        label: "Repair",
+        label: "Fix PATH",
         icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-        variant: "secondary",
+        variant: "primary",
         onClick: onRepair,
-        disabled: anyPending || repairBlocked
+        disabled: anyPending
       }
     ),
     showTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -351,7 +349,7 @@ function ActionButtonRow({
         icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
         variant: "outline",
         onClick: onTest,
-        disabled: anyPending || testBlocked
+        disabled: anyPending
       }
     ),
     showRemove && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -361,7 +359,7 @@ function ActionButtonRow({
         icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
         variant: "danger",
         onClick: onRemoveRequest,
-        disabled: anyPending || removeBlocked
+        disabled: anyPending
       }
     )
   ] });
@@ -435,6 +433,7 @@ function ManagerActionCard({
       }
     ),
     shim.activation_state === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim." }),
+    shim.activation_state === "repair_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart." }),
     shim.shim_path !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-[10px] text-slate-400", children: shim.shim_path })
   ] });
 }
@@ -536,12 +535,13 @@ function FailureBanner({ failed }) {
     }
   );
 }
-function PaidUserView({
+function FirewallControlsView({
   data,
   pendingOp,
   lastCompleted,
   lastFailed,
   confirmRemoveManager,
+  showGlobalActions,
   onInstall,
   onRepair,
   onTest,
@@ -556,7 +556,7 @@ function PaidUserView({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Per-manager controls" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
+      showGlobalActions && /* @__PURE__ */ jsxRuntimeExports.jsx(
         GlobalActionsBar,
         {
           anyPending,
@@ -766,33 +766,37 @@ function PackageFirewallPanel(props) {
     ] }),
     panelLoad.phase === "loading" && /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingSkeleton, {}),
     panelLoad.phase === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBanner, { message: panelLoad.message, onRetry: handleRetry }),
-    panelLoad.phase === "loaded" && (panelLoad.data.entitlement.allowed ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PaidUserView,
-      {
-        data: panelLoad.data,
-        pendingOp,
-        lastCompleted,
-        lastFailed,
-        confirmRemoveManager,
-        onInstall: handleInstall,
-        onRepair: handleRepair,
-        onTest: handleTest,
-        onRemoveRequest: handleRemoveRequest,
-        onRemoveConfirm: handleRemoveConfirm,
-        onRemoveCancel: handleRemoveCancel,
-        onAudit: handleAudit,
-        onSync: handleSync,
-        onDismissResult: handleDismissResult
-      }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-      FreeUserView,
-      {
-        connectError,
-        connectStarting: startingConnect,
-        data: panelLoad.data,
-        onStartConnect: handleStartConnect
-      }
-    )),
+    panelLoad.phase === "loaded" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      !panelLoad.data.entitlement.allowed && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EntitlementNotice,
+        {
+          connectError,
+          connectStarting: startingConnect,
+          data: panelLoad.data,
+          onStartConnect: handleStartConnect
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        FirewallControlsView,
+        {
+          data: panelLoad.data,
+          pendingOp,
+          lastCompleted,
+          lastFailed,
+          confirmRemoveManager,
+          showGlobalActions: panelLoad.data.entitlement.allowed,
+          onInstall: handleInstall,
+          onRepair: handleRepair,
+          onTest: handleTest,
+          onRemoveRequest: handleRemoveRequest,
+          onRemoveConfirm: handleRemoveConfirm,
+          onRemoveCancel: handleRemoveCancel,
+          onAudit: handleAudit,
+          onSync: handleSync,
+          onDismissResult: handleDismissResult
+        }
+      )
+    ] }),
     pendingApprovalOp !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalProofModal,
       {
