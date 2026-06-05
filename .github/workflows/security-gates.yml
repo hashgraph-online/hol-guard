@@ -64,4 +64,4 @@ jobs:
           GOBIN="$RUNNER_TEMP/bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Run Gitleaks
-        run: gitleaks detect --source . --no-banner --redact --exit-code 1
+        run: gitleaks detect --no-git --source . --no-banner --redact --exit-code 1
