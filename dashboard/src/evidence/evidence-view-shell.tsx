@@ -1,23 +1,12 @@
-import { useCallback } from "react";
-import type { ElementType } from "react";
-import {
-  HiMiniListBullet,
-  HiMiniChartBar,
-  HiMiniComputerDesktop,
-  HiMiniArrowDownTray,
-  HiMiniClock,
-  HiMiniCalendarDays,
-  HiMiniSquares2X2,
-} from "react-icons/hi2";
 import type { EvidenceView } from "./evidence-types";
 
-export const VIEW_TABS: { key: EvidenceView; label: string; icon: ElementType }[] = [
-  { key: "actions", label: "All actions", icon: HiMiniListBullet },
-  { key: "insights", label: "Insights", icon: HiMiniChartBar },
-  { key: "apps", label: "Apps", icon: HiMiniComputerDesktop },
-  { key: "story", label: "Story", icon: HiMiniCalendarDays },
-  { key: "categories", label: "Categories", icon: HiMiniSquares2X2 },
-  { key: "export", label: "Export", icon: HiMiniArrowDownTray },
+export const VIEW_TABS: { key: EvidenceView; label: string }[] = [
+  { key: "actions", label: "All actions" },
+  { key: "insights", label: "Insights" },
+  { key: "apps", label: "Apps" },
+  { key: "story", label: "Story" },
+  { key: "categories", label: "Categories" },
+  { key: "export", label: "Export" },
 ];
 
 export function EvidenceLoadingState() {
@@ -66,8 +55,7 @@ export function EvidenceHeader({
           Every action Guard reviewed on this machine.
         </p>
         {lastActivityLabel && (
-          <p className="flex items-center gap-1 text-[11px] text-slate-400">
-            <HiMiniClock className="h-3 w-3" aria-hidden="true" />
+          <p className="text-[11px] text-slate-400">
             Last activity: {lastActivityLabel}
           </p>
         )}
@@ -79,7 +67,6 @@ export function EvidenceHeader({
           aria-label="Export evidence"
           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-dark hover:bg-slate-50 transition-colors"
         >
-          <HiMiniArrowDownTray className="h-3.5 w-3.5" aria-hidden="true" />
           Export
         </button>
         {onClear && totalCount > 0 && (
@@ -94,76 +81,5 @@ export function EvidenceHeader({
         )}
       </div>
     </div>
-  );
-}
-
-export interface ViewTabBarProps {
-  view: EvidenceView;
-  onViewChange: (view: EvidenceView) => void;
-}
-
-export function ViewTabBar({ view, onViewChange }: ViewTabBarProps) {
-  return (
-    <div
-      className="flex gap-1 border-b border-slate-200/60"
-      role="tablist"
-      aria-label="Evidence views"
-    >
-      {VIEW_TABS.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = view === tab.key;
-        return (
-          <ViewTabButton
-            key={tab.key}
-            tabKey={tab.key}
-            label={tab.label}
-            icon={Icon}
-            isActive={isActive}
-            onSelect={onViewChange}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-interface ViewTabButtonProps {
-  tabKey: EvidenceView;
-  label: string;
-  icon: ElementType;
-  isActive: boolean;
-  onSelect: (key: EvidenceView) => void;
-}
-
-function ViewTabButton({
-  tabKey,
-  label,
-  icon: Icon,
-  isActive,
-  onSelect,
-}: ViewTabButtonProps) {
-  const handleClick = useCallback(() => {
-    onSelect(tabKey);
-  }, [tabKey, onSelect]);
-
-  return (
-    <button
-      role="tab"
-      aria-selected={isActive}
-      aria-controls={`tabpanel-${tabKey}`}
-      id={`tab-${tabKey}`}
-      onClick={handleClick}
-      className={`relative flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${
-        isActive
-          ? "text-brand-dark"
-          : "text-slate-500 hover:text-brand-dark"
-      }`}
-    >
-      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-      <span className="hidden sm:inline">{label}</span>
-      {isActive && (
-        <span className="absolute bottom-0 left-1 right-1 h-0.5 rounded-full bg-brand-blue" />
-      )}
-    </button>
   );
 }

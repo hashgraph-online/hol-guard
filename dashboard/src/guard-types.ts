@@ -337,6 +337,8 @@ export type GuardReceipt = {
   artifact_name: string | null;
   source_scope: string | null;
   timestamp: string;
+  diff_summary?: string | null;
+  scanner_evidence?: RiskSignalV2[];
 };
 
 export type GuardArtifactDiff = {

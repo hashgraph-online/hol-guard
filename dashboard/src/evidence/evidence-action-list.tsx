@@ -4,11 +4,11 @@ import {
   HiMiniShieldCheck,
   HiMiniNoSymbol,
   HiMiniQuestionMarkCircle,
+  HiMiniChevronUp,
   HiMiniChevronDown,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import type { EvidenceSortKey } from "./evidence-types";
-import { EVIDENCE_SORT_OPTIONS } from "./evidence-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { humanFileName } from "./plain-english";
@@ -53,6 +53,171 @@ function DecisionChip({ decision }: DecisionChipProps) {
       <HiMiniQuestionMarkCircle className="h-3 w-3" aria-hidden="true" />
       Reviewed
     </span>
+  );
+}
+
+const SORT_TOGGLE_MAP: Record<EvidenceSortKey, EvidenceSortKey> = {
+  newest: "oldest",
+  oldest: "newest",
+  artifact: "artifact",
+  app: "app",
+  category: "category",
+  decision: "decision",
+};
+
+function SortHeader({
+  label,
+  active,
+  ascending,
+  onClick,
+  className = "",
+}: {
+  label: string;
+  active: boolean;
+  ascending: boolean;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <th
+      scope="col"
+      aria-sort={active ? (ascending ? "ascending" : "descending") : "none"}
+      className={`px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${className}`}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center gap-1 hover:text-brand-dark transition-colors"
+        aria-label={`Sort by ${label}${active ? (ascending ? ", ascending" : ", descending") : ""}`}
+      >
+        {label}
+        {active && (
+          ascending ? (
+            <HiMiniChevronUp className="h-3 w-3" aria-hidden="true" />
+          ) : (
+            <HiMiniChevronDown className="h-3 w-3" aria-hidden="true" />
+          )
+        )}
+      </button>
+    </th>
+  );
+}
+
+export function EvidenceActionList({
+  receipts,
+  selectedId,
+  onSelectId,
+  onFilterHarness,
+  onFilterCategory,
+  sort,
+  onSortChange,
+  page,
+  pageSize,
+  onLoadMore,
+}: EvidenceActionListProps) {
+  const visible = receipts.slice(0, (page + 1) * pageSize);
+  const showLoadMore = hasMore(page, pageSize, receipts.length);
+
+  const handleSort = useCallback(
+    (key: EvidenceSortKey) => {
+      if (sort === key) {
+        onSortChange(SORT_TOGGLE_MAP[key]);
+      } else {
+        onSortChange(key);
+      }
+    },
+    [sort, onSortChange]
+  );
+
+  if (receipts.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <p className="text-sm font-medium text-brand-dark">No actions match</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Try adjusting the filters above.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-medium text-slate-500">
+          {receipts.length} action{receipts.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" aria-label="Evidence actions">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/60">
+                <th scope="col" className="w-8 px-3 py-2.5" />
+                <SortHeader
+                  label="Artifact"
+                  active={sort === "artifact"}
+                  ascending={sort === "artifact"}
+                  onClick={() => handleSort("artifact")}
+                  className="min-w-[180px]"
+                />
+                <SortHeader
+                  label="App"
+                  active={sort === "app"}
+                  ascending={sort === "app"}
+                  onClick={() => handleSort("app")}
+                  className="hidden sm:table-cell"
+                />
+                <SortHeader
+                  label="Category"
+                  active={sort === "category"}
+                  ascending={sort === "category"}
+                  onClick={() => handleSort("category")}
+                  className="hidden md:table-cell"
+                />
+                <SortHeader
+                  label="Decision"
+                  active={sort === "decision"}
+                  ascending={sort === "decision"}
+                  onClick={() => handleSort("decision")}
+                />
+                <SortHeader
+                  label="Time"
+                  active={sort === "newest" || sort === "oldest"}
+                  ascending={sort === "oldest"}
+                  onClick={() => handleSort("newest")}
+                  className="hidden lg:table-cell"
+                />
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((receipt) => (
+                <ActionRow
+                  key={receipt.receipt_id}
+                  receipt={receipt}
+                  isSelected={selectedId === receipt.receipt_id}
+                  onSelect={onSelectId}
+                  onFilterHarness={onFilterHarness}
+                  onFilterCategory={onFilterCategory}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showLoadMore && (
+        <div className="flex justify-center pt-2">
+          <button
+            type="button"
+            onClick={onLoadMore}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors"
+          >
+            Load more
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -107,145 +272,53 @@ function ActionRow({
   );
 
   return (
-    <div
-      role="button"
+    <tr
       tabIndex={0}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       aria-selected={isSelected}
-      className={`w-full text-left flex items-center gap-3 px-4 py-3 transition-colors border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:bg-slate-50 cursor-pointer ${
-        isSelected ? "bg-brand-blue/5 border-l-2 border-l-brand-blue" : ""
+      className={`border-b border-slate-100 last:border-0 transition-colors cursor-pointer ${
+        isSelected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50"
       }`}
     >
-      <span
-        className={`shrink-0 ${catInfo.color}`}
-        aria-hidden="true"
-      >
-        {catInfo.icon}
-      </span>
-
-      <div className="flex-1 min-w-0 space-y-0.5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium text-brand-dark truncate">
-            {artifactLabel}
-          </span>
-          <DecisionChip decision={receipt.policy_decision} />
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={handleHarnessClick}
-            aria-label={`Filter by app ${harnessDisplayName(receipt.harness)}`}
-            className="text-[11px] font-medium text-brand-blue hover:underline shrink-0"
-          >
-            {harnessDisplayName(receipt.harness)}
-          </button>
-          <span className="text-slate-300 text-[11px]">·</span>
-          <button
-            type="button"
-            onClick={handleCategoryClick}
-            aria-label={`Filter by category ${catInfo.label}`}
-            className="text-[11px] text-slate-500 hover:text-brand-dark shrink-0"
-          >
-            {catInfo.label}
-          </button>
-          <span className="text-slate-300 text-[11px]">·</span>
-          <span className="text-[11px] text-slate-400 shrink-0">
-            {formatRelativeTime(receipt.timestamp)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function EvidenceActionList({
-  receipts,
-  selectedId,
-  onSelectId,
-  onFilterHarness,
-  onFilterCategory,
-  sort,
-  onSortChange,
-  page,
-  pageSize,
-  onLoadMore,
-}: EvidenceActionListProps) {
-  const handleSortChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      onSortChange(e.target.value as EvidenceSortKey);
-    },
-    [onSortChange]
-  );
-
-  const visible = receipts.slice(0, (page + 1) * pageSize);
-  const showLoadMore = hasMore(page, pageSize, receipts.length);
-
-  if (receipts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-sm font-medium text-brand-dark">No actions match</p>
-        <p className="mt-1 text-xs text-slate-500">
-          Try adjusting the filters above.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium text-slate-500">
-          {receipts.length} action{receipts.length !== 1 ? "s" : ""}
+      <td className="px-3 py-2.5">
+        <span className={`${catInfo.color}`} aria-hidden="true">
+          {catInfo.icon}
         </span>
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">
-          Sort by:
-          <select
-            value={sort}
-            onChange={handleSortChange}
-            aria-label="Sort actions"
-            className="rounded-md border-0 bg-transparent py-0.5 text-xs font-medium text-brand-dark focus:outline-none focus:ring-1 focus:ring-brand-blue/30"
-          >
-            {EVIDENCE_SORT_OPTIONS.map((opt) => (
-              <option key={opt.key} value={opt.key}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <HiMiniChevronDown className="h-3 w-3 text-slate-400 pointer-events-none" aria-hidden="true" />
-        </label>
-      </div>
-
-      <div
-        className="rounded-xl border border-slate-200 bg-white overflow-hidden"
-        role="list"
-        aria-label="Evidence actions"
-      >
-        {visible.map((receipt) => (
-          <div role="listitem" key={receipt.receipt_id}>
-            <ActionRow
-              receipt={receipt}
-              isSelected={selectedId === receipt.receipt_id}
-              onSelect={onSelectId}
-              onFilterHarness={onFilterHarness}
-              onFilterCategory={onFilterCategory}
-            />
-          </div>
-        ))}
-      </div>
-
-      {showLoadMore && (
-        <div className="flex justify-center pt-2">
-          <button
-            type="button"
-            onClick={onLoadMore}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors"
-          >
-            Load more
-          </button>
-        </div>
-      )}
-    </div>
+      </td>
+      <td className="px-3 py-2.5">
+        <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">
+          {artifactLabel}
+        </span>
+      </td>
+      <td className="px-3 py-2.5 hidden sm:table-cell">
+        <button
+          type="button"
+          onClick={handleHarnessClick}
+          aria-label={`Filter by app ${harnessDisplayName(receipt.harness)}`}
+          className="text-xs font-medium text-brand-blue hover:underline"
+        >
+          {harnessDisplayName(receipt.harness)}
+        </button>
+      </td>
+      <td className="px-3 py-2.5 hidden md:table-cell">
+        <button
+          type="button"
+          onClick={handleCategoryClick}
+          aria-label={`Filter by category ${catInfo.label}`}
+          className="text-xs text-slate-500 hover:text-brand-dark"
+        >
+          {catInfo.label}
+        </button>
+      </td>
+      <td className="px-3 py-2.5">
+        <DecisionChip decision={receipt.policy_decision} />
+      </td>
+      <td className="px-3 py-2.5 hidden lg:table-cell">
+        <span className="text-xs text-slate-400 whitespace-nowrap">
+          {formatRelativeTime(receipt.timestamp)}
+        </span>
+      </td>
+    </tr>
   );
 }
