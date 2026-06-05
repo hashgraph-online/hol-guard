@@ -100,6 +100,24 @@ def test_cursor_hook_response_maps_policy_actions() -> None:
         hook_event_name="preToolUse",
     )
     assert ask["permission"] == "ask"
+    warn_shell = cursor_hook_response_from_guard(
+        policy_action="warn",
+        guard_payload={"review_hint": "Review exfil pattern", "risk_signals": ["exfil"]},
+        hook_event_name="beforeShellExecution",
+    )
+    assert warn_shell["permission"] == "ask"
+    benign_warn = cursor_hook_response_from_guard(
+        policy_action="warn",
+        guard_payload={},
+        hook_event_name="beforeShellExecution",
+    )
+    assert benign_warn["permission"] == "allow"
+    read_review = cursor_hook_response_from_guard(
+        policy_action="require-reapproval",
+        guard_payload={"review_hint": "Sensitive file"},
+        hook_event_name="beforeReadFile",
+    )
+    assert read_review["permission"] == "deny"
     assert cursor_hook_should_block(policy_action="block") is True
     assert cursor_hook_should_block(policy_action="require-reapproval") is False
 

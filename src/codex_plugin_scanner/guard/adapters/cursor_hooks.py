@@ -85,13 +85,14 @@ def cursor_hook_response_from_guard(
 ) -> dict[str, object]:
     """Translate Guard hook JSON into Cursor hook stdout JSON."""
 
-    permission = _cursor_permission_for_policy(policy_action)
+    permission = _cursor_permission_for_policy(policy_action, guard_payload)
     reason = _cursor_block_reason(guard_payload)
     raw_event = hook_event_name.strip().lower()
     if raw_event == "beforereadfile":
+        read_permission = _cursor_read_file_permission(permission)
         return {
-            "permission": "deny" if permission == "deny" else "allow",
-            "user_message": reason if permission == "deny" else None,
+            "permission": read_permission,
+            "user_message": reason if read_permission == "deny" else None,
         }
     response: dict[str, object] = {"permission": permission}
     if permission != "allow":
@@ -322,11 +323,38 @@ def _workspace_from_cursor_input(payload: dict[str, object]) -> str | None:
     return None
 
 
-def _cursor_permission(policy_action: str) -> str:
+def _guard_payload_has_actionable_risk(guard_payload: dict[str, object]) -> bool:
+    risk_signals = guard_payload.get("risk_signals")
+    if isinstance(risk_signals, list) and risk_signals:
+        return True
+    approval_requests = guard_payload.get("approval_requests")
+    if isinstance(approval_requests, list) and approval_requests:
+        return True
+    for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
+        value = guard_payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return True
+    decision = guard_payload.get("decision_v2_json")
+    if isinstance(decision, dict):
+        signals = decision.get("signals")
+        if isinstance(signals, list) and signals:
+            return True
+    return False
+
+
+def _cursor_permission(policy_action: str, guard_payload: dict[str, object]) -> str:
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action in {"require-reapproval", "review"}:
         return "ask"
+    if policy_action == "warn" and _guard_payload_has_actionable_risk(guard_payload):
+        return "ask"
+    return "allow"
+
+
+def _cursor_read_file_permission(permission: str) -> str:
+    if permission in {"deny", "ask"}:
+        return "deny"
     return "allow"
 
 
@@ -350,15 +378,16 @@ def _emit_cursor_response(
     policy_action: str,
     guard_payload: dict[str, object],
 ) -> tuple[dict[str, object], int]:
-    permission = _cursor_permission(policy_action)
+    permission = _cursor_permission(policy_action, guard_payload)
     reason = _cursor_reason(guard_payload)
     if hook_event_name.strip().lower() == "beforereadfile":
+        read_permission = "deny" if permission in {"deny", "ask"} else "allow"
         response = {
-            "permission": "deny" if permission == "deny" else "allow",
+            "permission": read_permission,
         }
-        if permission == "deny":
+        if read_permission == "deny":
             response["user_message"] = reason
-        return response, 2 if permission == "deny" else 0
+        return response, 2 if read_permission == "deny" else 0
     response: dict[str, object] = {"permission": permission}
     if permission != "allow":
         response["user_message"] = reason
@@ -559,11 +588,45 @@ def _tool_input_dict(value: object) -> dict[str, object]:
     return {}
 
 
-def _cursor_permission_for_policy(policy_action: str) -> str:
+def _guard_payload_has_actionable_risk_for_policy(guard_payload: Mapping[str, object]) -> bool:
+    risk_signals = guard_payload.get("risk_signals")
+    if isinstance(risk_signals, list) and risk_signals:
+        return True
+    approval_requests = guard_payload.get("approval_requests")
+    if isinstance(approval_requests, list) and approval_requests:
+        return True
+    for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
+        value = guard_payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return True
+    decision = guard_payload.get("decision_v2_json")
+    if isinstance(decision, Mapping):
+        signals = decision.get("signals")
+        if isinstance(signals, list) and signals:
+            return True
+    return False
+
+
+def _cursor_permission_for_policy(
+    policy_action: str,
+    guard_payload: Mapping[str, object] | None = None,
+) -> str:
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action in {"require-reapproval", "review"}:
         return "ask"
+    if (
+        policy_action == "warn"
+        and guard_payload is not None
+        and _guard_payload_has_actionable_risk_for_policy(guard_payload)
+    ):
+        return "ask"
+    return "allow"
+
+
+def _cursor_read_file_permission(permission: str) -> str:
+    if permission in {"deny", "ask"}:
+        return "deny"
     return "allow"
 
 
