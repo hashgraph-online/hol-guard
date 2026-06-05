@@ -41,7 +41,7 @@ def _make_receipt(
     diff_summary: str | None = None,
     approval_source: str | None = None,
     timestamp: str = "2025-01-01T00:00:00Z",
-    action_envelope_json: dict[str, object] | None = None,
+    approval_request_id: str | None = None,
 ) -> GuardReceipt:
     return GuardReceipt(
         receipt_id=receipt_id or str(uuid.uuid4()),
@@ -55,7 +55,7 @@ def _make_receipt(
         diff_summary=diff_summary,
         approval_source=approval_source,
         timestamp=timestamp,
-        action_envelope_json=action_envelope_json,
+        approval_request_id=approval_request_id,
     )
 
 
@@ -217,20 +217,86 @@ class TestReceiptFieldRoundtrip:
 
     def test_action_envelope_json_roundtrip(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
-        envelope: dict[str, object] = {"action_type": "shell_command", "command": "ls -la"}
-        receipt = _make_receipt(
-            receipt_id="r-env-01",
-            action_envelope_json=envelope,
+        from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+        envelope = GuardActionEnvelope(
+            schema_version=1,
+            action_id="action-01",
+            harness="codex",
+            event_name="PreToolUse",
+            action_type="shell_command",
+            workspace=None,
+            workspace_hash=None,
+            tool_name="bash",
+            command="ls -la",
+            prompt_excerpt=None,
+            prompt_text=None,
+            target_paths=(),
+            network_hosts=(),
+            mcp_server=None,
+            mcp_tool=None,
+            package_manager=None,
+            package_name=None,
         )
-        store.add_receipt(receipt)
+        receipt = _make_receipt(receipt_id="r-env-01")
+        store.add_receipt(receipt, action_envelope=envelope)
 
         result = store.get_receipt("r-env-01")
         assert result is not None
-        assert result["action_envelope_json"] == envelope
+        assert result["action_envelope_json"] == envelope.to_dict()
+        assert isinstance(result["envelope_redacted_json"], dict)
+        assert result["envelope_redacted_json"]["command_length"] == len("ls -la")
+        assert "command" not in result["envelope_redacted_json"]
 
         receipts = store.list_receipts(harness="codex", limit=10)
         assert len(receipts) == 1
-        assert receipts[0]["action_envelope_json"] == envelope
+        assert receipts[0]["action_envelope_json"] == envelope.to_dict()
+
+    def test_approval_request_id_joins_envelope_from_approval_table(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        from codex_plugin_scanner.guard.models import GuardApprovalRequest
+        from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+        envelope = GuardActionEnvelope(
+            schema_version=1,
+            action_id="action-02",
+            harness="codex",
+            event_name="PreToolUse",
+            action_type="shell_command",
+            workspace=None,
+            workspace_hash=None,
+            tool_name="bash",
+            command="rm -rf node_modules",
+            prompt_excerpt=None,
+            prompt_text=None,
+            target_paths=(),
+            network_hosts=(),
+            mcp_server=None,
+            mcp_tool=None,
+            package_manager=None,
+            package_name=None,
+        )
+        request = GuardApprovalRequest(
+            request_id="req-01",
+            harness="codex",
+            artifact_id="codex:project:bash",
+            artifact_name="Bash",
+            artifact_hash="sha256:abc",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("shell_command",),
+            source_scope="project",
+            config_path="/tmp",
+            review_command="Review",
+            approval_url="http://localhost/approvals/req-01",
+            action_envelope_json=envelope.to_dict(),
+        )
+        store.add_approval_request(request, now="2025-01-01T00:00:00Z")
+        receipt = _make_receipt(receipt_id="r-join-01", approval_request_id="req-01")
+        store.add_receipt(receipt)
+
+        result = store.get_receipt("r-join-01")
+        assert result is not None
+        assert result["approval_request_id"] == "req-01"
+        assert result["action_envelope_json"] == envelope.to_dict()
 
 
 class TestMapApprovalSource:

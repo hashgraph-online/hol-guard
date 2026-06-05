@@ -3259,6 +3259,9 @@ def _cloud_sync_receipt_payload(
     publisher = _optional_string(receipt.get("publisher"))
     if publisher is not None:
         payload["publisher"] = publisher
+    redacted_envelope = receipt.get("envelope_redacted_json")
+    if isinstance(redacted_envelope, dict) and redacted_envelope:
+        payload["envelopeRedacted"] = redacted_envelope
     return payload
 
 

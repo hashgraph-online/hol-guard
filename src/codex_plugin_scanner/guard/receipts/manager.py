@@ -7,6 +7,31 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from ..models import GuardReceipt
+from ..runtime.actions import GuardActionEnvelope
+
+
+def _redacted_envelope_dict(envelope: GuardActionEnvelope) -> dict[str, object]:
+    """Return a cloud-safe redacted view of the action envelope."""
+    return {
+        "schema_version": envelope.schema_version,
+        "action_id": envelope.action_id,
+        "harness": envelope.harness,
+        "event_name": envelope.event_name,
+        "action_type": envelope.action_type,
+        "workspace_hash": envelope.workspace_hash,
+        "tool_name": envelope.tool_name,
+        "command_length": len(envelope.command) if envelope.command is not None else 0,
+        "target_paths_count": len(envelope.target_paths),
+        "network_hosts_count": len(envelope.network_hosts),
+        "mcp_server": envelope.mcp_server,
+        "mcp_tool": envelope.mcp_tool,
+        "package_manager": envelope.package_manager,
+        "package_name": envelope.package_name,
+        "package_intent_kind": envelope.package_intent_kind,
+        "package_targets_count": len(envelope.package_targets),
+        "pre_execution_result": envelope.pre_execution_result,
+        "script_name": envelope.script_name,
+    }
 
 
 def _auto_diff_summary(changed_capabilities: list[str]) -> str:
@@ -31,7 +56,7 @@ def build_receipt(
     scanner_evidence: Sequence[Mapping[str, object]] = (),
     diff_summary: str | None = None,
     approval_source: str | None = None,
-    action_envelope_json: Mapping[str, object] | None = None,
+    approval_request_id: str | None = None,
 ) -> GuardReceipt:
     """Create a runtime receipt."""
 
@@ -54,6 +79,6 @@ def build_receipt(
         source_scope=source_scope,
         diff_summary=resolved_diff_summary,
         approval_source=approval_source,
-        action_envelope_json=dict(action_envelope_json) if action_envelope_json is not None else None,
+        approval_request_id=approval_request_id,
         scanner_evidence=tuple(dict(item) for item in scanner_evidence),
     )
