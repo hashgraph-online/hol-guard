@@ -1275,8 +1275,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self.server.store.replace_remote_policies(existing_remote_decisions, applied_at)  # type: ignore[attr-defined]
             applied_bundle_hash = str(validated_policy_bundle["bundleHash"])
             applied_bundle_version = str(validated_policy_bundle["bundleVersion"])
-        scope = self._optional_string(policy_memory.get("scope"))
-        action = self._optional_string(policy_memory.get("action"))
         if not policy_memory:
             self._write_json(
                 {
@@ -1288,6 +1286,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 }
             )
             return
+        scope = self._optional_string(policy_memory.get("scope"))
+        action = self._optional_string(policy_memory.get("action"))
         if scope is None or action is None:
             self._write_json({"error": "missing_policy_fields"}, status=400)
             return
