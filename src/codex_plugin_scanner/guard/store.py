@@ -30,6 +30,7 @@ from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRunt
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .store_approvals import (
+    _json_object,
     _json_object_list,
     approval_index_statements,
     approval_schema_statement,
@@ -1058,6 +1059,7 @@ class GuardStore:
             self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_runtime_receipts_column(connection, "diff_summary", "text")
             self._ensure_runtime_receipts_column(connection, "approval_source", "text")
+            self._ensure_runtime_receipts_column(connection, "action_envelope_json", "text")
             self._ensure_approval_column(connection, "artifact_type", "text not null default 'artifact'")
             self._ensure_approval_column(connection, "launch_target", "text")
             self._ensure_approval_column(connection, "transport", "text")
@@ -1812,9 +1814,9 @@ class GuardStore:
                   receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                   changed_capabilities_json,
                   provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                  diff_summary, approval_source, timestamp
+                  diff_summary, approval_source, timestamp, action_envelope_json
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     receipt.receipt_id,
@@ -1832,6 +1834,7 @@ class GuardStore:
                     receipt.diff_summary,
                     receipt.approval_source,
                     receipt.timestamp,
+                    json.dumps(receipt.action_envelope_json) if receipt.action_envelope_json is not None else None,
                 ),
             )
             self._ensure_local_device(connection)
@@ -1857,7 +1860,7 @@ class GuardStore:
                        capabilities_summary,
                        changed_capabilities_json,
                        provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                       diff_summary, approval_source, timestamp
+                       diff_summary, approval_source, timestamp, action_envelope_json
                 from runtime_receipts
                 where harness = ?
                 order by timestamp desc
@@ -1870,7 +1873,7 @@ class GuardStore:
                        capabilities_summary,
                        changed_capabilities_json,
                        provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                       diff_summary, approval_source, timestamp
+                       diff_summary, approval_source, timestamp, action_envelope_json
                 from runtime_receipts
                 order by timestamp desc
                 limit ?
@@ -1896,6 +1899,7 @@ class GuardStore:
                 "diff_summary": row["diff_summary"],
                 "approval_source": row["approval_source"],
                 "timestamp": str(row["timestamp"]),
+                "action_envelope_json": _json_object(row["action_envelope_json"]),
             }
             for row in rows
         ]
@@ -1911,7 +1915,8 @@ class GuardStore:
             query = """
                 select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
                        capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
-                       artifact_name, source_scope, scanner_evidence_json, diff_summary, approval_source, timestamp
+                       artifact_name, source_scope, scanner_evidence_json, diff_summary, approval_source, timestamp,
+                       action_envelope_json
                 from runtime_receipts
                 where rowid > ? and harness = ?
                 order by rowid asc
@@ -1926,7 +1931,8 @@ class GuardStore:
             query = """
                 select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
                        capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
-                       artifact_name, source_scope, scanner_evidence_json, diff_summary, approval_source, timestamp
+                       artifact_name, source_scope, scanner_evidence_json, diff_summary, approval_source, timestamp,
+                       action_envelope_json
                 from runtime_receipts
                 where rowid > ?
                 order by rowid asc
@@ -1953,6 +1959,7 @@ class GuardStore:
                 "diff_summary": row["diff_summary"],
                 "approval_source": row["approval_source"],
                 "timestamp": str(row["timestamp"]),
+                "action_envelope_json": _json_object(row["action_envelope_json"]),
             }
             for row in rows
         ]
@@ -1981,7 +1988,7 @@ class GuardStore:
                 select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                         changed_capabilities_json,
                        provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                       diff_summary, approval_source, timestamp
+                       diff_summary, approval_source, timestamp, action_envelope_json
                 from runtime_receipts
                 where receipt_id = ?
                 """,
@@ -2005,6 +2012,7 @@ class GuardStore:
             "diff_summary": row["diff_summary"],
             "approval_source": row["approval_source"],
             "timestamp": str(row["timestamp"]),
+            "action_envelope_json": _json_object(row["action_envelope_json"]),
         }
 
     def get_latest_receipt(self, harness: str, artifact_id: str) -> dict[str, object] | None:
@@ -2014,7 +2022,7 @@ class GuardStore:
                 select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                         changed_capabilities_json,
                        provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                       diff_summary, approval_source, timestamp
+                       diff_summary, approval_source, timestamp, action_envelope_json
                 from runtime_receipts
                 where harness = ? and artifact_id = ?
                 order by timestamp desc
@@ -2040,6 +2048,7 @@ class GuardStore:
             "diff_summary": row["diff_summary"],
             "approval_source": row["approval_source"],
             "timestamp": str(row["timestamp"]),
+            "action_envelope_json": _json_object(row["action_envelope_json"]),
         }
 
     def count_receipts(self, harness: str | None = None) -> int:

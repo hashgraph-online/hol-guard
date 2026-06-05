@@ -26,8 +26,9 @@ export function resolveActionType(receipt: GuardReceipt): string {
   const envelope = getEnvelope(receipt);
   const actionType = (envelope?.action_type ?? "").toLowerCase();
   const artifactType = getArtifactType(receipt);
+  const artifactName = (receipt.artifact_name ?? "").toLowerCase();
 
-  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command")) return "Shell command";
+  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command") || artifactName === "bash") return "Shell command";
   if (actionType === "prompt" || artifactType === "prompt_request") return "Prompt";
   if (actionType === "file_read" || artifactType === "file_read_request" || artifactType.includes("file_read")) return "File read";
   if (actionType === "file_write" || artifactType.includes("file_write") || artifactType.includes("write")) return "File write";
@@ -105,9 +106,9 @@ export function resolveActionTitle(receipt: GuardReceipt): string {
     return caps;
   }
 
-  // provenance_summary
+  // provenance_summary for hook events is more descriptive than the raw tool name
   const provenance = receipt.provenance_summary?.trim();
-  if (provenance && provenance.length > 0 && !provenance.startsWith("hook event for")) {
+  if (provenance && provenance.toLowerCase().startsWith("hook event for")) {
     return provenance;
   }
 
@@ -145,8 +146,12 @@ export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
     parts.push(`${envelope.network_hosts.length} hosts`);
   }
 
-  if (receipt.capabilities_summary && receipt.capabilities_summary !== "hook artifact · codex") {
-    parts.push(receipt.capabilities_summary);
+  const caps = receipt.capabilities_summary?.trim();
+  const provenance = receipt.provenance_summary?.trim();
+  if (caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed")) {
+    parts.push(caps);
+  } else if (provenance && provenance.toLowerCase() !== caps?.toLowerCase()) {
+    parts.push(provenance);
   }
 
   if (parts.length > 0) {

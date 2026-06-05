@@ -585,6 +585,16 @@ def _safe_json_list(value: object) -> list[object]:
     return list(parsed) if isinstance(parsed, list) else []
 
 
+def _json_object(value: object) -> dict[str, object] | None:
+    if value is None:
+        return None
+    try:
+        parsed = json.loads(str(value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return dict(parsed) if isinstance(parsed, dict) else None
+
+
 def _json_object_list(value: object) -> list[dict[str, object]]:
     if value is None:
         return []

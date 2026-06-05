@@ -13451,12 +13451,24 @@ async function fetchRequest(requestId) {
   const payload = await readJson(`/v1/requests/${requestId}`);
   return normalizeApprovalRequest(payload);
 }
+function normalizeReceipt(item) {
+  return {
+    ...item,
+    action_envelope_json: parseActionEnvelope(item.action_envelope_json)
+  };
+}
+function normalizeReceipts(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.map(normalizeReceipt);
+}
 async function fetchReceipts() {
   if (isGuardDemoMode()) {
     return getDemoReceipts();
   }
   const payload = await readJson("/v1/receipts");
-  return payload.items;
+  return normalizeReceipts(payload.items);
 }
 async function fetchLatestReceipt(artifactId, harness) {
   if (isGuardDemoMode()) {
@@ -13471,7 +13483,7 @@ async function fetchLatestReceipt(artifactId, harness) {
   if (!response.ok) {
     throw new Error(`Receipt request failed with ${response.status}`);
   }
-  return await response.json();
+  return normalizeReceipt(await response.json());
 }
 async function fetchPolicy(harness) {
   if (isGuardDemoMode()) {
@@ -14883,7 +14895,7 @@ const sidebarLinks = [
   { href: "/inbox", label: "Inbox", view: "inbox", icon: HiMiniInbox },
   { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
-  { href: "/supply-chain", label: "Trust Center", view: "supply-chain", icon: HiMiniSquares2X2 },
+  { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
 ];
 function ShellSidebar(props) {
@@ -16309,7 +16321,8 @@ function resolveActionType(receipt) {
   const envelope = getEnvelope(receipt);
   const actionType = (envelope?.action_type ?? "").toLowerCase();
   const artifactType = getArtifactType(receipt);
-  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command")) return "Shell command";
+  const artifactName = (receipt.artifact_name ?? "").toLowerCase();
+  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command") || artifactName === "bash") return "Shell command";
   if (actionType === "prompt" || artifactType === "prompt_request") return "Prompt";
   if (actionType === "file_read" || artifactType === "file_read_request" || artifactType.includes("file_read")) return "File read";
   if (actionType === "file_write" || artifactType.includes("file_write") || artifactType.includes("write")) return "File write";
@@ -16367,7 +16380,7 @@ function resolveActionTitle(receipt) {
     return caps;
   }
   const provenance = receipt.provenance_summary?.trim();
-  if (provenance && provenance.length > 0 && !provenance.startsWith("hook event for")) {
+  if (provenance && provenance.toLowerCase().startsWith("hook event for")) {
     return provenance;
   }
   const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
@@ -16394,8 +16407,12 @@ function resolveActionSubtitle(receipt) {
   if (type === "Network request" && envelope?.network_hosts && envelope.network_hosts.length > 1) {
     parts.push(`${envelope.network_hosts.length} hosts`);
   }
-  if (receipt.capabilities_summary && receipt.capabilities_summary !== "hook artifact · codex") {
-    parts.push(receipt.capabilities_summary);
+  const caps = receipt.capabilities_summary?.trim();
+  const provenance = receipt.provenance_summary?.trim();
+  if (caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed")) {
+    parts.push(caps);
+  } else if (provenance && provenance.toLowerCase() !== caps?.toLowerCase()) {
+    parts.push(provenance);
   }
   if (parts.length > 0) {
     return parts.join(" · ");
