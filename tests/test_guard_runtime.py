@@ -16201,6 +16201,79 @@ def test_policy_bundle_version_persists_after_store_reopen(tmp_path):
     }
 
 
+def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    store = GuardStore(guard_home)
+    bundle = {
+        "bundleVersion": "policy-2026-06-05.2",
+        "expiresAt": None,
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs before execution.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
+    }
+    store.replace_remote_policies(
+        guard_runner_module._build_policy_bundle_decisions(
+            bundle,
+            device_id=guard_runner_module._guard_device_metadata(store)[0],
+            device_name="MacBook Pro",
+        ),
+        "2026-06-05T13:31:00+00:00",
+    )
+
+    order: list[str] = []
+    original_resolve_policy = store.resolve_policy
+    original_add_receipt = store.add_receipt
+
+    def tracked_resolve_policy(*args, **kwargs):
+        order.append("resolve_policy")
+        return original_resolve_policy(*args, **kwargs)
+
+    def tracked_add_receipt(receipt):
+        order.append("add_receipt")
+        return original_add_receipt(receipt)
+
+    monkeypatch.setattr(store, "resolve_policy", tracked_resolve_policy)
+    monkeypatch.setattr(store, "add_receipt", tracked_add_receipt)
+
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(workspace / "opencode.json"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:package-request:proof",
+                name="npm install proof",
+                harness="codex",
+                artifact_type="package_request",
+                source_scope="project",
+                config_path=str(workspace / "opencode.json"),
+                metadata={"package_manager": "npm"},
+            ),
+        ),
+    )
+    config = GuardConfig(guard_home=guard_home, workspace=workspace, mode="enforce")
+
+    result = evaluate_detection(detection, store, config, persist=True)
+
+    assert result["artifacts"][0]["policy_action"] == "block"
+    assert order.index("resolve_policy") < order.index("add_receipt")
+
+
 def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
