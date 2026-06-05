@@ -644,6 +644,35 @@ def test_set_oauth_local_credentials_does_not_use_generic_secret_promotion(tmp_p
     assert headless_store.get_oauth_local_credentials() is not None
 
 
+def test_set_oauth_local_credentials_logs_when_fallback_mirror_fails(tmp_path, monkeypatch, caplog):
+    _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+
+    def fail_fallback_set_secret(secret_id: str, value: str) -> None:
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(store._oauth_secret_store.fallback, "set_secret", fail_fallback_set_secret)
+    caplog.set_level(logging.WARNING, logger="codex_plugin_scanner.guard.store")
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    assert store.get_oauth_local_credentials() is not None
+    assert "Failed to mirror OAuth credentials into encrypted fallback store" in caplog.text
+
+
 def test_get_oauth_local_credentials_backfills_encrypted_fallback_for_legacy_keyring_only_state(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch)
     guard_home = tmp_path / "guard-home"
