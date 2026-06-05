@@ -157,19 +157,29 @@ def _encode_jwt_segment(payload: dict[str, object]) -> str:
     return _base64url_encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
 
 
-def _sign_dpop_proof(*, token_endpoint: str, dpop_key_material: GuardDpopKeyMaterial, now: datetime) -> str:
+def _sign_dpop_proof(
+    *,
+    token_endpoint: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+    now: datetime,
+    nonce: str | None = None,
+) -> str:
     issued_at = int(now.timestamp())
     header = {
         "alg": dpop_key_material.algorithm,
         "jwk": dpop_key_material.public_jwk,
         "typ": "dpop+jwt",
     }
-    claims = {
+    claims: dict[str, object] = {
         "htu": token_endpoint,
         "htm": "POST",
         "iat": issued_at,
         "jti": str(uuid4()),
     }
+    if isinstance(nonce, str):
+        normalized_nonce = nonce.strip()
+        if normalized_nonce:
+            claims["nonce"] = normalized_nonce
     signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
     private_key = serialization.load_pem_private_key(
         dpop_key_material.private_key_pem.encode("ascii"),
@@ -181,6 +191,41 @@ def _sign_dpop_proof(*, token_endpoint: str, dpop_key_material: GuardDpopKeyMate
     r_value, s_value = decode_dss_signature(der_signature)
     jose_signature = _base64url_encode(r_value.to_bytes(32, byteorder="big") + s_value.to_bytes(32, byteorder="big"))
     return f"{signing_input.decode('ascii')}.{jose_signature}"
+
+
+def _oauth_response_header_value(response: object, header_name: str) -> str | None:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    value = headers.get(header_name)
+    if value is None:
+        header_items = getattr(headers, "items", None)
+        if callable(header_items):
+            target_header = header_name.lower()
+            for current_name, current_value in header_items():
+                if isinstance(current_name, str) and current_name.lower() == target_header:
+                    value = current_value
+                    break
+    if not isinstance(value, str):
+        return None
+    normalized_value = value.strip()
+    return normalized_value or None
+
+
+def _oauth_dpop_nonce_from_http_error(
+    error: urllib.error.HTTPError,
+    payload: object,
+) -> str | None:
+    if error.code not in {400, 401}:
+        return None
+    nonce = _oauth_response_header_value(error, "DPoP-Nonce")
+    if nonce is None:
+        return None
+    if isinstance(payload, dict):
+        oauth_error = str(payload.get("error") or "").strip()
+        if oauth_error and oauth_error not in {"use_dpop_nonce", "invalid_dpop_proof"}:
+            return None
+    return nonce
 
 
 def _build_browser_authorize_url(
@@ -519,6 +564,8 @@ def exchange_guard_device_code(
         wait_window_seconds = min(wait_window_seconds, max(wait_timeout_seconds, 0))
     deadline = time.monotonic() + wait_window_seconds
     current_interval = max(interval_seconds, 1)
+    dpop_nonce: str | None = None
+    nonce_retry_count = 0
     while True:
         request = urllib.request.Request(
             token_endpoint,
@@ -529,6 +576,7 @@ def exchange_guard_device_code(
                     token_endpoint=token_endpoint,
                     dpop_key_material=dpop_key_material,
                     now=now or datetime.now(timezone.utc),
+                    nonce=dpop_nonce,
                 ),
             ),
         )
@@ -537,6 +585,11 @@ def exchange_guard_device_code(
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             payload = _load_error_payload(error)
+            challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
+                dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
+                continue
             oauth_error = str(payload.get("error") or "").strip() if isinstance(payload, dict) else ""
             if oauth_error == "authorization_pending":
                 if time.monotonic() >= deadline:
@@ -592,23 +645,36 @@ def exchange_guard_authorization_code(
             "code_verifier": code_verifier,
         }
     ).encode("utf-8")
-    request = urllib.request.Request(
-        token_endpoint,
-        data=request_body,
-        method="POST",
-        headers=_guard_oauth_request_headers(
-            dpop=_sign_dpop_proof(
-                token_endpoint=token_endpoint,
-                dpop_key_material=dpop_key_material,
-                now=now or datetime.now(timezone.utc),
+    dpop_nonce: str | None = None
+    nonce_retry_count = 0
+    while True:
+        request = urllib.request.Request(
+            token_endpoint,
+            data=request_body,
+            method="POST",
+            headers=_guard_oauth_request_headers(
+                dpop=_sign_dpop_proof(
+                    token_endpoint=token_endpoint,
+                    dpop_key_material=dpop_key_material,
+                    now=now or datetime.now(timezone.utc),
+                    nonce=dpop_nonce,
+                ),
             ),
-        ),
-    )
-    with urlopen(request, timeout=20) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    if not isinstance(payload, dict):
-        raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
-    return _parse_guard_token_exchange_payload(payload)
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            payload = _load_error_payload(error)
+            challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
+                dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
+                continue
+            raise
+        if not isinstance(payload, dict):
+            raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
+        return _parse_guard_token_exchange_payload(payload)
 
 
 def refresh_guard_access_token(
@@ -620,35 +686,44 @@ def refresh_guard_access_token(
     urlopen=urllib.request.urlopen,
     now: datetime | None = None,
 ) -> GuardOAuthTokenExchangeResult:
-    request = urllib.request.Request(
-        token_endpoint,
-        data=_refresh_token_request_body(
-            client_id=client_id,
-            refresh_token=refresh_token,
-        ),
-        method="POST",
-        headers=_guard_oauth_request_headers(
-            dpop=_sign_dpop_proof(
-                token_endpoint=token_endpoint,
-                dpop_key_material=dpop_key_material,
-                now=now or datetime.now(timezone.utc),
+    dpop_nonce: str | None = None
+    nonce_retry_count = 0
+    while True:
+        request = urllib.request.Request(
+            token_endpoint,
+            data=_refresh_token_request_body(
+                client_id=client_id,
+                refresh_token=refresh_token,
             ),
-        ),
-    )
-    try:
-        with urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        payload = _load_error_payload(error)
-        message = (
-            str(payload.get("error_description") or payload.get("error") or error.reason)
-            if isinstance(payload, dict)
-            else str(error.reason)
+            method="POST",
+            headers=_guard_oauth_request_headers(
+                dpop=_sign_dpop_proof(
+                    token_endpoint=token_endpoint,
+                    dpop_key_material=dpop_key_material,
+                    now=now or datetime.now(timezone.utc),
+                    nonce=dpop_nonce,
+                ),
+            ),
         )
-        raise RuntimeError(f"Guard OAuth token exchange failed: {message}") from error
-    if not isinstance(payload, dict):
-        raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
-    return _parse_guard_token_exchange_payload(payload)
+        try:
+            with urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            payload = _load_error_payload(error)
+            challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
+                dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
+                continue
+            message = (
+                str(payload.get("error_description") or payload.get("error") or error.reason)
+                if isinstance(payload, dict)
+                else str(error.reason)
+            )
+            raise RuntimeError(f"Guard OAuth token exchange failed: {message}") from error
+        if not isinstance(payload, dict):
+            raise RuntimeError("Guard OAuth token exchange failed: invalid response.")
+        return _parse_guard_token_exchange_payload(payload)
 
 
 def revoke_guard_self_oauth_grant(
@@ -661,36 +736,45 @@ def revoke_guard_self_oauth_grant(
     urlopen=urllib.request.urlopen,
     now: datetime | None = None,
 ) -> None:
-    revoke_url = f"{oauth_client.issuer}{_SELF_REVOKE_PATH}"
-    request = urllib.request.Request(
-        revoke_url,
-        data=_self_revoke_request_body(
-            workspace_id=workspace_id,
-            revoke_cloud_grant=revoke_cloud_grant,
-        ),
-        method="POST",
-        headers={
-            **_guard_oauth_request_headers(
-                dpop=_sign_dpop_proof(
-                    token_endpoint=revoke_url,
-                    dpop_key_material=dpop_key_material,
-                    now=now or datetime.now(timezone.utc),
-                ),
+    revoke_url = f"{oauth_client.issuer.rstrip('/')}/api/guard/oauth/revoke/self"
+    dpop_nonce: str | None = None
+    nonce_retry_count = 0
+    while True:
+        request = urllib.request.Request(
+            revoke_url,
+            data=_self_revoke_request_body(
+                workspace_id=workspace_id,
+                revoke_cloud_grant=revoke_cloud_grant,
             ),
-            "Authorization": f"Bearer {access_token}",
-        },
-    )
-    try:
-        with urlopen(request, timeout=20):
-            return
-    except urllib.error.HTTPError as error:
-        payload = _load_error_payload(error)
-        message = (
-            str(payload.get("error_description") or payload.get("error") or error.reason)
-            if isinstance(payload, dict)
-            else str(error.reason)
+            method="POST",
+            headers={
+                **_guard_oauth_request_headers(
+                    dpop=_sign_dpop_proof(
+                        token_endpoint=revoke_url,
+                        dpop_key_material=dpop_key_material,
+                        now=now or datetime.now(timezone.utc),
+                        nonce=dpop_nonce,
+                    ),
+                ),
+                "Authorization": f"Bearer {access_token}",
+            },
         )
-        raise RuntimeError(f"Guard OAuth disconnect failed: {message}") from error
+        try:
+            with urlopen(request, timeout=20):
+                return
+        except urllib.error.HTTPError as error:
+            payload = _load_error_payload(error)
+            challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
+                dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
+                continue
+            message = (
+                str(payload.get("error_description") or payload.get("error") or error.reason)
+                if isinstance(payload, dict)
+                else str(error.reason)
+            )
+            raise RuntimeError(f"Guard OAuth disconnect failed: {message}") from error
 
 
 def _require_oauth_credential_string(credentials: dict[str, object], key: str) -> str:
