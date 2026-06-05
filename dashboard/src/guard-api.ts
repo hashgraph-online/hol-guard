@@ -1646,10 +1646,13 @@ function normalizePackageShimEntry(
   detail: Record<string, unknown> | null,
   pathStatus: PackageManagerProtection["path_status"],
 ): PackageShimEntry {
-  const installed = detail !== null && stringValue(detail.integrity) !== "missing";
+  const integrity = stringValue(detail?.integrity) ?? "uninstalled";
+  const installed = detail !== null && integrity !== "missing";
   const active = booleanValue(detail?.path_active);
   const activation_state = !installed
     ? "uninstalled"
+    : integrity === "tampered"
+    ? "repair_required"
     : active
     ? "protected"
     : pathStatus === "restart_required"
@@ -1659,7 +1662,7 @@ function normalizePackageShimEntry(
     active,
     activation_state,
     installed,
-    integrity: stringValue(detail?.integrity) ?? "uninstalled",
+    integrity,
     manager,
     path_index: numberValue(detail?.path_index),
     real_binary_found: booleanValue(detail?.real_binary_found),

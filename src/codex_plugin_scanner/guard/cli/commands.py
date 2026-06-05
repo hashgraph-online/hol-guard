@@ -118,7 +118,11 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
-from ..package_firewall_entitlement import package_firewall_block_details
+from ..package_firewall_entitlement import (
+    package_firewall_action_states,
+    package_firewall_available_actions,
+    package_firewall_block_details,
+)
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
 from ..proxy import (
@@ -1153,27 +1157,6 @@ def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _package_firewall_action_states(entitlement: dict[str, object]) -> dict[str, str]:
-    allowed = bool(entitlement.get("allowed"))
-    reason = str(entitlement.get("reason") or "").strip().lower()
-    if allowed:
-        state = "available"
-    elif reason == "guard_cloud_connect_required":
-        state = "connect_required"
-    elif reason == "guard_cloud_reconnect_required":
-        state = "reconnect_required"
-    else:
-        state = "paid_required"
-    return {
-        "install": state,
-        "repair": state,
-        "test": state,
-        "audit": state,
-        "sync": state,
-        "remove": state,
-    }
-
-
 def _package_firewall_cli_gate_input(args: argparse.Namespace, guard_home: Path) -> ApprovalGateInput | None:
     password = getattr(args, "approval_password", None)
     totp_code = getattr(args, "approval_totp", None)
@@ -1187,13 +1170,17 @@ def _package_firewall_cli_gate_input(args: argparse.Namespace, guard_home: Path)
 def _package_firewall_block_payload(
     *,
     entitlement: dict[str, object],
+    has_installed_managers: bool,
     operation: str,
 ) -> tuple[int, dict[str, object]]:
     status, error_code, message = package_firewall_block_details(entitlement)
     return (
         status,
         {
-            "available_actions": ["status", "education", "cli_fallback"],
+            "available_actions": package_firewall_available_actions(
+                entitlement,
+                has_installed_managers=has_installed_managers,
+            ),
             "cli_fallback": {
                 "connect": "hol-guard connect",
                 "status": "hol-guard package-shims status --json",
@@ -2096,16 +2083,21 @@ def run_guard_command(
         )
         shim_command = getattr(args, "package_shims_command", "status")
         entitlement = resolve_package_firewall_entitlement_with_refresh(store)
+        current_status = package_shim_status(context)
         if shim_command == "status":
-            payload = package_shim_status(context)
-            payload["actions"] = _package_firewall_action_states(entitlement)
+            payload = current_status
+            payload["actions"] = package_firewall_action_states(
+                entitlement,
+                has_installed_managers=bool(current_status.get("installed_managers")),
+            )
             payload["entitlement"] = entitlement
             payload["generated_at"] = _now()
             _emit("package-shims", payload, getattr(args, "json", False))
             return 0
-        if not bool(entitlement["allowed"]):
+        if shim_command not in {"repair", "uninstall"} and not bool(entitlement["allowed"]):
             status, payload = _package_firewall_block_payload(
                 entitlement=entitlement,
+                has_installed_managers=bool(current_status.get("installed_managers")),
                 operation="remove" if shim_command == "uninstall" else shim_command,
             )
             payload["generated_at"] = _now()
@@ -3431,9 +3423,8 @@ def run_guard_command(
                     if policy_action == "require-reapproval"
                     else "policy"
                 ),
-                action_envelope_json=action_envelope.to_dict() if action_envelope is not None else None,
             )
-            store.add_receipt(receipt)
+            store.add_receipt(receipt, action_envelope=action_envelope)
             response_payload = {
                 "recorded": True,
                 "harness": _canonical_harness_name(args.harness),
@@ -3674,14 +3665,18 @@ def run_guard_command(
                 return 0
             if codex_browser_decision == "block":
                 policy_action = "block"
+            approval_context = _native_approval_center_context(response_payload, harness=args.harness)
+            raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
             if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
-                _emit_native_hook_block_stderr(
-                    _native_hook_reason_for_harness(
+                if _canonical_harness_name(args.harness) == "codex" and approval_context is not None:
+                    native_block_reason = _native_hook_reason(raw_runtime_reason, approval_context)
+                else:
+                    native_block_reason = _native_hook_reason_for_harness(
                         args.harness,
-                        _runtime_artifact_native_reason(runtime_artifact, response_payload),
-                        _native_approval_center_context(response_payload, harness=args.harness),
+                        raw_runtime_reason,
+                        approval_context,
                     )
-                )
+                _emit_native_hook_block_stderr(native_block_reason)
                 _record_harness_usage_for_hook(
                     store=store,
                     action_envelope=action_envelope,
@@ -3689,17 +3684,18 @@ def run_guard_command(
                     policy_action=policy_action,
                 )
                 return 2
-            raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
-            if _canonical_harness_name(args.harness) == "codex" and event_name == "UserPromptSubmit":
+            if _canonical_harness_name(args.harness) == "codex" and (
+                event_name == "UserPromptSubmit" or approval_context is not None
+            ):
                 runtime_reason = _native_hook_reason(
                     raw_runtime_reason,
-                    _native_approval_center_context(response_payload, harness=args.harness),
+                    approval_context,
                 )
             else:
                 runtime_reason = _native_hook_reason_for_harness(
                     args.harness,
                     raw_runtime_reason,
-                    _native_approval_center_context(response_payload, harness=args.harness),
+                    approval_context,
                 )
             if _should_emit_claude_native_pretooluse_notice(
                 args,
@@ -3845,9 +3841,8 @@ def run_guard_command(
                 source_scope=_coalesce_string(payload.get("source_scope"), "project"),
                 user_override=_optional_string(payload.get("user_override")),
                 approval_source=("inline" if _optional_string(payload.get("user_override")) is not None else "policy"),
-                action_envelope_json=action_envelope.to_dict() if action_envelope is not None else None,
             )
-            store.add_receipt(receipt)
+            store.add_receipt(receipt, action_envelope=action_envelope)
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,
@@ -5092,6 +5087,8 @@ def _ensure_terminal_punctuation(message: str) -> str:
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)
     if harness != "codex":
+        return reason
+    if "open hol guard to approve or keep this blocked:" in reason.lower():
         return reason
     if "approve it in hol guard, then retry." in reason.lower():
         return reason
