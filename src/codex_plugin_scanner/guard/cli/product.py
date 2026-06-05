@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ..approvals import _connect_retry_refresh_race_from_reason
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..approvals import _connect_retry_refresh_race_from_reason
 from ..config import GuardConfig
 from ..consumer import detect_all
 from ..consumer.service import diff_artifact
