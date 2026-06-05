@@ -780,11 +780,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     extra_headers=self._cors_headers_for_request(),
                 )
             else:
-                self._write_json(
-                    {"error": "unauthorized"},
-                    status=401,
-                    extra_headers=self._cors_headers_for_request(),
-                )
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
@@ -3055,6 +3051,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/daemon/repair",
             "/v1/notifications/setup",
         }:
+            return True
+        if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:
             return True
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
             return True
