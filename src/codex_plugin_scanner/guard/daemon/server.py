@@ -444,25 +444,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        if (
-            self._is_hosted_dashboard_origin()
-            and self._is_hosted_dashboard_api_path(parsed.path, path_parts)
-            and not self._header_token_is_valid()
-        ):
-            self._write_json({"error": "unauthorized"}, status=401)
-            return
         if parsed.path == "/healthz":
             self._write_json(self._public_healthz_payload())
             return
         if parsed.path == "/v1/healthz/details":
             if not self._header_token_is_valid():
-                self._write_json(
-                    {"error": "unauthorized"},
-                    status=401,
-                    extra_headers=self._cors_headers_for_request(),
-                )
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
             self._write_json(self._detailed_healthz_payload())
+            return
+        if parsed.path == "/v1/events/stream":
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            self._stream_events(_int_query_value(parsed.query, "cursor"))
+            return
+        if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
@@ -677,16 +679,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path.startswith("/assets/") or parsed.path.startswith("/brand/"):
             self._write_static_asset(parsed.path.removeprefix("/"))
-            return
-        if parsed.path == "/v1/events/stream":
-            if self._query_has_guard_token(parsed.query):
-                self._record_query_token_rejection()
-                self._write_unauthorized()
-                return
-            if not self._header_token_is_valid():
-                self._write_unauthorized()
-                return
-            self._stream_events(_int_query_value(parsed.query, "cursor"))
             return
         if self._is_dashboard_route(parsed.path):
             self._write_dashboard_shell()
@@ -2719,14 +2711,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
 
     def _public_healthz_payload(self) -> dict[str, object]:
-        uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
-        pending_approvals = self.server.store.count_approval_requests()  # type: ignore[attr-defined]
         return {
             "ok": True,
-            "pending_approvals": pending_approvals,
-            "uptime_seconds": uptime,
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "package_version": __version__,
         }
 
     def _detailed_healthz_payload(self) -> dict[str, object]:

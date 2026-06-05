@@ -25,6 +25,14 @@ from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _guard_get_request(port: int, path: str, auth_token: str) -> urllib.request.Request:
+    return urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        headers={"X-Guard-Token": auth_token},
+        method="GET",
+    )
+
+
 class TestGuardSurfaceServer:
     def test_guard_daemon_serves_dashboard_shell_for_home_and_section_routes(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -259,7 +267,7 @@ class TestGuardSurfaceServer:
 
         try:
             with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/settings",
+                _guard_get_request(daemon.port, "/v1/settings", daemon._server.auth_token),
                 timeout=5,
             ) as read_response:
                 read_payload = json.loads(read_response.read().decode("utf-8"))
@@ -812,7 +820,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            with urllib.request.urlopen(
+                _guard_get_request(daemon.port, "/v1/runtime", daemon._server.auth_token),
+                timeout=5,
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -860,7 +871,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/inventory", timeout=5) as response:
+            with urllib.request.urlopen(
+                _guard_get_request(daemon.port, "/v1/inventory", daemon._server.auth_token),
+                timeout=5,
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -879,7 +893,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            with urllib.request.urlopen(
+                _guard_get_request(daemon.port, "/v1/runtime", daemon._server.auth_token),
+                timeout=5,
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -917,7 +934,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            with urllib.request.urlopen(
+                _guard_get_request(daemon.port, "/v1/runtime", daemon._server.auth_token),
+                timeout=5,
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -960,7 +980,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            with urllib.request.urlopen(
+                _guard_get_request(daemon.port, "/v1/runtime", daemon._server.auth_token),
+                timeout=5,
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1003,7 +1026,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            with urllib.request.urlopen(
+                _guard_get_request(daemon.port, "/v1/runtime", daemon._server.auth_token),
+                timeout=5,
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1075,7 +1101,10 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            with urllib.request.urlopen(
+                _guard_get_request(daemon.port, "/v1/runtime", daemon._server.auth_token),
+                timeout=5,
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1086,6 +1115,23 @@ class TestGuardSurfaceServer:
         assert payload["proof_status"]["first_synced_at"] == "2026-06-04T18:31:00+00:00"
         assert payload["latest_connect_state"]["status"] == "connected"
         assert payload["latest_connect_state"]["milestone"] == "first_sync_succeeded"
+
+    def test_guard_daemon_receipts_endpoint_requires_auth_and_records_audit(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/receipts", timeout=5)
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 401
+        payload = json.loads(error.value.read().decode("utf-8"))
+        assert payload["error"] == "unauthorized"
+        events = store.list_events(event_name="daemon.auth.unauthorized")
+        assert events[-1]["payload"]["path"] == "/v1/receipts"
 
     def test_guard_daemon_claude_hook_endpoint_accepts_empty_allow_response(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
@@ -1573,7 +1619,11 @@ class TestGuardSurfaceServer:
                 attach_payload = json.loads(response.read().decode("utf-8"))
 
             with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/sessions/{session_payload['session_id']}/resume",
+                _guard_get_request(
+                    daemon.port,
+                    f"/v1/sessions/{session_payload['session_id']}/resume",
+                    initialize_payload["auth_token"],
+                ),
                 timeout=5,
             ) as response:
                 attached_resume_payload = json.loads(response.read().decode("utf-8"))
@@ -1598,7 +1648,11 @@ class TestGuardSurfaceServer:
                 operation_payload = json.loads(response.read().decode("utf-8"))
 
             with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/sessions/{session_payload['session_id']}/resume",
+                _guard_get_request(
+                    daemon.port,
+                    f"/v1/sessions/{session_payload['session_id']}/resume",
+                    initialize_payload["auth_token"],
+                ),
                 timeout=5,
             ) as response:
                 active_resume_payload = json.loads(response.read().decode("utf-8"))
