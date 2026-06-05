@@ -47,6 +47,7 @@ CONNECT_STATUS_COMMAND = "hol-guard connect status"
 CONNECT_REPAIR_COMMAND = "hol-guard connect repair"
 DISCONNECT_COMMAND = "hol-guard disconnect"
 HEADLESS_CONNECT_COMMAND = "hol-guard connect --headless"
+CONNECT_SYNC_AUTH_CONTEXT_KEY = "_guard_sync_auth_context"
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEVICE_CODE_SLOW_DOWN_SECONDS = 5
 HEADLESS_RUNTIME_ID = "hol-guard"
@@ -342,6 +343,19 @@ def resolve_connect_url(connect_url: str) -> tuple[str, str]:
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
     oauth_client = resolve_guard_oauth_client_config(issuer)
     return f"{oauth_client.issuer}/api/guard/receipts/sync"
+
+
+def _build_sync_auth_context(
+    *,
+    access_token: str,
+    dpop_key_material: GuardDpopKeyMaterial,
+    sync_url: str,
+) -> dict[str, object]:
+    return {
+        "access_token": access_token,
+        "dpop_key_material": dpop_key_material,
+        "sync_url": sync_url,
+    }
 
 
 def build_device_authorization_request_body(
@@ -844,6 +858,7 @@ def run_guard_device_connect_command(
     open_browser=None,
     ci_safe: bool = False,
     machine_label: str | None = None,
+    include_sync_auth_context: bool = False,
 ) -> dict[str, object]:
     device = store.get_device_metadata()
     _, allowed_origin = resolve_connect_url(connect_url)
@@ -906,6 +921,7 @@ def run_guard_device_connect_command(
         runtime_label=HEADLESS_RUNTIME_LABEL,
         now=timestamp,
     )
+    sync_url = _oauth_sync_url_from_issuer(oauth_client.issuer)
     payload.update(
         {
             "status": "connected",
@@ -913,12 +929,18 @@ def run_guard_device_connect_command(
             "machine_id": token_result.machine_id,
             "workspace_id": token_result.workspace_id,
             "connect_url": connect_url,
-            "sync_url": _oauth_sync_url_from_issuer(oauth_client.issuer),
+            "sync_url": sync_url,
             "connect_command": CONNECT_COMMAND,
             "connect_status_command": CONNECT_STATUS_COMMAND,
             "connect_repair_command": CONNECT_REPAIR_COMMAND,
         }
     )
+    if include_sync_auth_context:
+        payload[CONNECT_SYNC_AUTH_CONTEXT_KEY] = _build_sync_auth_context(
+            access_token=token_result.access_token,
+            dpop_key_material=dpop_key_material,
+            sync_url=sync_url,
+        )
     return payload
 
 
@@ -931,6 +953,7 @@ def run_guard_browser_connect_command(
     exchange_authorization_code=exchange_guard_authorization_code,
     now: str | None = None,
     wait_timeout_seconds: float = 180,
+    include_sync_auth_context: bool = False,
 ) -> dict[str, object]:
     device = store.get_device_metadata()
     _, allowed_origin = resolve_connect_url(connect_url)
@@ -971,7 +994,8 @@ def run_guard_browser_connect_command(
         runtime_label=HEADLESS_RUNTIME_LABEL,
         now=timestamp,
     )
-    return {
+    sync_url = _oauth_sync_url_from_issuer(oauth_client.issuer)
+    payload: dict[str, object] = {
         "status": "connected",
         "connect_mode": "browser_oauth",
         "browser_opened": browser_opened,
@@ -981,11 +1005,18 @@ def run_guard_browser_connect_command(
         "machine_id": token_result.machine_id,
         "workspace_id": token_result.workspace_id,
         "connect_url": connect_url,
-        "sync_url": _oauth_sync_url_from_issuer(oauth_client.issuer),
+        "sync_url": sync_url,
         "connect_command": CONNECT_COMMAND,
         "connect_status_command": CONNECT_STATUS_COMMAND,
         "connect_repair_command": CONNECT_REPAIR_COMMAND,
     }
+    if include_sync_auth_context:
+        payload[CONNECT_SYNC_AUTH_CONTEXT_KEY] = _build_sync_auth_context(
+            access_token=token_result.access_token,
+            dpop_key_material=session.dpop_key_material,
+            sync_url=sync_url,
+        )
+    return payload
 
 
 def build_connect_status_payload(

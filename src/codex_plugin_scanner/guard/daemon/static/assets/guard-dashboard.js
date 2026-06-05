@@ -13920,9 +13920,13 @@ function normalizePackageFirewallAction(value) {
 async function fetchPackageFirewallStatus() {
   return normalizePackageFirewallStatus(await readJson("/v1/supply-chain/package-shims"));
 }
-async function runPackageFirewallAction(action, manager) {
-  const payload = manager !== null ? { managers: [manager] } : {};
-  const response = await readJson(
+async function runPackageFirewallAction(action, manager, credentials) {
+  const payload = {
+    ...manager !== null ? { managers: [manager] } : {},
+    ...credentials?.approval_password !== void 0 ? { approval_password: credentials.approval_password } : {},
+    ...credentials?.approval_totp_code !== void 0 ? { approval_totp_code: credentials.approval_totp_code } : {}
+  };
+  const response = await fetchGuardApi(
     `/v1/supply-chain/package-shims/${action}`,
     {
       method: "POST",
@@ -13933,7 +13937,14 @@ async function runPackageFirewallAction(action, manager) {
       body: JSON.stringify(payload)
     }
   );
-  return normalizePackageFirewallAction(response);
+  const payloadBody = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
+    );
+  }
+  return normalizePackageFirewallAction(payloadBody);
 }
 async function runAuditRemediation(input) {
   if (isGuardDemoMode()) {
@@ -15152,6 +15163,7 @@ function TabBar(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "tablist", className: "flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5", children: props.tabs.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx(
     "button",
     {
+      id: tab.id ?? tab.value,
       type: "button",
       role: "tab",
       "aria-selected": props.active === tab.value,
@@ -15897,7 +15909,7 @@ function EvidenceHeader({
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-0.5 min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-semibold text-brand-dark", children: "Evidence" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Every action Guard reviewed on this machine." }),
-      lastActivityLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-1 text-[11px] text-slate-400", children: [
+      lastActivityLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-slate-400", children: [
         "Last activity: ",
         lastActivityLabel
       ] })
@@ -16346,6 +16358,14 @@ function DecisionChip({ decision }) {
     "Reviewed"
   ] });
 }
+const SORT_TOGGLE_MAP = {
+  newest: "oldest",
+  oldest: "newest",
+  artifact: "artifact",
+  app: "app",
+  category: "category",
+  decision: "decision"
+};
 function SortHeader({
   label,
   active,
@@ -16357,6 +16377,7 @@ function SortHeader({
     "th",
     {
       scope: "col",
+      "aria-sort": active ? ascending ? "ascending" : "descending" : "none",
       className: `px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${className}`,
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
@@ -16390,10 +16411,8 @@ function EvidenceActionList({
   const showLoadMore = hasMore(page, pageSize, receipts.length);
   const handleSort = reactExports.useCallback(
     (key) => {
-      if (sort === key && key === "newest") {
-        onSortChange("oldest");
-      } else if (sort === key && key === "oldest") {
-        onSortChange("newest");
+      if (sort === key) {
+        onSortChange(SORT_TOGGLE_MAP[key]);
       } else {
         onSortChange(key);
       }
@@ -16420,7 +16439,7 @@ function EvidenceActionList({
           {
             label: "Artifact",
             active: sort === "artifact",
-            ascending: true,
+            ascending: sort === "artifact",
             onClick: () => handleSort("artifact"),
             className: "min-w-[180px]"
           }
@@ -16430,7 +16449,7 @@ function EvidenceActionList({
           {
             label: "App",
             active: sort === "app",
-            ascending: true,
+            ascending: sort === "app",
             onClick: () => handleSort("app"),
             className: "hidden sm:table-cell"
           }
@@ -16440,7 +16459,7 @@ function EvidenceActionList({
           {
             label: "Category",
             active: sort === "category",
-            ascending: true,
+            ascending: sort === "category",
             onClick: () => handleSort("category"),
             className: "hidden md:table-cell"
           }
@@ -16450,7 +16469,7 @@ function EvidenceActionList({
           {
             label: "Decision",
             active: sort === "decision",
-            ascending: true,
+            ascending: sort === "decision",
             onClick: () => handleSort("decision")
           }
         ),
@@ -16459,7 +16478,7 @@ function EvidenceActionList({
           {
             label: "Time",
             active: sort === "newest" || sort === "oldest",
-            ascending: sort === "newest",
+            ascending: sort === "oldest",
             onClick: () => handleSort("newest"),
             className: "hidden lg:table-cell"
           }
@@ -16528,7 +16547,6 @@ function ActionRow({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "tr",
     {
-      role: "button",
       tabIndex: 0,
       onClick: handleClick,
       onKeyDown: handleKeyDown,
@@ -16704,8 +16722,7 @@ function TechnicalSection({ receipt }) {
           value: (receipt.changed_capabilities ?? []).join(", ")
         }
       ),
-      receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Capabilities", value: receipt.capabilities_summary }),
-      receipt.diff_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Diff summary", value: receipt.diff_summary })
+      receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Capabilities", value: receipt.capabilities_summary })
     ] })
   ] });
 }
@@ -18127,7 +18144,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
       }
     );
   }
-  const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label }));
+  const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceHeader,
@@ -22265,6 +22282,18 @@ function parseRequestId(pathname) {
   }
   return null;
 }
+function viewTitle(view) {
+  if (view === "home") return "Home";
+  if (view === "inbox") return "Inbox";
+  if (view === "fleet") return "Protect";
+  if (view === "evidence") return "Evidence";
+  if (view === "settings") return "Settings";
+  if (view === "supply-chain") return "Supply Chain";
+  if (view === "audit") return "Audit";
+  if (view === "policy") return "Policy";
+  if (view === "feed-health") return "Feed Health";
+  return "App detail";
+}
 function parseAppDetail(pathname) {
   if (!pathname.startsWith("/apps/")) {
     return null;
@@ -22729,7 +22758,7 @@ function App() {
         children: "Skip to content"
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : view === "supply-chain" || view === "audit" || view === "policy" || view === "feed-health" ? "Trust Center" : "App detail" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: viewTitle(view) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalCenterLayout,
       {

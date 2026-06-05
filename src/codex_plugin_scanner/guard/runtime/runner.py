@@ -1543,20 +1543,24 @@ def _local_guard_runtime_session() -> dict[str, object]:
     }
 
 
-def sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
+def sync_local_guard_cloud_proof(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+) -> dict[str, object]:
     """Publish the local Guard runtime session before syncing receipts."""
 
-    auth_context = _resolve_guard_sync_auth_context(store)
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     runtime_summary = sync_runtime_session(
         store,
         session=_local_guard_runtime_session(),
-        auth_context=auth_context,
+        auth_context=resolved_auth_context,
     )
     receipts_summary = sync_receipts(
         store,
         persist_sync_summary=False,
         persist_connect_state=False,
-        auth_context=auth_context,
+        auth_context=resolved_auth_context,
     )
     summary = dict(receipts_summary)
     summary.update(
@@ -1945,57 +1949,58 @@ def _persist_rotated_oauth_refresh_token(
 
 
 def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
-    oauth_health = store.get_oauth_local_credential_health()
-    oauth_credentials = store.get_oauth_local_credentials()
-    if oauth_credentials is not None:
-        issuer = _optional_string(oauth_credentials.get("issuer"))
-        client_id = _optional_string(oauth_credentials.get("client_id"))
-        refresh_token = _optional_string(oauth_credentials.get("refresh_token"))
-        if issuer is None or client_id is None or refresh_token is None:
-            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        dpop_key_material = _oauth_dpop_key_material(oauth_credentials)
-        try:
-            oauth_client = resolve_guard_oauth_client_config(issuer)
-        except ValueError as error:
-            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
-        refreshed = _refresh_guard_oauth_access_token(
-            token_endpoint=oauth_client.token_endpoint,
-            client_id=client_id,
-            refresh_token=refresh_token,
-            dpop_key_material=dpop_key_material,
-        )
-        rotated_refresh_token = str(refreshed["refresh_token"])
-        package_firewall_entitlement = (
-            refreshed["package_firewall_entitlement"]
-            if isinstance(refreshed.get("package_firewall_entitlement"), dict)
-            else None
-        )
-        if rotated_refresh_token != refresh_token or package_firewall_entitlement is not None:
-            _persist_rotated_oauth_refresh_token(
-                store=store,
-                credentials=oauth_credentials,
-                package_firewall_entitlement=package_firewall_entitlement,
-                refresh_token=rotated_refresh_token,
+    with store.hold_oauth_refresh_lock():
+        oauth_health = store.get_oauth_local_credential_health()
+        oauth_credentials = store.get_oauth_local_credentials()
+        if oauth_credentials is not None:
+            issuer = _optional_string(oauth_credentials.get("issuer"))
+            client_id = _optional_string(oauth_credentials.get("client_id"))
+            refresh_token = _optional_string(oauth_credentials.get("refresh_token"))
+            if issuer is None or client_id is None or refresh_token is None:
+                raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+            dpop_key_material = _oauth_dpop_key_material(oauth_credentials)
+            try:
+                oauth_client = resolve_guard_oauth_client_config(issuer)
+            except ValueError as error:
+                raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
+            refreshed = _refresh_guard_oauth_access_token(
+                token_endpoint=oauth_client.token_endpoint,
+                client_id=client_id,
+                refresh_token=refresh_token,
+                dpop_key_material=dpop_key_material,
             )
-        sync_url = _validate_guard_sync_url(
-            _oauth_sync_url_from_issuer(oauth_client.issuer),
-            issuer=oauth_client.issuer,
-        )
+            rotated_refresh_token = str(refreshed["refresh_token"])
+            package_firewall_entitlement = (
+                refreshed["package_firewall_entitlement"]
+                if isinstance(refreshed.get("package_firewall_entitlement"), dict)
+                else None
+            )
+            if rotated_refresh_token != refresh_token or package_firewall_entitlement is not None:
+                _persist_rotated_oauth_refresh_token(
+                    store=store,
+                    credentials=oauth_credentials,
+                    package_firewall_entitlement=package_firewall_entitlement,
+                    refresh_token=rotated_refresh_token,
+                )
+            sync_url = _validate_guard_sync_url(
+                _oauth_sync_url_from_issuer(oauth_client.issuer),
+                issuer=oauth_client.issuer,
+            )
+            return {
+                "sync_url": sync_url,
+                "access_token": str(refreshed["access_token"]),
+                "dpop_key_material": dpop_key_material,
+            }
+        if bool(oauth_health.get("configured")):
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+        credentials = store.get_sync_credentials()
+        if credentials is None:
+            raise GuardSyncNotConfiguredError("Guard is not logged in.")
         return {
-            "sync_url": sync_url,
-            "access_token": str(refreshed["access_token"]),
-            "dpop_key_material": dpop_key_material,
+            "sync_url": _validate_guard_sync_url(str(credentials["sync_url"])),
+            "access_token": str(credentials["token"]),
+            "dpop_key_material": None,
         }
-    if bool(oauth_health.get("configured")):
-        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-    credentials = store.get_sync_credentials()
-    if credentials is None:
-        raise GuardSyncNotConfiguredError("Guard is not logged in.")
-    return {
-        "sync_url": _validate_guard_sync_url(str(credentials["sync_url"])),
-        "access_token": str(credentials["token"]),
-        "dpop_key_material": None,
-    }
 
 
 def _guard_sync_headers(

@@ -4,13 +4,17 @@ import {
   HiMiniBugAnt,
   HiMiniExclamationTriangle,
 } from "react-icons/hi2";
+import { ApprovalProofModal } from "./approval-proof-modal";
 import { SectionLabel, ActionButton, EmptyState } from "./approval-center-primitives";
 import type {
+  GuardApprovalGatePublicConfig,
   PackageFirewallStatusResponse,
   PackageFirewallActionType,
 } from "./guard-types";
 import {
+  fetchSettings,
   fetchPackageFirewallStatus,
+  GuardHarnessActionError,
   runPackageFirewallAction,
   runPackageAudit,
   runPackageSync,
@@ -35,6 +39,11 @@ type FailedOp = {
   op: OpKey;
   manager: string | null;
   message: string;
+};
+
+type ApprovalOp = {
+  op: PackageFirewallActionType;
+  manager: string;
 };
 
 type LoadingRowProps = { width: string };
@@ -251,12 +260,22 @@ function RefreshButton({ disabled, spinning, onRefresh }: RefreshButtonProps) {
   );
 }
 
-export function PackageFirewallPanel() {
+export function PackageFirewallPanel(props: {
+  approvalGate: GuardApprovalGatePublicConfig | null;
+}) {
+  const { approvalGate } = props;
   const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
   const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
   const [lastFailed, setLastFailed] = useState<FailedOp | null>(null);
   const [confirmRemoveManager, setConfirmRemoveManager] = useState<string | null>(null);
+  const [pendingApprovalOp, setPendingApprovalOp] = useState<ApprovalOp | null>(null);
+  const [resolvedApprovalGate, setResolvedApprovalGate] =
+    useState<GuardApprovalGatePublicConfig | null>(approvalGate);
+
+  useEffect(() => {
+    setResolvedApprovalGate(approvalGate);
+  }, [approvalGate]);
 
   const load = useCallback(async () => {
     setPanelLoad({ phase: "loading" });
@@ -285,22 +304,50 @@ export function PackageFirewallPanel() {
     }
   }, []);
 
+  const resolveApprovalGate = useCallback(async () => {
+    if (resolvedApprovalGate !== null) {
+      return resolvedApprovalGate;
+    }
+    try {
+      const payload = await fetchSettings();
+      const gate = payload.settings.approval_gate ?? null;
+      setResolvedApprovalGate(gate);
+      return gate;
+    } catch {
+      return null;
+    }
+  }, [resolvedApprovalGate]);
+
   const handleAction = useCallback(
-    async (op: PackageFirewallActionType, manager: string | null) => {
+    async (
+      op: PackageFirewallActionType,
+      manager: string | null,
+      credentials?: { approval_password?: string; approval_totp_code?: string },
+    ) => {
       setPendingOp({ op, manager });
       setLastFailed(null);
       try {
-        const response = await runPackageFirewallAction(op, manager);
+        const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
         await refreshAfterOp();
       } catch (err) {
+        if (
+          credentials === undefined &&
+          manager !== null &&
+          err instanceof GuardHarnessActionError &&
+          err.payload?.error === "approval_gate_required"
+        ) {
+          await resolveApprovalGate();
+          setPendingApprovalOp({ op, manager });
+          return;
+        }
         const message = err instanceof Error ? err.message : "Action failed.";
         setLastFailed({ op, manager, message });
       } finally {
         setPendingOp(null);
       }
     },
-    [refreshAfterOp],
+    [refreshAfterOp, resolveApprovalGate],
   );
 
   const handleGlobalOp = useCallback(
@@ -349,9 +396,18 @@ export function PackageFirewallPanel() {
   const handleSync = useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
   const handleDismissResult = useCallback(() => setLastCompleted(null), []);
   const handleRetry = useCallback(() => void load(), [load]);
+  const handleApprovalCancel = useCallback(() => setPendingApprovalOp(null), []);
+  const handleApprovalConfirm = useCallback(
+    (credentials: { approval_password?: string; approval_totp_code?: string }) => {
+      const pendingApproval = pendingApprovalOp;
+      if (pendingApproval === null) return;
+      setPendingApprovalOp(null);
+      void handleAction(pendingApproval.op, pendingApproval.manager, credentials);
+    },
+    [handleAction, pendingApprovalOp],
+  );
 
   const anyPending = pendingOp !== null;
-
   return (
     <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
@@ -393,6 +449,21 @@ export function PackageFirewallPanel() {
         ) : (
           <FreeUserView data={panelLoad.data} />
         ))}
+
+      {pendingApprovalOp !== null && (
+        <ApprovalProofModal
+          title={`${actionLabel(pendingApprovalOp.op)} ${pendingApprovalOp.manager}`}
+          detail="Enter local approval proof before Guard changes package-manager protection on this device."
+          confirmLabel={actionLabel(pendingApprovalOp.op)}
+          approvalGate={resolvedApprovalGate}
+          onCancel={handleApprovalCancel}
+          onConfirm={handleApprovalConfirm}
+        />
+      )}
     </div>
   );
+}
+
+function actionLabel(op: PackageFirewallActionType): string {
+  return op.charAt(0).toUpperCase() + op.slice(1);
 }
