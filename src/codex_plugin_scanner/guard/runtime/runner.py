@@ -931,6 +931,8 @@ def _validated_policy_bundle_payload(policy_bundle: dict[str, object]) -> tuple[
     if verifier.get("algorithm") != "sha256" or _non_empty_string(verifier.get("keyId")) is None:
         return None, "invalid_verifier"
     signature = verifier.get("signature")
+    # `signature` is forward-compatible bundle metadata today; the enforced integrity check is the
+    # stable bundle hash computed from the signed core fields below.
     if signature is not None and _non_empty_string(signature) is None:
         return None, "invalid_verifier"
     if policy_bundle.get("rolloutState") not in _POLICY_BUNDLE_ROLLOUT_STATES:
@@ -1040,8 +1042,7 @@ def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
             for family in explicit
             if isinstance(family, str) and family in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
         ]
-        if values:
-            return list(dict.fromkeys(values))
+        return list(dict.fromkeys(values))
 
     derived: list[str] = []
     scope = rule.get("scope")
