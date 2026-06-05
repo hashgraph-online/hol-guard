@@ -603,12 +603,13 @@ class GuardStore:
     def _promote_secret_to_primary(self, secret_store: SecretStore, secret_id: str, value: str) -> None:
         if isinstance(secret_store, FallbackSecretStore):
             secret_store.promote_secret(secret_id, value)
-            fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
-            if fallback_value != value:
-                try:
-                    secret_store.fallback.set_secret(secret_id, value)
-                except Exception:
-                    return
+            if isinstance(secret_store.fallback, EncryptedFileSecretStore):
+                fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
+                if fallback_value != value:
+                    try:
+                        secret_store.fallback.set_secret(secret_id, value)
+                    except Exception:
+                        return
 
     def _get_secret_from_store(self, store: SecretStore, secret_id: str) -> str | None:
         try:
