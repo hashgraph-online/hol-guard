@@ -16409,9 +16409,11 @@ function resolveActionSubtitle(receipt) {
   }
   const caps = receipt.capabilities_summary?.trim();
   const provenance = receipt.provenance_summary?.trim();
-  if (caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed")) {
+  const isCapsUseful = caps && caps !== "hook artifact · codex" && !caps.toLowerCase().startsWith("guard local daemon completed");
+  const isProvenanceUseful = provenance && provenance !== "hook artifact · codex" && !provenance.toLowerCase().startsWith("guard local daemon completed");
+  if (isCapsUseful) {
     parts.push(caps);
-  } else if (provenance && provenance.toLowerCase() !== caps?.toLowerCase()) {
+  } else if (isProvenanceUseful && provenance?.toLowerCase() !== caps?.toLowerCase()) {
     parts.push(provenance);
   }
   if (parts.length > 0) {
