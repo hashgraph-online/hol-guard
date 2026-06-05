@@ -74,6 +74,7 @@ class TestNoDashboardApprovalURLWake:
         )
 
         monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _gh: None)
+        monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _gh: [])
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
         monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", _make_start_mock(guard_home, port))
@@ -106,6 +107,7 @@ class TestNoDashboardApprovalURLWake:
             "load_guard_daemon_url",
             lambda _gh: f"http://127.0.0.1:{port}",
         )
+        monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _gh: [])
 
         def _boom(*_args, **_kwargs):
             spawn_calls.append("spawn")
@@ -204,6 +206,7 @@ class TestNoDashboardApprovalURLWake:
             "_retire_guard_daemon_process",
             lambda state: retire_calls.append(state),
         )
+        monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _gh: [])
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
         monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", _make_start_mock(guard_home, port))
