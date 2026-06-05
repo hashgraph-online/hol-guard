@@ -4,7 +4,6 @@ export const VIEW_TABS: { key: EvidenceView; label: string }[] = [
   { key: "actions", label: "All actions" },
   { key: "insights", label: "Insights" },
   { key: "apps", label: "Apps" },
-  { key: "story", label: "Story" },
   { key: "categories", label: "Categories" },
   { key: "export", label: "Export" },
 ];
