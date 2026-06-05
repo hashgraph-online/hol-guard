@@ -45,7 +45,7 @@ jobs:
           --skip-dirs /workdir/tests/fixtures
           --skip-files /workdir/.clusterfuzzlite/Dockerfile
           --exit-code 1
-          --no-progress
+          --quiet
           /workdir
 
   gitleaks:
@@ -63,5 +63,30 @@ jobs:
         run: |
           GOBIN="$RUNNER_TEMP/bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Run Gitleaks
-        run: gitleaks detect --no-git --source . --no-banner --redact --exit-code 1
+      - name: Determine Gitleaks scope
+        id: gitleaks-scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$PR_BASE_SHA" ]; then
+            echo "mode=git" >> "$GITHUB_OUTPUT"
+            echo "log_opts=${PR_BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "merge_group" ] && [ -n "$MERGE_GROUP_BASE_SHA" ]; then
+            echo "mode=git" >> "$GITHUB_OUTPUT"
+            echo "log_opts=${MERGE_GROUP_BASE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            echo "mode=git" >> "$GITHUB_OUTPUT"
+            echo "log_opts=${BEFORE_SHA}..${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=dir" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run Gitleaks on commit range
+        if: steps.gitleaks-scope.outputs.mode == 'git'
+        run: gitleaks git --log-opts="${{ steps.gitleaks-scope.outputs.log_opts }}" --no-banner --redact --exit-code 1 .
+      - name: Run Gitleaks on working tree
+        if: steps.gitleaks-scope.outputs.mode == 'dir'
+        run: gitleaks dir --no-banner --redact --exit-code 1 .
