@@ -2402,9 +2402,9 @@ def _guard_events_sync_url(sync_url: str) -> str:
         return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), parsed.query, ""))
     path = parsed.path.rstrip("/")
     for suffix in (
+        "/registry/api/v1/guard/receipts/sync",
         "/api/guard/receipts/sync",
         "/guard/receipts/sync",
-        "/registry/api/v1/guard/receipts/sync",
     ):
         if path.endswith(suffix):
             path = path[: -len(suffix)]

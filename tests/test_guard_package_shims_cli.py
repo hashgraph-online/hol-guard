@@ -30,6 +30,20 @@ def _seed_paid_oauth_entitlement(home_dir: Path) -> None:
     )
 
 
+def _seed_paid_bundle_entitlement(home_dir: Path) -> None:
+    GuardStore(home_dir).set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "bundle_version": "bundle-version-test",
+            "key_id": "bundle-key-test",
+            "policy_hash": "policy-hash-test",
+            "tier": "pro",
+            "workspace_id": "workspace-1",
+        },
+        "2026-06-05T01:39:51+00:00",
+    )
+
+
 def _seed_retry_required_oauth_connect(home_dir: Path) -> None:
     store = GuardStore(home_dir)
     store.set_oauth_local_credentials(
@@ -134,7 +148,7 @@ def test_package_shims_install_requires_local_approval_gate_proof(
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("SHELL", "/bin/zsh")
     guard_home = tmp_path / "guard-home"
-    _seed_paid_oauth_entitlement(guard_home)
+    _seed_paid_bundle_entitlement(guard_home)
     update_approval_gate_settings(
         guard_home,
         {

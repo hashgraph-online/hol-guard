@@ -24,6 +24,20 @@ from codex_plugin_scanner.guard.store import GuardStore
 WORKSPACE_ID = "workspace-alpha"
 
 
+def _seed_paid_bundle_entitlement(home_dir: Path) -> None:
+    GuardStore(home_dir).set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "bundle_version": "bundle-version-test",
+            "key_id": "bundle-key-test",
+            "policy_hash": "policy-hash-test",
+            "tier": "pro",
+            "workspace_id": WORKSPACE_ID,
+        },
+        "2026-06-05T01:39:51+00:00",
+    )
+
+
 def _generate_key_pair() -> tuple[bytes, bytes]:
     private_key = generate_private_key(public_exponent=65537, key_size=2048)
     private_pem = private_key.private_bytes(
@@ -144,15 +158,29 @@ def _seed_bundle(
 ) -> None:
     store = GuardStore(home_dir)
     now = "2026-05-19T00:00:00Z"
+    response = _bundle_response(
+        action=action,
+        ecosystem=ecosystem,
+        package_name=package_name,
+        package_version=package_version,
+    )
     store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "demo-token", now, workspace_id=WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
-        _bundle_response(
-            action=action,
-            ecosystem=ecosystem,
-            package_name=package_name,
-            package_version=package_version,
-        ),
+        response,
+        now,
+    )
+    bundle = response["bundle"]
+    assert isinstance(bundle, dict)
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "bundle_version": bundle["bundleVersion"],
+            "key_id": bundle["keyId"],
+            "policy_hash": bundle["policyHash"],
+            "tier": bundle["tier"],
+            "workspace_id": WORKSPACE_ID,
+        },
         now,
     )
 
@@ -164,6 +192,7 @@ def _install_single_manager_shim(
     manager: str,
     capsys,
 ) -> Path:
+    _seed_paid_bundle_entitlement(home_dir)
     rc = main(
         [
             "guard",
@@ -304,6 +333,7 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     fake_bin.mkdir()
     marker_path = tmp_path / "npm-allowed.json"
     _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    _seed_bundle(home_dir=home_dir, ecosystem="npm", package_name="minimist", package_version="1.2.9", action="allow")
     shim_path = _install_single_manager_shim(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -322,6 +352,7 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
         text=True,
         timeout=30,
     )
+    assert marker_path.exists(), f"stdout={result.stdout!r} stderr={result.stderr!r} returncode={result.returncode}"
     marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
 
     assert result.returncode == 0
@@ -391,6 +422,7 @@ def test_guard_package_shims_install_status_uninstall_roundtrip(tmp_path: Path, 
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
+    _seed_paid_bundle_entitlement(home_dir)
 
     install_rc = main(
         [
@@ -463,6 +495,7 @@ def test_guard_package_shims_install_merges_manifest_entries(tmp_path: Path, cap
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
+    _seed_paid_bundle_entitlement(home_dir)
 
     first_rc = main(
         [
@@ -506,6 +539,7 @@ def test_guard_package_shims_repair_command_restores_selected_manager(tmp_path: 
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
+    _seed_paid_bundle_entitlement(home_dir)
 
     install_rc = main(
         [
@@ -559,6 +593,7 @@ def test_guard_package_shims_install_does_not_mutate_path_environment(
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
+    _seed_paid_bundle_entitlement(home_dir)
     original_path = os.pathsep.join(["guard-a", "guard-b"])
     monkeypatch.setenv("PATH", original_path)
 
@@ -586,6 +621,7 @@ def test_guard_package_shim_wrapper_routes_commands_through_guard_protect(tmp_pa
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
+    _seed_paid_bundle_entitlement(home_dir)
 
     rc = main(
         [
