@@ -17025,7 +17025,7 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
     _write_text(workspace_dir / "__tests__" / "agent-token-detail.test.ts", "expect(onRotated).toHaveBeenCalled();\n")
 
     command = (
-        "rg -n \"onRotated=|onRotated:|onRotated\\)|AgentTokenDetail\" "
+        'rg -n "onRotated=|onRotated:|onRotated\\)|AgentTokenDetail" '
         "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/app "
         "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/__tests__"
     )
@@ -17722,6 +17722,14 @@ def test_sign_guard_dpop_proof_sets_nonce_claim() -> None:
     assert claims["nonce"] == "nonce-123"
 
 
+def test_guard_http_header_value_matches_case_insensitive_mapping() -> None:
+    class _Response:
+        def __init__(self) -> None:
+            self.headers = {"dpop-nonce": "nonce-123"}
+
+    assert guard_runner_module._guard_http_header_value(_Response(), "DPoP-Nonce") == "nonce-123"
+
+
 def test_sync_runtime_session_retries_with_dpop_nonce_challenge(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
@@ -17806,6 +17814,52 @@ def test_sync_runtime_session_retries_with_dpop_nonce_challenge(tmp_path, monkey
     assert "nonce" not in first_claims
     assert second_claims["nonce"] == challenge_nonce
     assert payload["runtime_session_id"] == "session-oauth"
+
+
+def test_sync_runtime_session_limits_dpop_nonce_retries(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    captured_requests: list[urllib.request.Request] = []
+
+    def _fake_urlopen(request, timeout):
+        del timeout
+        captured_requests.append(request)
+        attempt = len(captured_requests)
+        raise urllib.error.HTTPError(
+            request.full_url,
+            401,
+            "Unauthorized",
+            {"dpop-nonce": f"nonce-{attempt}"},
+            io.BytesIO(json.dumps({"error": "use_dpop_nonce"}).encode("utf-8")),
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="HTTP Error 401: Unauthorized"):
+        guard_runner_module.sync_runtime_session(
+            store,
+            auth_context={
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "access_token": "oauth-access-token-1",
+                "dpop_key_material": dpop_key_material,
+            },
+            session={
+                "session_id": "session-oauth",
+                "harness": "codex",
+                "surface": "cli",
+                "status": "active",
+                "client_name": "Codex",
+                "client_title": "Codex CLI",
+                "client_version": "1.0.0",
+                "workspace": "prod",
+                "capabilities": ["chat"],
+                "started_at": "2026-06-01T00:00:00+00:00",
+                "updated_at": "2026-06-01T00:00:00+00:00",
+                "operations": [],
+            },
+        )
+
+    assert len(captured_requests) == 4
 
 
 def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path, monkeypatch):

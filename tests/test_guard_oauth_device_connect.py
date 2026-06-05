@@ -8,6 +8,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.cli import commands as guard_commands
 from codex_plugin_scanner.guard.cli import connect_flow
@@ -1758,6 +1760,37 @@ def test_exchange_authorization_code_retries_with_dpop_nonce_challenge() -> None
     assert second_claims["nonce"] == challenge_nonce
     assert result.access_token == "access-123"
     assert result.refresh_token == "refresh-123"
+
+
+def test_exchange_authorization_code_limits_dpop_nonce_retries() -> None:
+    dpop_key_material = generate_dpop_key_pair()
+    captured_headers: list[dict[str, str]] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        captured_headers.append({str(key).lower(): str(value) for key, value in dict(request.header_items()).items()})
+        attempt = len(captured_headers)
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "Bad Request",
+            {"dpop-nonce": f"nonce-{attempt}"},
+            io.BytesIO(json.dumps({"error": "use_dpop_nonce"}).encode("utf-8")),
+        )
+
+    with pytest.raises(urllib.error.HTTPError):
+        connect_flow.exchange_guard_authorization_code(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            code="auth-code-123",
+            redirect_uri="http://127.0.0.1:61234/oauth/callback",
+            code_verifier="verifier-123",
+            dpop_key_material=dpop_key_material,
+            urlopen=fake_urlopen,
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+    assert len(captured_headers) == 4
 
 
 def test_exchange_guard_device_code_retries_with_dpop_nonce_challenge() -> None:

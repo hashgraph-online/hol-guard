@@ -198,6 +198,14 @@ def _oauth_response_header_value(response: object, header_name: str) -> str | No
     if headers is None:
         return None
     value = headers.get(header_name)
+    if value is None:
+        header_items = getattr(headers, "items", None)
+        if callable(header_items):
+            target_header = header_name.lower()
+            for current_name, current_value in header_items():
+                if isinstance(current_name, str) and current_name.lower() == target_header:
+                    value = current_value
+                    break
     if not isinstance(value, str):
         return None
     normalized_value = value.strip()
@@ -557,6 +565,7 @@ def exchange_guard_device_code(
     deadline = time.monotonic() + wait_window_seconds
     current_interval = max(interval_seconds, 1)
     dpop_nonce: str | None = None
+    nonce_retry_count = 0
     while True:
         request = urllib.request.Request(
             token_endpoint,
@@ -577,8 +586,9 @@ def exchange_guard_device_code(
         except urllib.error.HTTPError as error:
             payload = _load_error_payload(error)
             challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce:
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
                 dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
                 continue
             oauth_error = str(payload.get("error") or "").strip() if isinstance(payload, dict) else ""
             if oauth_error == "authorization_pending":
@@ -636,6 +646,7 @@ def exchange_guard_authorization_code(
         }
     ).encode("utf-8")
     dpop_nonce: str | None = None
+    nonce_retry_count = 0
     while True:
         request = urllib.request.Request(
             token_endpoint,
@@ -656,8 +667,9 @@ def exchange_guard_authorization_code(
         except urllib.error.HTTPError as error:
             payload = _load_error_payload(error)
             challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce:
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
                 dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
                 continue
             raise
         if not isinstance(payload, dict):
@@ -675,6 +687,7 @@ def refresh_guard_access_token(
     now: datetime | None = None,
 ) -> GuardOAuthTokenExchangeResult:
     dpop_nonce: str | None = None
+    nonce_retry_count = 0
     while True:
         request = urllib.request.Request(
             token_endpoint,
@@ -698,8 +711,9 @@ def refresh_guard_access_token(
         except urllib.error.HTTPError as error:
             payload = _load_error_payload(error)
             challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce:
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
                 dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
                 continue
             message = (
                 str(payload.get("error_description") or payload.get("error") or error.reason)
@@ -724,6 +738,7 @@ def revoke_guard_self_oauth_grant(
 ) -> None:
     revoke_url = f"{oauth_client.issuer.rstrip('/')}/api/guard/oauth/revoke/self"
     dpop_nonce: str | None = None
+    nonce_retry_count = 0
     while True:
         request = urllib.request.Request(
             revoke_url,
@@ -750,8 +765,9 @@ def revoke_guard_self_oauth_grant(
         except urllib.error.HTTPError as error:
             payload = _load_error_payload(error)
             challenge_nonce = _oauth_dpop_nonce_from_http_error(error, payload)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce:
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
                 dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
                 continue
             message = (
                 str(payload.get("error_description") or payload.get("error") or error.reason)
