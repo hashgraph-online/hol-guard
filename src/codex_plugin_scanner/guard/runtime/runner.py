@@ -1034,7 +1034,7 @@ def _policy_bundle_is_version_downgrade(
         return False
     try:
         return datetime.fromisoformat(next_issued_at) < datetime.fromisoformat(existing_issued_at)
-    except ValueError:
+    except (TypeError, ValueError):
         return False
 
 
