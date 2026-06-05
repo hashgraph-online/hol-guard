@@ -7095,6 +7095,13 @@ _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     )
     \s*"""
 )
+_CODEX_PRIVATE_KEY_FIXTURE_PATTERN = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----(?P<body>.*?)-----END [A-Z ]*PRIVATE KEY-----",
+    re.DOTALL,
+)
+_CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN = re.compile(
+    r"(?i)\b(?:secret-key-material|fixture|fake|example|sample|dummy|test-key|placeholder)\b"
+)
 _CODEX_SENSITIVE_SEARCH_BASENAMES = SOURCE_INSPECTION_SENSITIVE_PARTS | frozenset({"id_rsa"})
 _CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
     {
@@ -7192,6 +7199,11 @@ def _codex_source_inspection_can_skip_secret_output(
         return False
     if _codex_command_targets_secret_like_source_name(command_text):
         return False
+    non_medium_matches = [match for match in content_matches if match.sensitivity != "medium"]
+    if non_medium_matches:
+        return all(
+            match.classifier == "pem-private-key" for match in non_medium_matches
+        ) and _codex_output_uses_placeholder_private_key_fixture(response_text)
     if any(match.sensitivity != "medium" for match in content_matches):
         return False
     if _codex_command_references_benign_source_dotfile(command_text):
@@ -7202,6 +7214,21 @@ def _codex_source_inspection_can_skip_secret_output(
 def _codex_output_is_only_benign_secret_fixture(response_text: str) -> bool:
     lines = [line for line in response_text.splitlines() if line.strip()]
     return bool(lines) and all(_CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN.fullmatch(line) for line in lines)
+
+
+def _codex_output_uses_placeholder_private_key_fixture(response_text: str) -> bool:
+    matches = list(_CODEX_PRIVATE_KEY_FIXTURE_PATTERN.finditer(response_text))
+    if not matches:
+        return False
+    return all(
+        _CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN.search(
+            " ".join(line.strip() for line in match.group("body").splitlines() if line.strip())
+            .replace("\\n", " ")
+            .replace("\\r", " ")
+        )
+        is not None
+        for match in matches
+    )
 
 
 def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:
@@ -9349,7 +9376,29 @@ def _finalize_guard_connect_payload(
             }
         )
         return payload
-    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError, RuntimeError) as error:
+    except RuntimeError as error:
+        repair_message = (
+            "Guard Cloud pairing finished, but the first proof sync is still pending. "
+            "Local Guard will retry automatically while the daemon is running, or run hol-guard sync now."
+        )
+        store.record_latest_guard_connect_sync_result(
+            status="connected",
+            milestone="first_sync_pending",
+            now=now,
+            reason=str(error),
+        )
+        payload.update(
+            {
+                "status": "connected",
+                "milestone": "first_sync_pending",
+                "sync_succeeded": False,
+                "sync_error": str(error),
+                "repair_message": repair_message,
+                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
+            }
+        )
+        return payload
+    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
         store.record_latest_guard_connect_sync_result(
             status="retry_required",
             milestone="first_sync_failed",

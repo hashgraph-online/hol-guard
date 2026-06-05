@@ -32,7 +32,7 @@ function remediationLine(snapshot: GuardRuntimeSnapshot): string {
     return "Open the review queue, choose what to do with the blocked action, then retry in the same chat.";
   }
   if (snapshot.cloud_state === "paired_waiting") {
-    return "Open Guard Cloud while the first protected session lands and this machine finishes syncing.";
+    return "Keep Local Guard running while it finishes the first cloud sync automatically, or run hol-guard sync now.";
   }
   if (snapshot.cloud_state === "local_only") {
     return "Stay local for now or connect this machine when you want shared queue memory and cross-device proof.";
@@ -106,7 +106,7 @@ export function resolveCloudIntelCopy(state: "local_only" | "paired_waiting" | "
     return { label: "Offline, free", detail: "Running locally with no cloud sync. Your choices stay on this machine." };
   }
   if (state === "paired_waiting") {
-    return { label: "Pairing…", detail: "Connected to Guard Cloud, waiting for sync to start." };
+    return { label: "First sync in progress", detail: "Connected to Guard Cloud. Local Guard is sending the first shared proof now." };
   }
   return { label: "Synced, pro", detail: "Guard Cloud is active and syncing choices across your devices." };
 }
