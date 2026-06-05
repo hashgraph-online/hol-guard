@@ -253,7 +253,12 @@ def _cleanup_legacy_project_cursor_hooks(context: HarnessContext) -> None:
     script_path = _legacy_project_cursor_hook_script_path(context.workspace_dir)
     if not hooks_path.is_file() and not script_path.is_file():
         return
-    managed = script_path.is_file() and _is_managed_hook_script(script_path.read_text(encoding="utf-8"))
+    managed = False
+    if script_path.is_file():
+        try:
+            managed = _is_managed_hook_script(script_path.read_text(encoding="utf-8"))
+        except OSError:
+            managed = False
     if hooks_path.is_file() and not managed:
         try:
             payload = json.loads(hooks_path.read_text(encoding="utf-8"))

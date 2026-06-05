@@ -82,7 +82,7 @@ def test_resolve_guard_workspace_explicit_flag_wins(tmp_path: Path, monkeypatch:
     assert _resolve_guard_workspace(args, guard_home=guard_home) == other.resolve()
 
 
-def test_install_cursor_without_workspace_writes_project_hooks(
+def test_install_cursor_writes_global_hooks_not_project_hooks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -108,8 +108,9 @@ def test_install_cursor_without_workspace_writes_project_hooks(
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    hooks_path = repo / ".cursor" / "hooks.json"
+    hooks_path = home_dir / ".cursor" / "hooks.json"
     assert hooks_path.is_file()
+    assert not (repo / ".cursor" / "hooks.json").exists()
     managed_install = output["managed_install"]
     assert managed_install["harness"] == "cursor"
     assert Path(str(managed_install["workspace"])).resolve() == repo.resolve()
@@ -171,7 +172,7 @@ def test_install_cursor_hook_script_allows_benign_shell_command(
         ]
     )
     assert rc == 0
-    hook_script = repo / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+    hook_script = home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
     assert hook_script.is_file()
     payload = json.dumps({"hook_event_name": "beforeShellExecution", "command": "echo guard-e2e"})
     env = os.environ.copy()
