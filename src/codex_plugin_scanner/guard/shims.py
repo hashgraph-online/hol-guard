@@ -255,12 +255,13 @@ def get_path_order_status(
 
 def _package_shim_profile_status(context: HarnessContext) -> dict[str, object]:
     shim_dir = context.guard_home / "package-shims" / "bin"
-    profile_path, _export_line = _package_shim_profile_target(context.home_dir, shim_dir)
-    if profile_path is None:
+    home_dir = context.home_dir if isinstance(context.home_dir, Path) else None
+    if home_dir is None:
         return {
             "shell_profile_configured": False,
             "shell_profile_path": None,
         }
+    profile_path, _export_line = _package_shim_profile_target(home_dir, shim_dir)
     try:
         existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
     except OSError:
@@ -275,13 +276,12 @@ def _package_shim_profile_status(context: HarnessContext) -> dict[str, object]:
 def _package_shim_activation_path_status(
     *,
     installed_managers: list[str],
-    protected_managers: list[str],
     path_contains_shim_dir: bool,
     shell_profile_configured: bool,
 ) -> str:
-    if installed_managers and len(protected_managers) == len(installed_managers):
+    if installed_managers and path_contains_shim_dir:
         return "in_path"
-    if installed_managers and shell_profile_configured and not path_contains_shim_dir:
+    if installed_managers and shell_profile_configured:
         return "restart_required"
     return "missing_from_path"
 
@@ -425,7 +425,6 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
     profile_status = _package_shim_profile_status(context)
     activation_path_status = _package_shim_activation_path_status(
         installed_managers=installed_managers,
-        protected_managers=protected_managers,
         path_contains_shim_dir=path_contains_shim_dir,
         shell_profile_configured=bool(profile_status["shell_profile_configured"]),
     )
