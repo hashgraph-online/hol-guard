@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ab as HiMiniArrowPath, H as HiMiniShieldCheck, ai as HiMiniArrowTopRightOnSquare, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, h as HiMiniXCircle, r as reactExports, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, ao as startPackageFirewallConnect, S as SectionLabel, E as EmptyState, ap as HiMiniBugAnt, a as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ab as HiMiniArrowPath, H as HiMiniShieldCheck, ai as HiMiniArrowTopRightOnSquare, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, h as HiMiniXCircle, r as reactExports, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, ao as startPackageFirewallConnect, ap as openPackageFirewallShell, S as SectionLabel, E as EmptyState, aq as HiMiniBugAnt, a as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 function UpgradeCta({ entitlement }) {
@@ -61,6 +61,7 @@ function resolveConnectSteps(connectFlow) {
   ];
 }
 function ConnectFlowCard({
+  compact = false,
   connectError,
   connectStarting,
   connectFlow,
@@ -74,9 +75,47 @@ function ConnectFlowCard({
   const primaryBusy = connectStarting || running;
   const primaryLabel = running ? "Waiting for browser approval" : failed ? "Try connect again" : connectFlow.action_label;
   const steps = resolveConnectSteps(connectFlow);
-  const statusTone = mode === "repair" ? "attention" : "blue";
-  const statusLabel = mode === "repair" ? "Repair required" : "Connection required";
+  const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
+  const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  const hintCopy = localRecoveryHint ?? "Guard changes routing only after this machine receives signed cloud access.";
+  if (compact) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "HOL Guard Cloud" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold tracking-[-0.02em] text-brand-dark", children: connectFlow.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: connectFlow.detail })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 text-xs leading-relaxed text-slate-500 md:grid-cols-3", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-semibold text-brand-dark", children: [
+          index + 1,
+          ". ",
+          step.title
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5", children: step.body })
+      ] }, step.title)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-x-4 gap-y-1 text-xs leading-relaxed text-slate-500", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: hintCopy }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Guard changes routing only after this machine receives signed cloud access." })
+      ] }),
+      connectError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-brand-attention", children: connectError }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: onStartConnect, disabled: primaryBusy, children: [
+          primaryBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
+          primaryLabel
+        ] }),
+        showManualLink && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: manualHref, variant: "outline", children: [
+          "Open sign-in page",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
+        ] })
+      ] })
+    ] });
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2.5", children: [
@@ -142,12 +181,15 @@ function EntitlementNotice({
   onStartConnect
 }) {
   const connectRequired = data.entitlement.reason === "guard_cloud_connect_required" || data.entitlement.reason === "guard_cloud_reconnect_required";
-  const connectMode = data.entitlement.reason === "guard_cloud_reconnect_required" ? "repair" : "connect";
+  const reconnectLikeState = data.entitlement.reason === "guard_cloud_reconnect_required" || data.entitlement.reason === "guard_cloud_connect_required" && (data.entitlement.tier !== "unknown" || data.package_shims.some((shim) => shim.installed));
+  const connectMode = reconnectLikeState ? "repair" : "connect";
   const localRecoveryHint = data.package_shims.some((shim) => shim.installed) ? connectRequired ? "Existing shims on this machine can still be fixed or removed locally. Connect is only needed for new installs and cloud-gated verification." : null : null;
+  const compactConnectNotice = data.package_shims.some((shim) => shim.installed) || data.protection?.path_status === "restart_required";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
     connectRequired && data.connect_flow !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConnectFlowCard,
       {
+        compact: compactConnectNotice,
         connectError,
         connectStarting,
         connectFlow: data.connect_flow,
@@ -165,7 +207,13 @@ function activationHeadline(protection) {
   if (protection.path_status === "restart_required") return "Restart shell or apps to finish activation";
   return "Fix PATH to finish activation";
 }
-function ActivationSummary({ protection }) {
+function ActivationSummary({
+  activationAssistError,
+  openingShell,
+  onOpenShell,
+  onRefreshStatus,
+  protection
+}) {
   if (protection === null) {
     return null;
   }
@@ -173,11 +221,17 @@ function ActivationSummary({ protection }) {
   const Icon = protection.path_status === "in_path" ? HiMiniCheckCircle : protection.path_status === "restart_required" ? HiMiniArrowPath : HiMiniExclamationTriangle;
   const toneClass = protection.path_status === "in_path" ? "border-brand-green/20 bg-brand-green/[0.04]" : protection.path_status === "restart_required" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-brand-attention/20 bg-brand-attention/[0.04]";
   const iconClass = protection.path_status === "in_path" ? "text-brand-green" : protection.path_status === "restart_required" ? "text-brand-blue" : "text-brand-attention";
+  const canOpenShell = protection.path_status === "restart_required" && protection.shell_profile_configured && typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("mac");
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-xl border px-4 py-3 ${toneClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: activationHeadline(protection) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: copy.pathDetail })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: copy.pathDetail }),
+      protection.path_status === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: [
+        canOpenShell && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onOpenShell, disabled: openingShell, children: openingShell ? "Opening shell…" : "Open new shell" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRefreshStatus, disabled: openingShell, children: "Refresh after restart" })
+      ] }),
+      activationAssistError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-attention", children: activationAssistError })
     ] })
   ] }) });
 }
@@ -536,6 +590,8 @@ function FailureBanner({ failed }) {
   );
 }
 function FirewallControlsView({
+  activationAssistError,
+  openingShell,
   data,
   pendingOp,
   lastCompleted,
@@ -550,7 +606,9 @@ function FirewallControlsView({
   onRemoveCancel,
   onAudit,
   onSync,
-  onDismissResult
+  onDismissResult,
+  onOpenShell,
+  onRefreshStatus
 }) {
   const anyPending = pendingOp !== null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
@@ -566,7 +624,16 @@ function FirewallControlsView({
         }
       )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ActivationSummary, { protection: data.protection }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ActivationSummary,
+      {
+        activationAssistError,
+        openingShell,
+        onOpenShell,
+        onRefreshStatus,
+        protection: data.protection
+      }
+    ),
     lastFailed !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(FailureBanner, { failed: lastFailed }),
     lastCompleted !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionResultPanel, { completed: lastCompleted, onDismiss: onDismissResult }),
     data.package_shims.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -620,7 +687,9 @@ function PackageFirewallPanel(props) {
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
   const [lastFailed, setLastFailed] = reactExports.useState(null);
   const [connectError, setConnectError] = reactExports.useState(null);
+  const [activationAssistError, setActivationAssistError] = reactExports.useState(null);
   const [startingConnect, setStartingConnect] = reactExports.useState(false);
+  const [openingShell, setOpeningShell] = reactExports.useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = reactExports.useState(null);
   const [pendingApprovalOp, setPendingApprovalOp] = reactExports.useState(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
@@ -664,6 +733,7 @@ function PackageFirewallPanel(props) {
       setPendingOp({ op, manager });
       setLastFailed(null);
       setConnectError(null);
+      setActivationAssistError(null);
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
@@ -688,6 +758,7 @@ function PackageFirewallPanel(props) {
       setPendingOp({ op, manager: null });
       setLastFailed(null);
       setConnectError(null);
+      setActivationAssistError(null);
       try {
         const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
         setLastCompleted({ op, manager: null, response });
@@ -733,6 +804,7 @@ function PackageFirewallPanel(props) {
   const handleStartConnect = reactExports.useCallback(async () => {
     setStartingConnect(true);
     setConnectError(null);
+    setActivationAssistError(null);
     try {
       await startPackageFirewallConnect();
       await refreshAfterOp();
@@ -745,6 +817,17 @@ function PackageFirewallPanel(props) {
       setStartingConnect(false);
     }
   }, [onStateChanged, refreshAfterOp]);
+  const handleOpenShell = reactExports.useCallback(async () => {
+    setOpeningShell(true);
+    setActivationAssistError(null);
+    try {
+      await openPackageFirewallShell();
+    } catch (error) {
+      setActivationAssistError(error instanceof Error ? error.message : "Unable to open a new shell.");
+    } finally {
+      setOpeningShell(false);
+    }
+  }, []);
   const handleApprovalCancel = reactExports.useCallback(() => setPendingApprovalOp(null), []);
   const handleApprovalConfirm = reactExports.useCallback(
     (credentials) => {
@@ -793,7 +876,11 @@ function PackageFirewallPanel(props) {
           onRemoveCancel: handleRemoveCancel,
           onAudit: handleAudit,
           onSync: handleSync,
-          onDismissResult: handleDismissResult
+          onDismissResult: handleDismissResult,
+          onOpenShell: handleOpenShell,
+          onRefreshStatus: handleRetry,
+          openingShell,
+          activationAssistError
         }
       )
     ] }),

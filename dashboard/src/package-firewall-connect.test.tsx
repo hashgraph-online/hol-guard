@@ -31,6 +31,7 @@ Object.assign(globalThis, {
 
 const runningMarkup = renderToStaticMarkup(
   <ConnectFlowCard
+    compact
     connectError={null}
     connectStarting={false}
     connectFlow={{
@@ -58,8 +59,12 @@ assert(
   "PF1: running connect card should keep manual sign-in fallback visible",
 );
 assert(
-  runningMarkup.includes("Repair required"),
-  "PF1: running reconnect card should show repair state badge",
+  runningMarkup.includes("Waiting for approval"),
+  "PF1: running reconnect card should show waiting state badge",
+);
+assert(
+  !runningMarkup.includes("Security"),
+  "PF1: compact connect state should not render the nested security card",
 );
 
 const connectRequiredStatus: PackageFirewallStatusResponse = {
@@ -133,6 +138,14 @@ assert(
   freeViewMarkup.includes("Existing shims on this machine can still be fixed or removed locally."),
   "PF2: connect-required view should explain that local recovery still works",
 );
+assert(
+  !freeViewMarkup.includes("AVAILABLE NOW"),
+  "PF2: staged local recovery view should stay compact instead of nesting extra helper cards",
+);
+assert(
+  !freeViewMarkup.includes("SECURITY"),
+  "PF2: staged local recovery view should not render the large nested security card",
+);
 
 const upgradeRequiredStatus: PackageFirewallStatusResponse = {
   ...connectRequiredStatus,
@@ -170,4 +183,26 @@ assert(
 assert(
   upgradeMarkup.includes("Upgrade to enable active protection"),
   "PF3: upgrade-required view should render the upgrade CTA",
+);
+
+const reconnectLikeStatus: PackageFirewallStatusResponse = {
+  ...connectRequiredStatus,
+  entitlement: {
+    ...connectRequiredStatus.entitlement,
+    tier: "team",
+  },
+};
+
+const reconnectLikeMarkup = renderToStaticMarkup(
+  <EntitlementNotice
+    connectError={null}
+    connectStarting={false}
+    data={reconnectLikeStatus}
+    onStartConnect={() => undefined}
+  />,
+);
+
+assert(
+  reconnectLikeMarkup.includes("Repair required"),
+  "PF4: broken post-connect local auth should render repair guidance instead of a first-connect badge",
 );

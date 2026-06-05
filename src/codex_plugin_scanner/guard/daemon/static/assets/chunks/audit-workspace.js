@@ -1,4 +1,4 @@
-import { r as reactExports, aq as runAuditRemediation, a9 as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, W as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, b as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton, v as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
+import { r as reactExports, ar as runAuditRemediation, a9 as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, W as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, b as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton, v as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];

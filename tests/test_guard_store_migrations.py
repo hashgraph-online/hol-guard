@@ -53,6 +53,11 @@ class _FakeSystemKeyringModule:
 def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
     module = _FakeSystemKeyringModule()
     monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_macos_default_keychain_is_usable",
+        classmethod(lambda cls: True),
+    )
     return module
 
 
@@ -707,6 +712,156 @@ def test_oauth_local_credentials_mirror_secret_into_encrypted_fallback_store(tmp
     assert headless_store.get_oauth_local_credential_health()["state"] == "healthy"
 
 
+def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before_keyring(tmp_path, monkeypatch):
+    _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    def fail_primary_lookup(secret_id: str) -> str | None:
+        raise AssertionError(f"primary keyring lookup should not run for {secret_id}")
+
+    monkeypatch.setattr(store._oauth_secret_store.primary, "get_secret", fail_primary_lookup)
+
+    credentials = store.get_oauth_local_credentials()
+
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-secret-value"
+
+
+def test_get_oauth_local_credentials_fails_closed_when_fallback_hash_is_stale(tmp_path, monkeypatch):
+    _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(oauth_payload, dict)
+    oauth_payload["credentials_sha256"] = "pbkdf2-sha256$" + ("0" * 64)
+    store.set_sync_payload("oauth_local_credentials", oauth_payload, "2026-06-01T00:01:00+00:00")
+
+    def fail_primary_lookup(_secret_id: str, *, timeout_seconds: float) -> str | None:
+        assert timeout_seconds > 0
+        return None
+
+    monkeypatch.setattr(store._oauth_secret_store.primary, "get_secret_with_timeout", fail_primary_lookup)
+
+    assert store.get_oauth_local_credentials() is None
+    assert store.get_oauth_local_credential_health()["state"] == "degraded"
+
+
+def test_get_oauth_local_credentials_recovers_from_timed_primary_lookup_when_fallback_hash_is_stale(
+    tmp_path,
+    monkeypatch,
+):
+    fake_keyring = _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(oauth_payload, dict)
+    secret_id = str(oauth_payload["credentials_ref"])
+    original_secret = fake_keyring.get_password("hol-guard.oauth", secret_id)
+    assert isinstance(original_secret, str)
+    updated_secret_payload = json.loads(original_secret)
+    assert isinstance(updated_secret_payload, dict)
+    updated_secret_payload["refresh_token"] = "refresh-secret-value-rotated"
+    updated_secret = json.dumps(updated_secret_payload)
+    fake_keyring.set_password("hol-guard.oauth", secret_id, updated_secret)
+    oauth_payload["credentials_sha256"] = guard_store_module._secret_fingerprint(updated_secret)
+    store.set_sync_payload("oauth_local_credentials", oauth_payload, "2026-06-01T00:01:00+00:00")
+
+    assert isinstance(store._oauth_secret_store.primary, SystemKeyringSecretStore)
+    primary_secret = fake_keyring.get_password("hol-guard.oauth", secret_id)
+    assert isinstance(primary_secret, str)
+    monkeypatch.setattr(
+        store._oauth_secret_store.primary,
+        "get_secret",
+        lambda _secret_id: (_ for _ in ()).throw(AssertionError("plain primary lookup should not run")),
+    )
+    monkeypatch.setattr(
+        store._oauth_secret_store.primary,
+        "get_secret_with_timeout",
+        lambda _secret_id, *, timeout_seconds: primary_secret,
+    )
+
+    credentials = store.get_oauth_local_credentials()
+
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-secret-value-rotated"
+    assert store.get_oauth_local_credential_health()["state"] == "healthy"
+
+
+def test_get_recoverable_oauth_local_credentials_uses_encrypted_fallback_when_hash_is_stale(tmp_path, monkeypatch):
+    _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    assert isinstance(oauth_payload, dict)
+    oauth_payload["credentials_sha256"] = "pbkdf2-sha256$" + ("0" * 64)
+    store.set_sync_payload("oauth_local_credentials", oauth_payload, "2026-06-01T00:01:00+00:00")
+
+    assert store.get_oauth_local_credentials() is None
+
+    recoverable = store.get_recoverable_oauth_local_credentials()
+
+    assert recoverable is not None
+    assert recoverable["refresh_token"] == "refresh-secret-value"
+    assert recoverable["workspace_id"] == "workspace-123"
+
+
 def test_set_oauth_local_credentials_does_not_use_generic_secret_promotion(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch)
     guard_home = tmp_path / "guard-home"
@@ -737,7 +892,7 @@ def test_set_oauth_local_credentials_does_not_use_generic_secret_promotion(tmp_p
     assert headless_store.get_oauth_local_credentials() is not None
 
 
-def test_set_oauth_local_credentials_logs_when_fallback_mirror_fails(tmp_path, monkeypatch, caplog):
+def test_set_oauth_local_credentials_rejects_incomplete_fallback_mirror(tmp_path, monkeypatch, caplog):
     _install_fake_system_keyring(monkeypatch)
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
@@ -749,20 +904,26 @@ def test_set_oauth_local_credentials_logs_when_fallback_mirror_fails(tmp_path, m
     monkeypatch.setattr(store._oauth_secret_store.fallback, "set_secret", fail_fallback_set_secret)
     caplog.set_level(logging.WARNING, logger="codex_plugin_scanner.guard.store")
 
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-secret-value",
-        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
-        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
-        dpop_public_jwk_thumbprint="thumbprint-123",
-        grant_id="grant-123",
-        machine_id="machine-123",
-        workspace_id="workspace-123",
-        now="2026-06-01T00:00:00+00:00",
-    )
+    try:
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-secret-value",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            workspace_id="workspace-123",
+            now="2026-06-01T00:00:00+00:00",
+        )
+    except RuntimeError as error:
+        assert str(error) == "Guard could not persist local Guard Cloud authorization into the encrypted local store."
+    else:
+        raise AssertionError("OAuth persistence should fail when the encrypted fallback mirror is missing")
 
-    assert store.get_oauth_local_credentials() is not None
+    assert store.get_sync_payload("oauth_local_credentials") is None
+    assert store.get_oauth_local_credentials() is None
     assert "Failed to mirror OAuth credentials into encrypted fallback store" in caplog.text
 
 
