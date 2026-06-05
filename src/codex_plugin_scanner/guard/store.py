@@ -2000,26 +2000,28 @@ class GuardStore:
         result: dict[str, object] = {}
         if include_rowid:
             result["receipt_rowid"] = int(row["receipt_rowid"])
-        result.update({
-            "receipt_id": str(row["receipt_id"]),
-            "harness": str(row["harness"]),
-            "artifact_id": str(row["artifact_id"]),
-            "artifact_hash": str(row["artifact_hash"]),
-            "policy_decision": str(row["policy_decision"]),
-            "capabilities_summary": str(row["capabilities_summary"]),
-            "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
-            "provenance_summary": str(row["provenance_summary"]),
-            "user_override": row["user_override"],
-            "artifact_name": row["artifact_name"],
-            "source_scope": row["source_scope"],
-            "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
-            "diff_summary": row["diff_summary"],
-            "approval_source": row["approval_source"],
-            "approval_request_id": row["approval_request_id"],
-            "timestamp": str(row["timestamp"]),
-            "action_envelope_json": envelope,
-            "envelope_redacted_json": _json_object(row["envelope_redacted_json"]),
-        })
+        result.update(
+            {
+                "receipt_id": str(row["receipt_id"]),
+                "harness": str(row["harness"]),
+                "artifact_id": str(row["artifact_id"]),
+                "artifact_hash": str(row["artifact_hash"]),
+                "policy_decision": str(row["policy_decision"]),
+                "capabilities_summary": str(row["capabilities_summary"]),
+                "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
+                "provenance_summary": str(row["provenance_summary"]),
+                "user_override": row["user_override"],
+                "artifact_name": row["artifact_name"],
+                "source_scope": row["source_scope"],
+                "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
+                "diff_summary": row["diff_summary"],
+                "approval_source": row["approval_source"],
+                "approval_request_id": row["approval_request_id"],
+                "timestamp": str(row["timestamp"]),
+                "action_envelope_json": envelope,
+                "envelope_redacted_json": _json_object(row["envelope_redacted_json"]),
+            }
+        )
         return result
 
     def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
