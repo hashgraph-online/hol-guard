@@ -79,6 +79,10 @@ from ..desktop_notifications import (
 )
 from ..local_supply_chain import build_local_supply_chain_posture
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
+from ..package_firewall_entitlement import (
+    package_firewall_block_details,
+    resolve_package_firewall_entitlement,
+)
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -119,7 +123,6 @@ _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {"install", "repair", "test", "audit", "sync", "remove", "uninstall"}
-_SUPPLY_CHAIN_PAID_TIERS = {"paid", "premium", "enterprise", "guard_cloud", "guard-cloud"}
 
 
 class _HookPathValidationError(ValueError):
@@ -1303,15 +1306,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         entitlement = self._supply_chain_entitlement()
         if not bool(entitlement["allowed"]):
+            status, error_code, message = package_firewall_block_details(entitlement)
             self._write_json(
                 {
                     "available_actions": ["status", "education", "cli_fallback"],
                     "entitlement": entitlement,
-                    "error": "paid_guard_cloud_required",
-                    "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+                    "error": error_code,
+                    "message": message,
                     "operation": action,
                 },
-                status=402,
+                status=status,
             )
             return
         context = self._supply_chain_context(payload)
@@ -1379,15 +1383,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         operation = "remove" if action == "uninstall" else action
         entitlement = self._supply_chain_entitlement()
         if not bool(entitlement["allowed"]):
+            status, error_code, message = package_firewall_block_details(entitlement)
             self._write_json(
                 {
                     "available_actions": ["status", "education", "cli_fallback"],
                     "entitlement": entitlement,
-                    "error": "paid_guard_cloud_required",
-                    "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+                    "error": error_code,
+                    "message": message,
                     "operation": operation,
                 },
-                status=402,
+                status=status,
             )
             return
         context = self._supply_chain_context(payload)
@@ -1483,17 +1488,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return managers, None
 
     def _supply_chain_entitlement(self) -> dict[str, object]:
-        entitlement_payload = self.server.store.get_sync_payload("supply_chain_bundle_entitlement")  # type: ignore[attr-defined]
-        entitlement = entitlement_payload if isinstance(entitlement_payload, dict) else {}
-        tier = self._optional_string(entitlement.get("tier"))
-        normalized_tier = tier.strip().lower() if tier is not None else "free"
-        allowed = normalized_tier in _SUPPLY_CHAIN_PAID_TIERS
-        return {
-            "allowed": allowed,
-            "reason": "paid_entitlement_active" if allowed else "paid_guard_cloud_required",
-            "tier": normalized_tier,
-            "upgrade_cta": None if allowed else "Upgrade to HOL Guard Cloud to run package firewall actions.",
-        }
+        return resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
 
     @staticmethod
     def _supply_chain_action_states(allowed: bool) -> dict[str, str]:

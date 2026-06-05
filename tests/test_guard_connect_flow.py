@@ -7,8 +7,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from codex_plugin_scanner.guard.cli.connect_flow import build_connect_status_payload
+from codex_plugin_scanner.guard.cli.connect_flow import (
+    GuardOAuthLoopbackCallback,
+    GuardOAuthTokenExchangeResult,
+    build_connect_status_payload,
+    run_guard_browser_connect_command,
+)
+from codex_plugin_scanner.guard.cli.oauth_client import GuardDpopKeyMaterial
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_package_firewall_entitlement
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -110,3 +117,56 @@ def test_connect_repair_copy_points_to_device_code(tmp_path: Path) -> None:
     assert payload["repair_message"] == "Run hol-guard connect to start OAuth Device Code approval."
     assert "pairing" not in rendered.lower()
     assert "guardPairSecret" not in rendered
+
+
+def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    class _BrowserSession:
+        authorize_url = "https://hol.org/guard/connect?step=authorize"
+        redirect_uri = "http://127.0.0.1:55221/oauth/callback"
+        pkce_verifier = "pkce-verifier"
+        dpop_key_material = GuardDpopKeyMaterial(
+            algorithm="ES256",
+            private_key_pem="private-key",
+            public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+            public_jwk_thumbprint="thumbprint-1",
+        )
+
+        def wait_for_callback(self, _timeout_seconds: float) -> GuardOAuthLoopbackCallback:
+            return GuardOAuthLoopbackCallback(code="auth-code-1", state="state-1")
+
+        def close(self) -> None:
+            return None
+
+    payload = run_guard_browser_connect_command(
+        store=store,
+        connect_url="https://hol.org/guard/connect",
+        start_browser_session=lambda **_kwargs: _BrowserSession(),
+        open_browser=lambda _url: True,
+        exchange_authorization_code=lambda **_kwargs: GuardOAuthTokenExchangeResult(
+            access_token="access-token-1",
+            refresh_token="refresh-token-1",
+            expires_in=300,
+            scope="guard:runtime.sync guard:offline_access",
+            token_type="Bearer",
+            grant_id="grant-1",
+            machine_id="machine-1",
+            supply_chain_entitlement={
+                "supply_chain_entitlement_expires_at": "2026-07-05T01:39:51+00:00",
+                "supply_chain_firewall": True,
+                "supply_chain_plan_id": "pro",
+            },
+            workspace_id="workspace-1",
+        ),
+        now="2026-06-05T01:39:51+00:00",
+    )
+
+    entitlement = resolve_package_firewall_entitlement(store)
+    assert payload["status"] == "connected"
+    assert entitlement == {
+        "allowed": True,
+        "reason": "paid_oauth_entitlement_active",
+        "tier": "pro",
+        "upgrade_cta": None,
+    }
