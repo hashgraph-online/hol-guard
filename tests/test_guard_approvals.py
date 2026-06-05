@@ -1873,6 +1873,28 @@ class TestGuardApprovals:
         assert url_token_events[-1]["payload"]["path"] == "/v1/events/stream"
         assert url_token_events[-1]["payload"]["has_query_token"] is True
 
+    def test_guard_daemon_event_stream_rejects_non_ascii_query_token(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/events/stream?token={urllib.parse.quote('ñ')}",
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=5):
+                    raise AssertionError("expected HTTPError for non-ASCII query-token event stream auth")
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+        finally:
+            daemon.stop()
+
+        assert status == 401
+        assert payload["error"] == "unauthorized"
+
     def test_guard_daemon_ignores_invalid_json_body(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
