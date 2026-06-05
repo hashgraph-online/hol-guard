@@ -16201,6 +16201,13 @@ def test_policy_bundle_version_persists_after_store_reopen(tmp_path):
     }
 
 
+def test_policy_bundle_downgrade_check_ignores_mixed_timezone_formats():
+    assert guard_runner_module._policy_bundle_is_version_downgrade(
+        {"issuedAt": "2026-06-05T13:30:00+00:00"},
+        {"issuedAt": "2026-06-05T13:29:00"},
+    ) is False
+
+
 def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
