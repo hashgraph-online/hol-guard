@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
+from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
 from ..store import GuardStore
 from .oauth_client import (
     GuardDpopKeyMaterial,
@@ -88,6 +89,7 @@ class GuardOAuthTokenExchangeResult:
     token_type: str
     grant_id: str | None
     machine_id: str | None
+    supply_chain_entitlement: dict[str, object] | None
     workspace_id: str | None
 
 
@@ -401,6 +403,10 @@ def _parse_guard_token_exchange_payload(payload: dict[str, object]) -> GuardOAut
         token_type=token_type,
         grant_id=_read_nested_string(claims, "grant", "grantId"),
         machine_id=_read_nested_string(claims, "machine", "machineId"),
+        supply_chain_entitlement=build_oauth_package_firewall_entitlement(
+            payload,
+            now=datetime.now(timezone.utc),
+        ),
         workspace_id=_read_nested_string(claims, "workspace", "workspaceId"),
     )
 
@@ -722,6 +728,7 @@ def _persist_oauth_local_credentials(
     now: str,
     grant_id: str | None = None,
     machine_id: str | None = None,
+    supply_chain_entitlement: dict[str, object] | None = None,
     workspace_id: str | None = None,
     runtime_id: str | None = None,
     runtime_label: str | None = None,
@@ -735,6 +742,24 @@ def _persist_oauth_local_credentials(
         dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
         grant_id=grant_id,
         machine_id=machine_id,
+        supply_chain_entitlement_expires_at=(
+            str(supply_chain_entitlement.get("supply_chain_entitlement_expires_at"))
+            if isinstance(supply_chain_entitlement, dict)
+            and isinstance(supply_chain_entitlement.get("supply_chain_entitlement_expires_at"), str)
+            else None
+        ),
+        supply_chain_firewall=(
+            bool(supply_chain_entitlement.get("supply_chain_firewall"))
+            if isinstance(supply_chain_entitlement, dict)
+            and isinstance(supply_chain_entitlement.get("supply_chain_firewall"), bool)
+            else None
+        ),
+        supply_chain_plan_id=(
+            str(supply_chain_entitlement.get("supply_chain_plan_id"))
+            if isinstance(supply_chain_entitlement, dict)
+            and isinstance(supply_chain_entitlement.get("supply_chain_plan_id"), str)
+            else None
+        ),
         workspace_id=workspace_id,
         runtime_id=runtime_id,
         runtime_label=runtime_label,
@@ -783,6 +808,7 @@ def run_guard_disconnect_command(
             dpop_key_material=dpop_key_material,
             grant_id=_read_nested_string(credentials, "grant_id"),
             machine_id=_read_nested_string(credentials, "machine_id"),
+            supply_chain_entitlement=token_result.supply_chain_entitlement,
             workspace_id=workspace_id,
             runtime_id=_read_nested_string(credentials, "runtime_id"),
             runtime_label=_read_nested_string(credentials, "runtime_label"),
@@ -874,6 +900,7 @@ def run_guard_device_connect_command(
         dpop_key_material=dpop_key_material,
         grant_id=token_result.grant_id,
         machine_id=token_result.machine_id,
+        supply_chain_entitlement=token_result.supply_chain_entitlement,
         workspace_id=token_result.workspace_id,
         runtime_id=HEADLESS_RUNTIME_ID,
         runtime_label=HEADLESS_RUNTIME_LABEL,
@@ -938,6 +965,7 @@ def run_guard_browser_connect_command(
         dpop_key_material=session.dpop_key_material,
         grant_id=token_result.grant_id,
         machine_id=token_result.machine_id,
+        supply_chain_entitlement=token_result.supply_chain_entitlement,
         workspace_id=token_result.workspace_id,
         runtime_id=HEADLESS_RUNTIME_ID,
         runtime_label=HEADLESS_RUNTIME_LABEL,

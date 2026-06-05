@@ -37,6 +37,7 @@ from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
@@ -1797,6 +1798,10 @@ def _refresh_guard_oauth_access_token(
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
     return {
         "access_token": access_token,
+        "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
+            payload,
+            now=datetime.now(timezone.utc),
+        ),
         "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
     }
 
@@ -1824,6 +1829,7 @@ def _persist_rotated_oauth_refresh_token(
     *,
     store: GuardStore,
     credentials: dict[str, object],
+    package_firewall_entitlement: dict[str, object] | None = None,
     refresh_token: str,
 ) -> None:
     issuer = _optional_string(credentials.get("issuer"))
@@ -1848,6 +1854,26 @@ def _persist_rotated_oauth_refresh_token(
         dpop_public_jwk_thumbprint=dpop_public_jwk_thumbprint,
         grant_id=_optional_string(credentials.get("grant_id")),
         machine_id=_optional_string(credentials.get("machine_id")),
+        supply_chain_entitlement_expires_at=(
+            _optional_string(package_firewall_entitlement.get("supply_chain_entitlement_expires_at"))
+            if isinstance(package_firewall_entitlement, dict)
+            else _optional_string(credentials.get("supply_chain_entitlement_expires_at"))
+        ),
+        supply_chain_firewall=(
+            package_firewall_entitlement.get("supply_chain_firewall")
+            if isinstance(package_firewall_entitlement, dict)
+            and isinstance(package_firewall_entitlement.get("supply_chain_firewall"), bool)
+            else (
+                credentials.get("supply_chain_firewall")
+                if isinstance(credentials.get("supply_chain_firewall"), bool)
+                else None
+            )
+        ),
+        supply_chain_plan_id=(
+            _optional_string(package_firewall_entitlement.get("supply_chain_plan_id"))
+            if isinstance(package_firewall_entitlement, dict)
+            else _optional_string(credentials.get("supply_chain_plan_id"))
+        ),
         workspace_id=_optional_string(credentials.get("workspace_id")),
         now=_now(),
     )
@@ -1874,10 +1900,16 @@ def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
             dpop_key_material=dpop_key_material,
         )
         rotated_refresh_token = str(refreshed["refresh_token"])
-        if rotated_refresh_token != refresh_token:
+        package_firewall_entitlement = (
+            refreshed["package_firewall_entitlement"]
+            if isinstance(refreshed.get("package_firewall_entitlement"), dict)
+            else None
+        )
+        if rotated_refresh_token != refresh_token or package_firewall_entitlement is not None:
             _persist_rotated_oauth_refresh_token(
                 store=store,
                 credentials=oauth_credentials,
+                package_firewall_entitlement=package_firewall_entitlement,
                 refresh_token=rotated_refresh_token,
             )
         sync_url = _validate_guard_sync_url(
@@ -2296,7 +2328,7 @@ def _normalized_receipts_sync_url(sync_url: str) -> str:
             (
                 parsed.scheme,
                 parsed.netloc,
-                "/api/guard/receipts/sync",
+                "/registry/api/v1/guard/receipts/sync",
                 parsed.query,
                 "",
             )
