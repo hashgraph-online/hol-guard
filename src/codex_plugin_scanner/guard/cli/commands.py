@@ -3674,14 +3674,18 @@ def run_guard_command(
                 return 0
             if codex_browser_decision == "block":
                 policy_action = "block"
+            approval_context = _native_approval_center_context(response_payload, harness=args.harness)
+            raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
             if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
-                _emit_native_hook_block_stderr(
-                    _native_hook_reason_for_harness(
+                if _canonical_harness_name(args.harness) == "codex" and approval_context is not None:
+                    native_block_reason = _native_hook_reason(raw_runtime_reason, approval_context)
+                else:
+                    native_block_reason = _native_hook_reason_for_harness(
                         args.harness,
-                        _runtime_artifact_native_reason(runtime_artifact, response_payload),
-                        _native_approval_center_context(response_payload, harness=args.harness),
+                        raw_runtime_reason,
+                        approval_context,
                     )
-                )
+                _emit_native_hook_block_stderr(native_block_reason)
                 _record_harness_usage_for_hook(
                     store=store,
                     action_envelope=action_envelope,
@@ -3689,17 +3693,18 @@ def run_guard_command(
                     policy_action=policy_action,
                 )
                 return 2
-            raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
-            if _canonical_harness_name(args.harness) == "codex" and event_name == "UserPromptSubmit":
+            if _canonical_harness_name(args.harness) == "codex" and (
+                event_name == "UserPromptSubmit" or approval_context is not None
+            ):
                 runtime_reason = _native_hook_reason(
                     raw_runtime_reason,
-                    _native_approval_center_context(response_payload, harness=args.harness),
+                    approval_context,
                 )
             else:
                 runtime_reason = _native_hook_reason_for_harness(
                     args.harness,
                     raw_runtime_reason,
-                    _native_approval_center_context(response_payload, harness=args.harness),
+                    approval_context,
                 )
             if _should_emit_claude_native_pretooluse_notice(
                 args,
@@ -5092,6 +5097,8 @@ def _ensure_terminal_punctuation(message: str) -> str:
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)
     if harness != "codex":
+        return reason
+    if "open hol guard to approve or keep this blocked:" in reason.lower():
         return reason
     if "approve it in hol guard, then retry." in reason.lower():
         return reason

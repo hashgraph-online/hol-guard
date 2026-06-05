@@ -14,7 +14,6 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from hashlib import pbkdf2_hmac, sha256
 from pathlib import Path
 from typing import Protocol
@@ -339,6 +338,9 @@ class KeychainSecretStore:
 class SystemKeyringSecretStore:
     """Cross-platform OS credential store backed by the Python keyring library."""
 
+    _MACOS_KEYCHAIN_HEALTH_CACHE_TTL_SECONDS = 5.0
+    _macos_keychain_health_cache: tuple[float, bool] | None = None
+
     def __init__(self, service_name: str) -> None:
         self.service_name = service_name
 
@@ -347,8 +349,17 @@ class SystemKeyringSecretStore:
         return importlib.import_module("keyring")
 
     @staticmethod
-    @lru_cache(maxsize=1)
     def _macos_default_keychain_path() -> Path | None:
+        result = SystemKeyringSecretStore._run_macos_security_command("default-keychain", "-d", "user")
+        if result is None:
+            return None
+        raw_path = result.stdout.strip().strip('"').strip("'")
+        if not raw_path:
+            return None
+        return Path(raw_path).expanduser()
+
+    @staticmethod
+    def _run_macos_security_command(*args: str) -> subprocess.CompletedProcess[str] | None:
         if sys.platform != "darwin":
             return None
         security_path = Path("/usr/bin/security")
@@ -356,7 +367,7 @@ class SystemKeyringSecretStore:
             return None
         try:
             result = subprocess.run(
-                [str(security_path), "default-keychain"],
+                [str(security_path), *args],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -364,17 +375,64 @@ class SystemKeyringSecretStore:
             )
         except Exception:
             return None
-        if result.returncode != 0:
-            return None
-        raw_path = result.stdout.strip().strip('"').strip("'")
-        if not raw_path:
-            return None
-        return Path(raw_path).expanduser()
+        return result if result.returncode == 0 else None
+
+    @classmethod
+    def _macos_user_keychain_paths(cls) -> tuple[Path, ...]:
+        result = cls._run_macos_security_command("list-keychains", "-d", "user")
+        if result is None:
+            return ()
+        paths: list[Path] = []
+        for line in result.stdout.splitlines():
+            raw_path = line.strip().strip('"').strip("'")
+            if raw_path:
+                paths.append(Path(raw_path).expanduser())
+        return tuple(paths)
+
+    @classmethod
+    def _macos_keychain_path_is_usable(cls, path: Path | None) -> bool:
+        if path is None:
+            return False
+        expanded = path.expanduser()
+        if not expanded.exists():
+            return False
+        return cls._run_macos_security_command("show-keychain-info", str(expanded)) is not None
+
+    @staticmethod
+    def _normalized_macos_keychain_path(path: Path) -> str:
+        return os.path.realpath(os.fspath(path.expanduser()))
+
+    @classmethod
+    def _clear_macos_keychain_health_cache(cls) -> None:
+        cls._macos_keychain_health_cache = None
+
+    @classmethod
+    def _macos_default_keychain_is_usable_uncached(cls) -> bool:
+        path = cls._macos_default_keychain_path()
+        if path is None:
+            return False
+        user_keychain_paths = cls._macos_user_keychain_paths()
+        if not user_keychain_paths:
+            return False
+        normalized_default = cls._normalized_macos_keychain_path(path)
+        normalized_user_paths: dict[str, Path] = {}
+        for item in user_keychain_paths:
+            normalized_user_paths.setdefault(cls._normalized_macos_keychain_path(item), item)
+        if normalized_default not in normalized_user_paths:
+            return False
+        return all(cls._macos_keychain_path_is_usable(item) for item in normalized_user_paths.values())
 
     @classmethod
     def _macos_default_keychain_is_usable(cls) -> bool:
-        path = cls._macos_default_keychain_path()
-        return path is not None and path.exists()
+        if sys.platform != "darwin":
+            return False
+        cached = cls._macos_keychain_health_cache
+        now = time.monotonic()
+        if cached is not None and (now - cached[0]) < cls._MACOS_KEYCHAIN_HEALTH_CACHE_TTL_SECONDS:
+            return cached[1]
+        result = cls._macos_default_keychain_is_usable_uncached()
+        cls._macos_keychain_health_cache = (now, result)
+        return result
 
     @classmethod
     def _is_available(cls) -> bool:
