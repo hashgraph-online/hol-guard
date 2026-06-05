@@ -146,7 +146,7 @@ export function FeedHealthWorkspace({ snapshot, onOpenSettings }: FeedHealthWork
             <div>
               <p className="text-sm font-semibold text-brand-dark">Full feed syncing</p>
               <p className="text-xs text-slate-600 mt-0.5">
-                Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly.
+                Guard Cloud is connected. Local Guard is finishing the first shared proof automatically.
               </p>
             </div>
           </div>
