@@ -176,6 +176,36 @@ def test_cursor_editor_install_includes_native_hooks(tmp_path: Path) -> None:
     assert not (context.workspace_dir / ".cursor" / "hooks.json").exists()
 
 
+def test_legacy_cleanup_preserves_unrelated_hook_entries(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    assert context.workspace_dir is not None
+    legacy_hooks = context.workspace_dir / ".cursor" / "hooks.json"
+    legacy_script = context.workspace_dir / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    legacy_hooks.parent.mkdir(parents=True, exist_ok=True)
+    legacy_script.parent.mkdir(parents=True, exist_ok=True)
+    legacy_script.write_text(f'"""Managed by HOL Guard."""\n{HOOK_SCRIPT_NAME}\n', encoding="utf-8")
+    legacy_hooks.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "hooks": {
+                    "afterFileEdit": [{"command": "./fmt.sh"}],
+                    "beforeShellExecution": [
+                        {"command": str(legacy_script.resolve()), "timeout": 35, "failClosed": True}
+                    ],
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    install_cursor_hooks(context)
+
+    payload = json.loads(legacy_hooks.read_text(encoding="utf-8"))
+    assert payload["hooks"] == {"afterFileEdit": [{"command": "./fmt.sh"}]}
+
+
 def test_install_cursor_hooks_removes_legacy_project_hooks(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
     assert context.workspace_dir is not None

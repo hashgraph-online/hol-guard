@@ -220,18 +220,18 @@ def _uninstall_cursor_hooks_at_paths(
         backup_path.unlink()
     if restored and state_path.is_file():
         state_path.unlink()
-    if (
-        not restored
-        and hooks_path.is_file()
-        and script_path.is_file()
-        and _is_managed_hook_script(script_path.read_text(encoding="utf-8"))
-    ):
-        hooks_path.unlink()
-        restored = True
-        if state_path.is_file():
-            state_path.unlink()
-    if script_path.is_file() and _is_managed_hook_script(script_path.read_text(encoding="utf-8")):
-        script_path.unlink()
+    if not restored and hooks_path.is_file():
+        if _remove_managed_hook_entries(hooks_path=hooks_path, script_path=script_path):
+            restored = True
+            if state_path.is_file():
+                state_path.unlink()
+    if script_path.is_file():
+        try:
+            script_source = script_path.read_text(encoding="utf-8")
+        except OSError:
+            script_source = ""
+        if _is_managed_hook_script(script_source):
+            script_path.unlink()
     if remove_managed_copy:
         managed_script_path = managed_hook_script_path(context)
         if managed_script_path.is_file():
@@ -256,17 +256,18 @@ def _cleanup_legacy_project_cursor_hooks(context: HarnessContext) -> None:
             payload = json.loads(hooks_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             payload = {}
-        hooks = payload.get("hooks")
-        if isinstance(hooks, dict):
-            for entries in hooks.values():
-                if not isinstance(entries, list):
-                    continue
-                for entry in entries:
-                    if _is_managed_hook_entry(entry, command=str(script_path.resolve())):
-                        managed = True
+        if isinstance(payload, dict):
+            hooks = payload.get("hooks")
+            if isinstance(hooks, dict):
+                for entries in hooks.values():
+                    if not isinstance(entries, list):
+                        continue
+                    for entry in entries:
+                        if _is_managed_hook_entry(entry, command=str(script_path.resolve())):
+                            managed = True
+                            break
+                    if managed:
                         break
-                if managed:
-                    break
     if not managed:
         return
     _uninstall_cursor_hooks_at_paths(
@@ -294,7 +295,48 @@ def _prune_empty_project_cursor_dir(workspace_dir: Path) -> None:
     except OSError:
         return
     if not remaining:
-        cursor_dir.rmdir()
+        try:
+            cursor_dir.rmdir()
+        except OSError:
+            return
+
+
+def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool:
+    try:
+        payload = json.loads(hooks_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    hooks = payload.get("hooks")
+    has_managed_hooks = False
+    has_other_hooks = False
+    if not isinstance(hooks, dict):
+        return False
+    cleaned_hooks: dict[str, object] = {}
+    managed_command = str(script_path.resolve())
+    for event, entries in hooks.items():
+        if isinstance(entries, list):
+            filtered: list[object] = []
+            for entry in entries:
+                if _is_managed_hook_entry(entry, command=managed_command):
+                    has_managed_hooks = True
+                else:
+                    filtered.append(entry)
+            if filtered:
+                cleaned_hooks[str(event)] = filtered
+                has_other_hooks = True
+        else:
+            cleaned_hooks[str(event)] = entries
+            has_other_hooks = True
+    if not has_managed_hooks:
+        return False
+    if has_other_hooks:
+        payload["hooks"] = cleaned_hooks
+        hooks_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    else:
+        hooks_path.unlink()
+    return True
 
 
 def _resolve_guard_cli_command() -> list[str]:
