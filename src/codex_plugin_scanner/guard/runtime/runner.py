@@ -847,9 +847,7 @@ def sync_receipts(
 ) -> dict[str, object]:
     """Push local receipts to the configured sync endpoint."""
 
-    resolved_auth_context = (
-        auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    )
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     sync_url = _normalized_receipts_sync_url(resolved_auth_context["sync_url"])
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
@@ -1312,9 +1310,7 @@ def sync_guard_events(
 ) -> dict[str, object]:
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
-    resolved_auth_context = (
-        auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    )
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     sync_url = _guard_events_sync_url(resolved_auth_context["sync_url"])
     previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
