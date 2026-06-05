@@ -1,5 +1,5 @@
-import { r as reactExports, D as fetchSettings, ap as runAuditRemediation, a9 as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, W as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, a as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton, v as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
-import { A as ApprovalProofModal } from "./approval-proof-modal.js";
+import { r as reactExports, ap as runAuditRemediation, a9 as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, W as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, a as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton, v as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
+import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -125,23 +125,7 @@ function AuditWorkspace({ snapshot, receipts, approvalGate }) {
   const [pendingRemediation, setPendingRemediation] = reactExports.useState(null);
   const [runningRemediationId, setRunningRemediationId] = reactExports.useState(null);
   const [remediationMessages, setRemediationMessages] = reactExports.useState({});
-  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(approvalGate);
-  reactExports.useEffect(() => {
-    setResolvedApprovalGate(approvalGate);
-  }, [approvalGate]);
-  const resolveApprovalGate = reactExports.useCallback(async () => {
-    if (resolvedApprovalGate !== null) {
-      return resolvedApprovalGate;
-    }
-    try {
-      const payload = await fetchSettings();
-      const gate = payload.settings.approval_gate ?? null;
-      setResolvedApprovalGate(gate);
-      return gate;
-    } catch {
-      return null;
-    }
-  }, [resolvedApprovalGate]);
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
   const handleSearchChange = reactExports.useCallback((e) => {
     setFilter((f) => ({ ...f, searchQuery: e.target.value }));
   }, []);

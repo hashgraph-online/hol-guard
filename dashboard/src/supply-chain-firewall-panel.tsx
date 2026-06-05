@@ -12,7 +12,6 @@ import type {
   PackageFirewallActionType,
 } from "./guard-types";
 import {
-  fetchSettings,
   fetchPackageFirewallStatus,
   GuardHarnessActionError,
   runPackageFirewallAction,
@@ -22,6 +21,7 @@ import {
 import { FreeUserView, ActionResultPanel } from "./supply-chain-firewall-views";
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import { ManagerActionCard } from "./supply-chain-manager-card";
+import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 
 type PanelLoadState =
   | { phase: "loading" }
@@ -270,12 +270,7 @@ export function PackageFirewallPanel(props: {
   const [lastFailed, setLastFailed] = useState<FailedOp | null>(null);
   const [confirmRemoveManager, setConfirmRemoveManager] = useState<string | null>(null);
   const [pendingApprovalOp, setPendingApprovalOp] = useState<ApprovalOp | null>(null);
-  const [resolvedApprovalGate, setResolvedApprovalGate] =
-    useState<GuardApprovalGatePublicConfig | null>(approvalGate);
-
-  useEffect(() => {
-    setResolvedApprovalGate(approvalGate);
-  }, [approvalGate]);
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
 
   const load = useCallback(async () => {
     setPanelLoad({ phase: "loading" });
@@ -303,20 +298,6 @@ export function PackageFirewallPanel(props: {
       setPanelLoad({ phase: "error", message });
     }
   }, []);
-
-  const resolveApprovalGate = useCallback(async () => {
-    if (resolvedApprovalGate !== null) {
-      return resolvedApprovalGate;
-    }
-    try {
-      const payload = await fetchSettings();
-      const gate = payload.settings.approval_gate ?? null;
-      setResolvedApprovalGate(gate);
-      return gate;
-    } catch {
-      return null;
-    }
-  }, [resolvedApprovalGate]);
 
   const handleAction = useCallback(
     async (

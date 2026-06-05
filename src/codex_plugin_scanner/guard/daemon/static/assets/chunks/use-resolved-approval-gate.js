@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, D as fetchSettings } from "../guard-dashboard.js";
 function ApprovalProofModal(props) {
   const { title, detail, confirmLabel, approvalGate, onCancel, onConfirm } = props;
   const [password, setPassword] = reactExports.useState("");
@@ -53,6 +53,27 @@ function ApprovalProofModal(props) {
     ] })
   ] }) });
 }
+function useResolvedApprovalGate(initialGate) {
+  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(initialGate);
+  reactExports.useEffect(() => {
+    setResolvedApprovalGate(initialGate);
+  }, [initialGate]);
+  const resolveApprovalGate = reactExports.useCallback(async () => {
+    if (resolvedApprovalGate !== null) {
+      return resolvedApprovalGate;
+    }
+    try {
+      const payload = await fetchSettings();
+      const gate = payload.settings.approval_gate ?? null;
+      setResolvedApprovalGate(gate);
+      return gate;
+    } catch {
+      return null;
+    }
+  }, [resolvedApprovalGate]);
+  return { resolvedApprovalGate, resolveApprovalGate };
+}
 export {
-  ApprovalProofModal as A
+  ApprovalProofModal as A,
+  useResolvedApprovalGate as u
 };
