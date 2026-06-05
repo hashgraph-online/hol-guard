@@ -84,6 +84,12 @@ from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
+    _guard_device_metadata,
+    _build_policy_bundle_decisions,
+    _daemon_version_supported,
+    _policy_bundle_acknowledgement_payload,
+    _policy_bundle_is_version_downgrade,
+    _validated_policy_bundle_payload,
     sync_receipts,
     sync_supply_chain_bundle,
 )
@@ -1206,11 +1212,82 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "unknown_harness"}, status=404)
             return
         policy_memory = self._policy_memory_payload(payload.get("policy_memory"))
-        if not policy_memory:
+        policy_bundle = self._policy_memory_payload(payload.get("policy_bundle") or payload.get("policyBundle"))
+        validated_policy_bundle: dict[str, object] | None = None
+        applied_bundle_hash: str | None = None
+        applied_bundle_version: str | None = None
+        if not policy_memory and not policy_bundle:
             self._write_json({"error": "missing_policy_memory"}, status=400)
             return
+        if policy_bundle:
+            validated_policy_bundle, rejection_reason = _validated_policy_bundle_payload(policy_bundle)
+            existing_policy_bundle_payload = self.server.store.get_sync_payload("policy_bundle")  # type: ignore[attr-defined]
+            existing_policy_bundle = (
+                existing_policy_bundle_payload if isinstance(existing_policy_bundle_payload, dict) else None
+            )
+            if validated_policy_bundle is None:
+                self._write_json({"error": rejection_reason or "invalid_policy_bundle"}, status=400)
+                return
+            if not _daemon_version_supported(validated_policy_bundle):
+                self._write_json({"error": "unsupported_daemon_version"}, status=400)
+                return
+            if _policy_bundle_is_version_downgrade(existing_policy_bundle, validated_policy_bundle):
+                self._write_json({"error": "bundle_version_downgrade"}, status=400)
+                return
+            applied_at = _now()
+            self.server.store.set_sync_payload("policy_bundle", validated_policy_bundle, applied_at)  # type: ignore[attr-defined]
+            self.server.store.set_sync_payload("policy_bundle_last_good", validated_policy_bundle, applied_at)  # type: ignore[attr-defined]
+            device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
+            self.server.store.set_sync_payload(  # type: ignore[attr-defined]
+                "policy_bundle_ack",
+                _policy_bundle_acknowledgement_payload(
+                    device_id=device_id,
+                    device_name=device_name,
+                    policy_bundle=validated_policy_bundle,
+                    synced_at=applied_at,
+                ),
+                applied_at,
+            )
+            existing_remote_decisions = [
+                PolicyDecision(
+                    harness=str(item["harness"]),
+                    scope=item["scope"],  # type: ignore[arg-type]
+                    action=item["action"],  # type: ignore[arg-type]
+                    artifact_id=self._optional_string(item.get("artifact_id")),
+                    artifact_hash=self._optional_string(item.get("artifact_hash")),
+                    workspace=self._optional_string(item.get("workspace")),
+                    publisher=self._optional_string(item.get("publisher")),
+                    reason=self._optional_string(item.get("reason")),
+                    owner=self._optional_string(item.get("owner")),
+                    source=str(item.get("source") or "cloud-sync"),
+                    expires_at=self._optional_string(item.get("expires_at")),
+                )
+                for item in self.server.store.list_policy_decisions()  # type: ignore[attr-defined]
+                if item.get("source") in {"cloud-sync", "team-policy"}
+            ]
+            existing_remote_decisions.extend(
+                _build_policy_bundle_decisions(
+                    validated_policy_bundle,
+                    device_id=device_id,
+                    device_name=device_name,
+                )
+            )
+            self.server.store.replace_remote_policies(existing_remote_decisions, applied_at)  # type: ignore[attr-defined]
+            applied_bundle_hash = str(validated_policy_bundle["bundleHash"])
+            applied_bundle_version = str(validated_policy_bundle["bundleVersion"])
         scope = self._optional_string(policy_memory.get("scope"))
         action = self._optional_string(policy_memory.get("action"))
+        if not policy_memory:
+            self._write_json(
+                {
+                    "bundle_hash": applied_bundle_hash,
+                    "bundle_version": applied_bundle_version,
+                    "harness": adapter.harness,
+                    "operation": "policy_sync",
+                    "status": "completed",
+                }
+            )
+            return
         if scope is None or action is None:
             self._write_json({"error": "missing_policy_fields"}, status=400)
             return
@@ -1270,6 +1347,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         self._write_json(
             {
+                "bundle_hash": applied_bundle_hash,
+                "bundle_version": applied_bundle_version,
                 "harness": adapter.harness,
                 "operation": "policy_sync",
                 "receipt": receipt,

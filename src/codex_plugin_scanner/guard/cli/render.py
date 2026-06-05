@@ -2166,6 +2166,14 @@ def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:
         body.add_row("Sync endpoint", str(payload.get("sync_url")))
     if payload.get("last_sync_at"):
         body.add_row("Last sync", str(payload.get("last_sync_at")))
+    if payload.get("cloud_policy_bundle_version"):
+        body.add_row("Cloud policy", str(payload.get("cloud_policy_bundle_version")))
+    if payload.get("cloud_policy_bundle_hash"):
+        body.add_row("Bundle hash", str(payload.get("cloud_policy_bundle_hash")))
+    if payload.get("cloud_policy_rollout_state"):
+        body.add_row("Rollout", str(payload.get("cloud_policy_rollout_state")))
+    if payload.get("cloud_policy_sync_error"):
+        body.add_row("Policy sync", str(payload.get("cloud_policy_sync_error")))
     body.add_row("Cached advisories", str(payload.get("advisory_count") or 0))
     if payload.get("advisory_headline"):
         body.add_row("Latest advisory", str(payload.get("advisory_headline")))
