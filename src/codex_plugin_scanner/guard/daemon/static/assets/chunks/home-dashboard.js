@@ -96,7 +96,7 @@ function HomeProtectionModule({
             ] })
           ] }),
           (status === "unprotected" || status === "unknown") && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: onOpenFleet, variant: "secondary", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: onOpenSupplyChain ?? onOpenFleet, variant: "secondary", children: [
               "Set up protection",
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
             ] }),

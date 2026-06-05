@@ -179,7 +179,7 @@ export function HomeProtectionModule({
 
           {(status === "unprotected" || status === "unknown") && (
             <div className="flex items-center gap-3">
-              <ActionButton onClick={onOpenFleet} variant="secondary">
+              <ActionButton onClick={onOpenSupplyChain ?? onOpenFleet} variant="secondary">
                 Set up protection
                 <HiMiniArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
               </ActionButton>

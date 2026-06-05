@@ -31,6 +31,7 @@ def build_receipt(
     scanner_evidence: Sequence[Mapping[str, object]] = (),
     diff_summary: str | None = None,
     approval_source: str | None = None,
+    action_envelope_json: Mapping[str, object] | None = None,
 ) -> GuardReceipt:
     """Create a runtime receipt."""
 
@@ -53,5 +54,6 @@ def build_receipt(
         source_scope=source_scope,
         diff_summary=resolved_diff_summary,
         approval_source=approval_source,
+        action_envelope_json=dict(action_envelope_json) if action_envelope_json is not None else None,
         scanner_evidence=tuple(dict(item) for item in scanner_evidence),
     )

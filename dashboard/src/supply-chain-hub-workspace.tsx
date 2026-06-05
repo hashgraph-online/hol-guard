@@ -61,7 +61,7 @@ export function SupplyChainHubWorkspace(props: {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Trust Center</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Supply chain</p>
           <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{hubTitleForTab(tab)}</h1>
         </div>
         <TabBar tabs={hubTabs} active={tab} onChange={handleTabChange} />
