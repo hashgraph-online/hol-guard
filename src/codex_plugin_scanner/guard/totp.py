@@ -30,6 +30,8 @@ class TotpSecretStore:
         if self._fernet is not None:
             return
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        # Owner-only directory access is required for encrypted TOTP seed storage.
+        # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
         os.chmod(self.base_dir, 0o700)
         if not self.key_path.exists():
             self._atomic_write_bytes(self.key_path, Fernet.generate_key(), 0o600)
