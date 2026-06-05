@@ -135,3 +135,45 @@ def test_finalize_guard_connect_payload_keeps_reauth_failures_in_retry_required_
     assert payload["sync_succeeded"] is False
     assert payload["sync_error"] == "reauth required"
     assert payload["repair_message"] == "Run hol-guard connect again to refresh Guard Cloud authorization."
+
+
+def test_headless_first_sync_auth_expiry_marks_connect_state_for_repair(tmp_path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    now = "2026-06-04T12:00:00+00:00"
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now=now,
+    )
+    queued_calls: list[str] = []
+
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {"sync_url": "https://hol.org/api/guard/receipts/sync"},
+    )
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "healthy"},
+    )
+
+    def _raise_auth_expired(_store: GuardStore) -> dict[str, object]:
+        raise guard_commands_module.GuardSyncAuthorizationExpiredError("reauth required")
+
+    def _record_queue(*, store: GuardStore) -> dict[str, object]:
+        queued_calls.append(str(store.guard_home))
+        return {"status": "queued", "message": "Guard Cloud sync started."}
+
+    monkeypatch.setattr(daemon_server_module, "sync_receipts", _raise_auth_expired)
+    monkeypatch.setattr(daemon_server_module, "_queue_headless_cloud_sync", _record_queue)
+
+    daemon_server_module._run_headless_cloud_sync(store=store)
+
+    latest_state = store.get_effective_guard_connect_state(now="2026-06-04T12:05:00+00:00")
+    assert latest_state is not None
+    assert latest_state["status"] == "retry_required"
+    assert latest_state["milestone"] == "first_sync_failed"
+    assert latest_state["reason"] == "reauth required"
+    assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) is None
+    assert queued_calls == []
