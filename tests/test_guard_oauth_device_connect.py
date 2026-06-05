@@ -1503,6 +1503,7 @@ def test_browser_connect_persists_local_oauth_credentials(tmp_path: Path) -> Non
             grant_id="grant-123",
             machine_id="machine-123",
             workspace_id="workspace-123",
+            supply_chain_entitlement=None,
         )
 
     payload = connect_flow.run_guard_browser_connect_command(
