@@ -16184,6 +16184,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
 
 def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync",
         "guard-live-token",
@@ -16216,6 +16217,11 @@ def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
 
     payload = guard_runner_module.sync_runtime_session(
         store,
+        auth_context={
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "oauth-access-token-1",
+            "dpop_key_material": dpop_key_material,
+        },
         session={
             "session_id": "session-1",
             "harness": "hermes",
@@ -16238,6 +16244,7 @@ def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
 
 def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync",
         "guard-live-token",
@@ -16273,6 +16280,11 @@ def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypa
 
     payload = guard_runner_module.sync_runtime_session(
         store,
+        auth_context={
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "oauth-access-token-1",
+            "dpop_key_material": dpop_key_material,
+        },
         session={
             "session_id": "session-read-timeout",
             "harness": "hermes",
@@ -16535,6 +16547,7 @@ def test_sign_guard_dpop_proof_sets_access_token_hash_claim() -> None:
     expected_ath = guard_runner_module._base64url_encode(hashlib.sha256(access_token.encode("ascii")).digest())
 
     assert claims["ath"] == expected_ath
+
 
 def test_sync_receipts_uses_distinct_dpop_proofs_per_batch(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
@@ -17691,3 +17704,202 @@ def test_codex_read_only_source_inspection_rejects_malformed_chains(tmp_path: Pa
             command,
             cwd=workspace_dir,
         )
+
+
+def test_sign_guard_dpop_proof_sets_nonce_claim() -> None:
+    dpop_key_material = generate_dpop_key_pair()
+
+    proof = guard_runner_module._sign_guard_dpop_proof(
+        request_url="https://hol.org/api/guard/runtime/sessions/sync",
+        method="POST",
+        dpop_key_material=dpop_key_material,
+        nonce="nonce-123",
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    claims = _decode_jwt_segment(proof.split(".")[1])
+
+    assert claims["nonce"] == "nonce-123"
+
+
+def test_sync_runtime_session_retries_with_dpop_nonce_challenge(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    captured_requests: list[urllib.request.Request] = []
+    challenge_nonce = "nonce-runtime"
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        del timeout
+        captured_requests.append(request)
+        if len(captured_requests) == 1:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                401,
+                "Unauthorized",
+                {"DPoP-Nonce": challenge_nonce},
+                io.BytesIO(b"{}"),
+            )
+        assert request.full_url == "https://hol.org/api/guard/runtime/sessions/sync"
+        assert _request_header(request, "Authorization") == "Bearer oauth-access-token-1"
+        assert isinstance(_request_header(request, "DPoP"), str) and _request_header(request, "DPoP")
+        return _Response(
+            {
+                "generatedAt": "2026-06-01T00:00:10+00:00",
+                "items": [{"status": "accepted"}],
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_runtime_session(
+        store,
+        auth_context={
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "oauth-access-token-1",
+            "dpop_key_material": dpop_key_material,
+        },
+        session={
+            "session_id": "session-oauth",
+            "harness": "codex",
+            "surface": "cli",
+            "status": "active",
+            "client_name": "Codex",
+            "client_title": "Codex CLI",
+            "client_version": "1.0.0",
+            "workspace": "prod",
+            "capabilities": ["chat"],
+            "started_at": "2026-06-01T00:00:00+00:00",
+            "updated_at": "2026-06-01T00:00:00+00:00",
+            "operations": [],
+        },
+    )
+
+    first_claims = _decode_jwt_segment(_request_header(captured_requests[0], "DPoP").split(".")[1])
+    second_claims = _decode_jwt_segment(_request_header(captured_requests[1], "DPoP").split(".")[1])
+
+    assert len(captured_requests) == 2
+    assert "nonce" not in first_claims
+    assert second_claims["nonce"] == challenge_nonce
+    assert payload["runtime_session_id"] == "session-oauth"
+
+
+def test_sync_runtime_session_refresh_retries_with_dpop_nonce_challenge(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    captured_requests: list[urllib.request.Request] = []
+    challenge_nonce = "nonce-refresh"
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        del timeout
+        captured_requests.append(request)
+        if request.full_url == "https://hol.org/api/guard/oauth/token":
+            if len([item for item in captured_requests if item.full_url == request.full_url]) == 1:
+                raise urllib.error.HTTPError(
+                    request.full_url,
+                    401,
+                    "Unauthorized",
+                    {"DPoP-Nonce": challenge_nonce},
+                    io.BytesIO(b"{}"),
+                )
+            body = urllib.parse.parse_qs(request.data.decode("utf-8"))
+            assert body["grant_type"] == ["refresh_token"]
+            assert body["client_id"] == ["guard-local-daemon"]
+            assert body["refresh_token"] == ["refresh-token-1"]
+            return _Response(
+                {
+                    "access_token": "oauth-access-token-1",
+                    "refresh_token": "refresh-token-2",
+                    "token_type": "DPoP",
+                    "expires_in": 3600,
+                }
+            )
+        assert request.full_url == "https://hol.org/api/guard/runtime/sessions/sync"
+        return _Response(
+            {
+                "generatedAt": "2026-06-01T00:00:10+00:00",
+                "items": [{"status": "accepted"}],
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "session_id": "session-oauth",
+            "harness": "codex",
+            "surface": "cli",
+            "status": "active",
+            "client_name": "Codex",
+            "client_title": "Codex CLI",
+            "client_version": "1.0.0",
+            "workspace": "prod",
+            "capabilities": ["chat"],
+            "started_at": "2026-06-01T00:00:00+00:00",
+            "updated_at": "2026-06-01T00:00:00+00:00",
+            "operations": [],
+        },
+    )
+
+    refresh_requests = [
+        request for request in captured_requests if request.full_url == "https://hol.org/api/guard/oauth/token"
+    ]
+    assert len(refresh_requests) == 2
+    first_claims = _decode_jwt_segment(_request_header(refresh_requests[0], "DPoP").split(".")[1])
+    second_claims = _decode_jwt_segment(_request_header(refresh_requests[1], "DPoP").split(".")[1])
+    assert "nonce" not in first_claims
+    assert second_claims["nonce"] == challenge_nonce
+
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-token-2"
