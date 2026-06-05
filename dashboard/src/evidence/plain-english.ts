@@ -2,6 +2,10 @@ import type { GuardReceipt, GuardApprovalRequest } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
 
+function getArtifactType(receipt: GuardReceipt): string {
+  return ((receipt as GuardReceipt & { artifact_type?: string }).artifact_type ?? "").toLowerCase();
+}
+
 export function humanFileName(artifactName: string | null | undefined): string {
   if (!artifactName) return "a file";
   const name = artifactName.split("/").pop() ?? artifactName;
@@ -14,15 +18,102 @@ export function humanFileName(artifactName: string | null | undefined): string {
   return name;
 }
 
-export function plainEnglishDescription(receipt: GuardReceipt): string {
-  const category = detectCategory(receipt);
-  const app = harnessDisplayName(receipt.harness);
+export function resolveActionType(receipt: GuardReceipt): string {
+  const artifactType = getArtifactType(receipt);
+  const actionType = ((receipt.action_envelope_json as { action_type?: string } | null | undefined)?.action_type ?? "").toLowerCase();
+
+  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command")) return "Shell command";
+  if (actionType === "prompt" || artifactType === "prompt_request") return "Prompt";
+  if (actionType === "file_read" || artifactType === "file_read_request" || artifactType.includes("file_read")) return "File read";
+  if (actionType === "file_write" || artifactType.includes("file_write") || artifactType.includes("write")) return "File write";
+  if (actionType === "mcp_tool" || artifactType === "tool_action_request" || artifactType.includes("mcp") || artifactType.includes("tool")) return "Tool call";
+  if (actionType === "package_script" || artifactType.includes("package") || artifactType.includes("supply_chain")) return "Package";
+  if (actionType === "network_request" || artifactType.includes("network")) return "Network request";
+  if (artifactType.includes("plugin")) return "Plugin";
+  return "Action";
+}
+
+export function resolveActionTitle(receipt: GuardReceipt): string {
+  const artifactName = receipt.artifact_name?.trim();
+  if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
+    return artifactName;
+  }
+
+  const caps = receipt.capabilities_summary?.trim();
+  if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
+    return caps;
+  }
+
+  const signals = receipt.scanner_evidence ?? [];
+  if (signals.length > 0 && signals[0]?.title) {
+    return signals[0].title;
+  }
+
+  const provenance = receipt.provenance_summary?.trim();
+  if (provenance && provenance.length > 0 && !provenance.startsWith("hook event for")) {
+    return provenance;
+  }
+
   const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  const type = resolveActionType(receipt);
+  if (name && name !== type.toLowerCase()) {
+    return `${type}: ${name}`;
+  }
+  return type;
+}
+
+function looksLikeId(text: string): boolean {
+  if (text.includes(":")) return true;
+  if (/^[a-f0-9]{8,}$/i.test(text)) return true;
+  return false;
+}
+
+export function plainEnglishDescription(receipt: GuardReceipt): string {
+  const app = harnessDisplayName(receipt.harness);
+  const type = resolveActionType(receipt);
+  const title = resolveActionTitle(receipt);
+  const signals = receipt.scanner_evidence ?? [];
+  const firstSignal = signals[0];
 
   if (receipt.policy_decision === "allow") {
-    return allowedDescription(category, app, name);
+    if (firstSignal?.plain_reason) {
+      return `${app} ${pastTenseVerb(type)} ${title.toLowerCase()}. Guard reviewed it and allowed it.`;
+    }
+    return `${app} ${pastTenseVerb(type)} ${title.toLowerCase()}. Guard allowed it.`;
   }
-  return blockedDescription(category, app, name);
+
+  if (firstSignal?.plain_reason) {
+    return `${app} tried to ${infinitiveVerb(type)} ${title.toLowerCase()}. Guard stopped it: ${firstSignal.plain_reason}`;
+  }
+  return `${app} tried to ${infinitiveVerb(type)} ${title.toLowerCase()}. Guard stopped it.`;
+}
+
+function pastTenseVerb(type: string): string {
+  switch (type) {
+    case "Shell command": return "ran";
+    case "File read": return "read";
+    case "File write": return "wrote to";
+    case "Tool call": return "used";
+    case "Package": return "installed";
+    case "Network request": return "made";
+    case "Prompt": return "submitted";
+    case "Plugin": return "loaded";
+    default: return "ran";
+  }
+}
+
+function infinitiveVerb(type: string): string {
+  switch (type) {
+    case "Shell command": return "run";
+    case "File read": return "read";
+    case "File write": return "write to";
+    case "Tool call": return "use";
+    case "Package": return "install";
+    case "Network request": return "make";
+    case "Prompt": return "submit";
+    case "Plugin": return "load";
+    default: return "run";
+  }
 }
 
 function allowedDescription(category: ReceiptCategory, app: string, name: string): string {

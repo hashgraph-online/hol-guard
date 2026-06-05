@@ -11,7 +11,7 @@ import type { GuardReceipt } from "../guard-types";
 import type { EvidenceSortKey } from "./evidence-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { detectCategory, getCategoryInfo } from "./categories";
-import { humanFileName } from "./plain-english";
+import { resolveActionTitle, resolveActionType } from "./plain-english";
 import { hasMore } from "./evidence-pagination";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
@@ -126,7 +126,7 @@ export function EvidenceActionList({
               <tr className="border-b border-slate-100 bg-slate-50/80">
                 <th scope="col" className="w-8 px-3 py-2.5" />
                 <SortHeader
-                  label="Artifact"
+                  label="What happened"
                   active={sort === "artifact"}
                   ascending={sort === "artifact"}
                   onClick={() => handleSort("artifact")}
@@ -209,7 +209,8 @@ function ActionRow({
 }: ActionRowProps) {
   const category = detectCategory(receipt);
   const catInfo = getCategoryInfo(category);
-  const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  const actionTitle = resolveActionTitle(receipt);
+  const actionType = resolveActionType(receipt);
 
   const handleClick = useCallback(() => {
     onSelect(receipt.receipt_id);
@@ -258,9 +259,14 @@ function ActionRow({
         </span>
       </td>
       <td className="px-3 py-2.5">
-        <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">
-          {artifactLabel}
-        </span>
+        <div className="flex flex-col min-w-0">
+          <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">
+            {actionTitle}
+          </span>
+          <span className="text-[11px] text-slate-400 truncate block max-w-[200px]">
+            {actionType}
+          </span>
+        </div>
       </td>
       <td className="px-3 py-2.5 hidden sm:table-cell">
         <button

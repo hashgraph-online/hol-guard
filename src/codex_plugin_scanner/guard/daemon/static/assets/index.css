@@ -11,6 +11,11 @@
       --tw-translate-x: 0;
       --tw-translate-y: 0;
       --tw-translate-z: 0;
+      --tw-rotate-x: initial;
+      --tw-rotate-y: initial;
+      --tw-rotate-z: initial;
+      --tw-skew-x: initial;
+      --tw-skew-y: initial;
       --tw-space-y-reverse: 0;
       --tw-divide-y-reverse: 0;
       --tw-border-style: solid;
@@ -666,10 +671,6 @@
     margin-inline: auto;
   }
 
-  .-mt-20 {
-    margin-top: calc(var(--spacing) * -20);
-  }
-
   .mt-0\.5 {
     margin-top: calc(var(--spacing) * .5);
   }
@@ -940,6 +941,10 @@
 
   .h-40 {
     height: calc(var(--spacing) * 40);
+  }
+
+  .h-44 {
+    height: calc(var(--spacing) * 44);
   }
 
   .h-48 {
@@ -1229,6 +1234,10 @@
 
   .rotate-180 {
     rotate: 180deg;
+  }
+
+  .transform {
+    transform: var(--tw-rotate-x, ) var(--tw-rotate-y, ) var(--tw-rotate-z, ) var(--tw-skew-x, ) var(--tw-skew-y, );
   }
 
   .animate-pulse {
@@ -2553,13 +2562,13 @@
     background-color: var(--color-slate-100);
   }
 
-  .bg-slate-100\/50 {
-    background-color: #f1f5f980;
+  .bg-slate-100\/60 {
+    background-color: #f1f5f999;
   }
 
   @supports (color: color-mix(in lab, red, red)) {
-    .bg-slate-100\/50 {
-      background-color: color-mix(in oklab, var(--color-slate-100) 50%, transparent);
+    .bg-slate-100\/60 {
+      background-color: color-mix(in oklab, var(--color-slate-100) 60%, transparent);
     }
   }
 
@@ -3934,6 +3943,10 @@
     scrollbar-gutter: stable;
   }
 
+  .ring-inset {
+    --tw-ring-inset: inset;
+  }
+
   .group-open\:rotate-90:is(:where(.group):is([open], :popover-open, :open) *) {
     rotate: 90deg;
   }
@@ -5060,6 +5073,31 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   syntax: "*";
   inherits: false;
   initial-value: 0;
+}
+
+@property --tw-rotate-x {
+  syntax: "*";
+  inherits: false
+}
+
+@property --tw-rotate-y {
+  syntax: "*";
+  inherits: false
+}
+
+@property --tw-rotate-z {
+  syntax: "*";
+  inherits: false
+}
+
+@property --tw-skew-x {
+  syntax: "*";
+  inherits: false
+}
+
+@property --tw-skew-y {
+  syntax: "*";
+  inherits: false
 }
 
 @property --tw-space-y-reverse {

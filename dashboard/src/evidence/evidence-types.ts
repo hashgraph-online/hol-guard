@@ -37,7 +37,7 @@ export const EVIDENCE_SORT_OPTIONS: EvidenceSort[] = [
   { key: "app", label: "App" },
   { key: "decision", label: "Decision" },
   { key: "category", label: "Category" },
-  { key: "artifact", label: "Artifact" },
+  { key: "artifact", label: "Action name" },
 ];
 
 export const EVIDENCE_TIME_LABELS: Record<EvidenceTimeFilter, string> = {
