@@ -16421,6 +16421,7 @@ def test_sync_runtime_session_refreshes_oauth_access_token_and_rotates_refresh_t
             assert body["grant_type"] == ["refresh_token"]
             assert body["client_id"] == ["guard-local-daemon"]
             assert body["refresh_token"] == ["refresh-token-1"]
+            assert _request_header(request, "User-Agent") == guard_runner_module._GUARD_SYNC_USER_AGENT
             assert isinstance(_request_header(request, "DPoP"), str) and _request_header(request, "DPoP")
             return _Response(
                 {

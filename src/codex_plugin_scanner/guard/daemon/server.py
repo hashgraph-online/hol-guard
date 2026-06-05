@@ -77,12 +77,12 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..local_supply_chain import build_local_supply_chain_posture
-from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
-from ..package_firewall_entitlement import (
-    package_firewall_block_details,
-    resolve_package_firewall_entitlement,
+from ..local_supply_chain import (
+    build_local_supply_chain_posture,
+    resolve_package_firewall_entitlement_with_refresh,
 )
+from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
+from ..package_firewall_entitlement import package_firewall_block_details
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -1519,7 +1519,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return managers, None
 
     def _supply_chain_entitlement(self) -> dict[str, object]:
-        return resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
+        return resolve_package_firewall_entitlement_with_refresh(self.server.store)  # type: ignore[attr-defined]
 
     @staticmethod
     def _supply_chain_action_states(entitlement: dict[str, object]) -> dict[str, str]:
@@ -2759,6 +2759,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "approvals": pending_approvals,
             "pending_approvals": pending_approvals,
             "uptime_seconds": uptime,
+            "pid": os.getpid(),
             "tables": store.list_table_names(),
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,

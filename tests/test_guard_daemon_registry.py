@@ -131,6 +131,7 @@ class TestHealthzEndpoint:
             assert "package_version" in payload
             assert "tables" in payload
             assert "pending_approvals" in payload
+            assert isinstance(payload.get("pid"), int)
             assert "uptime_seconds" in payload
         finally:
             server.stop()

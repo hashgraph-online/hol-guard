@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .adapters.base import HarnessContext
 from .config import GuardConfig, resolve_risk_action
+from .package_firewall_entitlement import resolve_package_firewall_entitlement
 from .receipts import build_receipt
 from .redaction import redact_text
 from .runtime.package_intent_common import (
@@ -33,9 +34,12 @@ from .runtime.package_intent_common import (
 from .runtime.package_manifest_diff import parse_manifest_dependencies, parse_manifest_dependency_changes
 from .runtime.runner import (
     GuardSyncAuthorizationExpiredError,
+    GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
     _guard_sync_headers,
     _resolve_guard_sync_auth_context,
+    sync_local_guard_cloud_proof,
+    sync_supply_chain_bundle,
 )
 from .runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from .runtime.supply_chain_support import ecosystem_support_matrix
@@ -253,6 +257,30 @@ def build_supply_chain_status_payload(
         "dry_run": True,
         "supply_chain": posture,
     }
+
+
+def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict[str, object]:
+    """Resolve package-firewall access and opportunistically heal stale cloud state."""
+
+    entitlement = resolve_package_firewall_entitlement(store)
+    if bool(entitlement.get("allowed")):
+        return entitlement
+    if store.get_cloud_sync_profile() is None:
+        return entitlement
+    if str(entitlement.get("reason") or "") not in {"guard_cloud_reconnect_required", "paid_guard_cloud_required"}:
+        return entitlement
+    for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
+        try:
+            refresh(store)
+        except (
+            GuardSyncAuthorizationExpiredError,
+            GuardSyncNotAvailableError,
+            GuardSyncNotConfiguredError,
+            OSError,
+            RuntimeError,
+        ):
+            continue
+    return resolve_package_firewall_entitlement(store)
 
 
 def build_workspace_scan_payload(
