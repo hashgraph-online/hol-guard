@@ -2339,6 +2339,16 @@ def _normalized_receipts_sync_url(sync_url: str) -> str:
 def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
     normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
     parsed = urllib.parse.urlsplit(normalized_receipts_url)
+    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
+        return urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/registry/api/v1/guard/runtime/sessions/sync",
+                parsed.query,
+                "",
+            )
+        )
     if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
         return urllib.parse.urlunsplit(
             (
@@ -2373,7 +2383,9 @@ def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
 def _normalized_supply_chain_bundle_url(sync_url: str, workspace_id: str) -> str:
     normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
     parsed = urllib.parse.urlsplit(normalized_receipts_url)
-    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
+    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
+        next_path = "/registry/api/v1/guard/supply-chain/bundle"
+    elif parsed.path.rstrip("/") == "/api/guard/receipts/sync":
         next_path = "/api/guard/supply-chain/bundle"
     elif parsed.path.rstrip("/") == "/guard/receipts/sync":
         next_path = "/guard/supply-chain/bundle"
