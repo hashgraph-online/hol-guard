@@ -56,6 +56,21 @@ def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
     return module
 
 
+def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_missing(tmp_path, monkeypatch):
+    _install_fake_system_keyring(monkeypatch)
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    monkeypatch.setattr(
+        SystemKeyringSecretStore,
+        "_macos_default_keychain_path",
+        staticmethod(lambda: None),
+    )
+
+    secret_store = _build_oauth_secret_store(tmp_path / "guard-home")
+
+    assert SystemKeyringSecretStore._is_available() is False
+    assert isinstance(secret_store, EncryptedFileSecretStore)
+
+
 def test_windows_oauth_refresh_lock_wraps_permission_error_as_blocking(monkeypatch):
     class _FakeHandle:
         def seek(self, _offset: int) -> None:

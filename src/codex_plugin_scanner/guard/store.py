@@ -9,10 +9,12 @@ import logging
 import os
 import sqlite3
 import subprocess
+import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from hashlib import pbkdf2_hmac, sha256
 from pathlib import Path
 from typing import Protocol
@@ -334,6 +336,36 @@ class SystemKeyringSecretStore:
     def _load_keyring_module():
         return importlib.import_module("keyring")
 
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _macos_default_keychain_path() -> Path | None:
+        if sys.platform != "darwin":
+            return None
+        security_path = Path("/usr/bin/security")
+        if not security_path.exists():
+            return None
+        try:
+            result = subprocess.run(
+                [str(security_path), "default-keychain"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            return None
+        if result.returncode != 0:
+            return None
+        raw_path = result.stdout.strip().strip('"').strip("'")
+        if not raw_path:
+            return None
+        return Path(raw_path).expanduser()
+
+    @classmethod
+    def _macos_default_keychain_is_usable(cls) -> bool:
+        path = cls._macos_default_keychain_path()
+        return path is not None and path.exists()
+
     @classmethod
     def _is_available(cls) -> bool:
         try:
@@ -345,7 +377,11 @@ class SystemKeyringSecretStore:
         if backend_name == "failkeyring":
             return False
         priority = getattr(backend, "priority", None)
-        return not (isinstance(priority, (int, float)) and priority <= 0)
+        if isinstance(priority, (int, float)) and priority <= 0:
+            return False
+        if sys.platform == "darwin" and not cls._macos_default_keychain_is_usable():
+            return False
+        return True
 
     def set_secret(self, secret_id: str, value: str) -> None:
         keyring_module = self._load_keyring_module()
