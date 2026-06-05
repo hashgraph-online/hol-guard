@@ -50,7 +50,7 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
       <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-4">
         7-Day Activity
       </p>
-      <div className="flex items-end gap-2 h-40">
+      <div className="flex gap-2 h-40">
         {buckets.map((bucket) => {
           const total = bucket.allowed + bucket.blocked + bucket.reviewed;
           const heightPct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
@@ -58,30 +58,29 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
           const allowedHeight = total > 0 ? (bucket.allowed / total) * heightPct : 0;
 
           return (
-            <div key={bucket.dateKey} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
-              <div className="w-full flex-1 flex items-end rounded-lg overflow-hidden bg-slate-50">
-                <div className="w-full flex flex-col-reverse">
-                  {bucket.blocked > 0 && (
-                    <div
-                      className="w-full bg-amber-400 rounded-b-sm"
-                      style={{ height: `${Math.max(blockedHeight, 2)}%` }}
-                    />
-                  )}
-                  {bucket.allowed > 0 && (
-                    <div
-                      className="w-full bg-emerald-400"
-                      style={{ height: `${Math.max(allowedHeight, 2)}%` }}
-                    />
-                  )}
-                  {bucket.reviewed > 0 && (
-                    <div
-                      className="w-full bg-brand-blue rounded-t-sm"
-                      style={{
-                        height: `${Math.max(heightPct - blockedHeight - allowedHeight, 2)}%`,
-                      }}
-                    />
-                  )}
-                </div>
+            <div key={bucket.dateKey} className="flex-1 flex flex-col justify-end gap-1.5 min-w-0">
+              <div className="w-full flex-1 flex flex-col-reverse rounded-lg overflow-hidden bg-slate-50">
+                {bucket.blocked > 0 && (
+                  <div
+                    className="w-full bg-amber-400"
+                    style={{ height: `${Math.max(blockedHeight, 2)}%`, minHeight: total > 0 ? "2%" : "0" }}
+                  />
+                )}
+                {bucket.allowed > 0 && (
+                  <div
+                    className="w-full bg-emerald-400"
+                    style={{ height: `${Math.max(allowedHeight, 2)}%`, minHeight: total > 0 ? "2%" : "0" }}
+                  />
+                )}
+                {bucket.reviewed > 0 && (
+                  <div
+                    className="w-full bg-brand-blue"
+                    style={{
+                      height: `${Math.max(heightPct - blockedHeight - allowedHeight, 2)}%`,
+                      minHeight: total > 0 ? "2%" : "0",
+                    }}
+                  />
+                )}
               </div>
               <span className="text-[10px] text-slate-400 truncate w-full text-center">
                 {bucket.label}
