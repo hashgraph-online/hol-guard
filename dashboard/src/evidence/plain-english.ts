@@ -165,13 +165,13 @@ export function resolveActionDetail(receipt: GuardReceipt): string | null {
   if (type === "Shell command" && envelope.command) {
     return envelope.command;
   }
-  if ((type === "File read" || type === "File write") && envelope.target_paths.length > 0) {
+  if ((type === "File read" || type === "File write") && envelope.target_paths && envelope.target_paths.length > 0) {
     return envelope.target_paths.join("\n");
   }
   if (type === "Prompt" && (envelope.prompt_text || envelope.prompt_excerpt)) {
     return (envelope.prompt_text || envelope.prompt_excerpt) as string;
   }
-  if (type === "Network request" && envelope.network_hosts.length > 0) {
+  if (type === "Network request" && envelope.network_hosts && envelope.network_hosts.length > 0) {
     return envelope.network_hosts.join("\n");
   }
   if (type === "Tool call") {
@@ -190,6 +190,11 @@ export function resolveActionDetail(receipt: GuardReceipt): string | null {
   return null;
 }
 
+function formatSubtitle(subtitle: string): string {
+  if (subtitle.endsWith(".") || subtitle.endsWith("?") || subtitle.endsWith("!")) return subtitle + " ";
+  return subtitle + ". ";
+}
+
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, max - 1) + "…";
@@ -204,16 +209,16 @@ export function plainEnglishDescription(receipt: GuardReceipt): string {
   if (receipt.policy_decision === "allow") {
     if (receipt.user_override !== null) {
       return subtitle
-        ? `${app} ${pastTenseVerb(type)} ${title}. ${subtitle} You reviewed and allowed it.`
+        ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and allowed it.`
         : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
     }
     return subtitle
-      ? `${app} ${pastTenseVerb(type)} ${title}. ${subtitle} Guard allowed it automatically.`
+      ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} Guard allowed it automatically.`
       : `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
   }
 
   return subtitle
-    ? `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${subtitle}`
+    ? `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${formatSubtitle(subtitle)}`
     : `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
 }
 
