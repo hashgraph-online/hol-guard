@@ -3,6 +3,7 @@ import {
   clearReviewQueue,
   fetchAllPendingRequests,
   fetchApprovalPage,
+  GuardHarnessActionError,
   fetchQueueSummary,
 	  fetchResumeStatus,
 	  formatHarnessCommand,
@@ -824,6 +825,36 @@ assert(
   "L079d: remediation retries with refreshed Guard token"
 );
 assert(remediationBootstrap.operation === "package_shim_path", "L079d: remediation succeeds after token bootstrap");
+
+installGuardWindow("?guard-token=token-remediate-error&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  const parsed = new URL(url, "http://127.0.0.1:4174");
+  if (parsed.pathname === "/v1/audit/remediations/package_shim_path") {
+    return new Response(
+      JSON.stringify({
+        error: "approval_gate_required",
+        message: "Approval password required."
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+let remediationError: unknown = null;
+try {
+  await runAuditRemediation({
+    action: "package_shim_path",
+    manager: "pnpm"
+  });
+} catch (error) {
+  remediationError = error;
+}
+assert(remediationError instanceof GuardHarnessActionError, "L079e: runAuditRemediation throws GuardHarnessActionError on structured failures");
+assert(
+  remediationError instanceof GuardHarnessActionError && remediationError.payload?.error === "approval_gate_required",
+  "L079e: runAuditRemediation preserves daemon error code for approval modal fallback"
+);
 
 installGuardWindow("?guard-token=token-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchResolveCalls = installFetchStub({

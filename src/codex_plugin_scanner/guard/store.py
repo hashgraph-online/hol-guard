@@ -3062,6 +3062,9 @@ class GuardStore:
         now: str,
         grant_id: str | None = None,
         machine_id: str | None = None,
+        supply_chain_entitlement_expires_at: str | None = None,
+        supply_chain_firewall: bool | None = None,
+        supply_chain_plan_id: str | None = None,
         workspace_id: str | None = None,
         runtime_id: str | None = None,
         runtime_label: str | None = None,
@@ -3085,6 +3088,12 @@ class GuardStore:
             payload["grant_id"] = grant_id
         if machine_id:
             payload["machine_id"] = machine_id
+        if supply_chain_entitlement_expires_at:
+            payload["supply_chain_entitlement_expires_at"] = supply_chain_entitlement_expires_at
+        if isinstance(supply_chain_firewall, bool):
+            payload["supply_chain_firewall"] = supply_chain_firewall
+        if supply_chain_plan_id:
+            payload["supply_chain_plan_id"] = supply_chain_plan_id
         if workspace_id:
             payload["workspace_id"] = workspace_id
         if runtime_id:
@@ -3158,6 +3167,13 @@ class GuardStore:
             value = payload.get(key)
             if isinstance(value, str) and value:
                 result[key] = value
+        for key in ("supply_chain_entitlement_expires_at", "supply_chain_plan_id"):
+            value = payload.get(key)
+            if isinstance(value, str) and value:
+                result[key] = value
+        supply_chain_firewall = payload.get("supply_chain_firewall")
+        if isinstance(supply_chain_firewall, bool):
+            result["supply_chain_firewall"] = supply_chain_firewall
         return result
 
     def _load_oauth_secret_payload(
@@ -3216,6 +3232,13 @@ class GuardStore:
             value = metadata.get(key)
             if isinstance(value, str) and value:
                 result[key] = value
+        for key in ("supply_chain_entitlement_expires_at", "supply_chain_plan_id"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value:
+                result[key] = value
+        supply_chain_firewall = metadata.get("supply_chain_firewall")
+        if isinstance(supply_chain_firewall, bool):
+            result["supply_chain_firewall"] = supply_chain_firewall
         return result
 
     def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
