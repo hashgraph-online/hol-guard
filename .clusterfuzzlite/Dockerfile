@@ -7,3 +7,5 @@ RUN python3 -m pip install --require-hashes --no-cache-dir --no-binary=:all: --n
 COPY . $SRC/ai-plugin-scanner
 WORKDIR $SRC/ai-plugin-scanner
 COPY ./.clusterfuzzlite/build.sh $SRC/build.sh
+
+USER nobody

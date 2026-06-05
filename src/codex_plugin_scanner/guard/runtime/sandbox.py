@@ -261,7 +261,8 @@ def run_sandbox(request: SandboxRequest, *, analysis_mode: SandboxAnalysisMode =
         effective_cwd = str(Path(request.cwd).resolve()) if request.cwd else str(workspace)
         start = time.monotonic()
         try:
-            proc = subprocess.Popen(
+            # Guard sandbox intentionally executes reviewed commands inside strict cwd/env/resource limits.
+            proc = subprocess.Popen(  # nosemgrep: python.django.security.injection.command.subprocess-injection.subprocess-injection  # noqa: E501
                 argv,
                 cwd=effective_cwd,
                 env=env,
