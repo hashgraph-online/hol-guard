@@ -3456,9 +3456,25 @@ clearer UX and an implementation plan with technical references.
         store = GuardStore(tmp_path / "guard-home")
         call_order: list[str] = []
 
-        def fake_sync_runtime_session(current_store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+        shared_auth_context = {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "oauth-access-token-1",
+            "dpop_key_material": object(),
+        }
+
+        def fake_resolve_guard_sync_auth_context(current_store: GuardStore) -> dict[str, object]:
+            assert current_store is store
+            return shared_auth_context
+
+        def fake_sync_runtime_session(
+            current_store: GuardStore,
+            *,
+            session: dict[str, object],
+            auth_context: dict[str, object] | None = None,
+        ) -> dict[str, object]:
             assert current_store is store
             call_order.append("runtime")
+            assert auth_context is shared_auth_context
             assert session == {
                 "harness": "hol-guard",
                 "surface": "cli",
@@ -3486,11 +3502,13 @@ clearer UX and an implementation plan with technical references.
             *,
             persist_sync_summary: bool = True,
             persist_connect_state: bool = True,
+            auth_context: dict[str, object] | None = None,
         ) -> dict[str, object]:
             assert current_store is store
             assert persist_sync_summary is False
             assert persist_connect_state is False
             call_order.append("receipts")
+            assert auth_context is shared_auth_context
             return {
                 "synced_at": "2026-06-05T12:00:05+00:00",
                 "receipts_stored": 3,
@@ -3498,6 +3516,11 @@ clearer UX and an implementation plan with technical references.
                 "local_guard_online_at": "2026-06-05T12:00:05+00:00",
             }
 
+        monkeypatch.setattr(
+            guard_runner_module,
+            "_resolve_guard_sync_auth_context",
+            fake_resolve_guard_sync_auth_context,
+        )
         monkeypatch.setattr(guard_runner_module, "sync_runtime_session", fake_sync_runtime_session)
         monkeypatch.setattr(guard_runner_module, "sync_receipts", fake_sync_receipts)
 
@@ -3539,8 +3562,24 @@ clearer UX and an implementation plan with technical references.
             request_id="connect-1",
         )
 
-        def fake_sync_runtime_session(current_store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+        shared_auth_context = {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "oauth-access-token-1",
+            "dpop_key_material": object(),
+        }
+
+        def fake_resolve_guard_sync_auth_context(current_store: GuardStore) -> dict[str, object]:
             assert current_store is store
+            return shared_auth_context
+
+        def fake_sync_runtime_session(
+            current_store: GuardStore,
+            *,
+            session: dict[str, object],
+            auth_context: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            assert current_store is store
+            assert auth_context is shared_auth_context
             assert session["harness"] == "hol-guard"
             return {
                 "synced_at": "2026-06-05T12:00:02+00:00",
@@ -3559,10 +3598,12 @@ clearer UX and an implementation plan with technical references.
             *,
             persist_sync_summary: bool = True,
             persist_connect_state: bool = True,
+            auth_context: dict[str, object] | None = None,
         ) -> dict[str, object]:
             assert current_store is store
             assert persist_sync_summary is False
             assert persist_connect_state is False
+            assert auth_context is shared_auth_context
             return {
                 "synced_at": "2026-06-05T12:00:05+00:00",
                 "receipts_stored": 0,
@@ -3570,6 +3611,11 @@ clearer UX and an implementation plan with technical references.
                 "local_guard_online_at": "2026-06-05T12:00:05+00:00",
             }
 
+        monkeypatch.setattr(
+            guard_runner_module,
+            "_resolve_guard_sync_auth_context",
+            fake_resolve_guard_sync_auth_context,
+        )
         monkeypatch.setattr(guard_runner_module, "sync_runtime_session", fake_sync_runtime_session)
         monkeypatch.setattr(guard_runner_module, "sync_receipts", fake_sync_receipts)
 
@@ -16490,7 +16536,6 @@ def test_sign_guard_dpop_proof_sets_access_token_hash_claim() -> None:
 
     assert claims["ath"] == expected_ath
 
-
 def test_sync_receipts_uses_distinct_dpop_proofs_per_batch(tmp_path, monkeypatch):
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
@@ -16579,9 +16624,100 @@ def test_sync_receipts_uses_distinct_dpop_proofs_per_batch(tmp_path, monkeypatch
     payload = guard_runner_module.sync_receipts(store)
 
     assert len(token_requests) == 1
+    assert _request_header(token_requests[0], "User-Agent") == f"hol-guard/{guard_runner_module.__version__}"
     assert len(receipt_dpop_headers) >= 2
     assert receipt_dpop_headers[0] != receipt_dpop_headers[1]
     assert payload["receipts_stored"] == 51
+
+
+def test_sync_local_guard_cloud_proof_refreshes_oauth_once(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    dpop_key_material = generate_dpop_key_pair()
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem=dpop_key_material.private_key_pem,
+        dpop_public_jwk=dpop_key_material.public_jwk,
+        dpop_public_jwk_thumbprint=dpop_key_material.public_jwk_thumbprint,
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    token_requests: list[urllib.request.Request] = []
+    sync_requests: list[urllib.request.Request] = []
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url == "https://hol.org/api/guard/oauth/token":
+            token_requests.append(request)
+            return _Response(
+                {
+                    "access_token": "oauth-access-token-1",
+                    "refresh_token": "refresh-token-1",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                }
+            )
+        sync_requests.append(request)
+        if request.full_url == "https://hol.org/api/guard/runtime/sessions/sync":
+            return _Response(
+                {
+                    "syncedAt": "2026-06-01T00:00:05+00:00",
+                    "items": [{"sessionId": "runtime-session-1"}],
+                }
+            )
+        if request.full_url == "https://hol.org/api/guard/receipts/sync":
+            return _Response(
+                {
+                    "syncedAt": "2026-06-01T00:00:06+00:00",
+                    "receiptsStored": 0,
+                    "advisories": [],
+                    "policy": {},
+                    "alertPreferences": {},
+                    "teamPolicyPack": {},
+                    "exceptions": [],
+                }
+            )
+        if request.full_url == "https://hol.org/api/v1/guard/events":
+            return _Response(
+                {
+                    "syncedAt": "2026-06-01T00:00:07+00:00",
+                    "accepted": 1,
+                    "events": 1,
+                }
+            )
+        raise AssertionError(f"unexpected request: {request.full_url}")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_local_guard_cloud_proof(store)
+    expected_session_id = guard_runner_module._cloud_runtime_session_payload(
+        store,
+        guard_runner_module._local_guard_runtime_session(),
+    )["sessionId"]
+
+    assert len(token_requests) == 1
+    assert _request_header(token_requests[0], "User-Agent") == f"hol-guard/{guard_runner_module.__version__}"
+    assert [request.full_url for request in sync_requests] == [
+        "https://hol.org/api/guard/runtime/sessions/sync",
+        "https://hol.org/api/guard/receipts/sync",
+        "https://hol.org/api/v1/guard/events",
+    ]
+    assert payload["runtime_session_id"] == expected_session_id
 
 
 def test_sync_pain_signals_raises_when_oauth_refresh_is_revoked(tmp_path, monkeypatch):
