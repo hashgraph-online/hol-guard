@@ -124,6 +124,8 @@ def validate_guard_sync_endpoint(sync_url: str, *, issuer: str | None = None) ->
     if parsed.fragment:
         raise ValueError("Guard Cloud sync URL fragments are not allowed.")
     origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    if parsed.scheme != "https" and not _is_loopback_guard_origin(origin):
+        raise ValueError("Guard Cloud sync URL must use HTTPS.")
     if issuer is not None:
         oauth_client = resolve_guard_oauth_client_config(issuer)
         if origin != oauth_client.issuer:
