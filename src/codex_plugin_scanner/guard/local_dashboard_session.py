@@ -12,6 +12,7 @@ from typing import Any
 LOCAL_DASHBOARD_SESSION_VERSION = "guard-local-daemon-session.v1"
 LOCAL_DASHBOARD_SESSION_PREFIX = "gld1"
 DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS = 12 * 60 * 60
+_PROTECTED_LOCAL_DASHBOARD_SESSION_CLAIMS = frozenset({"version", "surface", "expires_at"})
 
 
 def build_local_dashboard_session_token(
@@ -28,7 +29,13 @@ def build_local_dashboard_session_token(
         "expires_at": expires_at.isoformat(),
     }
     if extra_claims:
-        payload_data.update(extra_claims)
+        payload_data.update(
+            {
+                key: value
+                for key, value in extra_claims.items()
+                if key not in _PROTECTED_LOCAL_DASHBOARD_SESSION_CLAIMS
+            }
+        )
     payload_json = json.dumps(payload_data, separators=(",", ":"))
     encoded_payload = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("ascii").rstrip("=")
     signature = hmac.new(auth_token.encode("utf-8"), encoded_payload.encode("utf-8"), hashlib.sha256).digest()

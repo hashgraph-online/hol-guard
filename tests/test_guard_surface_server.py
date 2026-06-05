@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import time
@@ -19,7 +20,10 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
-from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
+from codex_plugin_scanner.guard.local_dashboard_session import (
+    LOCAL_DASHBOARD_SESSION_VERSION,
+    build_local_dashboard_session_token,
+)
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
@@ -49,7 +53,33 @@ def _approval_center_session_token(daemon: GuardDaemonServer) -> str:
     )
 
 
+def _decode_dashboard_session_claims(token: str) -> dict[str, object]:
+    _prefix, encoded_payload, _signature = token.split(".")
+    padding = "=" * (-len(encoded_payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(f"{encoded_payload}{padding}").decode("utf-8"))
+
+
 class TestGuardSurfaceServer:
+    def test_local_dashboard_session_preserves_reserved_claims(self) -> None:
+        token = build_local_dashboard_session_token(
+            auth_token="daemon-auth-token",
+            surface="approval-center",
+            expires_in_seconds=60,
+            extra_claims={
+                "surface": "cli",
+                "version": "override-version",
+                "expires_at": "1970-01-01T00:00:00+00:00",
+                "custom": "value",
+            },
+        )
+
+        claims = _decode_dashboard_session_claims(token)
+
+        assert claims["version"] == LOCAL_DASHBOARD_SESSION_VERSION
+        assert claims["surface"] == "approval-center"
+        assert claims["expires_at"] != "1970-01-01T00:00:00+00:00"
+        assert claims["custom"] == "value"
+
     def test_guard_daemon_serves_dashboard_shell_for_home_and_section_routes(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
