@@ -6,7 +6,7 @@ import {
   HiMiniExclamationTriangle,
   HiMiniArrowPath,
 } from "react-icons/hi2";
-import { ActionButton } from "./approval-center-primitives";
+import { ActionButton, Tag } from "./approval-center-primitives";
 import type {
   PackageManagerProtection,
   PackageFirewallStatusResponse,
@@ -50,6 +50,171 @@ export function UpgradeCta({ entitlement }: UpgradeCtaProps) {
   );
 }
 
+type ConnectFlowCardProps = {
+  connectError: string | null;
+  connectStarting: boolean;
+  connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>;
+  mode: "connect" | "repair";
+  onStartConnect: () => void;
+};
+
+type ConnectStepProps = {
+  body: string;
+  current: boolean;
+  done: boolean;
+  index: number;
+  title: string;
+};
+
+function ConnectStep({ body, current, done, index, title }: ConnectStepProps) {
+  const toneClass = done
+    ? "border-brand-green/20 bg-brand-green/[0.04]"
+    : current
+    ? "border-brand-blue/20 bg-brand-blue/[0.04]"
+    : "border-slate-200 bg-white/85";
+  const badgeClass = done
+    ? "bg-brand-green/10 text-brand-green"
+    : current
+    ? "bg-brand-blue/10 text-brand-blue"
+    : "bg-slate-100 text-slate-500";
+  return (
+    <div className={`rounded-[18px] border px-3.5 py-3 ${toneClass}`}>
+      <div className="flex items-start gap-3">
+        <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${badgeClass}`}>
+          {done ? <HiMiniCheckCircle className="h-3.5 w-3.5" aria-hidden="true" /> : index}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-brand-dark">{title}</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">{body}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function resolveConnectSteps(
+  connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>,
+): Array<{ body: string; current: boolean; done: boolean; title: string }> {
+  const running = connectFlow.state === "running";
+  const failed = connectFlow.state === "failed";
+  const browserOpened = connectFlow.browser_opened === true;
+  return [
+    {
+      title: "Start local connect",
+      body: failed
+        ? "Guard started the local connect flow, but it needs another attempt."
+        : "The local daemon opens a secure HOL Guard Cloud sign-in flow for this machine.",
+      done: running || failed,
+      current: !running && !failed,
+    },
+    {
+      title: "Approve in browser",
+      body: browserOpened
+        ? "Finish sign-in in the browser window Guard opened."
+        : "If your browser did not open automatically, use the manual sign-in link below.",
+      done: false,
+      current: running,
+    },
+    {
+      title: "Unlock firewall actions",
+      body: "Guard verifies package-firewall access before it changes package-manager routing.",
+      done: false,
+      current: false,
+    },
+  ];
+}
+
+export function ConnectFlowCard({
+  connectError,
+  connectStarting,
+  connectFlow,
+  mode,
+  onStartConnect,
+}: ConnectFlowCardProps) {
+  const manualHref = connectFlow.authorize_url ?? connectFlow.connect_url;
+  const running = connectFlow.state === "running";
+  const failed = connectFlow.state === "failed";
+  const primaryBusy = connectStarting || running;
+  const primaryLabel = running
+    ? "Waiting for browser approval"
+    : failed
+    ? "Try connect again"
+    : connectFlow.action_label;
+  const steps = resolveConnectSteps(connectFlow);
+  const statusTone = mode === "repair" ? "attention" : "blue";
+  const statusLabel = mode === "repair" ? "Repair required" : "Connection required";
+  const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  return (
+    <div className="rounded-[24px] border border-brand-blue/20 bg-gradient-to-br from-brand-blue/[0.05] via-white to-brand-purple/[0.04] px-4 py-4 shadow-[0_18px_45px_-34px_rgba(39,80,180,0.5)]">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue">
+                HOL Guard Cloud
+              </p>
+              <Tag tone={statusTone}>{statusLabel}</Tag>
+            </div>
+            <div className="space-y-1">
+              <p className="text-base font-semibold tracking-[-0.02em] text-brand-dark">
+                {connectFlow.title}
+              </p>
+              <p className="max-w-3xl text-sm leading-relaxed text-slate-500">
+                {connectFlow.detail}
+              </p>
+            </div>
+          </div>
+          <div className="rounded-[18px] border border-slate-200 bg-white/85 px-3.5 py-3 sm:max-w-xs">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Security
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              Guard does not change package-manager routing until this machine receives signed cloud access.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          {steps.map((step, index) => (
+            <ConnectStep
+              key={step.title}
+              index={index + 1}
+              title={step.title}
+              body={step.body}
+              current={step.current}
+              done={step.done}
+            />
+          ))}
+        </div>
+
+        {connectError !== null && (
+          <div className="rounded-[18px] border border-brand-attention/25 bg-brand-attention/[0.05] px-3.5 py-3">
+            <p className="text-sm font-medium text-brand-dark">Guard could not start local connect</p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">{connectError}</p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <ActionButton variant="primary" onClick={onStartConnect} disabled={primaryBusy}>
+            {primaryBusy ? (
+              <HiMiniArrowPath className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <HiMiniShieldCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {primaryLabel}
+          </ActionButton>
+          {showManualLink && (
+            <ActionButton href={manualHref} variant="outline">
+              Open sign-in page
+              <HiMiniArrowTopRightOnSquare className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            </ActionButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type CliFallbackProps = {
   commands: NonNullable<PackageFirewallStatusResponse["cli_fallback"]>;
 };
@@ -57,11 +222,11 @@ type CliFallbackProps = {
 export function CliFallback({ commands }: CliFallbackProps) {
   const items = Object.entries(commands);
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+    <details className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+      <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
         CLI fallback
-      </p>
-      <div className="space-y-1.5">
+      </summary>
+      <div className="mt-3 space-y-1.5">
         {items.map(([label, command]) => (
           <div key={label} className="min-w-0">
             <span className="mr-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -71,21 +236,44 @@ export function CliFallback({ commands }: CliFallbackProps) {
           </div>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
 type FreeUserViewProps = {
+  connectError: string | null;
+  connectStarting: boolean;
   data: PackageFirewallStatusResponse;
+  onStartConnect: () => void;
 };
 
-export function FreeUserView({ data }: FreeUserViewProps) {
+export function FreeUserView({
+  connectError,
+  connectStarting,
+  data,
+  onStartConnect,
+}: FreeUserViewProps) {
+  const connectRequired =
+    data.entitlement.reason === "guard_cloud_connect_required" ||
+    data.entitlement.reason === "guard_cloud_reconnect_required";
+  const connectMode = data.entitlement.reason === "guard_cloud_reconnect_required" ? "repair" : "connect";
+  const supportedManagersLabel = connectRequired ? "Protected after connect" : "Would be protected";
   return (
     <div className="space-y-4 px-4 py-4">
-      <UpgradeCta entitlement={data.entitlement} />
+      {connectRequired && data.connect_flow !== null ? (
+        <ConnectFlowCard
+          connectError={connectError}
+          connectStarting={connectStarting}
+          connectFlow={data.connect_flow}
+          mode={connectMode}
+          onStartConnect={onStartConnect}
+        />
+      ) : (
+        <UpgradeCta entitlement={data.entitlement} />
+      )}
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">
-          Would be protected
+          {supportedManagersLabel}
         </p>
         {data.supported_managers.length === 0 ? (
           <p className="text-xs text-slate-500">No supported managers detected on this machine.</p>

@@ -13836,7 +13836,14 @@ function normalizePackageFirewallActions(value) {
   if (!isRecord(value)) {
     return {};
   }
-  const allowedStates = /* @__PURE__ */ new Set(["available", "paid_required", "reconnect_required", "pending", "disabled"]);
+  const allowedStates = /* @__PURE__ */ new Set([
+    "available",
+    "connect_required",
+    "paid_required",
+    "reconnect_required",
+    "pending",
+    "disabled"
+  ]);
   const entries = Object.entries(value).filter(
     (entry) => typeof entry[1] === "string" && allowedStates.has(entry[1])
   );
@@ -13847,9 +13854,13 @@ function normalizePackageFirewallCliFallback(value) {
     return null;
   }
   const fallback = {};
+  const connect = stringValue(value.connect);
   const install = stringValue(value.install);
   const status = stringValue(value.status);
   const remove = stringValue(value.remove);
+  if (connect !== null) {
+    fallback.connect = connect;
+  }
   if (install !== null) {
     fallback.install = install;
   }
@@ -13860,6 +13871,33 @@ function normalizePackageFirewallCliFallback(value) {
     fallback.remove = remove;
   }
   return Object.keys(fallback).length > 0 ? fallback : null;
+}
+function normalizePackageFirewallConnectFlow(value) {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const state = value.state;
+  if (state !== "idle" && state !== "running" && state !== "failed") {
+    return null;
+  }
+  const title = stringValue(value.title);
+  const detail = stringValue(value.detail);
+  const actionLabel = stringValue(value.action_label);
+  const connectUrl = stringValue(value.connect_url);
+  if (title === null || detail === null || actionLabel === null || connectUrl === null) {
+    return null;
+  }
+  return {
+    state,
+    title,
+    detail,
+    action_label: actionLabel,
+    connect_url: connectUrl,
+    authorize_url: isStringOrNull(value.authorize_url) ? value.authorize_url : null,
+    browser_opened: value.browser_opened === true ? true : value.browser_opened === false ? false : null,
+    request_id: isStringOrNull(value.request_id) ? value.request_id : null,
+    poll_after_ms: numberValue(value.poll_after_ms)
+  };
 }
 function normalizePackageShimEntry(manager, detail, pathStatus) {
   const installed = detail !== null && stringValue(detail.integrity) !== "missing";
@@ -13938,6 +13976,7 @@ function normalizePackageFirewallStatus(value) {
   return {
     actions: normalizePackageFirewallActions(record.actions),
     cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
+    connect_flow: normalizePackageFirewallConnectFlow(record.connect_flow),
     entitlement: normalizePackageFirewallEntitlement(record.entitlement),
     operation: stringValue(record.operation) ?? "status",
     package_shims: packageShims,
@@ -13961,6 +14000,15 @@ function normalizePackageFirewallAction(value) {
 }
 async function fetchPackageFirewallStatus() {
   return normalizePackageFirewallStatus(await readJson("/v1/supply-chain/package-shims"));
+}
+async function startPackageFirewallConnect() {
+  return normalizePackageFirewallConnectFlow(
+    await readJson("/v1/supply-chain/package-shims/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    })
+  );
 }
 async function runPackageFirewallAction(action, manager, credentials) {
   const payload = {
@@ -23182,10 +23230,11 @@ export {
   runPackageFirewallAction as al,
   runPackageAudit as am,
   runPackageSync as an,
-  HiMiniBugAnt as ao,
-  runAuditRemediation as ap,
-  HiMiniSignal as aq,
-  HiMiniClock as ar,
+  startPackageFirewallConnect as ao,
+  HiMiniBugAnt as ap,
+  runAuditRemediation as aq,
+  HiMiniSignal as ar,
+  HiMiniClock as as,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,

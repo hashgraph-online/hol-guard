@@ -523,6 +523,7 @@ export type PackageFirewallGlobalActionType = (typeof PACKAGE_FIREWALL_GLOBAL_AC
 
 export type PackageFirewallActionState =
   | "available"
+  | "connect_required"
   | "paid_required"
   | "reconnect_required"
   | "pending"
@@ -557,9 +558,22 @@ export type PackageFirewallReceipt = {
 };
 
 export type PackageFirewallCliFallback = {
+  connect?: string;
   install?: string;
   status?: string;
   remove?: string;
+};
+
+export type PackageFirewallConnectFlow = {
+  state: "idle" | "running" | "failed";
+  title: string;
+  detail: string;
+  action_label: string;
+  connect_url: string;
+  authorize_url: string | null;
+  browser_opened: boolean | null;
+  request_id: string | null;
+  poll_after_ms: number | null;
 };
 
 export type PackageFirewallStatusResponse = {
@@ -571,6 +585,7 @@ export type PackageFirewallStatusResponse = {
   entitlement: PackageFirewallEntitlement;
   actions: Partial<Record<PackageFirewallActionType | PackageFirewallGlobalActionType, PackageFirewallActionState>>;
   cli_fallback: PackageFirewallCliFallback | null;
+  connect_flow: PackageFirewallConnectFlow | null;
 };
 
 export type PackageFirewallActionResponse = {
