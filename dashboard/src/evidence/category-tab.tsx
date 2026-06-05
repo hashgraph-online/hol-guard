@@ -9,7 +9,7 @@ import {
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES, detectCategory } from "./categories";
-import { plainEnglishDescription, resolveActionTitle, resolveActionType } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle } from "./plain-english";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
 import { DecisionBadge } from "./decision-badge";
 import { Badge } from "../approval-center-primitives";
@@ -179,6 +179,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
                     const catInfo = getCategoryInfo(category);
                     const actionTitle = resolveActionTitle(receipt);
                     const actionType = resolveActionType(receipt);
+                    const actionSubtitle = resolveActionSubtitle(receipt);
                     return (
                       <tr key={receipt.receipt_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                         <td className="px-3 py-2.5">
@@ -186,8 +187,8 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">{actionTitle}</span>
-                            <span className="text-[11px] text-slate-400 truncate block max-w-[200px]">{actionType}</span>
+                            <span className="text-sm font-medium text-brand-dark truncate block max-w-[260px]">{actionTitle}</span>
+                            <span className="text-[11px] text-slate-400 truncate block max-w-[260px]">{actionSubtitle ?? actionType}</span>
                           </div>
                         </td>
                         <td className="px-3 py-2.5 hidden md:table-cell">

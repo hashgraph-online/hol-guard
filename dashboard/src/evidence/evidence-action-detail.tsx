@@ -15,7 +15,7 @@ import {
 import { useState } from "react";
 import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
-import { plainEnglishDescription, resolveActionTitle, resolveActionType } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle, resolveActionDetail } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
@@ -294,7 +294,10 @@ export function EvidenceActionDetail({
   const description = plainEnglishDescription(receipt);
   const actionTitle = resolveActionTitle(receipt);
   const actionType = resolveActionType(receipt);
+  const actionSubtitle = resolveActionSubtitle(receipt);
+  const actionDetail = resolveActionDetail(receipt);
   const signals = receipt.scanner_evidence ?? [];
+  const primarySignal = signals[0];
   let copyLabel = "Copy receipt ID";
   if (copied) {
     copyLabel = "Copied!";
@@ -349,10 +352,32 @@ export function EvidenceActionDetail({
 
         <p className="text-sm text-brand-dark leading-relaxed">{description}</p>
 
-        {receipt.capabilities_summary && (
-          <p className="text-xs text-slate-500 italic leading-relaxed">
-            {receipt.capabilities_summary}
-          </p>
+        {actionDetail && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <SectionLabel>{actionType}</SectionLabel>
+            <p className="mt-1 text-xs font-mono text-brand-dark break-all whitespace-pre-line leading-relaxed">
+              {actionDetail}
+            </p>
+          </div>
+        )}
+
+        {primarySignal && (
+          <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-3">
+            <div className="flex items-center gap-2">
+              <SeverityIcon severity={primarySignal.severity} />
+              <SectionLabel>Scanner finding</SectionLabel>
+              <SeverityBadge severity={primarySignal.severity} />
+            </div>
+            <p className="mt-1 text-sm font-medium text-brand-dark">{primarySignal.title}</p>
+            <p className="mt-1 text-xs text-brand-dark/80 leading-relaxed">
+              {primarySignal.plain_reason}
+            </p>
+            {primarySignal.false_positive_hint && (
+              <p className="mt-2 text-[11px] text-slate-500 italic">
+                Might be safe if: {primarySignal.false_positive_hint}
+              </p>
+            )}
+          </div>
         )}
 
         {receipt.provenance_summary && (

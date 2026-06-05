@@ -1,9 +1,13 @@
-import type { GuardReceipt, GuardApprovalRequest } from "../guard-types";
+import type { GuardReceipt, GuardApprovalRequest, GuardActionEnvelope } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
 
 function getArtifactType(receipt: GuardReceipt): string {
   return (receipt.artifact_type ?? "").toLowerCase();
+}
+
+function getEnvelope(receipt: GuardReceipt): GuardActionEnvelope | null {
+  return receipt.action_envelope_json ?? null;
 }
 
 export function humanFileName(artifactName: string | null | undefined): string {
@@ -19,8 +23,9 @@ export function humanFileName(artifactName: string | null | undefined): string {
 }
 
 export function resolveActionType(receipt: GuardReceipt): string {
+  const envelope = getEnvelope(receipt);
+  const actionType = (envelope?.action_type ?? "").toLowerCase();
   const artifactType = getArtifactType(receipt);
-  const actionType = ((receipt.action_envelope_json as { action_type?: string } | null | undefined)?.action_type ?? "").toLowerCase();
 
   if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command")) return "Shell command";
   if (actionType === "prompt" || artifactType === "prompt_request") return "Prompt";
@@ -36,59 +41,180 @@ export function resolveActionType(receipt: GuardReceipt): string {
   return "Action";
 }
 
-export function resolveActionTitle(receipt: GuardReceipt): string {
-  const artifactName = receipt.artifact_name?.trim();
-  if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
-    return artifactName;
-  }
-
-  const caps = receipt.capabilities_summary?.trim();
-  if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
-    return caps;
-  }
-
-  const signals = receipt.scanner_evidence ?? [];
-  if (signals.length > 0 && signals[0]?.title) {
-    return signals[0].title;
-  }
-
-  const provenance = receipt.provenance_summary?.trim();
-  if (provenance && provenance.length > 0 && !provenance.startsWith("hook event for")) {
-    return provenance;
-  }
-
-  const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
-  const type = resolveActionType(receipt);
-  if (name && name !== type.toLowerCase()) {
-    return `${type}: ${name}`;
-  }
-  return type;
-}
-
 function looksLikeId(text: string): boolean {
   if (/^\w+:[a-f0-9]{8,}$/i.test(text)) return true;
   if (/^[a-f0-9]{8,}$/i.test(text)) return true;
   return false;
 }
 
+export function resolveActionTitle(receipt: GuardReceipt): string {
+  const envelope = getEnvelope(receipt);
+  const type = resolveActionType(receipt);
+
+  // Shell command: show the actual command if available
+  const command = envelope?.command?.trim();
+  if (type === "Shell command" && command && command.length > 0) {
+    return truncate(command, 80);
+  }
+
+  // File access: show the actual path
+  const targetPath = envelope?.target_paths?.[0]?.trim();
+  if ((type === "File read" || type === "File write") && targetPath && targetPath.length > 0) {
+    return truncate(targetPath, 80);
+  }
+
+  // Prompt: show excerpt
+  const promptExcerpt = envelope?.prompt_excerpt?.trim();
+  if (type === "Prompt" && promptExcerpt && promptExcerpt.length > 0) {
+    return truncate(promptExcerpt, 80);
+  }
+
+  // Network: show host
+  const host = envelope?.network_hosts?.[0]?.trim();
+  if (type === "Network request" && host && host.length > 0) {
+    return host;
+  }
+
+  // MCP tool: show tool name
+  const mcpTool = envelope?.mcp_tool?.trim() ?? envelope?.tool_name?.trim();
+  if (type === "Tool call" && mcpTool && mcpTool.length > 0) {
+    return mcpTool;
+  }
+
+  // Package: show package name
+  const packageName = envelope?.package_name?.trim();
+  if (type === "Package" && packageName && packageName.length > 0) {
+    return packageName;
+  }
+
+  // Scanner evidence title is usually more descriptive than raw artifact_name
+  const signals = receipt.scanner_evidence ?? [];
+  if (signals.length > 0 && signals[0]?.title) {
+    return signals[0].title;
+  }
+
+  // artifact_name when it is human-readable
+  const artifactName = receipt.artifact_name?.trim();
+  if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
+    return artifactName;
+  }
+
+  // capabilities_summary
+  const caps = receipt.capabilities_summary?.trim();
+  if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
+    return caps;
+  }
+
+  // provenance_summary
+  const provenance = receipt.provenance_summary?.trim();
+  if (provenance && provenance.length > 0 && !provenance.startsWith("hook event for")) {
+    return provenance;
+  }
+
+  const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  if (name && name.toLowerCase() !== type.toLowerCase()) {
+    return `${type}: ${name}`;
+  }
+  return type;
+}
+
+export function resolveActionSubtitle(receipt: GuardReceipt): string | null {
+  const signals = receipt.scanner_evidence ?? [];
+  const firstSignal = signals[0];
+
+  // Highest priority: scanner plain_reason explains the actual risk
+  if (firstSignal?.plain_reason) {
+    return firstSignal.plain_reason;
+  }
+
+  // Fallback to a human-readable context string built from envelope + metadata
+  const envelope = getEnvelope(receipt);
+  const type = resolveActionType(receipt);
+  const parts: string[] = [];
+
+  if (type === "Shell command" && envelope?.command) {
+    // Already shown as title; subtitle can be empty or show tool_name
+    if (envelope.tool_name) parts.push(`via ${envelope.tool_name}`);
+  }
+
+  if ((type === "File read" || type === "File write") && envelope?.target_paths && envelope.target_paths.length > 1) {
+    parts.push(`${envelope.target_paths.length} paths`);
+  }
+
+  if (type === "Network request" && envelope?.network_hosts && envelope.network_hosts.length > 1) {
+    parts.push(`${envelope.network_hosts.length} hosts`);
+  }
+
+  if (receipt.capabilities_summary && receipt.capabilities_summary !== "hook artifact · codex") {
+    parts.push(receipt.capabilities_summary);
+  }
+
+  if (parts.length > 0) {
+    return parts.join(" · ");
+  }
+
+  return null;
+}
+
+export function resolveActionDetail(receipt: GuardReceipt): string | null {
+  const envelope = getEnvelope(receipt);
+  if (!envelope) return null;
+
+  const type = resolveActionType(receipt);
+
+  if (type === "Shell command" && envelope.command) {
+    return envelope.command;
+  }
+  if ((type === "File read" || type === "File write") && envelope.target_paths.length > 0) {
+    return envelope.target_paths.join("\n");
+  }
+  if (type === "Prompt" && (envelope.prompt_text || envelope.prompt_excerpt)) {
+    return (envelope.prompt_text || envelope.prompt_excerpt) as string;
+  }
+  if (type === "Network request" && envelope.network_hosts.length > 0) {
+    return envelope.network_hosts.join("\n");
+  }
+  if (type === "Tool call") {
+    const server = envelope.mcp_server ?? envelope.tool_name;
+    const tool = envelope.mcp_tool;
+    if (server && tool) return `${server} → ${tool}`;
+    if (tool) return tool;
+    if (server) return server;
+  }
+  if (type === "Package") {
+    const pm = envelope.package_manager;
+    const name = envelope.package_name;
+    if (pm && name) return `${pm} install ${name}`;
+    if (name) return name;
+  }
+  return null;
+}
+
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max - 1) + "…";
+}
+
 export function plainEnglishDescription(receipt: GuardReceipt): string {
   const app = harnessDisplayName(receipt.harness);
   const type = resolveActionType(receipt);
   const title = resolveActionTitle(receipt);
-  const signals = receipt.scanner_evidence ?? [];
-  const firstSignal = signals[0];
+  const subtitle = resolveActionSubtitle(receipt);
 
   if (receipt.policy_decision === "allow") {
     if (receipt.user_override !== null) {
-      return `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
+      return subtitle
+        ? `${app} ${pastTenseVerb(type)} ${title}. ${subtitle} You reviewed and allowed it.`
+        : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
     }
-    return `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
+    return subtitle
+      ? `${app} ${pastTenseVerb(type)} ${title}. ${subtitle} Guard allowed it automatically.`
+      : `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
   }
 
-  if (firstSignal?.plain_reason) {
-    return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${firstSignal.plain_reason}`;
-  }
-  return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
+  return subtitle
+    ? `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${subtitle}`
+    : `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
 }
 
 function pastTenseVerb(type: string): string {
