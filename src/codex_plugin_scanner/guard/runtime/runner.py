@@ -1319,7 +1319,9 @@ def sync_receipts(
         else:
             last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
             preserved_bundle_payload = (
-                last_good_bundle_payload if isinstance(last_good_bundle_payload, dict) and last_good_bundle_payload else existing_policy_bundle
+                last_good_bundle_payload
+                if isinstance(last_good_bundle_payload, dict) and last_good_bundle_payload
+                else existing_policy_bundle
             )
             if isinstance(preserved_bundle_payload, dict) and preserved_bundle_payload:
                 remote_decisions.update(
