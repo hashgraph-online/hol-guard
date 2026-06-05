@@ -910,7 +910,9 @@ def _policy_bundle_rule_is_valid(rule: object) -> bool:
     if not isinstance(rule.get("reason"), str):
         return False
     scope = rule.get("scope")
-    return isinstance(scope, dict) and all(_policy_bundle_string_list(scope.get(key)) for key in _POLICY_BUNDLE_SCOPE_KEYS)
+    return isinstance(scope, dict) and all(
+        _policy_bundle_string_list(scope.get(key)) for key in _POLICY_BUNDLE_SCOPE_KEYS
+    )
 
 
 def _policy_bundle_acknowledgement_is_valid(acknowledgement: object) -> bool:
@@ -990,7 +992,11 @@ def _validated_policy_bundle_payload(policy_bundle: dict[str, object]) -> tuple[
         "bundleHash": bundle_hash,
         "issuedAt": issued_at,
         "expiresAt": expires_at,
-        **({"minDaemonVersion": policy_bundle["minDaemonVersion"]} if _non_empty_string(policy_bundle.get("minDaemonVersion")) else {}),
+        **(
+            {"minDaemonVersion": policy_bundle["minDaemonVersion"]}
+            if _non_empty_string(policy_bundle.get("minDaemonVersion"))
+            else {}
+        ),
         "verifier": verifier,
         "rolloutState": policy_bundle["rolloutState"],
         "policyDefaults": defaults,
@@ -1093,17 +1099,15 @@ def _policy_bundle_rule_matches_local_scope(
     if not isinstance(scope, dict):
         return False
     devices = scope.get("devices")
-    if isinstance(devices, list) and devices:
-        if device_id not in devices and device_name not in devices:
-            return False
-    environments = scope.get("environments")
-    if isinstance(environments, list) and environments:
-        if not any(isinstance(item, str) and item in _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments):
-            return False
-    locations = scope.get("locations")
-    if isinstance(locations, list) and locations:
+    if isinstance(devices, list) and devices and device_id not in devices and device_name not in devices:
         return False
-    return True
+    environments = scope.get("environments")
+    if isinstance(environments, list) and environments and not any(
+        isinstance(item, str) and item in _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments
+    ):
+        return False
+    locations = scope.get("locations")
+    return not (isinstance(locations, list) and locations)
 
 
 def _policy_bundle_rule_harnesses(rule: dict[str, object]) -> list[str]:
@@ -1131,7 +1135,6 @@ def _build_policy_bundle_decisions(
     rules = policy_bundle.get("rules")
     if not isinstance(rules, list):
         return decisions
-    bundle_version = _non_empty_string(policy_bundle.get("bundleVersion")) or "policy-bundle"
     for item in rules:
         if not isinstance(item, dict):
             continue
@@ -1277,7 +1280,9 @@ def sync_receipts(
     else:
         store.set_sync_payload("policy", {}, now)
     if policy_bundle_payload is not None:
-        validated_policy_bundle, policy_bundle_rejection_reason = _validated_policy_bundle_payload(policy_bundle_payload)
+        validated_policy_bundle, policy_bundle_rejection_reason = _validated_policy_bundle_payload(
+            policy_bundle_payload
+        )
         existing_policy_bundle_payload = store.get_sync_payload("policy_bundle")
         existing_policy_bundle = (
             existing_policy_bundle_payload if isinstance(existing_policy_bundle_payload, dict) else None
@@ -1285,7 +1290,9 @@ def sync_receipts(
         if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "unsupported_daemon_version"
-        if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(existing_policy_bundle, validated_policy_bundle):
+        if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
+            existing_policy_bundle, validated_policy_bundle
+        ):
             validated_policy_bundle = None
             policy_bundle_rejection_reason = "bundle_version_downgrade"
         if validated_policy_bundle is not None:
