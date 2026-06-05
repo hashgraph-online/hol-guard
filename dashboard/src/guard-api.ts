@@ -1029,12 +1029,30 @@ export async function fetchRequest(requestId: string): Promise<GuardApprovalRequ
   return normalizeApprovalRequest(payload);
 }
 
+type RawGuardReceipt = Omit<GuardReceipt, "action_envelope_json"> & {
+  action_envelope_json?: unknown;
+};
+
+function normalizeReceipt(item: RawGuardReceipt): GuardReceipt {
+  return {
+    ...item,
+    action_envelope_json: parseActionEnvelope(item.action_envelope_json)
+  };
+}
+
+function normalizeReceipts(items: RawGuardReceipt[] | null | undefined): GuardReceipt[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.map(normalizeReceipt);
+}
+
 export async function fetchReceipts(): Promise<GuardReceipt[]> {
   if (isGuardDemoMode()) {
     return getDemoReceipts();
   }
-  const payload = await readJson<{ items: GuardReceipt[] }>("/v1/receipts");
-  return payload.items;
+  const payload = await readJson<{ items: RawGuardReceipt[] }>("/v1/receipts");
+  return normalizeReceipts(payload.items);
 }
 
 export async function fetchLatestReceipt(
@@ -1053,7 +1071,7 @@ export async function fetchLatestReceipt(
   if (!response.ok) {
     throw new Error(`Receipt request failed with ${response.status}`);
   }
-  return (await response.json()) as GuardReceipt;
+  return normalizeReceipt((await response.json()) as RawGuardReceipt);
 }
 
 export async function fetchPolicy(harness: string): Promise<GuardPolicyDecision[]> {

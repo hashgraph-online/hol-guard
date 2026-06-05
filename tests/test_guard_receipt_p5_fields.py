@@ -41,6 +41,7 @@ def _make_receipt(
     diff_summary: str | None = None,
     approval_source: str | None = None,
     timestamp: str = "2025-01-01T00:00:00Z",
+    action_envelope_json: dict[str, object] | None = None,
 ) -> GuardReceipt:
     return GuardReceipt(
         receipt_id=receipt_id or str(uuid.uuid4()),
@@ -54,6 +55,7 @@ def _make_receipt(
         diff_summary=diff_summary,
         approval_source=approval_source,
         timestamp=timestamp,
+        action_envelope_json=action_envelope_json,
     )
 
 
@@ -212,6 +214,23 @@ class TestReceiptFieldRoundtrip:
         assert len(receipts) == 1
         assert receipts[0]["diff_summary"] == "1 change(s): removed"
         assert receipts[0]["approval_source"] == "policy"
+
+    def test_action_envelope_json_roundtrip(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        envelope: dict[str, object] = {"action_type": "shell_command", "command": "ls -la"}
+        receipt = _make_receipt(
+            receipt_id="r-env-01",
+            action_envelope_json=envelope,
+        )
+        store.add_receipt(receipt)
+
+        result = store.get_receipt("r-env-01")
+        assert result is not None
+        assert result["action_envelope_json"] == envelope
+
+        receipts = store.list_receipts(harness="codex", limit=10)
+        assert len(receipts) == 1
+        assert receipts[0]["action_envelope_json"] == envelope
 
 
 class TestMapApprovalSource:
