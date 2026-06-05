@@ -2986,9 +2986,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
             bearer_token = authorization[7:].strip()
         candidates = [
-            candidate
-            for candidate in (session_token, bearer_token)
-            if isinstance(candidate, str) and candidate.strip()
+            candidate for candidate in (session_token, bearer_token) if isinstance(candidate, str) and candidate.strip()
         ]
         return any(self._dashboard_session_token_matches(candidate, payload=payload) for candidate in candidates)
 
@@ -3107,16 +3105,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
                 return True
         if self.command == "POST":
-            if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {
-                "approve",
-                "block",
-                "resume",
-            }:
+            if (
+                len(path_parts) == 4
+                and path_parts[:2] == ["v1", "requests"]
+                and path_parts[3]
+                in {
+                    "approve",
+                    "block",
+                    "resume",
+                }
+            ):
                 return True
-            if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {
-                "items",
-                "status",
-            }:
+            if (
+                len(path_parts) == 4
+                and path_parts[:2] == ["v1", "operations"]
+                and path_parts[3]
+                in {
+                    "items",
+                    "status",
+                }
+            ):
                 return True
         return False
 
