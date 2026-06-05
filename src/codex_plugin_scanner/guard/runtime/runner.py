@@ -1827,6 +1827,7 @@ def _refresh_guard_oauth_access_token(
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
+            "User-Agent": _GUARD_SYNC_USER_AGENT,
             "DPoP": _sign_guard_dpop_proof(
                 request_url=token_endpoint,
                 method="POST",
