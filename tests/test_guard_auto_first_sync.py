@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
-import urllib.request
-
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_headless_daemon_api import _dashboard_token, _read_json_response, _request
 
 
 def test_finalize_guard_connect_payload_keeps_first_sync_pending_on_transient_sync_error(
@@ -83,8 +82,17 @@ def test_guard_daemon_runtime_request_queues_pending_first_sync(tmp_path, monkey
     try:
         daemon.start()
         assert calls == []
-        with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/runtime",
+                method="GET",
+                token=_dashboard_token(auth_token),
+            ),
+        )
+        assert status == 200
         assert payload["cloud_state"] == "paired_waiting"
         assert calls == [str(store.guard_home)]
     finally:
