@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.cli import update_commands as guard_update_comma
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
+from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore, KeychainSecretStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -6446,6 +6447,101 @@ url = http://127.0.0.1:8787/guard-canary
         assert "artifactHash" in first_receipt
         assert "recommendation" in first_receipt
 
+    def test_guard_sync_persists_cloud_policy_bundle_for_manual_sync(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        _SyncRequestHandler.response_code = 200
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-06-05T13:45:00Z",
+            "receiptsStored": 0,
+            "policyBundle": {
+                "contractVersion": "guard-policy-bundle.v1",
+                "bundleVersion": "policy-2026-06-05.1",
+                "bundleHash": "sha256:bundle-proof",
+                "issuedAt": "2026-06-05T13:45:00Z",
+                "expiresAt": None,
+                "verifier": {
+                    "algorithm": "sha256",
+                    "keyId": "guard-policy-bundle-v1",
+                    "signature": None,
+                },
+                "rolloutState": "enforcing",
+                "policyDefaults": {
+                    "mode": "enforce",
+                    "defaultAction": "warn",
+                    "unknownPublisherAction": "review",
+                    "changedHashAction": "require-reapproval",
+                    "newNetworkDomainAction": "warn",
+                    "subprocessAction": "block",
+                    "telemetryEnabled": False,
+                    "syncEnabled": True,
+                },
+                "rules": [],
+                "acknowledgements": [],
+            },
+        }
+        _SyncRequestHandler.response_payload["policyBundle"]["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(
+            _SyncRequestHandler.response_payload["policyBundle"]
+        )
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            _seed_sync_credentials(home_dir, f"http://127.0.0.1:{server.server_port}/receipts")
+            rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+            payload = json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            _SyncRequestHandler.response_code = 200
+            _SyncRequestHandler.response_payload = {
+                "syncedAt": "2026-04-09T00:00:00Z",
+                "receiptsStored": 1,
+            }
+
+        assert rc == 0
+        assert payload["synced_at"] == "2026-06-05T13:45:00Z"
+        assert GuardStore(home_dir).get_sync_payload("policy_bundle")["bundleVersion"] == "policy-2026-06-05.1"
+
+    def test_guard_status_reports_cloud_policy_bundle_version(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        now = "2026-05-01T00:00:00Z"
+        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "oauth_access_token_fixture", now)
+        store.set_sync_payload(
+            "policy_bundle",
+            {
+                "bundleVersion": "policy-2026-05-01.3",
+                "bundleHash": "sha256:bundle-proof",
+                "rolloutState": "enforcing",
+            },
+            now,
+        )
+        store.set_sync_payload(
+            "policy_bundle_last_error",
+            {"reason": "auth_expired"},
+            now,
+        )
+
+        rc = main(["guard", "status", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["cloud_policy_bundle_version"] == "policy-2026-05-01.3"
+        assert payload["cloud_policy_bundle_hash"] == "sha256:bundle-proof"
+        assert payload["cloud_policy_rollout_state"] == "enforcing"
+        assert payload["cloud_policy_sync_error"] == "auth_expired"
+
+    def test_guard_status_explains_local_only_policy_state(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        rc = main(["guard", "status", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["cloud_state"] == "local_only"
+        assert "this machine" in str(payload["cloud_state_detail"]).lower()
+
     def test_guard_connect_opens_device_code_browser_flow_without_pairing(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -8079,6 +8175,38 @@ url = http://127.0.0.1:8787/guard-canary
                 "syncEnabled": True,
                 "updatedAt": "2026-04-09T00:00:00Z",
             },
+            "policyBundle": {
+                "contractVersion": "guard-policy-bundle.v1",
+                "bundleVersion": "policy-2026-04-09.1",
+                "bundleHash": "sha256:16bf2a9dd5678a80600579f326fe38ed15a6419819a4f2a3eac876c1d95d18ba",
+                "issuedAt": "2026-04-09T00:00:00Z",
+                "expiresAt": None,
+                "verifier": {
+                    "algorithm": "sha256",
+                    "keyId": "guard-policy-bundle-v1",
+                    "signature": None,
+                },
+                "rolloutState": "enforcing",
+                "policyDefaults": {
+                    "mode": "enforce",
+                    "defaultAction": "warn",
+                    "unknownPublisherAction": "review",
+                    "changedHashAction": "allow",
+                    "newNetworkDomainAction": "warn",
+                    "subprocessAction": "block",
+                    "telemetryEnabled": False,
+                    "syncEnabled": True,
+                },
+                "rules": [],
+                "acknowledgements": [
+                    {
+                        "deviceId": "device-1",
+                        "deviceName": "Guard local daemon",
+                        "acknowledgedAt": "2026-04-09T00:01:00Z",
+                        "status": "synced",
+                    }
+                ],
+            },
             "alertPreferences": {
                 "emailEnabled": True,
                 "digestMode": "daily",
@@ -8129,10 +8257,105 @@ url = http://127.0.0.1:8787/guard-canary
         assert run_rc == 1
         assert _SyncRequestHandler.captured_body is not None
         assert run_output["blocked"] is True
+        store = GuardStore(home_dir)
+        assert store.get_sync_payload("policy_bundle") == {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-04-09.1",
+            "bundleHash": "sha256:16bf2a9dd5678a80600579f326fe38ed15a6419819a4f2a3eac876c1d95d18ba",
+            "issuedAt": "2026-04-09T00:00:00Z",
+            "expiresAt": None,
+            "verifier": {
+                "algorithm": "sha256",
+                "keyId": "guard-policy-bundle-v1",
+                "signature": None,
+            },
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [],
+            "acknowledgements": [
+                {
+                    "deviceId": "device-1",
+                    "deviceName": "Guard local daemon",
+                    "acknowledgedAt": "2026-04-09T00:01:00Z",
+                    "status": "synced",
+                }
+            ],
+        }
         assert any(
             artifact["artifact_id"] == "codex:global:global_tools" and artifact["policy_action"] == "block"
             for artifact in run_output["artifacts"]
         )
+
+    def test_synced_policy_payload_prefers_bundle_defaults(self, tmp_path):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.set_sync_payload(
+            "policy",
+            {
+                "mode": "observe",
+                "defaultAction": "allow",
+                "unknownPublisherAction": "allow",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "allow",
+                "subprocessAction": "allow",
+                "telemetryEnabled": True,
+                "syncEnabled": False,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "2026-04-09T00:00:00Z",
+        )
+        store.set_sync_payload(
+            "policy_bundle",
+            {
+                "contractVersion": "guard-policy-bundle.v1",
+                "bundleVersion": "policy-2026-04-09.1",
+                "bundleHash": "sha256:cf9abe12666da1cbd99e0aeb7b94d15f34c5051bb69bff1e5208477f305e6362",
+                "issuedAt": "2026-04-09T00:10:00Z",
+                "expiresAt": None,
+                "verifier": {
+                    "algorithm": "sha256",
+                    "keyId": "guard-policy-bundle-v1",
+                    "signature": None,
+                },
+                "rolloutState": "enforcing",
+                "policyDefaults": {
+                    "mode": "enforce",
+                    "defaultAction": "warn",
+                    "unknownPublisherAction": "review",
+                    "changedHashAction": "require-reapproval",
+                    "newNetworkDomainAction": "warn",
+                    "subprocessAction": "block",
+                    "telemetryEnabled": False,
+                    "syncEnabled": True,
+                },
+                "rules": [],
+                "acknowledgements": [],
+            },
+            "2026-04-09T00:10:00Z",
+        )
+
+        assert guard_commands_module._synced_policy_payload(store) == {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+            "updatedAt": "2026-04-09T00:10:00Z",
+            "bundleHash": "sha256:cf9abe12666da1cbd99e0aeb7b94d15f34c5051bb69bff1e5208477f305e6362",
+            "bundleVersion": "policy-2026-04-09.1",
+        }
 
     def test_guard_invalid_harness_returns_parser_error(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -8250,6 +8473,29 @@ url = http://127.0.0.1:8787/guard-canary
         assert output == {
             "synced": False,
             "error": "Guard authorization expired. Run `hol-guard connect` to sign in again.",
+        }
+
+    def test_refresh_cloud_policy_bundle_records_auth_expired_reason(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.set_sync_credentials(
+            "https://hol.org/api/guard/receipts/sync",
+            "oauth_access_token_fixture",
+            "2026-04-09T00:00:00Z",
+        )
+
+        def _fail_sync(_store: GuardStore) -> dict[str, object]:
+            raise guard_commands_module.GuardSyncAuthorizationExpiredError(
+                "Guard authorization expired. Run `hol-guard connect` to sign in again."
+            )
+
+        monkeypatch.setattr(guard_commands_module, "sync_receipts", _fail_sync)
+
+        guard_commands_module._refresh_cloud_policy_bundle(store)
+
+        assert store.get_sync_payload("policy_bundle_last_error") == {
+            "reason": "auth_expired",
+            "message": "Guard authorization expired. Run `hol-guard connect` to sign in again.",
         }
 
     def test_guard_sync_reports_remote_sync_errors_in_json_mode(self, tmp_path, capsys):
