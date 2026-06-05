@@ -10,10 +10,15 @@ import {
   HiMiniArrowDown,
   HiMiniArrowUp,
   HiMiniChevronRight,
+  HiMiniWrenchScrewdriver,
 } from "react-icons/hi2";
 import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
+import { ApprovalProofModal } from "./approval-proof-modal";
 import { formatRelativeTime, harnessDisplayName } from "./approval-center-utils";
-import type { GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import { GuardHarnessActionError, runAuditRemediation } from "./guard-api";
+import type { AuditRemediationAction } from "./guard-api";
+import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -26,7 +31,14 @@ export type AuditResult = {
   workspace: string | null;
   timestamp: string;
   remediation: string | null;
+  remediationAction: AuditRemediationRequest | null;
   resolved: boolean;
+};
+
+export type AuditRemediationRequest = {
+  action: AuditRemediationAction;
+  manager: string;
+  label: string;
 };
 
 export type AuditFilterState = {
@@ -54,6 +66,11 @@ export function deriveFrontendAuditResults(
         workspace: null,
         timestamp: snapshot.generated_at,
         remediation: `Add ${protection.shim_dir} to PATH and restart your shell. Then run hol-guard supply-chain verify.`,
+        remediationAction: {
+          action: "package_shim_path",
+          manager: mgr,
+          label: `Install Guard for ${mgr}`,
+        },
         resolved: false,
       });
     }
@@ -70,6 +87,7 @@ export function deriveFrontendAuditResults(
       workspace: r.source_scope ?? null,
       timestamp: r.timestamp,
       remediation: "Review the action in evidence and adjust policy if it was a false positive.",
+      remediationAction: null,
       resolved: true,
     });
   }
@@ -84,6 +102,7 @@ export function deriveFrontendAuditResults(
       workspace: null,
       timestamp: snapshot.generated_at,
       remediation: "Start Guard with hol-guard bootstrap or check system logs.",
+      remediationAction: null,
       resolved: false,
     });
   }
@@ -104,12 +123,16 @@ function severityBadgeTone(
 type AuditResultRowProps = {
   result: AuditResult;
   onMarkResolved?: (id: string) => void;
+  onRunRemediation: (result: AuditResult) => void;
+  running: boolean;
+  actionMessage: string | null;
 };
 
-function AuditResultRow({ result, onMarkResolved }: AuditResultRowProps) {
+function AuditResultRow({ result, onMarkResolved, onRunRemediation, running, actionMessage }: AuditResultRowProps) {
   const [expanded, setExpanded] = useState(false);
   const toggle = useCallback(() => setExpanded((p) => !p), []);
   const handleResolve = useCallback(() => onMarkResolved?.(result.id), [onMarkResolved, result.id]);
+  const handleRunRemediation = useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
 
   return (
     <div className={`border-b border-slate-100 last:border-b-0 ${result.resolved ? "opacity-60" : ""}`}>
@@ -157,6 +180,17 @@ function AuditResultRow({ result, onMarkResolved }: AuditResultRowProps) {
                 Remediation
               </p>
               <p className="text-sm text-brand-dark/80">{result.remediation}</p>
+              {result.remediationAction && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <ActionButton onClick={handleRunRemediation} disabled={running}>
+                    <HiMiniWrenchScrewdriver className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                    {running ? "Running..." : result.remediationAction.label}
+                  </ActionButton>
+                </div>
+              )}
+              {actionMessage !== null && (
+                <p className="mt-2 text-xs text-slate-500">{actionMessage}</p>
+              )}
             </div>
           )}
           {!result.resolved && onMarkResolved && (
@@ -173,9 +207,10 @@ function AuditResultRow({ result, onMarkResolved }: AuditResultRowProps) {
 type AuditWorkspaceProps = {
   snapshot: GuardRuntimeSnapshot;
   receipts: GuardReceipt[];
+  approvalGate: GuardApprovalGatePublicConfig | null;
 };
 
-export function AuditWorkspace({ snapshot, receipts }: AuditWorkspaceProps) {
+export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorkspaceProps) {
   const [filter, setFilter] = useState<AuditFilterState>({
     severityFilter: "all",
     harnessFilter: "",
@@ -183,6 +218,10 @@ export function AuditWorkspace({ snapshot, receipts }: AuditWorkspaceProps) {
     searchQuery: "",
   });
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
+  const [pendingRemediation, setPendingRemediation] = useState<AuditResult | null>(null);
+  const [runningRemediationId, setRunningRemediationId] = useState<string | null>(null);
+  const [remediationMessages, setRemediationMessages] = useState<Record<string, string>>({});
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
 
   const handleSearchChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setFilter((f) => ({ ...f, searchQuery: e.target.value }));
@@ -202,6 +241,68 @@ export function AuditWorkspace({ snapshot, receipts }: AuditWorkspaceProps) {
   const handleMarkResolved = useCallback((id: string) => {
     setResolvedIds((prev) => new Set([...prev, id]));
   }, []);
+
+  const executeRemediation = useCallback(
+    async (
+      result: AuditResult,
+      credentials?: { approval_password?: string; approval_totp_code?: string },
+    ) => {
+      if (result.remediationAction === null) return;
+      setRunningRemediationId(result.id);
+      setRemediationMessages((prev) => ({ ...prev, [result.id]: "Running remediation through the local daemon." }));
+      try {
+        await runAuditRemediation({
+          ...result.remediationAction,
+          ...credentials,
+        });
+        setResolvedIds((prev) => new Set([...prev, result.id]));
+        setRemediationMessages((prev) => ({
+          ...prev,
+          [result.id]: "Remediation completed. Restart your shell before retrying package installs.",
+        }));
+      } catch (error) {
+        if (
+          credentials === undefined &&
+          error instanceof GuardHarnessActionError &&
+          error.payload?.error === "approval_gate_required"
+        ) {
+          await resolveApprovalGate();
+          setPendingRemediation(result);
+          setRemediationMessages((prev) => {
+            const next = { ...prev };
+            delete next[result.id];
+            return next;
+          });
+          return;
+        }
+        const message = error instanceof Error ? error.message : "Unable to run remediation.";
+        setRemediationMessages((prev) => ({ ...prev, [result.id]: message }));
+      } finally {
+        setRunningRemediationId(null);
+      }
+    },
+    [resolveApprovalGate],
+  );
+
+  const handleRunRemediation = useCallback(
+    (result: AuditResult) => {
+      if (result.remediationAction === null) return;
+      void executeRemediation(result);
+    },
+    [executeRemediation],
+  );
+
+  const handleCancelRemediationGate = useCallback(() => setPendingRemediation(null), []);
+
+  const handleConfirmRemediationGate = useCallback(
+    (credentials: { approval_password?: string; approval_totp_code?: string }) => {
+      const result = pendingRemediation;
+      if (result === null) return;
+      setPendingRemediation(null);
+      void executeRemediation(result, credentials);
+    },
+    [executeRemediation, pendingRemediation],
+  );
 
   const baseResults = useMemo(
     () => deriveFrontendAuditResults(receipts, snapshot),
@@ -250,8 +351,7 @@ export function AuditWorkspace({ snapshot, receipts }: AuditWorkspaceProps) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-brand-dark">Audit</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="text-sm text-slate-500">
             Workspace audit results, open issues, and remediation queue.
           </p>
         </div>
@@ -335,7 +435,13 @@ export function AuditWorkspace({ snapshot, receipts }: AuditWorkspaceProps) {
           <div role="list" aria-label="Audit results">
             {results.map((result) => (
               <div key={result.id} role="listitem">
-                <AuditResultRow result={result} onMarkResolved={handleMarkResolved} />
+                <AuditResultRow
+                  result={result}
+                  onMarkResolved={handleMarkResolved}
+                  onRunRemediation={handleRunRemediation}
+                  running={runningRemediationId === result.id}
+                  actionMessage={remediationMessages[result.id] ?? null}
+                />
               </div>
             ))}
           </div>
@@ -348,6 +454,17 @@ export function AuditWorkspace({ snapshot, receipts }: AuditWorkspaceProps) {
             .map((r) => ({ ...r, resolved: r.resolved || resolvedIds.has(r.id) }))
             .filter((r) => !r.resolved && (r.severity === "critical" || r.severity === "high"))}
           onMarkResolved={handleMarkResolved}
+          onRunRemediation={handleRunRemediation}
+          runningRemediationId={runningRemediationId}
+          remediationMessages={remediationMessages}
+        />
+      )}
+      {pendingRemediation !== null && (
+        <RemediationApprovalModal
+          result={pendingRemediation}
+          approvalGate={resolvedApprovalGate}
+          onCancel={handleCancelRemediationGate}
+          onConfirm={handleConfirmRemediationGate}
         />
       )}
     </div>
@@ -357,9 +474,18 @@ export function AuditWorkspace({ snapshot, receipts }: AuditWorkspaceProps) {
 type RemediationQueueProps = {
   results: AuditResult[];
   onMarkResolved: (id: string) => void;
+  onRunRemediation: (result: AuditResult) => void;
+  runningRemediationId: string | null;
+  remediationMessages: Record<string, string>;
 };
 
-function RemediationQueue({ results, onMarkResolved }: RemediationQueueProps) {
+function RemediationQueue({
+  results,
+  onMarkResolved,
+  onRunRemediation,
+  runningRemediationId,
+  remediationMessages,
+}: RemediationQueueProps) {
   if (results.length === 0) return null;
   return (
     <div className="rounded-2xl border border-red-100 bg-red-50/40 shadow-sm">
@@ -384,13 +510,62 @@ function RemediationQueue({ results, onMarkResolved }: RemediationQueueProps) {
                   <p className="text-sm text-slate-600">{r.remediation}</p>
                 )}
               </div>
-              <ActionButton variant="outline" onClick={() => onMarkResolved(r.id)}>
-                Resolve
-              </ActionButton>
+              <RemediationQueueActions
+                result={r}
+                onMarkResolved={onMarkResolved}
+                onRunRemediation={onRunRemediation}
+                running={runningRemediationId === r.id}
+              />
             </div>
+            {remediationMessages[r.id] && (
+              <p className="text-xs text-slate-500">{remediationMessages[r.id]}</p>
+            )}
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+function RemediationQueueActions(props: {
+  result: AuditResult;
+  onMarkResolved: (id: string) => void;
+  onRunRemediation: (result: AuditResult) => void;
+  running: boolean;
+}) {
+  const { result, onMarkResolved, onRunRemediation, running } = props;
+  const handleMarkResolved = useCallback(() => onMarkResolved(result.id), [onMarkResolved, result.id]);
+  const handleRunRemediation = useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
+  if (result.remediationAction !== null) {
+    return (
+      <ActionButton onClick={handleRunRemediation} disabled={running}>
+        <HiMiniWrenchScrewdriver className="mr-1.5 h-4 w-4" aria-hidden="true" />
+        {running ? "Running..." : result.remediationAction.label}
+      </ActionButton>
+    );
+  }
+  return (
+    <ActionButton variant="outline" onClick={handleMarkResolved}>
+      Resolve
+    </ActionButton>
+  );
+}
+
+function RemediationApprovalModal(props: {
+  result: AuditResult;
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  onCancel: () => void;
+  onConfirm: (credentials: { approval_password?: string; approval_totp_code?: string }) => void;
+}) {
+  const { approvalGate, onCancel, onConfirm, result } = props;
+  return (
+    <ApprovalProofModal
+      title={result.remediationAction?.label ?? "Run remediation"}
+      detail="Enter local approval proof before Guard changes package-manager protection on this device."
+      confirmLabel="Run remediation"
+      approvalGate={approvalGate}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }

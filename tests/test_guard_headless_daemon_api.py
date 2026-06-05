@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
@@ -220,6 +222,260 @@ def test_supply_chain_package_firewall_install_requires_paid_entitlement(tmp_pat
     assert payload["available_actions"] == ["status", "education", "cli_fallback"]
 
 
+def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired_cloud_auth(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-05T01:39:51+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-05T01:39:51+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-06-05T01:40:10+00:00",
+        reason="Guard authorization expired. Run `hol-guard connect` again.",
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_local_guard_cloud_proof",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("cloud auth still expired")),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_supply_chain_bundle",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["entitlement"] == {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "unknown",
+        "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+    }
+    assert payload["actions"]["install"] == "reconnect_required"
+
+
+def test_supply_chain_package_firewall_install_requires_reconnect_when_cloud_auth_expired(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-05T01:39:51+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-05T01:39:51+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-06-05T01:40:10+00:00",
+        reason="Guard authorization expired. Run `hol-guard connect` again.",
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_local_guard_cloud_proof",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("cloud auth still expired")),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_supply_chain_bundle",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                token=token,
+                payload={"managers": ["npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 403
+    assert payload["error"] == "guard_cloud_reconnect_required"
+    assert payload["entitlement"]["tier"] == "unknown"
+
+
+def test_supply_chain_package_firewall_install_self_heals_retry_required_cloud_auth(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        workspace_id="workspace-1",
+        now="2026-06-05T01:39:51+00:00",
+    )
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-06-05T01:39:51+00:00",
+        request_id="connect-1",
+    )
+    store.record_latest_guard_connect_sync_result(
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-06-05T01:40:10+00:00",
+        reason="Guard authorization expired. Run `hol-guard connect` again.",
+    )
+
+    def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
+        assert current_store is store
+        current_store.record_latest_guard_connect_sync_success(
+            sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
+            now="2026-06-05T01:41:00+00:00",
+        )
+        return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
+
+    def fake_sync_supply_chain_bundle(current_store: GuardStore) -> dict[str, object]:
+        assert current_store is store
+        current_store.set_sync_payload(
+            "supply_chain_bundle_entitlement",
+            {
+                "bundle_version": "bundle-version-test",
+                "key_id": "bundle-key-test",
+                "policy_hash": "policy-hash-test",
+                "tier": "pro",
+                "workspace_id": "workspace-1",
+            },
+            "2026-06-05T01:41:05+00:00",
+        )
+        return {"bundle_version": "bundle-version-test", "tier": "pro"}
+
+    monkeypatch.setattr(local_supply_chain_module, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof)
+    monkeypatch.setattr(local_supply_chain_module, "sync_supply_chain_bundle", fake_sync_supply_chain_bundle)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                token=token,
+                payload={"managers": ["npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["status"] == "completed"
+    assert payload["entitlement"] == {
+        "allowed": True,
+        "reason": "paid_entitlement_active",
+        "tier": "pro",
+        "upgrade_cta": None,
+    }
+    assert payload["result"]["installed_managers"] == ["npm"]
+
+
+def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-token-1",
+        dpop_private_key_pem="private-key",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
+        dpop_public_jwk_thumbprint="thumbprint-1",
+        grant_id="grant-1",
+        machine_id="machine-1",
+        supply_chain_entitlement_expires_at="2026-07-05T01:39:51+00:00",
+        supply_chain_firewall=True,
+        supply_chain_plan_id="pro",
+        workspace_id="workspace-1",
+        now="2026-06-05T01:39:51+00:00",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["entitlement"] == {
+        "allowed": True,
+        "reason": "paid_oauth_entitlement_active",
+        "tier": "pro",
+        "upgrade_cta": None,
+    }
+    assert payload["actions"] == {
+        "install": "available",
+        "repair": "available",
+        "test": "available",
+        "audit": "available",
+        "sync": "available",
+        "remove": "available",
+    }
+
+
 def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
@@ -266,6 +522,90 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(tmp_path:
     assert test_payload["status"] == "completed"
     assert test_payload["result"]["tested_managers"] == ["npm"]
     assert test_payload["result"]["blocked_execution"] is True
+
+
+def test_audit_package_shim_path_remediation_requires_approval_gate_proof(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
+    update_approval_gate_settings(
+        store.guard_home,
+        {
+            "enabled": True,
+            "new_password": "local-password",
+            "confirm_password": "local-password",
+        },
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/audit/remediations/package_shim_path",
+                token=token,
+                payload={"manager": "pnpm"},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 403
+    assert payload["error"] == "approval_gate_required"
+
+
+def test_audit_package_shim_path_remediation_updates_profile_with_gate_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
+    update_approval_gate_settings(
+        store.guard_home,
+        {
+            "enabled": True,
+            "new_password": "local-password",
+            "confirm_password": "local-password",
+        },
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/audit/remediations/package_shim_path",
+                token=token,
+                payload={"manager": "pnpm", "approval_password": "local-password"},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    profile_path = home_dir / ".zshrc"
+    shim_path = store.guard_home / "package-shims" / "bin" / "pnpm"
+    assert status == 200
+    assert payload["operation"] == "package_shim_path"
+    assert payload["receipt"]["operation"] == "package_shim_path"
+    assert shim_path.exists()
+    assert str(store.guard_home / "package-shims" / "bin") in profile_path.read_text(encoding="utf-8")
+    result = payload["result"]
+    assert isinstance(result, dict)
+    assert result["manager"] == "pnpm"
+    assert result["profile"]["changed"] is True
 
 
 def test_supply_chain_package_firewall_rejects_duplicate_managers(tmp_path: Path) -> None:
@@ -367,7 +707,7 @@ def test_headless_capabilities_rejects_dashboard_session_from_guard_token_header
     assert payload["error"] == "unauthorized"
 
 
-def test_cloud_app_handoff_get_rejects_legacy_local_page(tmp_path: Path) -> None:
+def test_cloud_app_handoff_get_requires_auth_before_legacy_local_page_branch(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -386,8 +726,8 @@ def test_cloud_app_handoff_get_rejects_legacy_local_page(tmp_path: Path) -> None
     finally:
         daemon.stop()
 
-    assert status == 410
-    assert payload["error"] == "legacy_cloud_handoff_disabled"
+    assert status == 401
+    assert payload["error"] == "unauthorized"
     serialized = json.dumps(payload)
     assert "handoffToken" not in serialized
     assert "dashboardSessionToken" not in serialized
@@ -447,7 +787,7 @@ def test_cloud_app_handoff_start_does_not_save_raw_sync_credentials(tmp_path: Pa
     assert store.get_sync_credentials() is None
 
 
-def test_cloud_app_handoff_navigation_does_not_save_raw_sync_credentials(tmp_path: Path) -> None:
+def test_cloud_app_handoff_navigation_requires_auth_before_legacy_sync_query_handling(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     path = (
@@ -473,8 +813,8 @@ def test_cloud_app_handoff_navigation_does_not_save_raw_sync_credentials(tmp_pat
     finally:
         daemon.stop()
 
-    assert status == 410
-    assert payload["error"] == "legacy_cloud_handoff_disabled"
+    assert status == 401
+    assert payload["error"] == "unauthorized"
     assert "guard-runtime-token" not in json.dumps(payload)
     assert store.get_sync_credentials() is None
 
@@ -574,19 +914,34 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         "2026-05-23T17:18:00.000Z",
         workspace_id="workspace-1",
     )
-    sync_calls: list[bool] = []
+    sync_calls: list[str] = []
     sync_finished = threading.Event()
+    store.record_guard_connect_pairing_completed(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-05-23T17:18:20.000Z",
+        request_id="connect-1",
+    )
 
-    def fake_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+    def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
         assert current_store is store
-        sync_calls.append(True)
+        sync_calls.append("runtime")
+        sync_calls.append("receipts")
         sync_finished.set()
-        return {
+        summary = {
             "synced_at": "2026-05-23T17:18:40.061Z",
             "receipts_stored": 1,
+            "runtime_session_synced_at": "2026-05-23T17:18:35.000Z",
+            "runtime_session_id": "runtime-session-1",
+            "runtime_sessions_visible": 1,
         }
+        current_store.record_latest_guard_connect_sync_success(
+            sync_payload=summary,
+            now="2026-05-23T17:18:40.061Z",
+        )
+        return summary
 
-    monkeypatch.setattr(daemon_server, "sync_receipts", fake_sync_receipts, raising=False)
+    monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -614,7 +969,11 @@ def test_headless_app_scan_syncs_receipt_to_cloud_when_connected(
         "message": "Guard Cloud sync started.",
     }
     assert sync_finished.wait(timeout=2)
-    assert sync_calls == [True]
+    assert sync_calls == ["runtime", "receipts"]
+    latest_state = store.get_latest_guard_connect_state(now="2026-05-23T17:18:40.061Z")
+    assert isinstance(latest_state, dict)
+    assert latest_state["proof"]["runtime_session_id"] == "runtime-session-1"
+    assert latest_state["proof"]["runtime_session_synced_at"] == "2026-05-23T17:18:35.000Z"
 
 
 def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
@@ -632,7 +991,7 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
     sync_started = threading.Event()
     sync_release = threading.Event()
 
-    def blocking_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+    def blocking_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:
         assert current_store is store
         sync_calls.append(1)
         sync_started.set()
@@ -642,7 +1001,12 @@ def test_headless_app_scan_does_not_spawn_unbounded_cloud_sync_threads(
             "receipts_stored": 1,
         }
 
-    monkeypatch.setattr(daemon_server, "sync_receipts", blocking_sync_receipts, raising=False)
+    monkeypatch.setattr(
+        daemon_server,
+        "sync_local_guard_cloud_proof",
+        blocking_sync_local_guard_cloud_proof,
+        raising=False,
+    )
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

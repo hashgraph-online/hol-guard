@@ -99,7 +99,9 @@ def test_daemon_lists_harness_setup_contracts(tmp_path: Path) -> None:
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
-        status, payload = _read_json_response(_request(daemon.port, "/v1/harnesses"))
+        status, payload = _read_json_response(
+            _request(daemon.port, "/v1/harnesses", token=daemon._server.auth_token)
+        )
     finally:
         daemon.stop()
 

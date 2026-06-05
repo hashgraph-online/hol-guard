@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,7 +54,7 @@ class TestDaemonStateStartedAt:
 
 
 class TestHealthzEndpoint:
-    """L306: /healthz must expose pending_approvals and uptime_seconds."""
+    """L306: public /healthz stays redacted; detailed health requires daemon auth."""
 
     def _start_server(self, tmp_path: Path) -> tuple[str, object]:
         from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
@@ -70,60 +71,87 @@ class TestHealthzEndpoint:
         with urllib.request.urlopen(f"{url}/healthz", timeout=3) as resp:
             return json.loads(resp.read())
 
-    def test_healthz_includes_pending_approvals(self, tmp_path: Path) -> None:
+    def _get_healthz_details(self, url: str, server: object) -> dict:
+        request = urllib.request.Request(
+            f"{url}/v1/healthz/details",
+            headers={"X-Guard-Token": server._server.auth_token},
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=3) as resp:
+            return json.loads(resp.read())
+
+    def test_healthz_redacts_pending_approval_counts(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
             payload = self._get_healthz(url)
-            assert "pending_approvals" in payload, "/healthz must include pending_approvals"
+            assert "pending_approvals" not in payload
         finally:
             server.stop()
 
-    def test_healthz_includes_uptime_seconds(self, tmp_path: Path) -> None:
+    def test_healthz_redacts_uptime_seconds(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
             payload = self._get_healthz(url)
-            assert "uptime_seconds" in payload, "/healthz must include uptime_seconds"
+            assert "uptime_seconds" not in payload
         finally:
             server.stop()
 
-    def test_healthz_uptime_is_non_negative(self, tmp_path: Path) -> None:
+    def test_healthz_exposes_compatibility_version_only(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
             payload = self._get_healthz(url)
-            assert payload["uptime_seconds"] >= 0.0
+            assert payload == {
+                "ok": True,
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+            }
         finally:
             server.stop()
 
-    def test_healthz_pending_approvals_is_int(self, tmp_path: Path) -> None:
+    def test_healthz_redacts_package_version(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
             payload = self._get_healthz(url)
-            assert isinstance(payload["pending_approvals"], int)
+            assert "package_version" not in payload
         finally:
             server.stop()
 
-    def test_healthz_still_includes_legacy_approvals_field(self, tmp_path: Path) -> None:
+    def test_healthz_redacts_legacy_approvals_field(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
             payload = self._get_healthz(url)
-            assert "approvals" in payload, "legacy approvals field must remain for backward compat"
+            assert "approvals" not in payload
         finally:
             server.stop()
 
-    def test_healthz_still_includes_version_and_tables(self, tmp_path: Path) -> None:
+    def test_healthz_details_includes_version_and_tables(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
-            payload = self._get_healthz(url)
+            payload = self._get_healthz_details(url, server)
             assert "compatibility_version" in payload
             assert "package_version" in payload
             assert "tables" in payload
+            assert "pending_approvals" in payload
+            assert isinstance(payload.get("pid"), int)
+            assert "uptime_seconds" in payload
         finally:
             server.stop()
 
-    def test_healthz_includes_guard_home_for_daemon_identity(self, tmp_path: Path) -> None:
+    def test_healthz_details_includes_guard_home_for_daemon_identity(self, tmp_path: Path) -> None:
         url, server = self._start_server(tmp_path)
         try:
-            payload = self._get_healthz(url)
+            payload = self._get_healthz_details(url, server)
             assert payload["guard_home"] == str((tmp_path / "guard-home").resolve())
+        finally:
+            server.stop()
+
+    def test_healthz_details_requires_auth(self, tmp_path: Path) -> None:
+        url, server = self._start_server(tmp_path)
+        try:
+            with urllib.request.urlopen(f"{url}/v1/healthz/details", timeout=3):
+                raise AssertionError("expected healthz details to require daemon auth")
+        except urllib.error.HTTPError as error:
+            assert error.code == 401
+            payload = json.loads(error.read())
+            assert payload["error"] == "unauthorized"
         finally:
             server.stop()

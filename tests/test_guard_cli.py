@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli import product as guard_product_module
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
@@ -3011,10 +3012,9 @@ args = ["workspace-skill.js", "--changed"]
         assert Path(str(manifest["backup_path"])).is_file()
         assert managed_payload["permission"]["danger_lab_*"] == "ask"
         assert managed_payload["mcp"]["danger_lab"]["type"] == "local"
-        assert managed_payload["mcp"]["danger_lab"]["command"][2] == "codex_plugin_scanner.cli"
-        assert managed_payload["mcp"]["danger_lab"]["command"][3] == "guard"
-        assert managed_payload["mcp"]["danger_lab"]["command"][4] == "opencode-mcp-proxy"
+        assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
         assert managed_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
+        assert "opencode-mcp-proxy" not in json.dumps(managed_payload["mcp"]["danger_lab"])
 
     def test_guard_reinstall_does_not_double_wrap_opencode_mcp_proxies(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3060,10 +3060,13 @@ args = ["workspace-skill.js", "--changed"]
         second_output = json.loads(capsys.readouterr().out)
         managed_config_path = Path(str(second_output["managed_install"]["manifest"]["managed_config_path"]))
         managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
-        proxy_command = managed_payload["mcp"]["danger_lab"]["command"]
+        runtime_config_path = Path(str(second_output["managed_install"]["manifest"]["runtime_config_path"]))
+        runtime_payload = json.loads(runtime_config_path.read_text(encoding="utf-8"))
+        proxy_command = runtime_payload["mcp"]["danger_lab"]["command"]
 
         assert first_rc == 0
         assert second_rc == 0
+        assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
         assert proxy_command.count("opencode-mcp-proxy") == 1
         assert proxy_command[proxy_command.index("--command") + 1] == "python3"
         assert "--arg=danger-server.py" in proxy_command
@@ -6624,12 +6627,133 @@ url = http://127.0.0.1:8787/guard-canary
         assert "guardPairRequest" not in json.dumps(connect_output)
         assert store.get_sync_credentials() is None
 
+    def test_guard_connect_runs_first_sync_and_surfaces_cloud_urls(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        store = GuardStore(home_dir)
+        sync_calls: list[str] = []
+        bundle_calls: list[str] = []
+
+        def fake_device_flow(
+            *,
+            store: GuardStore,
+            connect_url: str,
+            wait_timeout_seconds: int = 180,
+            announce_copy=None,
+            open_browser=None,
+            ci_safe: bool = False,
+            machine_label: str | None = None,
+        ) -> dict[str, object]:
+            del connect_url, wait_timeout_seconds, announce_copy, open_browser, ci_safe, machine_label
+            store.set_oauth_local_credentials(
+                issuer="https://hol.org",
+                client_id="guard-local-daemon",
+                refresh_token="refresh-secret-value",
+                dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+                dpop_public_jwk={
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "x": "x-value",
+                    "y": "y-value",
+                    "alg": "ES256",
+                    "use": "sig",
+                },
+                dpop_public_jwk_thumbprint="thumbprint-123",
+                grant_id="grant-123",
+                machine_id="machine-123",
+                workspace_id="workspace-123",
+                now="2026-06-04T18:30:00+00:00",
+            )
+            return {
+                "status": "connected",
+                "connect_mode": "device_code",
+                "browser_opened": True,
+                "workspace_id": "workspace-123",
+            }
+
+        def fake_sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
+            del store
+            sync_calls.append("first-proof")
+            return {
+                "synced_at": "2026-06-04T18:31:00+00:00",
+                "receipts_stored": 4,
+                "inventory_tracked": 2,
+                "runtime_session_synced_at": "2026-06-04T18:30:59+00:00",
+                "runtime_session_id": "runtime-session-123",
+                "runtime_sessions_visible": 1,
+                "runtime_harness": "hol-guard",
+                "runtime_surface": "cli",
+                "runtime_workspace": "local-machine",
+                "runtime_device_id": "machine-123",
+                "local_guard_online_at": "2026-06-04T18:30:59+00:00",
+                "runtime": {
+                    "synced_at": "2026-06-04T18:30:59+00:00",
+                    "runtime_session_synced_at": "2026-06-04T18:30:59+00:00",
+                    "runtime_session_id": "runtime-session-123",
+                },
+                "receipts": {
+                    "synced_at": "2026-06-04T18:31:00+00:00",
+                    "receipts_stored": 4,
+                    "inventory_tracked": 2,
+                },
+            }
+
+        def fake_sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
+            del store
+            bundle_calls.append("bundle")
+            return {"synced_at": "2026-06-04T18:31:05+00:00", "status": "synced"}
+
+        monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
+        monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof)
+        monkeypatch.setattr(guard_commands_module, "sync_supply_chain_bundle", fake_sync_supply_chain_bundle)
+
+        rc = main(
+            [
+                "guard",
+                "connect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--connect-url",
+                "https://hol.org/guard/connect",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        latest_state = store.get_latest_guard_connect_state(now="2026-06-04T18:31:00+00:00")
+
+        assert rc == 0
+        assert sync_calls == ["first-proof"]
+        assert bundle_calls == ["bundle"]
+        assert output["status"] == "connected"
+        assert output["milestone"] == "first_sync_succeeded"
+        assert output["sync_attempted"] is True
+        assert output["sync_succeeded"] is True
+        assert output["connect_url"] == "https://hol.org/guard/connect"
+        assert output["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+        assert output["last_sync_at"] == "2026-06-04T18:31:00+00:00"
+        assert output["sync"]["receipts_stored"] == 4
+        assert output["sync"]["runtime_session_id"] == "runtime-session-123"
+        assert isinstance(latest_state, dict)
+        assert latest_state["status"] == "connected"
+        assert latest_state["milestone"] == "first_sync_succeeded"
+        assert latest_state["proof"]["runtime_session_id"] == "runtime-session-123"
+        assert latest_state["proof"]["runtime_session_synced_at"] == "2026-06-04T18:30:59+00:00"
+
     def test_guard_status_reports_oauth_key_storage_health(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
         store = GuardStore(home_dir)
+        store.set_sync_credentials(
+            "https://hol.org/api/guard/receipts/sync",
+            "legacy-token",
+            "2026-06-04T18:31:00+00:00",
+            workspace_id="workspace-123",
+        )
         store.set_oauth_local_credentials(
             issuer="https://hol.org",
             client_id="guard-local-daemon",
@@ -6665,6 +6789,124 @@ url = http://127.0.0.1:8787/guard-canary
             "machine_id": "machine-123",
             "workspace_id": "workspace-123",
         }
+
+    def test_guard_connect_status_prefers_active_sync_over_expired_browser_pairing(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
+        store = GuardStore(home_dir)
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-secret-value",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "x-value",
+                "y": "y-value",
+                "alg": "ES256",
+                "use": "sig",
+            },
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            workspace_id="workspace-123",
+            now="2026-06-04T18:30:00+00:00",
+        )
+        store.set_sync_payload(
+            "sync_summary",
+            {
+                "synced_at": "2026-06-04T18:31:00+00:00",
+                "receipts_stored": 4,
+                "inventory_tracked": 2,
+            },
+            "2026-06-04T18:31:00+00:00",
+        )
+        with store._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_connect_states (
+                  request_id,
+                  sync_url,
+                  allowed_origin,
+                  status,
+                  milestone,
+                  reason,
+                  created_at,
+                  updated_at,
+                  expires_at,
+                  completed_at,
+                  proof_json
+                )
+                values (?, ?, ?, 'expired', 'expired', 'request_expired', ?, ?, ?, ?, ?)
+                """,
+                (
+                    "connect-expired",
+                    "https://hol.org/api/guard/receipts/sync",
+                    "https://hol.org",
+                    "2026-06-04T18:20:00+00:00",
+                    "2026-06-04T18:20:00+00:00",
+                    "2026-06-04T18:25:00+00:00",
+                    "2026-06-04T18:20:00+00:00",
+                    json.dumps({}),
+                ),
+            )
+
+        rc = main(["guard", "connect", "status", "--home", str(home_dir), "--workspace", str(workspace_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "connected"
+        assert output["milestone"] == "first_sync_succeeded"
+        assert output["reason"] == "first_sync_succeeded"
+        assert output["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+        assert output["connect_url"] == "https://hol.org/guard/connect"
+        assert output["latest_connect_state"]["status"] == "connected"
+        assert output["latest_connect_state"]["milestone"] == "first_sync_succeeded"
+        assert output["latest_connect_state"]["proof"]["first_synced_at"] == "2026-06-04T18:31:00+00:00"
+
+    def test_guard_status_degraded_oauth_does_not_fall_back_to_legacy_sync(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
+        store = GuardStore(home_dir)
+        store.set_oauth_local_credentials(
+            issuer="https://hol.org",
+            client_id="guard-local-daemon",
+            refresh_token="refresh-secret-value",
+            dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+            dpop_public_jwk={
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "x-value",
+                "y": "y-value",
+                "alg": "ES256",
+                "use": "sig",
+            },
+            dpop_public_jwk_thumbprint="thumbprint-123",
+            grant_id="grant-123",
+            machine_id="machine-123",
+            workspace_id="workspace-123",
+            now="2026-06-04T18:30:00+00:00",
+        )
+        oauth_payload = store.get_sync_payload("oauth_local_credentials")
+        assert isinstance(oauth_payload, dict)
+        oauth_payload["credentials_sha256"] = "pbkdf2-sha256$invalid"
+        store.set_sync_payload("oauth_local_credentials", oauth_payload, "2026-06-04T18:30:30+00:00")
+
+        output = guard_product_module.build_guard_status_payload(
+            HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+            store,
+            load_guard_config(home_dir),
+        )
+
+        assert output["sync_configured"] is False
+        assert output["cloud_state"] == "local_only"
+        assert "sign-in on this machine is incomplete" in output["cloud_state_detail"]
+        assert output["oauth_storage_health"]["state"] == "degraded"
 
     def test_guard_disconnect_revokes_cloud_grant_through_oauth_disconnect_helper(
         self,

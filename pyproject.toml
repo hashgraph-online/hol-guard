@@ -29,6 +29,7 @@ classifiers = [
 dependencies = [
     "rich>=13.0",
     "cryptography>=47.0.0",
+    "keyring>=25.0",
     "packaging>=24.0",
     "tomli>=2.0; python_version < '3.11'",
     "cisco-ai-skill-scanner~=2.0.9",

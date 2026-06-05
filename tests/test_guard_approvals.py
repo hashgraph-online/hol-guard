@@ -982,17 +982,31 @@ class TestGuardApprovals:
         expected_port = daemon_manager_module._configured_port(guard_home)
         responses = iter([None, None, f"http://127.0.0.1:{expected_port}"])
 
+        class FakeProcess:
+            def poll(self):
+                return None
+
         monkeypatch.delenv("GUARD_DAEMON_PORT", raising=False)
         monkeypatch.setattr(
             daemon_manager_module,
             "load_guard_daemon_url",
             lambda _guard_home: next(responses),
         )
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [],
+        )
         monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [],
+        )
         monkeypatch.setattr(
             daemon_manager_module.subprocess,
             "Popen",
-            lambda command, **_kwargs: launched_commands.append(command) or SimpleNamespace(),
+            lambda command, **_kwargs: launched_commands.append(command) or FakeProcess(),
         )
 
         url = daemon_manager_module.ensure_guard_daemon(guard_home)
@@ -1192,7 +1206,12 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests", timeout=5) as response:
+            list_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(list_request, timeout=5) as response:
                 approvals_payload = json.loads(response.read().decode("utf-8"))
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/approvals/req-456/decision",
@@ -1233,7 +1252,12 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/runtime",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
                 snapshot_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1269,7 +1293,12 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/runtime",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
                 snapshot_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1411,23 +1440,41 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests", timeout=5) as response:
+            list_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(list_request, timeout=5) as response:
                 requests_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests/req-v1", timeout=5) as response:
+            item_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/req-v1",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(item_request, timeout=5) as response:
                 request_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/receipts/{built_receipt.receipt_id}", timeout=5
-            ) as response:
+            receipt_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/receipts/{built_receipt.receipt_id}",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(receipt_request, timeout=5) as response:
                 receipt_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(
+            latest_receipt_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/receipts/latest?harness=codex&artifact_id="
                 f"{urllib.parse.quote(artifact.artifact_id, safe='')}",
-                timeout=5,
-            ) as response:
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(latest_receipt_request, timeout=5) as response:
                 latest_receipt_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/artifacts/{artifact.artifact_id}/diff?harness=codex", timeout=5
-            ) as response:
+            diff_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/artifacts/{artifact.artifact_id}/diff?harness=codex",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(diff_request, timeout=5) as response:
                 diff_payload = json.loads(response.read().decode("utf-8"))
             policy_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
@@ -1445,9 +1492,12 @@ class TestGuardApprovals:
             )
             with urllib.request.urlopen(policy_request, timeout=5) as response:
                 policy_save_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/v1/policy?harness=codex", timeout=5
-            ) as response:
+            policy_list_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy?harness=codex",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(policy_list_request, timeout=5) as response:
                 policy_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1475,10 +1525,12 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(
+            request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/artifacts/codex%3Aproject%3Atools%2Fwith%2Fslash/diff?harness=codex",
-                timeout=5,
-            ) as response:
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
                 diff_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
@@ -1808,6 +1860,33 @@ class TestGuardApprovals:
         assert status == 401
         assert payload["error"] == "unauthorized"
 
+    def test_guard_daemon_event_stream_rejects_query_token_and_records_audit(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/events/stream?token={daemon._server.auth_token}",
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=5):
+                    raise AssertionError("expected HTTPError for query-token event stream auth")
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+        finally:
+            daemon.stop()
+
+        assert status == 401
+        assert payload["error"] == "unauthorized"
+        auth_events = store.list_events(event_name="daemon.auth.unauthorized")
+        assert auth_events[-1]["payload"]["path"] == "/v1/events/stream"
+        url_token_events = store.list_events(event_name="daemon.auth.query_token_rejected")
+        assert url_token_events[-1]["payload"]["path"] == "/v1/events/stream"
+        assert url_token_events[-1]["payload"]["has_query_token"] is True
+
     def test_guard_daemon_event_stream_rejects_non_ascii_query_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -1819,12 +1898,11 @@ class TestGuardApprovals:
                 method="GET",
             )
             try:
-                urllib.request.urlopen(request, timeout=5)
+                with urllib.request.urlopen(request, timeout=5):
+                    raise AssertionError("expected HTTPError for non-ASCII query-token event stream auth")
             except urllib.error.HTTPError as error:
                 payload = json.loads(error.read().decode("utf-8"))
                 status = error.code
-            else:
-                raise AssertionError("expected HTTPError for malformed query token")
         finally:
             daemon.stop()
 

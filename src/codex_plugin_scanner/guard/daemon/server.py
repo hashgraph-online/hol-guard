@@ -19,7 +19,7 @@ import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
@@ -77,8 +77,12 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..local_supply_chain import build_local_supply_chain_posture
+from ..local_supply_chain import (
+    build_local_supply_chain_posture,
+    resolve_package_firewall_entitlement_with_refresh,
+)
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
+from ..package_firewall_entitlement import package_firewall_block_details
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -91,16 +95,19 @@ from ..runtime.runner import (
     _policy_bundle_is_version_downgrade,
     _validated_policy_bundle_payload,
     sync_receipts,
+    sync_local_guard_cloud_proof,
     sync_supply_chain_bundle,
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..shims import (
+    ensure_package_shim_path_in_shell_profile,
     install_package_shims,
     package_shim_status,
     package_shim_supported_managers,
     repair_package_shims,
     uninstall_package_shims,
 )
+from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
@@ -121,8 +128,17 @@ from .manager import (
 
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
+_AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {"install", "repair", "test", "audit", "sync", "remove", "uninstall"}
-_SUPPLY_CHAIN_PAID_TIERS = {"paid", "premium", "enterprise", "guard_cloud", "guard-cloud"}
+
+
+class _HookPathValidationError(ValueError):
+    def __init__(self, parameter: str, reason: str) -> None:
+        self.parameter = parameter
+        self.reason = reason
+        parameter_slug = parameter.replace("-", "_")
+        super().__init__(f"invalid_hook_{parameter_slug}_path")
+        self.code = f"invalid_hook_{parameter_slug}_path"
 
 
 def _headless_cloud_sync_store_key(store: GuardStore) -> str:
@@ -348,18 +364,33 @@ def _run_headless_cloud_sync(
 ) -> None:
     recorded_at = _now()
     try:
-        sync_payload = sync_receipts(store)
+        sync_payload = sync_local_guard_cloud_proof(store)
         summary = {
             "status": "synced",
             "synced_at": sync_payload.get("synced_at"),
             "receipts_stored": sync_payload.get("receipts_stored", 0),
+            "runtime_session_id": sync_payload.get("runtime_session_id"),
+            "runtime_session_synced_at": sync_payload.get("runtime_session_synced_at"),
+            "runtime_sessions_visible": sync_payload.get("runtime_sessions_visible"),
         }
     except GuardSyncAuthorizationExpiredError as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=recorded_at,
+            reason=str(error),
+        )
         summary = {
             "status": "auth_expired",
             "message": str(error),
         }
     except GuardSyncNotConfiguredError as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=recorded_at,
+            reason=str(error),
+        )
         summary = {
             "status": "not_configured",
             "message": str(error),
@@ -381,7 +412,7 @@ def _queue_headless_cloud_sync(
     *,
     store: GuardStore,
 ) -> dict[str, object]:
-    if store.get_sync_credentials() is None:
+    if store.get_cloud_sync_profile() is None:
         return {
             "status": "not_configured",
             "message": "Guard Cloud sync is not paired on this machine.",
@@ -413,6 +444,22 @@ def _queue_headless_cloud_sync(
     }
 
 
+def _maybe_queue_first_cloud_sync(*, store: GuardStore) -> dict[str, object] | None:
+    if store.get_cloud_sync_profile() is None:
+        return None
+    oauth_health = store.get_oauth_local_credential_health()
+    if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":
+        return None
+    latest_state = store.get_effective_guard_connect_state(now=_now())
+    if latest_state is None:
+        return None
+    if str(latest_state.get("status") or "") != "connected":
+        return None
+    if str(latest_state.get("milestone") or "") != "first_sync_pending":
+        return None
+    return _queue_headless_cloud_sync(store=store)
+
+
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
 
@@ -438,28 +485,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        if (
-            self._is_hosted_dashboard_origin()
-            and self._is_hosted_dashboard_api_path(parsed.path, path_parts)
-            and not self._header_token_is_valid()
-        ):
-            self._write_json({"error": "unauthorized"}, status=401)
-            return
         if parsed.path == "/healthz":
-            uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
-            self._write_json(
-                {
-                    "ok": True,
-                    "receipts": len(store.list_receipts(limit=500)),
-                    "approvals": store.count_approval_requests(),
-                    "pending_approvals": store.count_approval_requests(),
-                    "uptime_seconds": uptime,
-                    "tables": store.list_table_names(),
-                    "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
-                    "package_version": __version__,
-                    "guard_home": str(store.guard_home.resolve()),
-                }
-            )
+            self._write_json(self._public_healthz_payload())
+            return
+        if parsed.path == "/v1/healthz/details":
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            self._write_json(self._detailed_healthz_payload())
+            return
+        if parsed.path == "/v1/events/stream":
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            self._stream_events(_int_query_value(parsed.query, "cursor"))
+            return
+        if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
+            self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
@@ -468,6 +514,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"items": store.list_guard_sessions(limit=200)})
             return
         if parsed.path == "/v1/runtime":
+            _maybe_queue_first_cloud_sync(store=store)
             config = load_guard_config(store.guard_home)
             snapshot = build_runtime_snapshot(
                 store=store,
@@ -675,12 +722,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/assets/") or parsed.path.startswith("/brand/"):
             self._write_static_asset(parsed.path.removeprefix("/"))
             return
-        if parsed.path == "/v1/events/stream":
-            if not self._token_is_valid(parsed.query):
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
-            self._stream_events(_int_query_value(parsed.query, "cursor"))
-            return
         if self._is_dashboard_route(parsed.path):
             self._write_dashboard_shell()
             return
@@ -746,11 +787,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     extra_headers=self._cors_headers_for_request(),
                 )
             else:
-                self._write_json(
-                    {"error": "unauthorized"},
-                    status=401,
-                    extra_headers=self._cors_headers_for_request(),
-                )
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
@@ -818,6 +855,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/notifications/setup":
             self._handle_notification_setup(payload)
+            return
+        if (
+            len(path_parts) == 4
+            and path_parts[:3] == ["v1", "audit", "remediations"]
+            and path_parts[3] in _AUDIT_REMEDIATION_ACTIONS
+        ):
+            self._handle_audit_remediation(path_parts[3], payload)
             return
         if (
             len(path_parts) == 4
@@ -1356,13 +1400,79 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _handle_audit_remediation(self, action: str, payload: dict[str, object]) -> None:
+        if action != "package_shim_path":
+            self._write_json({"error": "unsupported_remediation", "operation": action}, status=404)
+            return
+        manager = self._optional_string(payload.get("manager"))
+        if manager is None:
+            self._write_json({"error": "missing_manager", "operation": action}, status=400)
+            return
+        managers, manager_error = self._supply_chain_managers({"managers": [manager]})
+        if manager_error is not None:
+            self._write_json({"error": manager_error, "operation": action}, status=400)
+            return
+        entitlement = self._supply_chain_entitlement()
+        if not bool(entitlement["allowed"]):
+            status, error_code, message = package_firewall_block_details(entitlement)
+            self._write_json(
+                {
+                    "available_actions": ["status", "education", "cli_fallback"],
+                    "entitlement": entitlement,
+                    "error": error_code,
+                    "message": message,
+                    "operation": action,
+                },
+                status=status,
+            )
+            return
+        context = self._supply_chain_context(payload)
+        try:
+            require_high_risk(
+                self.server.store.guard_home,  # type: ignore[attr-defined]
+                purpose="supply_chain_firewall",
+                approval_gate_input=approval_gate_input_from_mapping(payload),
+            )
+            install_result = install_package_shims(context, managers=managers)
+            profile_result = ensure_package_shim_path_in_shell_profile(context)
+            status = package_shim_status(context)
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        except ValueError as error:
+            self._write_json({"error": str(error), "operation": action}, status=400)
+            return
+        result = {
+            "manager": manager,
+            "install": install_result,
+            "profile": profile_result,
+            "package_shims": status,
+            "restart_shell_required": True,
+        }
+        receipt = self._record_headless_receipt(
+            harness="package-firewall",
+            operation=action,
+            payload=payload,
+            result=result,
+            workspace_id=self._optional_string(payload.get("workspace_id"))
+            or self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
+        )
+        self._write_json(
+            {
+                "entitlement": entitlement,
+                "operation": action,
+                "receipt": receipt,
+                "result": result,
+                "status": "completed",
+            }
+        )
+
     def _handle_supply_chain_package_firewall_status(self) -> None:
         entitlement = self._supply_chain_entitlement()
         status = package_shim_status(self._harness_context({}))
-        allowed = bool(entitlement["allowed"])
         self._write_json(
             {
-                "actions": self._supply_chain_action_states(allowed),
+                "actions": self._supply_chain_action_states(entitlement),
                 "cli_fallback": {
                     "install": "hol-guard package-shims install --json",
                     "status": "hol-guard package-shims status --json",
@@ -1380,15 +1490,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         operation = "remove" if action == "uninstall" else action
         entitlement = self._supply_chain_entitlement()
         if not bool(entitlement["allowed"]):
+            status, error_code, message = package_firewall_block_details(entitlement)
             self._write_json(
                 {
                     "available_actions": ["status", "education", "cli_fallback"],
                     "entitlement": entitlement,
-                    "error": "paid_guard_cloud_required",
-                    "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+                    "error": error_code,
+                    "message": message,
                     "operation": operation,
                 },
-                status=402,
+                status=status,
             )
             return
         context = self._supply_chain_context(payload)
@@ -1484,21 +1595,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return managers, None
 
     def _supply_chain_entitlement(self) -> dict[str, object]:
-        entitlement_payload = self.server.store.get_sync_payload("supply_chain_bundle_entitlement")  # type: ignore[attr-defined]
-        entitlement = entitlement_payload if isinstance(entitlement_payload, dict) else {}
-        tier = self._optional_string(entitlement.get("tier"))
-        normalized_tier = tier.strip().lower() if tier is not None else "free"
-        allowed = normalized_tier in _SUPPLY_CHAIN_PAID_TIERS
-        return {
-            "allowed": allowed,
-            "reason": "paid_entitlement_active" if allowed else "paid_guard_cloud_required",
-            "tier": normalized_tier,
-            "upgrade_cta": None if allowed else "Upgrade to HOL Guard Cloud to run package firewall actions.",
-        }
+        return resolve_package_firewall_entitlement_with_refresh(self.server.store)  # type: ignore[attr-defined]
 
     @staticmethod
-    def _supply_chain_action_states(allowed: bool) -> dict[str, str]:
-        state = "available" if allowed else "paid_required"
+    def _supply_chain_action_states(entitlement: dict[str, object]) -> dict[str, str]:
+        allowed = bool(entitlement.get("allowed"))
+        reason = str(entitlement.get("reason") or "").strip().lower()
+        if allowed:
+            state = "available"
+        elif reason == "guard_cloud_reconnect_required":
+            state = "reconnect_required"
+        else:
+            state = "paid_required"
         return {
             "install": state,
             "repair": state,
@@ -1549,7 +1657,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             },
             sort_keys=True,
         )
-        artifact_hash = hashlib.sha256(material.encode("utf-8")).hexdigest()
+        artifact_hash = stable_digest_hex(material.encode("utf-8"))
         changed_capabilities = [] if operation in {"status", "scan"} else [operation]
         artifact_id = f"headless:{harness}:{operation}"
         artifact_name = f"Headless {operation}"
@@ -2334,11 +2442,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _handle_claude_hook(self, payload: dict[str, object], query: str) -> None:
         params = parse_qs(query)
-        home_dir = self._optional_string(params.get("home", [None])[-1])
-        guard_home = self._optional_string(params.get("guard-home", [None])[-1])
-        from ..cli.commands import _normalize_explicit_workspace_path
-
-        workspace = _normalize_explicit_workspace_path(self._optional_string(params.get("workspace", [None])[-1]))
+        try:
+            home_dir = self._validated_hook_directory_string(
+                "home",
+                self._optional_string(params.get("home", [None])[-1]),
+                roots=self._hook_safe_roots(),
+            )
+            guard_home = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            workspace = self._validated_hook_directory_string(
+                "workspace",
+                self._normalized_hook_workspace_string(params.get("workspace", [None])[-1]),
+                roots=self._hook_safe_roots(),
+            )
+        except _HookPathValidationError as error:
+            self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+            self._write_json({"error": error.code}, status=400)
+            return
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = runtime_harness or "claude-code"
         args = argparse.Namespace(
@@ -2376,10 +2495,54 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json(hook_payload)
 
-    def _token_is_valid(self, query: str) -> bool:
-        params = parse_qs(query)
-        token = params.get("token", [None])[-1]
-        return self._tokens_match(token)
+    def _query_has_guard_token(self, query: str) -> bool:
+        return any(key == "token" for key, _value in parse_qsl(query, keep_blank_values=True))
+
+    def _write_unauthorized(self, *, extra_headers: dict[str, str] | None = None) -> None:
+        self._record_auth_audit_event()
+        self._write_json({"error": "unauthorized"}, status=401, extra_headers=extra_headers)
+
+    def _daemon_server(self) -> _GuardDaemonHttpServer:
+        return cast(_GuardDaemonHttpServer, self.server)
+
+    def _record_auth_audit_event(self) -> None:
+        origin = self.headers.get("Origin")
+        self._daemon_server().store.add_event(
+            "daemon.auth.unauthorized",
+            {
+                "method": self.command,
+                "path": urlparse(self.path).path,
+                "origin": self._normalize_origin(origin),
+                "origin_header": origin if isinstance(origin, str) and origin.strip() else None,
+                "has_authorization": isinstance(self.headers.get("Authorization"), str),
+                "has_dashboard_session": isinstance(self.headers.get("X-Guard-Dashboard-Session"), str),
+                "has_guard_token": isinstance(self.headers.get("X-Guard-Token"), str),
+            },
+            _now(),
+        )
+
+    def _record_query_token_rejection(self) -> None:
+        self._daemon_server().store.add_event(
+            "daemon.auth.query_token_rejected",
+            {
+                "method": self.command,
+                "path": urlparse(self.path).path,
+                "has_query_token": True,
+            },
+            _now(),
+        )
+
+    def _record_hook_path_rejection(self, *, parameter: str, reason: str) -> None:
+        self._daemon_server().store.add_event(
+            "daemon.hook.path_rejected",
+            {
+                "method": self.command,
+                "path": urlparse(self.path).path,
+                "parameter": parameter,
+                "reason": reason,
+            },
+            _now(),
+        )
 
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")
@@ -2619,6 +2782,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
             return True
+        if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
+            return True
         if (
             len(path_parts) == 4
             and path_parts[:2] == ["v1", "requests"]
@@ -2653,6 +2818,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _is_hosted_dashboard_origin(self) -> bool:
         origin = self._normalize_origin(self.headers.get("Origin"))
         return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
+
+    def _public_healthz_payload(self) -> dict[str, object]:
+        return {
+            "ok": True,
+            "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+        }
+
+    def _detailed_healthz_payload(self) -> dict[str, object]:
+        uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
+        store = self.server.store  # type: ignore[attr-defined]
+        pending_approvals = store.count_approval_requests()
+        return {
+            "ok": True,
+            "receipts": len(store.list_receipts(limit=500)),
+            "approvals": pending_approvals,
+            "pending_approvals": pending_approvals,
+            "uptime_seconds": uptime,
+            "pid": os.getpid(),
+            "tables": store.list_table_names(),
+            "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+            "package_version": __version__,
+            "guard_home": str(store.guard_home.resolve()),
+        }
 
     @staticmethod
     def _normalize_origin(origin: str | None) -> str | None:
@@ -2795,6 +2983,94 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
         return min(value, maximum)
 
+    def _validated_hook_directory_string(
+        self,
+        parameter: str,
+        value: str | None,
+        *,
+        roots: tuple[Path, ...] | None = None,
+    ) -> str | None:
+        if value is None:
+            return None
+        return os.fspath(self._validate_hook_directory_path(parameter, value, roots=roots))
+
+    @staticmethod
+    def _normalized_hook_workspace_string(value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        stripped = value.strip()
+        if not stripped or stripped.lower() in {"none", "null"}:
+            return None
+        # Mirror the CLI hook contract until runtime callers stop emitting `/None`
+        # as the explicit "no workspace" sentinel.
+        candidate = os.path.expanduser(stripped)
+        if os.path.basename(candidate) == "None":
+            candidate = os.path.dirname(candidate)
+            if not candidate.strip():
+                return None
+        return os.path.normpath(candidate)
+
+    def _validate_hook_directory_path(
+        self,
+        parameter: str,
+        value: str,
+        *,
+        roots: tuple[Path, ...] | None = None,
+    ) -> Path:
+        expanded = os.path.expanduser(value)
+        if not os.path.isabs(expanded):
+            raise _HookPathValidationError(parameter, "relative_path")
+        try:
+            candidate = os.path.realpath(expanded)
+        except OSError:
+            raise _HookPathValidationError(parameter, "path_resolve_failed") from None
+        effective_roots = roots
+        if parameter in {"home", "workspace"} and effective_roots is None:
+            effective_roots = self._hook_safe_roots()
+        if effective_roots is not None:
+            root_match = False
+            for root in effective_roots:
+                root_path = os.path.realpath(os.fspath(root))
+                try:
+                    if os.path.commonpath([candidate, root_path]) == root_path:
+                        root_match = True
+                        break
+                except ValueError:
+                    continue
+            if not root_match:
+                raise _HookPathValidationError(parameter, "unexpected_root")
+        return Path(candidate)
+
+    def _validated_hook_guard_home(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        expanded = os.path.expanduser(value)
+        if not os.path.isabs(expanded):
+            raise _HookPathValidationError("guard-home", "relative_path")
+        try:
+            candidate = os.path.realpath(expanded)
+        except OSError:
+            raise _HookPathValidationError("guard-home", "path_resolve_failed") from None
+        expected = os.path.realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
+        if candidate != expected:
+            raise _HookPathValidationError("guard-home", "unexpected_guard_home")
+        return expected
+
+    def _hook_safe_roots(self) -> tuple[Path, ...]:
+        current_home = Path.home().resolve()
+        roots: list[Path] = [current_home]
+        guard_home_root = self._daemon_server().store.guard_home.expanduser().resolve().parent
+        if not self._path_is_within_root(guard_home_root, current_home):
+            roots.append(guard_home_root)
+        return tuple(roots)
+
+    @staticmethod
+    def _path_is_within_root(candidate: str, root: str) -> bool:
+        try:
+            return os.path.commonpath([candidate, root]) == root
+        except ValueError:
+            return False
+
     @staticmethod
     def _scope_target_is_valid(
         scope: str,
@@ -2856,9 +3132,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/notifications/setup",
         }:
             return True
+        if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:
+            return True
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
             return True
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
+            return True
+        if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
             return True

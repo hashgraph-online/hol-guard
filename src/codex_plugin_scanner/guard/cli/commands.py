@@ -108,6 +108,7 @@ from ..local_supply_chain import (
     build_supply_chain_status_payload,
     build_workspace_audit_payload,
     build_workspace_scan_payload,
+    resolve_package_firewall_entitlement_with_refresh,
 )
 from ..mcp_tool_calls import (
     allow_tool_call,
@@ -117,6 +118,7 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
+from ..package_firewall_entitlement import package_firewall_block_details
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
 from ..proxy import (
@@ -153,10 +155,12 @@ from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
+    GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
     extract_prompt_requests,
     guard_run,
     prompt_requests_to_artifacts,
+    sync_local_guard_cloud_proof,
     sync_receipts,
     sync_runtime_session,
     sync_supply_chain_bundle,
@@ -191,10 +195,12 @@ from .approval_commands import (
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
 from .connect_flow import (
+    CONNECT_SYNC_AUTH_CONTEXT_KEY,
     DEFAULT_GUARD_CONNECT_URL,
     DEFAULT_GUARD_SYNC_URL,
     build_connect_status_payload,
     connect_recovery_command,
+    resolve_connect_url,
     run_guard_browser_connect_command,
     run_guard_device_connect_command,
     run_guard_disconnect_command,
@@ -511,6 +517,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         dest="package_shim_managers",
         default=[],
     )
+    package_shims_parser.add_argument("--approval-password")
+    package_shims_parser.add_argument("--approval-totp")
     _add_guard_common_args(package_shims_parser)
     package_shims_parser.add_argument("--json", action="store_true")
 
@@ -1145,6 +1153,57 @@ def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _package_firewall_action_states(entitlement: dict[str, object]) -> dict[str, str]:
+    allowed = bool(entitlement.get("allowed"))
+    reason = str(entitlement.get("reason") or "").strip().lower()
+    if allowed:
+        state = "available"
+    elif reason == "guard_cloud_reconnect_required":
+        state = "reconnect_required"
+    else:
+        state = "paid_required"
+    return {
+        "install": state,
+        "repair": state,
+        "test": state,
+        "audit": state,
+        "sync": state,
+        "remove": state,
+    }
+
+
+def _package_firewall_cli_gate_input(args: argparse.Namespace, guard_home: Path) -> ApprovalGateInput | None:
+    password = getattr(args, "approval_password", None)
+    totp_code = getattr(args, "approval_totp", None)
+    if isinstance(password, str) and password:
+        return ApprovalGateInput(password=password, totp_code=totp_code)
+    if isinstance(totp_code, str) and totp_code:
+        return ApprovalGateInput(password=None, totp_code=totp_code)
+    return prompt_for_approval_gate(guard_home, use_cooldown=False)
+
+
+def _package_firewall_block_payload(
+    *,
+    entitlement: dict[str, object],
+    operation: str,
+) -> tuple[int, dict[str, object]]:
+    status, error_code, message = package_firewall_block_details(entitlement)
+    return (
+        status,
+        {
+            "available_actions": ["status", "education", "cli_fallback"],
+            "cli_fallback": {
+                "connect": "hol-guard connect",
+                "status": "hol-guard package-shims status --json",
+            },
+            "entitlement": entitlement,
+            "error": error_code,
+            "message": message,
+            "operation": operation,
+        },
+    )
+
+
 def _guard_http_url(value: str) -> str:
     parsed = urllib.parse.urlparse(value.strip())
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -1417,26 +1476,51 @@ def _normalize_explicit_workspace_path(value: str | None) -> Path | None:
         return path
 
 
-def _resolve_guard_workspace(
-    args: argparse.Namespace,
+_INSTALL_WORKSPACE_COMMANDS = frozenset({"install", "uninstall"})
+_PROJECT_ROOT_MARKERS = (
+    ".git",
+    "pyproject.toml",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+)
+
+
+def _requested_install_harness(args: argparse.Namespace) -> str | None:
+    if bool(getattr(args, "all", False)):
+        return None
+    harness = str(getattr(args, "harness", "") or "").strip()
+    return harness or None
+
+
+def _workspace_from_cursor_project_dir() -> Path | None:
+    project_dir = os.environ.get("CURSOR_PROJECT_DIR", "").strip()
+    if not project_dir:
+        return None
+    return _normalize_explicit_workspace_path(project_dir)
+
+
+def _workspace_has_project_markers(path: Path) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return any((resolved / marker).exists() for marker in _PROJECT_ROOT_MARKERS)
+
+
+def _workspace_from_harness_detection(
+    harness: str,
     *,
+    cwd: Path,
     guard_home: Path,
 ) -> Path | None:
-    explicit_workspace = getattr(args, "workspace", None)
-    if explicit_workspace:
-        return _normalize_explicit_workspace_path(str(explicit_workspace))
-    if getattr(args, "guard_command", None) != "apps":
-        return None
-    if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
-        return None
-    harness = str(getattr(args, "harness", "")).strip()
-    if not harness:
-        return None
     try:
         adapter = get_adapter(harness)
     except ValueError:
         return None
-    cwd = Path.cwd().resolve()
     detection = adapter.detect(
         HarnessContext(
             home_dir=Path.home().resolve(),
@@ -1445,9 +1529,61 @@ def _resolve_guard_workspace(
         )
     )
     for config_path in detection.config_paths:
-        if Path(config_path).resolve().is_relative_to(cwd):
+        try:
+            resolved_path = Path(config_path).expanduser().resolve()
+        except OSError:
+            continue
+        if resolved_path.is_relative_to(cwd):
             return cwd
     return None
+
+
+def _resolve_default_install_workspace(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path,
+) -> Path | None:
+    """Pick a project workspace for install/uninstall when --workspace is omitted."""
+
+    cwd = Path.cwd().resolve()
+    harness = _requested_install_harness(args)
+    cursor_project_dir = _workspace_from_cursor_project_dir()
+    if cursor_project_dir is not None and (harness is None or harness == "cursor"):
+        return cursor_project_dir
+
+    if _workspace_has_project_markers(cwd):
+        return cwd
+
+    git_root = _git_repo_root(cwd)
+    if git_root is not None:
+        return git_root
+
+    if harness is not None:
+        detected = _workspace_from_harness_detection(harness, cwd=cwd, guard_home=guard_home)
+        if detected is not None:
+            return detected
+    return None
+
+
+def _resolve_guard_workspace(
+    args: argparse.Namespace,
+    *,
+    guard_home: Path,
+) -> Path | None:
+    explicit_workspace = getattr(args, "workspace", None)
+    if explicit_workspace:
+        return _normalize_explicit_workspace_path(str(explicit_workspace))
+    guard_command = getattr(args, "guard_command", None)
+    if guard_command in _INSTALL_WORKSPACE_COMMANDS:
+        return _resolve_default_install_workspace(args, guard_home=guard_home)
+    if guard_command != "apps":
+        return None
+    if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
+        return None
+    harness = str(getattr(args, "harness", "")).strip()
+    if not harness:
+        return None
+    return _workspace_from_harness_detection(harness, cwd=Path.cwd().resolve(), guard_home=guard_home)
 
 
 def _run_apps_command(
@@ -1957,14 +2093,42 @@ def run_guard_command(
             if isinstance(manager, str) and manager.strip()
         )
         shim_command = getattr(args, "package_shims_command", "status")
-        if shim_command == "install":
-            payload = install_package_shims(context, managers=requested_managers or None)
-        elif shim_command == "repair":
-            payload = repair_package_shims(context, managers=requested_managers or None)
-        elif shim_command == "uninstall":
-            payload = uninstall_package_shims(context, managers=requested_managers or None)
-        else:
+        entitlement = resolve_package_firewall_entitlement_with_refresh(store)
+        if shim_command == "status":
             payload = package_shim_status(context)
+            payload["actions"] = _package_firewall_action_states(entitlement)
+            payload["entitlement"] = entitlement
+            payload["generated_at"] = _now()
+            _emit("package-shims", payload, getattr(args, "json", False))
+            return 0
+        if not bool(entitlement["allowed"]):
+            status, payload = _package_firewall_block_payload(
+                entitlement=entitlement,
+                operation="remove" if shim_command == "uninstall" else shim_command,
+            )
+            payload["generated_at"] = _now()
+            _emit("package-shims", payload, getattr(args, "json", False))
+            return 2
+        try:
+            if shim_command in {"install", "repair", "uninstall"}:
+                gate_input = _package_firewall_cli_gate_input(args, store.guard_home)
+                require_high_risk(
+                    store.guard_home,
+                    purpose="supply_chain_firewall",
+                    approval_gate_input=gate_input,
+                )
+            if shim_command == "install":
+                payload = install_package_shims(context, managers=requested_managers or None)
+            elif shim_command == "repair":
+                payload = repair_package_shims(context, managers=requested_managers or None)
+            elif shim_command == "uninstall":
+                payload = uninstall_package_shims(context, managers=requested_managers or None)
+            else:
+                payload = package_shim_status(context)
+        except ApprovalGateError as error:
+            _emit("package-shims", approval_gate_cli_payload(error), getattr(args, "json", False))
+            return 2
+        payload["entitlement"] = entitlement
         payload["generated_at"] = _now()
         _emit("package-shims", payload, getattr(args, "json", False))
         return 0
@@ -3795,6 +3959,8 @@ def _should_emit_native_hook_json_response(
     output_stream: TextIO | None,
 ) -> bool:
     harness = _canonical_harness_name(args.harness)
+    if harness == "codex" and getattr(args, "json", False) and event_name == "UserPromptSubmit":
+        return True
     return (
         harness in {"claude-code", "codex"}
         and getattr(args, "json", False)
@@ -7014,6 +7180,13 @@ _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     )
     \s*"""
 )
+_CODEX_PRIVATE_KEY_FIXTURE_PATTERN = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----(?P<body>.*?)-----END [A-Z ]*PRIVATE KEY-----",
+    re.DOTALL,
+)
+_CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN = re.compile(
+    r"(?i)\b(?:secret-key-material|fixture|fake|example|sample|dummy|test-key|placeholder)\b"
+)
 _CODEX_SENSITIVE_SEARCH_BASENAMES = SOURCE_INSPECTION_SENSITIVE_PARTS | frozenset({"id_rsa"})
 _CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
     {
@@ -7111,8 +7284,11 @@ def _codex_source_inspection_can_skip_secret_output(
         return False
     if _codex_command_targets_secret_like_source_name(command_text):
         return False
-    if any(match.sensitivity != "medium" for match in content_matches):
-        return False
+    non_medium_matches = [match for match in content_matches if match.sensitivity != "medium"]
+    if non_medium_matches:
+        return all(
+            match.classifier == "pem-private-key" for match in non_medium_matches
+        ) and _codex_output_uses_placeholder_private_key_fixture(response_text)
     if _codex_command_references_benign_source_dotfile(command_text):
         return _codex_output_is_only_benign_secret_fixture(response_text)
     return True
@@ -7121,6 +7297,21 @@ def _codex_source_inspection_can_skip_secret_output(
 def _codex_output_is_only_benign_secret_fixture(response_text: str) -> bool:
     lines = [line for line in response_text.splitlines() if line.strip()]
     return bool(lines) and all(_CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN.fullmatch(line) for line in lines)
+
+
+def _codex_output_uses_placeholder_private_key_fixture(response_text: str) -> bool:
+    matches = list(_CODEX_PRIVATE_KEY_FIXTURE_PATTERN.finditer(response_text))
+    if not matches:
+        return False
+    return all(
+        _CODEX_PRIVATE_KEY_FIXTURE_BODY_PATTERN.search(
+            " ".join(line.strip() for line in match.group("body").splitlines() if line.strip())
+            .replace("\\n", " ")
+            .replace("\\r", " ")
+        )
+        is not None
+        for match in matches
+    )
 
 
 def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:
@@ -9122,7 +9313,7 @@ def _resolve_policy_expiry(args: argparse.Namespace) -> str | None:
 
 
 def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]:
-    latest_state = store.get_latest_guard_connect_state(now=_now())
+    latest_state = store.get_effective_guard_connect_state(now=_now())
     payload: dict[str, object] = {
         "oauth_storage_health": _guard_doctor_oauth_storage_health_payload(store),
         "connect_recovery_command": connect_recovery_command(latest_state),
@@ -9185,7 +9376,7 @@ def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
 
 
 def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
-    if store.get_sync_credentials() is None:
+    if store.get_cloud_sync_profile() is None:
         return
     now = _now()
     try:
@@ -9227,6 +9418,157 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
     store.set_sync_payload("policy_bundle_last_error", {}, now)
 
 
+def _guard_cloud_urls_for_connect(connect_url: str) -> dict[str, str]:
+    normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
+    dashboard_url = f"{allowed_origin}/guard"
+    return {
+        "connect_url": normalized_connect_url,
+        "sync_url": f"{allowed_origin}/api/guard/receipts/sync",
+        "dashboard_url": dashboard_url,
+        "inbox_url": f"{dashboard_url}/inbox",
+        "fleet_url": f"{dashboard_url}/fleet",
+        "allowed_origin": allowed_origin,
+    }
+
+
+def _finalize_guard_connect_payload(
+    *,
+    store: GuardStore,
+    connect_url: str,
+    payload: dict[str, object],
+    now: str,
+) -> dict[str, object]:
+    sync_auth_context = payload.pop(CONNECT_SYNC_AUTH_CONTEXT_KEY, None)
+    urls = _guard_cloud_urls_for_connect(connect_url)
+    for key in ("connect_url", "sync_url", "dashboard_url", "inbox_url", "fleet_url"):
+        payload.setdefault(key, urls[key])
+    if str(payload.get("status") or "") != "connected":
+        return payload
+    store.clear_cloud_sync_state_for_reconnect()
+    latest_state = store.record_guard_connect_pairing_completed(
+        sync_url=str(urls["sync_url"]),
+        allowed_origin=str(urls["allowed_origin"]),
+        now=now,
+    )
+    payload.update(
+        {
+            "status": str(latest_state.get("status") or payload.get("status") or "connected"),
+            "milestone": str(latest_state.get("milestone") or "first_sync_pending"),
+            "completed_at": latest_state.get("completed_at") or now,
+            "latest_connect_state": latest_state,
+        }
+    )
+    oauth_health = store.get_oauth_local_credential_health()
+    oauth_state = str(oauth_health.get("state") or "")
+    if store.get_cloud_sync_profile() is None and oauth_state == "degraded":
+        repair_message = (
+            "Guard Cloud authorization did not persist locally. "
+            "Run hol-guard connect again to repair local sign-in."
+        )
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=now,
+            reason=repair_message,
+        )
+        payload.update(
+            {
+                "status": "retry_required",
+                "milestone": "first_sync_failed",
+                "sync_succeeded": False,
+                "sync_error": repair_message,
+                "repair_message": repair_message,
+                "latest_connect_state": store.get_effective_guard_connect_state(now=now),
+            }
+        )
+        return payload
+    if store.get_cloud_sync_profile() is None:
+        payload["sync_attempted"] = False
+        return payload
+    payload["sync_attempted"] = True
+    try:
+        if isinstance(sync_auth_context, dict):
+            sync_payload = sync_local_guard_cloud_proof(store, auth_context=sync_auth_context)
+        else:
+            sync_payload = sync_local_guard_cloud_proof(store)
+    except GuardSyncNotAvailableError as error:
+        store.record_latest_guard_connect_sync_result(
+            status="connected",
+            milestone="sync_not_available",
+            now=now,
+            reason=str(error),
+        )
+        payload.update(
+            {
+                "milestone": "sync_not_available",
+                "sync_succeeded": False,
+                "sync_error": str(error),
+                "repair_message": str(error),
+                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
+            }
+        )
+        return payload
+    except (GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError) as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=now,
+            reason=str(error),
+        )
+        payload.update(
+            {
+                "status": "retry_required",
+                "milestone": "first_sync_failed",
+                "sync_succeeded": False,
+                "sync_error": str(error),
+                "repair_message": "Run hol-guard connect again to refresh Guard Cloud authorization.",
+                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
+            }
+        )
+        return payload
+    except RuntimeError as error:
+        repair_message = (
+            "Guard Cloud pairing finished, but the first proof sync is still pending. "
+            "Local Guard will retry automatically while the daemon is running, or run hol-guard sync now."
+        )
+        store.record_latest_guard_connect_sync_result(
+            status="connected",
+            milestone="first_sync_pending",
+            now=now,
+            reason=str(error),
+        )
+        payload.update(
+            {
+                "status": "connected",
+                "milestone": "first_sync_pending",
+                "sync_succeeded": False,
+                "sync_error": str(error),
+                "repair_message": repair_message,
+                "latest_connect_state": store.get_latest_guard_connect_state(now=now),
+            }
+        )
+        return payload
+    latest_state = store.record_latest_guard_connect_sync_success(
+        sync_payload=sync_payload,
+        now=str(sync_payload.get("synced_at") or now),
+    )
+    payload.update(
+        {
+            "status": "connected",
+            "milestone": "first_sync_succeeded",
+            "sync_succeeded": True,
+            "sync": sync_payload,
+            "last_sync_at": sync_payload.get("synced_at"),
+            "latest_connect_state": latest_state or store.get_latest_guard_connect_state(now=now),
+        }
+    )
+    try:
+        payload["supply_chain"] = sync_supply_chain_bundle(store)
+    except (GuardSyncNotConfiguredError, GuardSyncNotAvailableError, RuntimeError) as error:
+        payload["supply_chain_error"] = str(error)
+    return payload
+
+
 def _filter_policy_items(items: list[dict[str, object]], *, active_only: bool) -> list[dict[str, object]]:
     if not active_only:
         return items
@@ -9265,6 +9607,7 @@ def _run_guard_device_connect_flow(
         open_browser=open_browser,
         ci_safe=ci_safe,
         machine_label=machine_label,
+        include_sync_auth_context=True,
     )
 
 
@@ -9278,6 +9621,7 @@ def _run_guard_browser_connect_flow(
         store=store,
         connect_url=connect_url,
         wait_timeout_seconds=wait_timeout_seconds,
+        include_sync_auth_context=True,
     )
 
 
@@ -9327,6 +9671,12 @@ def _build_guard_device_connect_payload(
     except (RuntimeError, TimeoutError, urllib.error.URLError, http.client.HTTPException) as error:
         print(f"Guard authorization failed: {error}", file=sys.stderr)
         return None, 1
+    payload = _finalize_guard_connect_payload(
+        store=store,
+        connect_url=connect_url,
+        payload=payload,
+        now=_now(),
+    )
     return payload, 0
 
 

@@ -810,7 +810,14 @@ def _guard_home_has_sync_credentials(path: Path) -> bool:
         return False
     try:
         with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
-            row = connection.execute("select 1 from sync_state where state_key = 'credentials' limit 1").fetchone()
+            row = connection.execute(
+                """
+                select 1
+                from sync_state
+                where state_key in ('credentials', 'oauth_local_credentials')
+                limit 1
+                """
+            ).fetchone()
     except sqlite3.Error:
         return False
     return row is not None

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 
 from .edge_events import build_access_graph_snapshot_event
 from .models import HarnessDetection
 from .redaction import redact_sensitive_text
+from .stable_digest import stable_digest_hex
 from .store import GuardStore
 
 
@@ -59,7 +59,10 @@ def queue_access_graph_snapshot(
         "harness": detection.harness,
         "generatedAt": now,
     }
-    snapshot_hash = hashlib.sha256(json.dumps(snapshot_seed, sort_keys=True).encode("utf-8")).hexdigest()[:24]
+    snapshot_hash = stable_digest_hex(
+        json.dumps(snapshot_seed, sort_keys=True).encode("utf-8"),
+        length=24,
+    )
     snapshot_id = f"access-graph-{snapshot_hash}"
     payload = {
         "snapshotId": snapshot_id,
