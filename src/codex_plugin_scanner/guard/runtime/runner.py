@@ -10,7 +10,6 @@ import re
 import socket
 import subprocess
 import threading
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
