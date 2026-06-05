@@ -361,11 +361,23 @@ def _run_headless_cloud_sync(
             "receipts_stored": sync_payload.get("receipts_stored", 0),
         }
     except GuardSyncAuthorizationExpiredError as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=recorded_at,
+            reason=str(error),
+        )
         summary = {
             "status": "auth_expired",
             "message": str(error),
         }
     except GuardSyncNotConfiguredError as error:
+        store.record_latest_guard_connect_sync_result(
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=recorded_at,
+            reason=str(error),
+        )
         summary = {
             "status": "not_configured",
             "message": str(error),
