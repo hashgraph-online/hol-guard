@@ -27,7 +27,6 @@ import { EvidenceAnalyticsPanel } from "./evidence/evidence-analytics-panel";
 import { EvidenceExportDrawer } from "./evidence/evidence-export-drawer";
 import { EvidenceClearModal } from "./evidence/evidence-clear-modal";
 import { AppTab } from "./evidence/app-tab";
-import { StoryTab } from "./evidence/story-tab";
 import { CategoryTab } from "./evidence/category-tab";
 
 export type ReceiptsState =
@@ -90,7 +89,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.day, filters.category, filters.sourceScope]);
+  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.category, filters.sourceScope]);
 
   const effectiveFilters = useMemo(
     () => ({ ...filters, search: debouncedSearch }),
@@ -144,10 +143,6 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   const handleSortChange = useCallback((sort: EvidenceSortKey) => {
     handleFilterChange({ sort });
   }, [handleFilterChange]);
-
-  const handleSelectDay = useCallback((day: string) => {
-    setFilters((prev) => ({ ...prev, day }));
-  }, []);
 
   const handleLoadMore = useCallback(() => {
     setPage((prev) => prev + 1);
@@ -258,7 +253,6 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-insights"
             role="tabpanel"
             aria-labelledby="tab-insights"
-            className="max-w-2xl"
           >
             <EvidenceAnalyticsPanel
               metrics={metrics}
@@ -276,21 +270,6 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             className="max-w-2xl"
           >
             <AppTab receipts={filtered} />
-          </div>
-        )}
-
-        {filters.view === "story" && (
-          <div
-            id="tabpanel-story"
-            role="tabpanel"
-            aria-labelledby="tab-story"
-            className="max-w-2xl"
-          >
-            <StoryTab
-              receipts={filtered}
-              selectedDay={filters.day ?? ""}
-              onSelectDay={handleSelectDay}
-            />
           </div>
         )}
 
