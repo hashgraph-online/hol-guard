@@ -3448,6 +3448,210 @@ clearer UX and an implementation plan with technical references.
         assert summary["runtime_session_sync_skipped"] is True
         assert summary["runtime_session_sync_reason"] == "runtime_session_endpoint_unavailable"
 
+    def test_sync_local_guard_cloud_proof_publishes_runtime_before_receipts(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        call_order: list[str] = []
+
+        def fake_sync_runtime_session(current_store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+            assert current_store is store
+            call_order.append("runtime")
+            assert session == {
+                "harness": "hol-guard",
+                "surface": "cli",
+                "status": "active",
+                "client_name": "hol-guard",
+                "client_title": "HOL Guard CLI",
+                "client_version": guard_runner_module.__version__,
+                "workspace": "local-machine",
+                "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+            }
+            return {
+                "synced_at": "2026-06-05T12:00:00+00:00",
+                "runtime_session_synced_at": "2026-06-05T12:00:00+00:00",
+                "runtime_session_id": "runtime-session-1",
+                "runtime_sessions_visible": 1,
+                "runtime_harness": "hol-guard",
+                "runtime_surface": "cli",
+                "runtime_workspace": "local-machine",
+                "runtime_device_id": "device-1",
+                "local_guard_online_at": "2026-06-05T12:00:00+00:00",
+            }
+
+        def fake_sync_receipts(
+            current_store: GuardStore,
+            *,
+            persist_sync_summary: bool = True,
+            persist_connect_state: bool = True,
+        ) -> dict[str, object]:
+            assert current_store is store
+            assert persist_sync_summary is False
+            assert persist_connect_state is False
+            call_order.append("receipts")
+            return {
+                "synced_at": "2026-06-05T12:00:05+00:00",
+                "receipts_stored": 3,
+                "inventory_tracked": 2,
+                "local_guard_online_at": "2026-06-05T12:00:05+00:00",
+            }
+
+        monkeypatch.setattr(guard_runner_module, "sync_runtime_session", fake_sync_runtime_session)
+        monkeypatch.setattr(guard_runner_module, "sync_receipts", fake_sync_receipts)
+
+        payload = guard_runner_module.sync_local_guard_cloud_proof(store)
+
+        assert call_order == ["runtime", "receipts"]
+        assert payload["runtime_session_id"] == "runtime-session-1"
+        assert payload["runtime_session_synced_at"] == "2026-06-05T12:00:00+00:00"
+        assert payload["runtime_sessions_visible"] == 1
+        assert payload["receipts_stored"] == 3
+        assert payload["runtime"] == {
+            "synced_at": "2026-06-05T12:00:00+00:00",
+            "runtime_session_synced_at": "2026-06-05T12:00:00+00:00",
+            "runtime_session_id": "runtime-session-1",
+            "runtime_sessions_visible": 1,
+            "runtime_harness": "hol-guard",
+            "runtime_surface": "cli",
+            "runtime_workspace": "local-machine",
+            "runtime_device_id": "device-1",
+            "local_guard_online_at": "2026-06-05T12:00:00+00:00",
+        }
+        assert payload["receipts"] == {
+            "synced_at": "2026-06-05T12:00:05+00:00",
+            "receipts_stored": 3,
+            "inventory_tracked": 2,
+            "local_guard_online_at": "2026-06-05T12:00:05+00:00",
+        }
+
+    def test_sync_local_guard_cloud_proof_persists_runtime_fields_in_connect_state(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.record_guard_connect_pairing_completed(
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            allowed_origin="https://hol.org",
+            now="2026-06-05T12:00:00+00:00",
+            request_id="connect-1",
+        )
+
+        def fake_sync_runtime_session(current_store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+            assert current_store is store
+            assert session["harness"] == "hol-guard"
+            return {
+                "synced_at": "2026-06-05T12:00:02+00:00",
+                "runtime_session_synced_at": "2026-06-05T12:00:02+00:00",
+                "runtime_session_id": "runtime-session-1",
+                "runtime_sessions_visible": 1,
+                "runtime_harness": "hol-guard",
+                "runtime_surface": "cli",
+                "runtime_workspace": "local-machine",
+                "runtime_device_id": "device-1",
+                "local_guard_online_at": "2026-06-05T12:00:02+00:00",
+            }
+
+        def fake_sync_receipts(
+            current_store: GuardStore,
+            *,
+            persist_sync_summary: bool = True,
+            persist_connect_state: bool = True,
+        ) -> dict[str, object]:
+            assert current_store is store
+            assert persist_sync_summary is False
+            assert persist_connect_state is False
+            return {
+                "synced_at": "2026-06-05T12:00:05+00:00",
+                "receipts_stored": 0,
+                "inventory_tracked": 0,
+                "local_guard_online_at": "2026-06-05T12:00:05+00:00",
+            }
+
+        monkeypatch.setattr(guard_runner_module, "sync_runtime_session", fake_sync_runtime_session)
+        monkeypatch.setattr(guard_runner_module, "sync_receipts", fake_sync_receipts)
+
+        payload = guard_runner_module.sync_local_guard_cloud_proof(store)
+        latest_state = store.get_latest_guard_connect_state(now="2026-06-05T12:00:05+00:00")
+        sync_summary = store.get_sync_payload("sync_summary")
+
+        assert payload["runtime_session_id"] == "runtime-session-1"
+        assert isinstance(sync_summary, dict)
+        assert sync_summary["runtime_session_id"] == "runtime-session-1"
+        assert sync_summary["runtime_session_synced_at"] == "2026-06-05T12:00:02+00:00"
+        assert latest_state is not None
+        assert latest_state["milestone"] == "first_sync_succeeded"
+        proof = latest_state["proof"]
+        assert isinstance(proof, dict)
+        assert proof["runtime_session_id"] == "runtime-session-1"
+        assert proof["runtime_session_synced_at"] == "2026-06-05T12:00:02+00:00"
+        assert proof["first_synced_at"] == "2026-06-05T12:00:05+00:00"
+
+    def test_cloud_runtime_session_payload_uses_contract_safe_local_identity(
+        self,
+        tmp_path,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+
+        payload = guard_runner_module._cloud_runtime_session_payload(
+            store,
+            {
+                "session_id": "runtime-session-1",
+                "harness": "hol-guard",
+                "surface": "cli",
+                "status": "active",
+                "client_name": "hol-guard",
+                "client_title": "HOL Guard CLI",
+                "client_version": "2.0.345",
+                "workspace": "local-machine",
+                "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+            },
+        )
+
+        local_identity = payload["localIdentity"]
+        assert isinstance(local_identity, dict)
+        assert "lastSyncedAt" in local_identity
+        assert "daemonId" not in local_identity
+        assert "daemonVersion" not in local_identity
+        assert "daemonStatus" not in local_identity
+        assert "relayState" not in local_identity
+
+    def test_receipt_sync_context_matches_cloud_contract_for_empty_first_sync(
+        self,
+        tmp_path,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_payload(
+            "runtime_session_summary",
+            {
+                "runtime_harness": "hol-guard",
+                "runtime_session_synced_at": "2026-06-05T12:00:00+00:00",
+            },
+            "2026-06-05T12:00:00+00:00",
+        )
+        store.set_sync_payload(
+            "sync_summary",
+            {
+                "synced_at": "2026-06-05T11:59:00+00:00",
+            },
+            "2026-06-05T11:59:00+00:00",
+        )
+
+        context = guard_runner_module._receipt_sync_context(
+            store,
+            local_guard_online_at="2026-06-05T12:00:05+00:00",
+        )
+
+        assert context["deviceId"] == store.get_or_create_installation_id()
+        assert isinstance(context["deviceName"], str)
+        assert context["harness"] == "hol-guard"
+        assert context["lastRuntimeSyncAt"] == "2026-06-05T12:00:00+00:00"
+        assert context["localGuardOnlineAt"] == "2026-06-05T12:00:05+00:00"
+        assert context["syncHealth"] == "healthy"
+        assert "lastReceiptSyncAt" not in context
+
     def test_guard_store_initializes_runtime_tables_and_receipt_columns(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
 
@@ -15577,7 +15781,7 @@ def test_sync_receipts_uses_rowid_cursor_and_sync_context(tmp_path, monkeypatch)
     assert second_summary["receipts"] == 1
     assert len(sync_payloads) == 2
     assert sync_payloads[1]["receipts"][0]["receiptId"] == "receipt-late"
-    assert sync_payloads[1]["syncContext"]["lastReceiptSyncAt"] == "2026-04-19T00:00:10+00:00"
+    assert "lastReceiptSyncAt" not in sync_payloads[1]["syncContext"]
     latest_cursor = store.get_sync_payload("receipt_sync_cursor")
     assert isinstance(latest_cursor, dict)
     assert isinstance(latest_cursor["last_rowid"], int)
