@@ -11,7 +11,7 @@ import type { GuardReceipt } from "../guard-types";
 import type { EvidenceSortKey } from "./evidence-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { detectCategory, getCategoryInfo } from "./categories";
-import { resolveActionTitle, resolveActionType } from "./plain-english";
+import { resolveActionTitle, resolveActionType, resolveActionSubtitle } from "./plain-english";
 import { hasMore } from "./evidence-pagination";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
@@ -211,6 +211,7 @@ function ActionRow({
   const catInfo = getCategoryInfo(category);
   const actionTitle = resolveActionTitle(receipt);
   const actionType = resolveActionType(receipt);
+  const actionSubtitle = resolveActionSubtitle(receipt);
 
   const handleClick = useCallback(() => {
     onSelect(receipt.receipt_id);
@@ -260,11 +261,11 @@ function ActionRow({
       </td>
       <td className="px-3 py-2.5">
         <div className="flex flex-col min-w-0">
-          <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">
+          <span className="text-sm font-medium text-brand-dark truncate block max-w-[260px]">
             {actionTitle}
           </span>
-          <span className="text-[11px] text-slate-400 truncate block max-w-[200px]">
-            {actionType}
+          <span className="text-[11px] text-slate-400 truncate block max-w-[260px]">
+            {actionSubtitle ?? actionType}
           </span>
         </div>
       </td>

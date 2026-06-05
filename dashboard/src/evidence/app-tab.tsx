@@ -10,7 +10,7 @@ import {
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { harnessDisplayName, isDisplayableHarness, formatRelativeTime } from "../approval-center-utils";
-import { plainEnglishDescription, resolveActionTitle, resolveActionType } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
 import { Sparkline } from "./sparkline";
@@ -258,6 +258,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
                     const catInfo = getCategoryInfo(category);
                     const actionTitle = resolveActionTitle(receipt);
                     const actionType = resolveActionType(receipt);
+                    const actionSubtitle = resolveActionSubtitle(receipt);
                     return (
                       <tr key={receipt.receipt_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                         <td className="px-3 py-2.5">
@@ -265,8 +266,8 @@ function AppTabRaw({ receipts }: AppTabProps) {
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">{actionTitle}</span>
-                            <span className="text-[11px] text-slate-400 truncate block max-w-[200px]">{actionType}</span>
+                            <span className="text-sm font-medium text-brand-dark truncate block max-w-[260px]">{actionTitle}</span>
+                            <span className="text-[11px] text-slate-400 truncate block max-w-[260px]">{actionSubtitle ?? actionType}</span>
                           </div>
                         </td>
                         <td className="px-3 py-2.5 hidden md:table-cell">
