@@ -30,11 +30,7 @@ def build_local_dashboard_session_token(
     }
     if extra_claims:
         payload_data.update(
-            {
-                key: value
-                for key, value in extra_claims.items()
-                if key not in _PROTECTED_LOCAL_DASHBOARD_SESSION_CLAIMS
-            }
+            {key: value for key, value in extra_claims.items() if key not in _PROTECTED_LOCAL_DASHBOARD_SESSION_CLAIMS}
         )
     payload_json = json.dumps(payload_data, separators=(",", ":"))
     encoded_payload = base64.urlsafe_b64encode(payload_json.encode("utf-8")).decode("ascii").rstrip("=")
