@@ -213,6 +213,47 @@ def resolve_package_firewall_entitlement(
     return _connect_required_entitlement(store)
 
 
+def package_firewall_action_states(
+    entitlement: dict[str, object],
+    *,
+    has_installed_managers: bool,
+) -> dict[str, str]:
+    allowed = bool(entitlement.get("allowed"))
+    reason = str(entitlement.get("reason") or "").strip().lower()
+    if allowed:
+        blocked_state = "available"
+    elif reason == "guard_cloud_connect_required":
+        blocked_state = "connect_required"
+    elif reason == "guard_cloud_reconnect_required":
+        blocked_state = "reconnect_required"
+    else:
+        blocked_state = "paid_required"
+    local_recovery_state = "available" if has_installed_managers else "disabled"
+    return {
+        "install": blocked_state,
+        "repair": local_recovery_state,
+        "test": blocked_state,
+        "audit": blocked_state,
+        "sync": blocked_state,
+        "remove": local_recovery_state,
+    }
+
+
+def package_firewall_available_actions(
+    entitlement: dict[str, object],
+    *,
+    has_installed_managers: bool,
+) -> list[str]:
+    reason = str(entitlement.get("reason") or "").strip().lower()
+    actions = ["status"]
+    if reason in {"guard_cloud_connect_required", "guard_cloud_reconnect_required"}:
+        actions.append("connect")
+    if has_installed_managers:
+        actions.extend(["repair", "remove"])
+    actions.extend(["education", "cli_fallback"])
+    return actions
+
+
 def package_firewall_block_details(entitlement: dict[str, object]) -> tuple[int, str, str]:
     if entitlement.get("reason") == "guard_cloud_connect_required":
         return (

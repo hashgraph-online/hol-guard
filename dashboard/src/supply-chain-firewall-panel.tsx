@@ -19,7 +19,7 @@ import {
   runPackageSync,
   startPackageFirewallConnect,
 } from "./guard-api";
-import { FreeUserView, ActionResultPanel, ActivationSummary } from "./supply-chain-firewall-views";
+import { EntitlementNotice, ActionResultPanel, ActivationSummary } from "./supply-chain-firewall-views";
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import { ManagerActionCard } from "./supply-chain-manager-card";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
@@ -157,12 +157,13 @@ function FailureBanner({ failed }: FailureBannerProps) {
   );
 }
 
-type PaidUserViewProps = {
+type FirewallControlsViewProps = {
   data: PackageFirewallStatusResponse;
   pendingOp: PendingOp | null;
   lastCompleted: CompletedOp | null;
   lastFailed: FailedOp | null;
   confirmRemoveManager: string | null;
+  showGlobalActions: boolean;
   onInstall: (manager: string) => void;
   onRepair: (manager: string) => void;
   onTest: (manager: string) => void;
@@ -174,12 +175,13 @@ type PaidUserViewProps = {
   onDismissResult: () => void;
 };
 
-function PaidUserView({
+function FirewallControlsView({
   data,
   pendingOp,
   lastCompleted,
   lastFailed,
   confirmRemoveManager,
+  showGlobalActions,
   onInstall,
   onRepair,
   onTest,
@@ -189,18 +191,20 @@ function PaidUserView({
   onAudit,
   onSync,
   onDismissResult,
-}: PaidUserViewProps) {
+}: FirewallControlsViewProps) {
   const anyPending = pendingOp !== null;
   return (
     <div className="space-y-4 px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-brand-dark">Per-manager controls</p>
-        <GlobalActionsBar
-          anyPending={anyPending}
-          pendingOp={pendingOp}
-          onAudit={onAudit}
-          onSync={onSync}
-        />
+        {showGlobalActions && (
+          <GlobalActionsBar
+            anyPending={anyPending}
+            pendingOp={pendingOp}
+            onAudit={onAudit}
+            onSync={onSync}
+          />
+        )}
       </div>
 
       <ActivationSummary protection={data.protection} />
@@ -448,14 +452,25 @@ export function PackageFirewallPanel(props: {
         <ErrorBanner message={panelLoad.message} onRetry={handleRetry} />
       )}
 
-      {panelLoad.phase === "loaded" &&
-        (panelLoad.data.entitlement.allowed ? (
-          <PaidUserView
+      {panelLoad.phase === "loaded" && (
+        <>
+          {!panelLoad.data.entitlement.allowed && (
+            <div className="border-b border-slate-100">
+              <EntitlementNotice
+                connectError={connectError}
+                connectStarting={startingConnect}
+                data={panelLoad.data}
+                onStartConnect={handleStartConnect}
+              />
+            </div>
+          )}
+          <FirewallControlsView
             data={panelLoad.data}
             pendingOp={pendingOp}
             lastCompleted={lastCompleted}
             lastFailed={lastFailed}
             confirmRemoveManager={confirmRemoveManager}
+            showGlobalActions={panelLoad.data.entitlement.allowed}
             onInstall={handleInstall}
             onRepair={handleRepair}
             onTest={handleTest}
@@ -466,14 +481,8 @@ export function PackageFirewallPanel(props: {
             onSync={handleSync}
             onDismissResult={handleDismissResult}
           />
-        ) : (
-          <FreeUserView
-            connectError={connectError}
-            connectStarting={startingConnect}
-            data={panelLoad.data}
-            onStartConnect={handleStartConnect}
-          />
-        ))}
+        </>
+      )}
 
       {pendingApprovalOp !== null && (
         <ApprovalProofModal

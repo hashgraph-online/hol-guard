@@ -89,7 +89,11 @@ from ..local_supply_chain import (
     resolve_package_firewall_entitlement_with_refresh,
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
-from ..package_firewall_entitlement import package_firewall_block_details
+from ..package_firewall_entitlement import (
+    package_firewall_action_states,
+    package_firewall_available_actions,
+    package_firewall_block_details,
+)
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -562,15 +566,6 @@ def _resolve_package_firewall_connect_flow(
         flow["poll_after_ms"] = None
         return flow
     return flow
-
-
-def _package_firewall_available_actions(entitlement: dict[str, object]) -> list[str]:
-    reason = str(entitlement.get("reason") or "").strip().lower()
-    actions = ["status"]
-    if reason in {"guard_cloud_connect_required", "guard_cloud_reconnect_required"}:
-        actions.append("connect")
-    actions.extend(["education", "cli_fallback"])
-    return actions
 
 
 def _finalize_daemon_guard_connect_payload(
@@ -1671,9 +1666,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         entitlement = self._supply_chain_entitlement()
         if not bool(entitlement["allowed"]):
             status, error_code, message = package_firewall_block_details(entitlement)
+            current_status = package_shim_status(self._supply_chain_context(payload))
             self._write_json(
                 {
-                    "available_actions": _package_firewall_available_actions(entitlement),
+                    "available_actions": package_firewall_available_actions(
+                        entitlement,
+                        has_installed_managers=bool(current_status.get("installed_managers")),
+                    ),
                     "entitlement": entitlement,
                     "error": error_code,
                     "message": message,
@@ -1723,7 +1722,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         status = package_shim_status(self._harness_context({}))
         self._write_json(
             {
-                "actions": self._supply_chain_action_states(entitlement),
+                "actions": package_firewall_action_states(
+                    entitlement,
+                    has_installed_managers=bool(status.get("installed_managers")),
+                ),
                 "cli_fallback": {
                     "connect": "hol-guard connect",
                     "install": "hol-guard package-shims install --json",
@@ -1745,11 +1747,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         operation = "remove" if action == "uninstall" else action
         entitlement = self._supply_chain_entitlement()
-        if not bool(entitlement["allowed"]):
+        context = self._supply_chain_context(payload)
+        current_status = package_shim_status(context)
+        if operation not in {"repair", "remove"} and not bool(entitlement["allowed"]):
             status, error_code, message = package_firewall_block_details(entitlement)
             self._write_json(
                 {
-                    "available_actions": _package_firewall_available_actions(entitlement),
+                    "available_actions": package_firewall_available_actions(
+                        entitlement,
+                        has_installed_managers=bool(current_status.get("installed_managers")),
+                    ),
                     "entitlement": entitlement,
                     "error": error_code,
                     "message": message,
@@ -1758,7 +1765,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=status,
             )
             return
-        context = self._supply_chain_context(payload)
         managers, manager_error = self._supply_chain_managers(payload)
         if manager_error is not None:
             self._write_json({"error": manager_error, "operation": operation}, status=400)
@@ -1810,10 +1816,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if operation == "test":
             status = package_shim_status(context)
             installed = {str(manager) for manager in status.get("installed_managers", []) if isinstance(manager, str)}
+            protected = {str(manager) for manager in status.get("protected_managers", []) if isinstance(manager, str)}
             tested_managers = list(managers or tuple(sorted(installed)))
+            path_repair_required = [
+                manager for manager in tested_managers if manager in installed and manager not in protected
+            ]
             return {
-                "blocked_execution": all(manager in installed for manager in tested_managers),
+                "blocked_execution": bool(tested_managers) and all(manager in protected for manager in tested_managers),
+                "missing_managers": [manager for manager in tested_managers if manager not in installed],
                 "package_shims": status,
+                "path_repair_required": path_repair_required,
                 "tested_managers": tested_managers,
             }
         if operation == "audit":
@@ -1852,27 +1864,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _supply_chain_entitlement(self) -> dict[str, object]:
         return resolve_package_firewall_entitlement_with_refresh(self.server.store)  # type: ignore[attr-defined]
-
-    @staticmethod
-    def _supply_chain_action_states(entitlement: dict[str, object]) -> dict[str, str]:
-        allowed = bool(entitlement.get("allowed"))
-        reason = str(entitlement.get("reason") or "").strip().lower()
-        if allowed:
-            state = "available"
-        elif reason == "guard_cloud_connect_required":
-            state = "connect_required"
-        elif reason == "guard_cloud_reconnect_required":
-            state = "reconnect_required"
-        else:
-            state = "paid_required"
-        return {
-            "install": state,
-            "repair": state,
-            "test": state,
-            "audit": state,
-            "sync": state,
-            "remove": state,
-        }
 
     def _supply_chain_connect_flow(self, entitlement: dict[str, object]) -> dict[str, object] | None:
         return _resolve_package_firewall_connect_flow(server=self.server, entitlement=entitlement)  # type: ignore[arg-type]

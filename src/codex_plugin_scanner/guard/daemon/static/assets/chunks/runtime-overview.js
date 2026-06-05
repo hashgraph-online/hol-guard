@@ -93,9 +93,10 @@ function resolvePackageManagerProtectionCopy(protection) {
     };
   }
   const pathInPath = protection.path_status === "in_path";
+  const installedButInactive = protection.installed_managers.length > 0;
   return {
     pathLabel: pathInPath ? "Guard shim directory is in PATH" : "Guard shim directory missing from PATH",
-    pathDetail: pathInPath ? `Package manager commands are intercepted via ${protection.shim_dir}.` : `The shim directory (${protection.shim_dir}) is not on PATH. Install bypass is possible for package managers that are not otherwise protected.`,
+    pathDetail: pathInPath ? `Package manager commands are intercepted via ${protection.shim_dir}.` : installedButInactive ? `The shim directory (${protection.shim_dir}) is not on PATH yet. Use Fix PATH on an installed manager and Guard will update your shell profile automatically.` : `The shim directory (${protection.shim_dir}) is not on PATH. Install bypass is possible for package managers that are not otherwise protected.`,
     pathTone: pathInPath ? "green" : "attention",
     protectedList: protection.protected_managers,
     unprotectedList: protection.unprotected_managers
