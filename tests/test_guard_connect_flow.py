@@ -76,21 +76,21 @@ def test_daemon_rejects_legacy_connect_pairing_endpoints(tmp_path: Path) -> None
     daemon.start()
 
     try:
-        initialize_payload = _initialize_daemon(daemon)
+        _initialize_daemon(daemon)
         request_status, request_payload = _post_legacy_connect_endpoint(
             daemon=daemon,
             path="/v1/connect/requests",
-            token=initialize_payload["auth_token"],
+            token=daemon._server.auth_token,
         )
         complete_status, complete_payload = _post_legacy_connect_endpoint(
             daemon=daemon,
             path="/v1/connect/complete",
-            token=initialize_payload["auth_token"],
+            token=daemon._server.auth_token,
         )
         result_status, result_payload = _post_legacy_connect_endpoint(
             daemon=daemon,
             path="/v1/connect/result",
-            token=initialize_payload["auth_token"],
+            token=daemon._server.auth_token,
         )
     finally:
         daemon.stop()

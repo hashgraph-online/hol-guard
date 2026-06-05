@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
+from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
@@ -30,6 +31,21 @@ def _guard_get_request(port: int, path: str, auth_token: str) -> urllib.request.
         f"http://127.0.0.1:{port}{path}",
         headers={"X-Guard-Token": auth_token},
         method="GET",
+    )
+
+
+def _guard_dashboard_session_get_request(port: int, path: str, session_token: str) -> urllib.request.Request:
+    return urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        headers={"X-Guard-Dashboard-Session": session_token},
+        method="GET",
+    )
+
+
+def _approval_center_session_token(daemon: GuardDaemonServer) -> str:
+    return build_local_dashboard_session_token(
+        auth_token=daemon._server.auth_token,
+        surface="approval-center",
     )
 
 
@@ -1516,6 +1532,7 @@ class TestGuardSurfaceServer:
         assert initialize_payload["protocol"]["current_version"] == "1.1"
         assert initialize_payload["protocol"]["minimum_version"] == "1.0"
         assert initialize_payload["protocol"]["supported_versions"] == ["1.1", "1.0"]
+        assert "auth_token" not in initialize_payload
         assert unsupported_error is not None
         assert unsupported_error.code == 400
 
@@ -1695,6 +1712,7 @@ class TestGuardSurfaceServer:
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
                 initialize_payload = json.loads(response.read().decode("utf-8"))
+            session_token = _approval_center_session_token(daemon)
 
             attach_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/clients/attach",
@@ -1706,7 +1724,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Dashboard-Session": session_token,
                 },
                 method="POST",
             )
@@ -1740,6 +1758,7 @@ class TestGuardSurfaceServer:
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
                 initialize_payload = json.loads(response.read().decode("utf-8"))
+            session_token = _approval_center_session_token(daemon)
 
             session_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/sessions/start",
@@ -1753,7 +1772,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Dashboard-Session": session_token,
                 },
                 method="POST",
             )
@@ -1771,7 +1790,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Dashboard-Session": session_token,
                 },
                 method="POST",
             )
@@ -1779,10 +1798,10 @@ class TestGuardSurfaceServer:
                 attach_payload = json.loads(response.read().decode("utf-8"))
 
             with urllib.request.urlopen(
-                _guard_get_request(
+                _guard_dashboard_session_get_request(
                     daemon.port,
                     f"/v1/sessions/{session_payload['session_id']}/resume",
-                    initialize_payload["auth_token"],
+                    session_token,
                 ),
                 timeout=5,
             ) as response:
@@ -1800,7 +1819,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Dashboard-Session": session_token,
                 },
                 method="POST",
             )
@@ -1808,10 +1827,10 @@ class TestGuardSurfaceServer:
                 operation_payload = json.loads(response.read().decode("utf-8"))
 
             with urllib.request.urlopen(
-                _guard_get_request(
+                _guard_dashboard_session_get_request(
                     daemon.port,
                     f"/v1/sessions/{session_payload['session_id']}/resume",
-                    initialize_payload["auth_token"],
+                    session_token,
                 ),
                 timeout=5,
             ) as response:
@@ -1846,6 +1865,7 @@ class TestGuardSurfaceServer:
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
                 initialize_payload = json.loads(response.read().decode("utf-8"))
+            session_token = _approval_center_session_token(daemon)
 
             attach_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/clients/attach",
@@ -1858,7 +1878,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Dashboard-Session": session_token,
                 },
                 method="POST",
             )
@@ -1897,7 +1917,8 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
+                response.read()
+            auth_token = daemon._server.auth_token
 
             session_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/sessions/start",
@@ -1914,7 +1935,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -1933,7 +1954,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -1950,7 +1971,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -1967,7 +1988,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -1979,7 +2000,7 @@ class TestGuardSurfaceServer:
                 data=json.dumps({"status": "completed"}).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -2014,7 +2035,8 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
+                response.read()
+            auth_token = daemon._server.auth_token
 
             item_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/operations/missing-operation/items",
@@ -2026,7 +2048,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -2064,7 +2086,8 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
+                response.read()
+            auth_token = daemon._server.auth_token
 
             operation_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/operations/start",
@@ -2078,7 +2101,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -2116,14 +2139,15 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
+                response.read()
+            auth_token = daemon._server.auth_token
 
             status_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/operations/missing-operation/status",
                 data=json.dumps({"status": "completed"}).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -2164,7 +2188,8 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
+                response.read()
+            auth_token = daemon._server.auth_token
 
             session_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/sessions/start",
@@ -2178,7 +2203,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -2231,7 +2256,7 @@ class TestGuardSurfaceServer:
                 data=json.dumps(block_payload).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -2243,7 +2268,7 @@ class TestGuardSurfaceServer:
                 data=json.dumps(block_payload).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -2268,7 +2293,8 @@ class TestGuardSurfaceServer:
 
         assert len(opened_urls) == 1
         assert f"{opened_url.scheme}://{opened_url.netloc}{opened_url.path}" == f"http://127.0.0.1:{daemon.port}"
-        assert opened_fragment["guard-token"] == [initialize_payload["auth_token"]]
+        assert opened_fragment["guard-token"][0].startswith("gld1.")
+        assert opened_fragment["guard-token"] != [daemon._server.auth_token]
 
     def test_guard_daemon_rejects_legacy_browser_connect_pairing_endpoint(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -2289,7 +2315,8 @@ class TestGuardSurfaceServer:
                 method="POST",
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
-                initialize_payload = json.loads(response.read().decode("utf-8"))
+                response.read()
+            auth_token = daemon._server.auth_token
 
             legacy_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/connect/requests",
@@ -2301,7 +2328,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method="POST",
             )
@@ -2467,6 +2494,7 @@ class TestGuardSurfaceServer:
             )
             with urllib.request.urlopen(initialize_request, timeout=5) as response:
                 initialize_payload = json.loads(response.read().decode("utf-8"))
+            session_token = _approval_center_session_token(daemon)
 
             attach_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/clients/attach",
@@ -2479,7 +2507,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Dashboard-Session": session_token,
                 },
                 method="POST",
             )
@@ -2497,7 +2525,7 @@ class TestGuardSurfaceServer:
                 ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Dashboard-Session": session_token,
                 },
                 method="POST",
             )

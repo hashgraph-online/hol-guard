@@ -29,6 +29,7 @@ import type {
   GuardHarnessAction,
   GuardHarnessActionErrorPayload,
   GuardHarnessActionResult,
+  GuardManagedInstall,
   GuardNotificationSetupResult,
   GuardPolicyDecision,
   PackageManagerProtection,
@@ -176,42 +177,6 @@ function saveGuardToken(guardToken: string): void {
   window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
 }
 
-function parseAuthToken(payload: unknown): string | null {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  const authToken = payload["auth_token"];
-  return typeof authToken === "string" && authToken.trim() ? authToken : null;
-}
-
-async function refreshGuardToken(): Promise<string | null> {
-  const response = await fetch(guardApiInput("/v1/initialize"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_name: "guard-dashboard",
-      client_title: "HOL Guard dashboard",
-      surface: "dashboard",
-      capabilities: ["approval-resolution"],
-      supported_protocol_versions: [1]
-    })
-  });
-  if (!response.ok) {
-    return null;
-  }
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    return null;
-  }
-  const authToken = parseAuthToken(payload);
-  if (authToken !== null) {
-    saveGuardToken(authToken);
-  }
-  return authToken;
-}
-
 function readGuardDaemonOrigin(): string | null {
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
   if (rawDaemonUrl) {
@@ -260,7 +225,7 @@ function withGuardAuthForToken(
     return init;
   }
   const headers = new Headers(init?.headers);
-  headers.set("X-Guard-Token", guardToken);
+  headers.set("X-Guard-Dashboard-Session", guardToken);
   return {
     ...init,
     headers
@@ -269,24 +234,16 @@ function withGuardAuthForToken(
 
 async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
-  let response = await fetch(requestInput, withGuardAuth(init));
-  if (response.status !== 401) {
-    return response;
-  }
-  const refreshedToken = await refreshGuardToken();
-  if (refreshedToken === null) {
-    return response;
-  }
-  return fetch(requestInput, withGuardAuthForToken(init, refreshedToken));
+  return fetch(requestInput, withGuardAuth(init));
 }
 
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
-  return guardToken ? { "X-Guard-Token": guardToken } : {};
+  return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
 }
 
 function guardAuthHeadersForToken(guardToken: string | null): HeadersInit {
-  return guardToken ? { "X-Guard-Token": guardToken } : {};
+  return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
 }
 
 export function guardAwareHref(href: string): string {
