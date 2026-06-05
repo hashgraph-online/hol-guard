@@ -90,10 +90,10 @@ def cursor_hook_response_from_guard(
     raw_event = hook_event_name.strip().lower()
     if raw_event == "beforereadfile":
         read_permission = _cursor_read_file_permission(permission)
-        return {
-            "permission": read_permission,
-            "user_message": reason if read_permission == "deny" else None,
-        }
+        response: dict[str, object] = {"permission": read_permission}
+        if read_permission == "deny":
+            response["user_message"] = reason
+        return {key: value for key, value in response.items() if value is not None}
     response: dict[str, object] = {"permission": permission}
     if permission != "allow":
         response["user_message"] = reason
@@ -290,6 +290,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 GUARD_HOME = __GUARD_HOME__
@@ -335,7 +336,7 @@ def _guard_payload_has_actionable_risk(guard_payload: dict[str, object]) -> bool
         if isinstance(value, str) and value.strip():
             return True
     decision = guard_payload.get("decision_v2_json")
-    if isinstance(decision, dict):
+    if isinstance(decision, Mapping):
         signals = decision.get("signals")
         if isinstance(signals, list) and signals:
             return True
@@ -364,7 +365,7 @@ def _cursor_reason(guard_payload: dict[str, object]) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     decision = guard_payload.get("decision_v2_json")
-    if isinstance(decision, dict):
+    if isinstance(decision, Mapping):
         for key in ("harness_message", "retry_instruction", "user_body", "user_title"):
             value = decision.get(key)
             if isinstance(value, str) and value.strip():

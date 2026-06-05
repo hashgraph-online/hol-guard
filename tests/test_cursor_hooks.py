@@ -118,6 +118,12 @@ def test_cursor_hook_response_maps_policy_actions() -> None:
         hook_event_name="beforeReadFile",
     )
     assert read_review["permission"] == "deny"
+    read_allow = cursor_hook_response_from_guard(
+        policy_action="allow",
+        guard_payload={},
+        hook_event_name="beforeReadFile",
+    )
+    assert read_allow == {"permission": "allow"}
     assert cursor_hook_should_block(policy_action="block") is True
     assert cursor_hook_should_block(policy_action="require-reapproval") is False
 

@@ -163,5 +163,7 @@ class TestCursorHeadlessHookExecution:
             assert permission in _BLOCKED_PERMISSIONS, response
             if permission == "deny":
                 assert exit_code == 2
+            else:
+                assert exit_code == 0
             return
         raise AssertionError(f"unsupported expected permission label: {expected}")
