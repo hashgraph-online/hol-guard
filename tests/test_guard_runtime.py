@@ -9799,8 +9799,7 @@ def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
                 next_step="Confirm the exact version in Claude's approval prompt.",
                 dashboard_url="https://hol.org/guard/inbox",
                 harness_message=(
-                    "HOL Guard is reviewing npm install react@18.3.0. "
-                    "Review evidence: https://hol.org/guard/inbox."
+                    "HOL Guard is reviewing npm install react@18.3.0. Review evidence: https://hol.org/guard/inbox."
                 ),
             ),
         )
@@ -9828,8 +9827,7 @@ def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
 
     review_url = output["approval_requests"][0]["approval_url"]
     retry_instruction = (
-        f"Open HOL Guard to approve or keep this blocked: {review_url}. "
-        "After you choose, retry the same Codex action."
+        f"Open HOL Guard to approve or keep this blocked: {review_url}. After you choose, retry the same Codex action."
     )
 
     assert rc == 1
@@ -9912,8 +9910,7 @@ def test_guard_hook_localizes_package_review_copy_with_daemon_client_approval_ur
 
     review_url = output["approval_requests"][0]["approval_url"]
     retry_instruction = (
-        f"Open HOL Guard to approve or keep this blocked: {review_url}. "
-        "After you choose, retry the same Codex action."
+        f"Open HOL Guard to approve or keep this blocked: {review_url}. After you choose, retry the same Codex action."
     )
 
     assert rc == 1
@@ -16061,6 +16058,92 @@ def test_sync_runtime_session_rejects_untrusted_oauth_issuer_before_network(tmp_
             store,
             session={
                 "session_id": "session-oauth",
+                "harness": "codex",
+                "surface": "cli",
+                "status": "active",
+                "client_name": "Codex",
+                "client_title": "Codex CLI",
+                "client_version": "1.0.0",
+                "workspace": "prod",
+                "capabilities": ["chat"],
+                "started_at": "2026-06-01T00:00:00+00:00",
+                "updated_at": "2026-06-01T00:00:00+00:00",
+                "operations": [],
+            },
+        )
+
+    assert attempted_request is False
+
+
+def test_sync_runtime_session_rejects_non_https_legacy_sync_url_before_network(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "legacy-runtime-token",
+        "2026-06-01T00:00:00+00:00",
+        workspace_id="workspace-1",
+    )
+    credentials_payload = store.get_sync_payload("credentials")
+    assert isinstance(credentials_payload, dict)
+    credentials_payload["sync_url"] = "http://hol.org/api/guard/receipts/sync"
+    store.set_sync_payload("credentials", credentials_payload, "2026-06-01T00:00:01+00:00")
+    attempted_request = False
+
+    def _fake_urlopen(request, timeout):
+        nonlocal attempted_request
+        attempted_request = True
+        raise AssertionError("network call should be blocked before urlopen")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+        guard_runner_module.sync_runtime_session(
+            store,
+            session={
+                "session_id": "session-http-sync",
+                "harness": "codex",
+                "surface": "cli",
+                "status": "active",
+                "client_name": "Codex",
+                "client_title": "Codex CLI",
+                "client_version": "1.0.0",
+                "workspace": "prod",
+                "capabilities": ["chat"],
+                "started_at": "2026-06-01T00:00:00+00:00",
+                "updated_at": "2026-06-01T00:00:00+00:00",
+                "operations": [],
+            },
+        )
+
+    assert attempted_request is False
+
+
+def test_sync_runtime_session_rejects_unallowlisted_legacy_sync_url_before_network(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "legacy-runtime-token",
+        "2026-06-01T00:00:00+00:00",
+        workspace_id="workspace-1",
+    )
+    credentials_payload = store.get_sync_payload("credentials")
+    assert isinstance(credentials_payload, dict)
+    credentials_payload["sync_url"] = "https://evil.example/api/guard/receipts/sync"
+    store.set_sync_payload("credentials", credentials_payload, "2026-06-01T00:00:01+00:00")
+    attempted_request = False
+
+    def _fake_urlopen(request, timeout):
+        nonlocal attempted_request
+        attempted_request = True
+        raise AssertionError("network call should be blocked before urlopen")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotConfiguredError, match="not trusted"):
+        guard_runner_module.sync_runtime_session(
+            store,
+            session={
+                "session_id": "session-unallowlisted-sync",
                 "harness": "codex",
                 "surface": "cli",
                 "status": "active",
