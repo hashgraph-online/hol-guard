@@ -2056,9 +2056,7 @@ def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
             try:
                 oauth_client = resolve_guard_oauth_client_config(issuer)
             except ValueError as error:
-                raise GuardSyncAuthorizationExpiredError(
-                    f"{_guard_oauth_reauthorization_message()} {error}"
-                ) from error
+                raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
             refreshed = _refresh_guard_oauth_access_token(
                 token_endpoint=oauth_client.token_endpoint,
                 client_id=client_id,
