@@ -158,6 +158,12 @@ function AppTabRaw({ receipts }: AppTabProps) {
     return items;
   }, [apps, selectedApp, decisionFilter, categoryFilter]);
 
+  const categories = useMemo(() => {
+    if (!selectedApp) return [];
+    const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
+    return Array.from(new Set(allItems.map((r) => detectCategory(r))));
+  }, [apps, selectedApp]);
+
   if (appReceipts.length === 0) {
     return (
       <div className="py-12 text-center">
@@ -172,8 +178,6 @@ function AppTabRaw({ receipts }: AppTabProps) {
     const allowed = allItems.filter((r) => r.policy_decision === "allow").length;
     const blocked = allItems.filter((r) => r.policy_decision === "block").length;
     const color = harnessColor(selectedApp);
-
-    const categories = Array.from(new Set(allItems.map((r) => detectCategory(r))));
 
     return (
       <div className="space-y-5">

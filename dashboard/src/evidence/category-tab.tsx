@@ -1,13 +1,6 @@
 import { useMemo, useState, memo, useCallback } from "react";
 import {
   HiMiniChevronRight,
-  HiMiniLockClosed,
-  HiMiniGlobeAlt,
-  HiMiniExclamationTriangle,
-  HiMiniEyeSlash,
-  HiMiniDocumentText,
-  HiMiniWrenchScrewdriver,
-  HiMiniCircleStack,
   HiMiniChevronLeft,
   HiMiniFunnel,
   HiMiniShieldCheck,
@@ -15,29 +8,14 @@ import {
   HiMiniQuestionMarkCircle,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
-import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES } from "./categories";
+import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES, detectCategory } from "./categories";
 import { plainEnglishDescription, humanFileName } from "./plain-english";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
-import { detectCategory } from "./categories";
 
 interface CategoryTabProps {
   receipts: GuardReceipt[];
   onFilterCategory?: (category: ReceiptCategory) => void;
 }
-
-const ICON_MAP: Record<string, React.ReactNode> = {
-  secret: <HiMiniLockClosed className="h-5 w-5" aria-hidden="true" />,
-  network: <HiMiniGlobeAlt className="h-5 w-5" aria-hidden="true" />,
-  destructive: <HiMiniExclamationTriangle className="h-5 w-5" aria-hidden="true" />,
-  hidden: <HiMiniEyeSlash className="h-5 w-5" aria-hidden="true" />,
-  "file-write": <HiMiniDocumentText className="h-5 w-5" aria-hidden="true" />,
-  "tool-call": <HiMiniWrenchScrewdriver className="h-5 w-5" aria-hidden="true" />,
-  other: <HiMiniCircleStack className="h-5 w-5" aria-hidden="true" />,
-  mcp: <HiMiniWrenchScrewdriver className="h-5 w-5" aria-hidden="true" />,
-  skill: <HiMiniWrenchScrewdriver className="h-5 w-5" aria-hidden="true" />,
-  "supply-chain": <HiMiniCircleStack className="h-5 w-5" aria-hidden="true" />,
-  data: <HiMiniCircleStack className="h-5 w-5" aria-hidden="true" />,
-};
 
 function DecisionBadge({ decision }: { decision: string }) {
   if (decision === "allow") {
@@ -84,7 +62,7 @@ function CategoryCard({ cat, count, blocked, onSelect }: CategoryCardProps) {
     >
       <div className="flex items-center gap-3">
         <span className={`inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 ${cat.color}`}>
-          {ICON_MAP[cat.key] ?? ICON_MAP.other}
+          {cat.icon}
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-brand-dark">{cat.label}</p>
@@ -131,10 +109,15 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
     return items;
   }, [groups, selectedCategory, decisionFilter, harnessFilter]);
 
+  const harnesses = useMemo(() => {
+    if (!selectedCategory) return [];
+    const allItems = groups.get(selectedCategory) ?? [];
+    return Array.from(new Set(allItems.map((r) => r.harness)));
+  }, [groups, selectedCategory]);
+
   if (selectedCategory) {
     const allItems = groups.get(selectedCategory) ?? [];
     const info = getCategoryInfo(selectedCategory);
-    const harnesses = Array.from(new Set(allItems.map((r) => r.harness)));
 
     return (
       <div className="space-y-5">
@@ -149,7 +132,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="flex items-center gap-3">
             <span className={`inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 ${info.color}`}>
-              {ICON_MAP[selectedCategory] ?? ICON_MAP.other}
+              {info.icon}
             </span>
             <div>
               <h2 className="text-base font-semibold text-brand-dark">{info.label}</h2>

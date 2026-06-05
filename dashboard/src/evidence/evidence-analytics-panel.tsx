@@ -10,6 +10,14 @@ interface EvidenceAnalyticsPanelProps {
   onFilterCategory: (category: string) => void;
 }
 
+const TONE_STYLES: Record<string, { bg: string; text: string; accent: string }> = {
+  blue: { bg: "bg-brand-blue/[0.04]", text: "text-brand-blue", accent: "bg-brand-blue" },
+  green: { bg: "bg-emerald-50", text: "text-emerald-700", accent: "bg-emerald-500" },
+  amber: { bg: "bg-amber-50", text: "text-amber-700", accent: "bg-amber-500" },
+  purple: { bg: "bg-purple-50", text: "text-purple-700", accent: "bg-purple-500" },
+  slate: { bg: "bg-slate-50", text: "text-slate-700", accent: "bg-slate-500" },
+};
+
 function StatCard({
   label,
   value,
@@ -21,14 +29,7 @@ function StatCard({
   subtext?: string;
   tone: "blue" | "green" | "amber" | "purple" | "slate";
 }) {
-  const toneStyles: Record<string, { bg: string; text: string; accent: string }> = {
-    blue: { bg: "bg-brand-blue/[0.04]", text: "text-brand-blue", accent: "bg-brand-blue" },
-    green: { bg: "bg-emerald-50", text: "text-emerald-700", accent: "bg-emerald-500" },
-    amber: { bg: "bg-amber-50", text: "text-amber-700", accent: "bg-amber-500" },
-    purple: { bg: "bg-purple-50", text: "text-purple-700", accent: "bg-purple-500" },
-    slate: { bg: "bg-slate-50", text: "text-slate-700", accent: "bg-slate-500" },
-  };
-  const style = toneStyles[tone];
+  const style = TONE_STYLES[tone];
 
   return (
     <div className={`rounded-2xl ${style.bg} p-5`}>
