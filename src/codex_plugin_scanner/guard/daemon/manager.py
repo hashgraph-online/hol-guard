@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
@@ -72,17 +73,24 @@ def ensure_guard_daemon(guard_home: Path) -> str:
     state_path = _state_path(guard_home)
     existing_url = load_guard_daemon_url(guard_home)
     if existing_url is not None:
+        _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(existing_url))
         return existing_url
     with _guard_daemon_start_lock(guard_home):
         existing_url = load_guard_daemon_url(guard_home)
         if existing_url is not None:
+            _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(existing_url))
             return existing_url
+        adopted_url = _adopt_existing_guard_daemon(guard_home)
+        if adopted_url is not None:
+            _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(adopted_url))
+            return adopted_url
         stale_state = _load_state(guard_home)
         if isinstance(stale_state, dict) and not _guard_daemon_state_matches_current_runtime(stale_state):
             _retire_guard_daemon_process({**stale_state, "guard_home": str(guard_home)})
         if _guard_daemon_start_in_progress(guard_home):
             inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS)
             if inflight_url is not None:
+                _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(inflight_url))
                 return inflight_url
         clear_guard_daemon_state(guard_home)
         for candidate_port in _candidate_ports(guard_home):
@@ -115,6 +123,7 @@ def ensure_guard_daemon(guard_home: Path) -> str:
                 process=process,
             )
             if url is not None:
+                _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(url))
                 return url
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
 
@@ -178,18 +187,125 @@ def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.re
     return urllib.request.Request(url, headers=headers, method="GET")
 
 
-def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth_token: str) -> bool:
+def _daemon_healthz_details_payload(url: str, auth_token: str) -> dict[str, object] | None:
     try:
         request = _daemon_health_request(f"{url}/v1/healthz/details", auth_token)
         with urllib.request.urlopen(request, timeout=1) as response:
             if response.status != 200:
-                return False
-            return _healthz_payload_matches_guard_home(response.read().decode("utf-8"), guard_home)
-    except (OSError, ValueError, urllib.error.URLError):
+                return None
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth_token: str) -> bool:
+    payload = _daemon_healthz_details_payload(url, auth_token)
+    if payload is None:
         return False
+    return _healthz_payload_matches_guard_home(json.dumps(payload), guard_home)
 
 
-def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> None:
+def _guard_daemon_url_port(url: str) -> int | None:
+    try:
+        parsed = urllib.parse.urlparse(url)
+        return parsed.port
+    except ValueError:
+        return None
+
+
+def _adopt_existing_guard_daemon(guard_home: Path) -> str | None:
+    if os.name == "nt":
+        return None
+    candidate_ports = _adoptable_guard_daemon_ports(guard_home)
+    for port in candidate_ports:
+        adopted = _initialize_existing_guard_daemon(guard_home, port)
+        if adopted is None:
+            continue
+        write_guard_daemon_state(guard_home, port, adopted["auth_token"], pid=adopted["pid"])
+        return adopted["url"]
+    return None
+
+
+def _adoptable_guard_daemon_ports(guard_home: Path) -> list[int]:
+    preferred_ports: list[int] = []
+    state = _load_state(guard_home)
+    state_port = state.get("port") if isinstance(state, dict) else None
+    if isinstance(state_port, int) and state_port > 0:
+        preferred_ports.append(state_port)
+    configured_port = _configured_port(guard_home)
+    if isinstance(configured_port, int) and configured_port > 0:
+        preferred_ports.append(configured_port)
+    for _pid, port in _running_guard_daemon_processes_for_guard_home(guard_home):
+        preferred_ports.append(port)
+    seen: set[int] = set()
+    ordered: list[int] = []
+    for port in preferred_ports:
+        if port in seen:
+            continue
+        seen.add(port)
+        ordered.append(port)
+    return ordered
+
+
+def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> dict[str, str | int] | None:
+    url = f"http://127.0.0.1:{port}"
+    try:
+        with urllib.request.urlopen(_daemon_health_request(f"{url}/healthz"), timeout=1) as response:
+            raw_payload = response.read().decode("utf-8")
+            if response.status != 200 or not _healthz_payload_is_current(raw_payload):
+                return None
+        request = urllib.request.Request(
+            f"{url}/v1/initialize",
+            data=json.dumps(
+                {
+                    "client_name": "guard-daemon-manager",
+                    "client_title": "HOL Guard daemon manager",
+                    "surface": "cli",
+                    "capabilities": ["daemon-adoption"],
+                    "supported_protocol_versions": [1],
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=2) as response:
+            if response.status != 200:
+                return None
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    auth_token = payload.get("auth_token")
+    if not isinstance(auth_token, str) or not auth_token.strip():
+        return None
+    details_payload = _daemon_healthz_details_payload(url, auth_token)
+    if details_payload is None or not _healthz_payload_matches_guard_home(json.dumps(details_payload), guard_home):
+        return None
+    pid = details_payload.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    return {"url": url, "auth_token": auth_token, "pid": pid}
+
+
+def _retire_duplicate_guard_daemons(guard_home: Path, *, keep_port: int | None) -> None:
+    if keep_port is None:
+        return
+    for pid, port in _running_guard_daemon_processes_for_guard_home(guard_home):
+        if port == keep_port:
+            continue
+        _retire_guard_daemon_pid(pid, expected_guard_home=guard_home)
+
+
+def _guard_daemon_pid_for_guard_home_port(guard_home: Path, port: int) -> int | None:
+    for pid, candidate_port in _running_guard_daemon_processes_for_guard_home(guard_home):
+        if candidate_port == port:
+            return pid
+    return None
+
+
+def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str, *, pid: int | None = None) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
     _write_private_text(
@@ -202,7 +318,7 @@ def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> No
                 "package_version": __version__,
                 "source_root": _current_guard_daemon_source_root(),
                 "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
-                "pid": os.getpid(),
+                "pid": pid if isinstance(pid, int) and pid > 0 else os.getpid(),
                 "started_at": datetime.now(timezone.utc).isoformat(),
             },
             indent=2,
@@ -600,6 +716,63 @@ def _guard_home_from_command(command: str) -> Path | None:
         if part == "--guard-home" and index + 1 < len(parts):
             return Path(parts[index + 1])
     return None
+
+
+def _guard_daemon_port_from_command(command: str) -> int | None:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return None
+    for index, part in enumerate(parts):
+        if part.startswith("--port="):
+            try:
+                port = int(part.split("=", 1)[1])
+            except ValueError:
+                return None
+            return port if port > 0 else None
+        if part != "--port" or index + 1 >= len(parts):
+            continue
+        try:
+            port = int(parts[index + 1])
+        except ValueError:
+            return None
+        return port if port > 0 else None
+    return None
+
+
+def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tuple[int, int]]:
+    if os.name == "nt":
+        return []
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,command="],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    processes: list[tuple[int, int]] = []
+    for line in result.stdout.splitlines():
+        match = re.match(r"^\s*(\d+)\s+(.*)$", line)
+        if match is None:
+            continue
+        pid = int(match.group(1))
+        command = match.group(2).strip()
+        if "codex_plugin_scanner.cli" not in command or "guard daemon --serve" not in command:
+            continue
+        command_guard_home = _guard_home_from_command(command)
+        port = _guard_daemon_port_from_command(command)
+        if command_guard_home is None or port is None:
+            continue
+        try:
+            matches_home = command_guard_home.resolve() == guard_home.resolve()
+        except OSError:
+            matches_home = command_guard_home == guard_home
+        if matches_home:
+            processes.append((pid, port))
+    return sorted(processes, key=lambda item: item[1])
 
 
 def _guard_daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:

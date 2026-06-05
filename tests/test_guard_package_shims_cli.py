@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -85,10 +86,21 @@ def test_package_shims_install_requires_paid_entitlement(tmp_path: Path, capsys:
 
 def test_package_shims_status_reports_reconnect_required_when_cloud_auth_expired(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     _seed_retry_required_oauth_connect(guard_home)
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_local_guard_cloud_proof",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("cloud auth still expired")),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_supply_chain_bundle",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+    )
 
     rc = main(["guard", "package-shims", "status", "--home", str(guard_home), "--json"])
 
@@ -105,10 +117,21 @@ def test_package_shims_status_reports_reconnect_required_when_cloud_auth_expired
 
 def test_package_shims_install_requires_reconnect_when_cloud_auth_expired(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     _seed_retry_required_oauth_connect(guard_home)
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_local_guard_cloud_proof",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("cloud auth still expired")),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_supply_chain_bundle",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+    )
 
     rc = main(["guard", "package-shims", "install", "--manager", "npm", "--home", str(guard_home), "--json"])
 
@@ -116,6 +139,57 @@ def test_package_shims_install_requires_reconnect_when_cloud_auth_expired(
     assert rc == 2
     assert payload["error"] == "guard_cloud_reconnect_required"
     assert payload["entitlement"]["tier"] == "unknown"
+
+
+def test_package_shims_install_self_heals_retry_required_cloud_auth(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    guard_home = tmp_path / "guard-home"
+    _seed_retry_required_oauth_connect(guard_home)
+
+    def fake_sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
+        store.record_latest_guard_connect_sync_success(
+            sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
+            now="2026-06-05T01:41:00+00:00",
+        )
+        return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
+
+    def fake_sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
+        store.set_sync_payload(
+            "supply_chain_bundle_entitlement",
+            {
+                "bundle_version": "bundle-version-test",
+                "key_id": "bundle-key-test",
+                "policy_hash": "policy-hash-test",
+                "tier": "pro",
+                "workspace_id": "workspace-1",
+            },
+            "2026-06-05T01:41:05+00:00",
+        )
+        return {"bundle_version": "bundle-version-test", "tier": "pro"}
+
+    monkeypatch.setattr(local_supply_chain_module, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof)
+    monkeypatch.setattr(local_supply_chain_module, "sync_supply_chain_bundle", fake_sync_supply_chain_bundle)
+
+    rc = main(["guard", "package-shims", "install", "--manager", "npm", "--home", str(guard_home), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    shim_path = guard_home / "package-shims" / "bin" / "npm"
+    assert rc == 0
+    assert payload["entitlement"] == {
+        "allowed": True,
+        "reason": "paid_entitlement_active",
+        "tier": "pro",
+        "upgrade_cta": None,
+    }
+    assert payload["installed_managers"] == ["npm"]
+    assert shim_path.exists()
 
 
 def test_package_shims_status_reports_paid_oauth_entitlement(
