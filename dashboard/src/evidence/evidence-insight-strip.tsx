@@ -23,7 +23,7 @@ export function EvidenceInsightStrip({ metrics }: EvidenceInsightStripProps) {
       <ProofStrip
         items={[
           { label: "Total", value: String(metrics.total), tone: "slate" },
-          { label: "Stopped", value: String(metrics.blocked), tone: "blue" },
+          { label: "Stopped", value: String(metrics.blocked), tone: "attention" },
           { label: "Apps seen", value: String(appCount), tone: "green" },
           { label: "Last action", value: lastAction, tone: "slate" },
         ]}

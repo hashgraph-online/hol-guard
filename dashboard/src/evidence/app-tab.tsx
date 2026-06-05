@@ -13,8 +13,9 @@ import { harnessDisplayName, isDisplayableHarness, formatRelativeTime } from "..
 import { plainEnglishDescription, humanFileName } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
-import { Badge, SectionLabel } from "../approval-center-primitives";
 import { Sparkline } from "./sparkline";
+import { DecisionBadge } from "./decision-badge";
+import { Badge } from "../approval-center-primitives";
 
 interface AppTabProps {
   receipts: GuardReceipt[];
@@ -36,31 +37,6 @@ function harnessColor(harness: string): string {
   const hash = hashString(harness);
   const hue = HUE_PALETTE[hash % HUE_PALETTE.length];
   return `hsl(${hue} 70% 45%)`;
-}
-
-function DecisionBadge({ decision }: { decision: string }) {
-  if (decision === "allow") {
-    return (
-      <Badge tone="success">
-        <HiMiniShieldCheck className="h-3 w-3" aria-hidden="true" />
-        Allowed
-      </Badge>
-    );
-  }
-  if (decision === "block") {
-    return (
-      <Badge tone="attention">
-        <HiMiniNoSymbol className="h-3 w-3" aria-hidden="true" />
-        Stopped
-      </Badge>
-    );
-  }
-  return (
-    <Badge tone="info">
-      <HiMiniQuestionMarkCircle className="h-3 w-3" aria-hidden="true" />
-      Reviewed
-    </Badge>
-  );
 }
 
 interface AppListCardProps {

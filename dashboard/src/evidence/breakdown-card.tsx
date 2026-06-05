@@ -3,6 +3,7 @@ import { harnessDisplayName } from "../approval-center-utils";
 import { getCategoryInfo } from "./categories";
 import type { ReceiptCategory } from "./categories";
 import { Badge } from "../approval-center-primitives";
+import type { GuardReceipt } from "../guard-types";
 
 interface AppBreakdownCardProps {
   harness: string;
@@ -49,11 +50,11 @@ export function AppBreakdownCard({
 }
 
 interface CategoryBreakdownCardProps {
-  categoryKey: string;
+  categoryKey: ReceiptCategory;
   total: number;
   blocked: number;
   maxTotal: number;
-  onFilter: (category: string) => void;
+  onFilter: (category: ReceiptCategory) => void;
 }
 
 export function CategoryBreakdownCard({
@@ -64,7 +65,7 @@ export function CategoryBreakdownCard({
   onFilter,
 }: CategoryBreakdownCardProps) {
   const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-  const catInfo = getCategoryInfo(categoryKey as ReceiptCategory);
+  const catInfo = getCategoryInfo(categoryKey);
   const handleClick = useCallback(() => onFilter(categoryKey), [categoryKey, onFilter]);
 
   return (

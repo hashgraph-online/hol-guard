@@ -756,12 +756,12 @@ export function GuardHero(props: {
 }
 
 export function ProofStrip(props: {
-  items: Array<{ label: string; value: string | number; tone?: "blue" | "green" | "purple" | "slate"; icon?: ReactNode; hint?: string }>;
+  items: Array<{ label: string; value: string | number; tone?: "blue" | "green" | "purple" | "slate" | "attention"; icon?: ReactNode; hint?: string }>;
 }) {
   return (
     <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
       {props.items.map((item) => {
-        const toneColor = item.tone === "blue" ? "text-brand-blue" : item.tone === "green" ? "text-emerald-600" : item.tone === "purple" ? "text-brand-purple" : "text-brand-dark";
+        const toneColor = item.tone === "blue" ? "text-brand-blue" : item.tone === "green" ? "text-emerald-600" : item.tone === "purple" ? "text-brand-purple" : item.tone === "attention" ? "text-amber-600" : "text-brand-dark";
         return (
           <div key={item.label} className="flex flex-col" title={item.hint}>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{item.label}</p>

@@ -11,36 +11,12 @@ import type { GuardReceipt } from "../guard-types";
 import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES, detectCategory } from "./categories";
 import { plainEnglishDescription, humanFileName } from "./plain-english";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
-import { Badge, SectionLabel } from "../approval-center-primitives";
+import { DecisionBadge } from "./decision-badge";
+import { Badge } from "../approval-center-primitives";
 
 interface CategoryTabProps {
   receipts: GuardReceipt[];
   onFilterCategory?: (category: ReceiptCategory) => void;
-}
-
-function DecisionBadge({ decision }: { decision: string }) {
-  if (decision === "allow") {
-    return (
-      <Badge tone="success">
-        <HiMiniShieldCheck className="h-3 w-3" aria-hidden="true" />
-        Allowed
-      </Badge>
-    );
-  }
-  if (decision === "block") {
-    return (
-      <Badge tone="attention">
-        <HiMiniNoSymbol className="h-3 w-3" aria-hidden="true" />
-        Stopped
-      </Badge>
-    );
-  }
-  return (
-    <Badge tone="info">
-      <HiMiniQuestionMarkCircle className="h-3 w-3" aria-hidden="true" />
-      Reviewed
-    </Badge>
-  );
 }
 
 interface CategoryCardProps {

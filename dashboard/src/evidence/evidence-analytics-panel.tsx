@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { EvidenceMetrics, TrendBucket, PeriodComparison } from "./evidence-metrics";
 import { SectionLabel, Badge } from "../approval-center-primitives";
 import { AppBreakdownCard, CategoryBreakdownCard } from "./breakdown-card";
+import type { ReceiptCategory } from "./categories";
 
 interface EvidenceAnalyticsPanelProps {
   metrics: EvidenceMetrics;
@@ -58,7 +59,7 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
               return (
                 <div
                   key={bucket.dateKey}
-                  className="flex-1 flex flex-col justify-end gap-1.5 min-w-0"
+                  className="relative flex-1 flex flex-col justify-end gap-1.5 min-w-0"
                   onMouseEnter={() => setHoveredBucket(bucket.dateKey)}
                   onMouseLeave={() => setHoveredBucket(null)}
                 >
@@ -95,7 +96,10 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
                     {bucket.label}
                   </span>
                   {isHovered && total > 0 && (
-                    <div className="absolute z-10 -mt-20 bg-brand-dark text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                    <div
+                      className="absolute z-10 bg-brand-dark text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap mb-2"
+                      style={{ bottom: "100%", left: "50%", transform: "translateX(-50%)" }}
+                    >
                       <div className="font-semibold">{bucket.label}</div>
                       <div className="flex gap-3 mt-1">
                         {bucket.allowed > 0 && <span className="text-emerald-300">{bucket.allowed} allowed</span>}
@@ -232,11 +236,11 @@ export function EvidenceAnalyticsPanel({
             {sortedCategories.map(([cat, counts]) => (
               <CategoryBreakdownCard
                 key={cat}
-                categoryKey={cat}
+                categoryKey={cat as ReceiptCategory}
                 total={counts.total}
                 blocked={counts.blocked}
                 maxTotal={maxCatTotal}
-                onFilter={onFilterCategory}
+                onFilter={(c) => onFilterCategory(c as string)}
               />
             ))}
           </div>

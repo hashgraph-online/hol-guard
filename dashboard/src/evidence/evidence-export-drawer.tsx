@@ -8,7 +8,7 @@ import type { EvidenceFilterState } from "./evidence-types";
 import { downloadEvidence } from "./evidence-export";
 import { exportDiagnostics } from "../guard-api";
 import { downloadBlob } from "../history-export";
-import { ActionButton, SectionLabel } from "../approval-center-primitives";
+import { ActionButton } from "../approval-center-primitives";
 
 interface EvidenceExportDrawerProps {
   receipts: GuardReceipt[];

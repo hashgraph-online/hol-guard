@@ -17,40 +17,12 @@ import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { plainEnglishDescription, humanFileName } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
-import { Badge, SectionLabel } from "../approval-center-primitives";
+import { SectionLabel } from "../approval-center-primitives";
+import { DecisionBadge } from "./decision-badge";
 
 interface EvidenceActionDetailProps {
   receipt: GuardReceipt | null;
   onClose: () => void;
-}
-
-interface DecisionBadgeProps {
-  decision: string;
-}
-
-function DecisionBadge({ decision }: DecisionBadgeProps) {
-  if (decision === "allow") {
-    return (
-      <Badge tone="success">
-        <HiMiniShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-        Allowed
-      </Badge>
-    );
-  }
-  if (decision === "block") {
-    return (
-      <Badge tone="attention">
-        <HiMiniNoSymbol className="h-3.5 w-3.5" aria-hidden="true" />
-        Stopped
-      </Badge>
-    );
-  }
-  return (
-    <Badge tone="info">
-      <HiMiniQuestionMarkCircle className="h-3.5 w-3.5" aria-hidden="true" />
-      Reviewed
-    </Badge>
-  );
 }
 
 function SeverityIcon({ severity }: { severity: string }) {

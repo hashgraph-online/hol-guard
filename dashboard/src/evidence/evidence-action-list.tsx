@@ -13,7 +13,8 @@ import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils
 import { detectCategory, getCategoryInfo } from "./categories";
 import { humanFileName } from "./plain-english";
 import { hasMore } from "./evidence-pagination";
-import { Badge, SectionLabel } from "../approval-center-primitives";
+import { SectionLabel } from "../approval-center-primitives";
+import { DecisionBadge } from "./decision-badge";
 
 interface EvidenceActionListProps {
   receipts: GuardReceipt[];
@@ -26,35 +27,6 @@ interface EvidenceActionListProps {
   page: number;
   pageSize: number;
   onLoadMore: () => void;
-}
-
-interface DecisionChipProps {
-  decision: string;
-}
-
-function DecisionChip({ decision }: DecisionChipProps) {
-  if (decision === "allow") {
-    return (
-      <Badge tone="success">
-        <HiMiniShieldCheck className="h-3 w-3" aria-hidden="true" />
-        Allowed
-      </Badge>
-    );
-  }
-  if (decision === "block") {
-    return (
-      <Badge tone="attention">
-        <HiMiniNoSymbol className="h-3 w-3" aria-hidden="true" />
-        Stopped
-      </Badge>
-    );
-  }
-  return (
-    <Badge tone="info">
-      <HiMiniQuestionMarkCircle className="h-3 w-3" aria-hidden="true" />
-      Reviewed
-    </Badge>
-  );
 }
 
 const SORT_TOGGLE_MAP: Record<EvidenceSortKey, EvidenceSortKey> = {
@@ -311,7 +283,7 @@ function ActionRow({
         </button>
       </td>
       <td className="px-3 py-2.5">
-        <DecisionChip decision={receipt.policy_decision} />
+        <DecisionBadge decision={receipt.policy_decision} />
       </td>
       <td className="px-3 py-2.5 hidden lg:table-cell">
         <span className="text-xs text-slate-400 whitespace-nowrap">
