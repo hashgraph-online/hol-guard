@@ -2108,7 +2108,7 @@ def run_guard_command(
             )
             payload["generated_at"] = _now()
             _emit("package-shims", payload, getattr(args, "json", False))
-            return 2 if status >= 400 else 0
+            return 2
         try:
             if shim_command in {"install", "repair", "uninstall"}:
                 gate_input = _package_firewall_cli_gate_input(args, store.guard_home)
