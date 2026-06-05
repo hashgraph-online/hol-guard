@@ -14160,9 +14160,6 @@ function HiMiniMagnifyingGlass(props) {
 function HiMiniLockClosed(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniListBullet(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
 function HiMiniKey(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -14204,9 +14201,6 @@ function HiMiniCube(props) {
 }
 function HiMiniCpuChip(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M14 6H6v8h8V6Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.25 3V1.75a.75.75 0 0 1 1.5 0V3h1.5V1.75a.75.75 0 0 1 1.5 0V3h.5A2.75 2.75 0 0 1 17 5.75v.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v.5A2.75 2.75 0 0 1 14.25 17h-.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-.5A2.75 2.75 0 0 1 3 14.25v-.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-.5A2.75 2.75 0 0 1 5.75 3h.5V1.75a.75.75 0 0 1 1.5 0V3h1.5ZM4.5 5.75c0-.69.56-1.25 1.25-1.25h8.5c.69 0 1.25.56 1.25 1.25v8.5c0 .69-.56 1.25-1.25 1.25h-8.5c-.69 0-1.25-.56-1.25-1.25v-8.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniComputerDesktop(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniCommandLine(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.25 3A2.25 2.25 0 0 0 1 5.25v9.5A2.25 2.25 0 0 0 3.25 17h13.5A2.25 2.25 0 0 0 19 14.75v-9.5A2.25 2.25 0 0 0 16.75 3H3.25Zm.943 8.752a.75.75 0 0 1 .055-1.06L6.128 9l-1.88-1.693a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 0 1-1.06-.055ZM9.75 10.25a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -14255,9 +14249,6 @@ function HiMiniCheckCircle(props) {
 }
 function HiMiniChartBar(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.5 2A1.5 1.5 0 0 0 14 3.5v13a1.5 1.5 0 0 0 1.5 1.5h1a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-1ZM9.5 6A1.5 1.5 0 0 0 8 7.5v9A1.5 1.5 0 0 0 9.5 18h1a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 10.5 6h-1ZM3.5 10A1.5 1.5 0 0 0 2 11.5v5A1.5 1.5 0 0 0 3.5 18h1A1.5 1.5 0 0 0 6 16.5v-5A1.5 1.5 0 0 0 4.5 10h-1Z" }, "child": [] }] })(props);
-}
-function HiMiniCalendarDays(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M5.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H6a.75.75 0 0 1-.75-.75V12ZM6 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H6ZM7.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H8a.75.75 0 0 1-.75-.75V12ZM8 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H8ZM9.25 10a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H10a.75.75 0 0 1-.75-.75V10ZM10 11.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V12a.75.75 0 0 0-.75-.75H10ZM9.25 14a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H10a.75.75 0 0 1-.75-.75V14ZM12 9.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V10a.75.75 0 0 0-.75-.75H12ZM11.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H12a.75.75 0 0 1-.75-.75V12ZM12 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H12ZM13.25 10a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H14a.75.75 0 0 1-.75-.75V10ZM14 11.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V12a.75.75 0 0 0-.75-.75H14Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniBugAnt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.56 1.14a.75.75 0 0 1 .177 1.045 3.989 3.989 0 0 0-.464.86c.185.17.382.329.59.473A3.993 3.993 0 0 1 10 2c1.272 0 2.405.594 3.137 1.518.208-.144.405-.302.59-.473a3.989 3.989 0 0 0-.464-.86.75.75 0 0 1 1.222-.869c.369.519.65 1.105.822 1.736a.75.75 0 0 1-.174.707 7.03 7.03 0 0 1-1.299 1.098A4 4 0 0 1 14 6c0 .52-.301.963-.723 1.187a6.961 6.961 0 0 1-1.158.486c.13.208.231.436.296.679 1.413-.174 2.779-.5 4.081-.96a19.655 19.655 0 0 0-.09-2.319.75.75 0 1 1 1.493-.146 21.239 21.239 0 0 1 .08 3.028.75.75 0 0 1-.482.667 20.873 20.873 0 0 1-5.153 1.249 2.521 2.521 0 0 1-.107.247 20.945 20.945 0 0 1 5.252 1.257.75.75 0 0 1 .482.74 20.945 20.945 0 0 1-.908 5.107.75.75 0 0 1-1.433-.444c.415-1.34.69-2.743.806-4.191-.495-.173-1-.327-1.512-.46.05.284.076.575.076.873 0 1.814-.517 3.312-1.426 4.37A4.639 4.639 0 0 1 10 19a4.639 4.639 0 0 1-3.574-1.63C5.516 16.311 5 14.813 5 13c0-.298.026-.59.076-.873-.513.133-1.017.287-1.512.46.116 1.448.39 2.85.806 4.191a.75.75 0 1 1-1.433.444 20.94 20.94 0 0 1-.908-5.107.75.75 0 0 1 .482-.74 20.838 20.838 0 0 1 5.252-1.257 2.493 2.493 0 0 1-.107-.247 20.874 20.874 0 0 1-5.153-1.249.75.75 0 0 1-.482-.667 21.342 21.342 0 0 1 .08-3.028.75.75 0 1 1 1.493.146 19.745 19.745 0 0 0-.09 2.319c1.302.46 2.668.786 4.08.96.066-.243.166-.471.297-.679a6.962 6.962 0 0 1-1.158-.486A1.348 1.348 0 0 1 6 6a4 4 0 0 1 .166-1.143 7.032 7.032 0 0 1-1.3-1.098.75.75 0 0 1-.173-.707 5.48 5.48 0 0 1 .822-1.736.75.75 0 0 1 1.046-.177Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -15875,12 +15866,12 @@ function writeEvidenceUrlState(state) {
   window.history.replaceState({}, "", url.toString());
 }
 const VIEW_TABS = [
-  { key: "actions", label: "All actions", icon: HiMiniListBullet },
-  { key: "insights", label: "Insights", icon: HiMiniChartBar },
-  { key: "apps", label: "Apps", icon: HiMiniComputerDesktop },
-  { key: "story", label: "Story", icon: HiMiniCalendarDays },
-  { key: "categories", label: "Categories", icon: HiMiniSquares2X2 },
-  { key: "export", label: "Export", icon: HiMiniArrowDownTray }
+  { key: "actions", label: "All actions" },
+  { key: "insights", label: "Insights" },
+  { key: "apps", label: "Apps" },
+  { key: "story", label: "Story" },
+  { key: "categories", label: "Categories" },
+  { key: "export", label: "Export" }
 ];
 function EvidenceLoadingState() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-label": "Loading evidence", children: [
@@ -15907,23 +15898,19 @@ function EvidenceHeader({
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-semibold text-brand-dark", children: "Evidence" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Every action Guard reviewed on this machine." }),
       lastActivityLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-1 text-[11px] text-slate-400", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "h-3 w-3", "aria-hidden": "true" }),
         "Last activity: ",
         lastActivityLabel
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 shrink-0", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
           onClick: onExport,
           "aria-label": "Export evidence",
           className: "inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-brand-dark hover:bg-slate-50 transition-colors",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-            "Export"
-          ]
+          children: "Export"
         }
       ),
       onClear && totalCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -15939,66 +15926,6 @@ function EvidenceHeader({
     ] })
   ] });
 }
-function ViewTabBar({ view, onViewChange }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: "flex gap-1 border-b border-slate-200/60",
-      role: "tablist",
-      "aria-label": "Evidence views",
-      children: VIEW_TABS.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = view === tab.key;
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ViewTabButton,
-          {
-            tabKey: tab.key,
-            label: tab.label,
-            icon: Icon,
-            isActive,
-            onSelect: onViewChange
-          },
-          tab.key
-        );
-      })
-    }
-  );
-}
-function ViewTabButton({
-  tabKey,
-  label,
-  icon: Icon,
-  isActive,
-  onSelect
-}) {
-  const handleClick = reactExports.useCallback(() => {
-    onSelect(tabKey);
-  }, [tabKey, onSelect]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      role: "tab",
-      "aria-selected": isActive,
-      "aria-controls": `tabpanel-${tabKey}`,
-      id: `tab-${tabKey}`,
-      onClick: handleClick,
-      className: `relative flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium transition-colors ${isActive ? "text-brand-dark" : "text-slate-500 hover:text-brand-dark"}`,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: label }),
-        isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute bottom-0 left-1 right-1 h-0.5 rounded-full bg-brand-blue" })
-      ]
-    }
-  );
-}
-const EVIDENCE_SORT_OPTIONS = [
-  { key: "newest", label: "Newest first" },
-  { key: "oldest", label: "Oldest first" },
-  { key: "app", label: "App" },
-  { key: "decision", label: "Decision" },
-  { key: "category", label: "Category" },
-  { key: "artifact", label: "Artifact" }
-];
 const EVIDENCE_TIME_LABELS = {
   all: "All time",
   today: "Today",
@@ -16419,6 +16346,148 @@ function DecisionChip({ decision }) {
     "Reviewed"
   ] });
 }
+function SortHeader({
+  label,
+  active,
+  ascending,
+  onClick,
+  className = ""
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "th",
+    {
+      scope: "col",
+      className: `px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${className}`,
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick,
+          className: "inline-flex items-center gap-1 hover:text-brand-dark transition-colors",
+          "aria-label": `Sort by ${label}${active ? ascending ? ", ascending" : ", descending" : ""}`,
+          children: [
+            label,
+            active && (ascending ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" }))
+          ]
+        }
+      )
+    }
+  );
+}
+function EvidenceActionList({
+  receipts,
+  selectedId,
+  onSelectId,
+  onFilterHarness,
+  onFilterCategory,
+  sort,
+  onSortChange,
+  page,
+  pageSize,
+  onLoadMore
+}) {
+  const visible = receipts.slice(0, (page + 1) * pageSize);
+  const showLoadMore = hasMore(page, pageSize, receipts.length);
+  const handleSort = reactExports.useCallback(
+    (key) => {
+      if (sort === key && key === "newest") {
+        onSortChange("oldest");
+      } else if (sort === key && key === "oldest") {
+        onSortChange("newest");
+      } else {
+        onSortChange(key);
+      }
+    },
+    [sort, onSortChange]
+  );
+  if (receipts.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-16 text-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "No actions match" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Try adjusting the filters above." })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-between px-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-medium text-slate-500", children: [
+      receipts.length,
+      " action",
+      receipts.length !== 1 ? "s" : ""
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-200 bg-white overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full text-sm", "aria-label": "Evidence actions", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 bg-slate-50/60", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "w-8 px-3 py-2.5" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SortHeader,
+          {
+            label: "Artifact",
+            active: sort === "artifact",
+            ascending: true,
+            onClick: () => handleSort("artifact"),
+            className: "min-w-[180px]"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SortHeader,
+          {
+            label: "App",
+            active: sort === "app",
+            ascending: true,
+            onClick: () => handleSort("app"),
+            className: "hidden sm:table-cell"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SortHeader,
+          {
+            label: "Category",
+            active: sort === "category",
+            ascending: true,
+            onClick: () => handleSort("category"),
+            className: "hidden md:table-cell"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SortHeader,
+          {
+            label: "Decision",
+            active: sort === "decision",
+            ascending: true,
+            onClick: () => handleSort("decision")
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SortHeader,
+          {
+            label: "Time",
+            active: sort === "newest" || sort === "oldest",
+            ascending: sort === "newest",
+            onClick: () => handleSort("newest"),
+            className: "hidden lg:table-cell"
+          }
+        )
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: visible.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActionRow,
+        {
+          receipt,
+          isSelected: selectedId === receipt.receipt_id,
+          onSelect: onSelectId,
+          onFilterHarness,
+          onFilterCategory
+        },
+        receipt.receipt_id
+      )) })
+    ] }) }) }),
+    showLoadMore && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center pt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: onLoadMore,
+        className: "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
+        children: "Load more"
+      }
+    ) })
+  ] });
+}
 function ActionRow({
   receipt,
   isSelected,
@@ -16457,134 +16526,42 @@ function ActionRow({
     [receipt.receipt_id, onSelect]
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
+    "tr",
     {
       role: "button",
       tabIndex: 0,
       onClick: handleClick,
       onKeyDown: handleKeyDown,
       "aria-selected": isSelected,
-      className: `w-full text-left flex items-center gap-3 px-4 py-3 transition-colors border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:bg-slate-50 cursor-pointer ${isSelected ? "bg-brand-blue/5 border-l-2 border-l-brand-blue" : ""}`,
+      className: `border-b border-slate-100 last:border-0 transition-colors cursor-pointer ${isSelected ? "bg-brand-blue/[0.04]" : "hover:bg-slate-50"}`,
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "span",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[200px]", children: artifactLabel }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden sm:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
           {
-            className: `shrink-0 ${catInfo.color}`,
-            "aria-hidden": "true",
-            children: catInfo.icon
+            type: "button",
+            onClick: handleHarnessClick,
+            "aria-label": `Filter by app ${harnessDisplayName(receipt.harness)}`,
+            className: "text-xs font-medium text-brand-blue hover:underline",
+            children: harnessDisplayName(receipt.harness)
           }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0 space-y-0.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 flex-wrap", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate", children: artifactLabel }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionChip, { decision: receipt.policy_decision })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 flex-wrap", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                onClick: handleHarnessClick,
-                "aria-label": `Filter by app ${harnessDisplayName(receipt.harness)}`,
-                className: "text-[11px] font-medium text-brand-blue hover:underline shrink-0",
-                children: harnessDisplayName(receipt.harness)
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-300 text-[11px]", children: "·" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
-              {
-                type: "button",
-                onClick: handleCategoryClick,
-                "aria-label": `Filter by category ${catInfo.label}`,
-                className: "text-[11px] text-slate-500 hover:text-brand-dark shrink-0",
-                children: catInfo.label
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-300 text-[11px]", children: "·" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 shrink-0", children: formatRelativeTime(receipt.timestamp) })
-          ] })
-        ] })
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden md:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleCategoryClick,
+            "aria-label": `Filter by category ${catInfo.label}`,
+            className: "text-xs text-slate-500 hover:text-brand-dark",
+            children: catInfo.label
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionChip, { decision: receipt.policy_decision }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400 whitespace-nowrap", children: formatRelativeTime(receipt.timestamp) }) })
       ]
     }
   );
-}
-function EvidenceActionList({
-  receipts,
-  selectedId,
-  onSelectId,
-  onFilterHarness,
-  onFilterCategory,
-  sort,
-  onSortChange,
-  page,
-  pageSize,
-  onLoadMore
-}) {
-  const handleSortChange = reactExports.useCallback(
-    (e) => {
-      onSortChange(e.target.value);
-    },
-    [onSortChange]
-  );
-  const visible = receipts.slice(0, (page + 1) * pageSize);
-  const showLoadMore = hasMore(page, pageSize, receipts.length);
-  if (receipts.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-16 text-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "No actions match" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Try adjusting the filters above." })
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between px-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-medium text-slate-500", children: [
-        receipts.length,
-        " action",
-        receipts.length !== 1 ? "s" : ""
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-1.5 text-xs text-slate-500", children: [
-        "Sort by:",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "select",
-          {
-            value: sort,
-            onChange: handleSortChange,
-            "aria-label": "Sort actions",
-            className: "rounded-md border-0 bg-transparent py-0.5 text-xs font-medium text-brand-dark focus:outline-none focus:ring-1 focus:ring-brand-blue/30",
-            children: EVIDENCE_SORT_OPTIONS.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.key, children: opt.label }, opt.key))
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3 text-slate-400 pointer-events-none", "aria-hidden": "true" })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        className: "rounded-xl border border-slate-200 bg-white overflow-hidden",
-        role: "list",
-        "aria-label": "Evidence actions",
-        children: visible.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "listitem", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ActionRow,
-          {
-            receipt,
-            isSelected: selectedId === receipt.receipt_id,
-            onSelect: onSelectId,
-            onFilterHarness,
-            onFilterCategory
-          }
-        ) }, receipt.receipt_id))
-      }
-    ),
-    showLoadMore && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center pt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: onLoadMore,
-        className: "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
-        children: "Load more"
-      }
-    ) })
-  ] });
 }
 function DecisionBadge$1({ decision }) {
   if (decision === "allow") {
@@ -16602,6 +16579,90 @@ function DecisionBadge$1({ decision }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-brand-blue ring-1 ring-blue-200", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniQuestionMarkCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
     "Reviewed"
+  ] });
+}
+function SeverityIcon({ severity }) {
+  if (severity === "critical" || severity === "high") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-amber-500", "aria-hidden": "true" });
+  }
+  if (severity === "medium") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBolt, { className: "h-4 w-4 text-orange-400", "aria-hidden": "true" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" });
+}
+function SeverityBadge({ severity }) {
+  const styles = {
+    critical: "bg-amber-100 text-amber-800 ring-amber-200",
+    high: "bg-amber-50 text-amber-700 ring-amber-200",
+    medium: "bg-orange-50 text-orange-700 ring-orange-200",
+    low: "bg-blue-50 text-brand-blue ring-blue-200",
+    info: "bg-slate-100 text-slate-600 ring-slate-200"
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "span",
+    {
+      className: `inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ${styles[severity] ?? styles.info}`,
+      children: severity
+    }
+  );
+}
+function ScannerEvidenceSection$1({ signals }) {
+  const [expanded, setExpanded] = reactExports.useState({});
+  const toggle = reactExports.useCallback((id) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+  if (signals.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: [
+      "Scanner findings (",
+      signals.length,
+      ")"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: signals.map((signal) => {
+      const isOpen = expanded[signal.signal_id] ?? false;
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "rounded-lg border border-slate-200 bg-white overflow-hidden",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                onClick: () => toggle(signal.signal_id),
+                "aria-expanded": isOpen,
+                className: "flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(SeverityIcon, { severity: signal.severity }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex-1 text-xs font-medium text-brand-dark truncate", children: signal.title }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(SeverityBadge, { severity: signal.severity }),
+                  isOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5 text-slate-400 shrink-0", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5 text-slate-400 shrink-0", "aria-hidden": "true" })
+                ]
+              }
+            ),
+            isOpen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-3 py-2.5 space-y-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-dark/80 leading-relaxed", children: signal.plain_reason }),
+              signal.technical_detail && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-md bg-slate-50 px-2.5 py-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-medium uppercase tracking-wide text-slate-400 mb-1", children: "Technical detail" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-mono text-brand-dark/70 break-all leading-relaxed", children: signal.technical_detail })
+              ] }),
+              signal.false_positive_hint && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-slate-500 italic", children: signal.false_positive_hint }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-[10px] text-slate-400", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                  "Detector: ",
+                  signal.detector
+                ] }),
+                signal.advisory_id && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                  "· Advisory: ",
+                  signal.advisory_id
+                ] })
+              ] })
+            ] })
+          ]
+        },
+        signal.signal_id
+      );
+    }) })
   ] });
 }
 function TechnicalSection({ receipt }) {
@@ -16643,7 +16704,8 @@ function TechnicalSection({ receipt }) {
           value: (receipt.changed_capabilities ?? []).join(", ")
         }
       ),
-      receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Capabilities", value: receipt.capabilities_summary })
+      receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Capabilities", value: receipt.capabilities_summary }),
+      receipt.diff_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Diff summary", value: receipt.diff_summary })
     ] })
   ] });
 }
@@ -16736,6 +16798,7 @@ function EvidenceActionDetail({
   const catInfo = getCategoryInfo(category);
   const description = plainEnglishDescription(receipt);
   const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  const signals = receipt.scanner_evidence ?? [];
   let copyLabel = "Copy receipt ID";
   if (copied) {
     copyLabel = "Copied!";
@@ -16785,7 +16848,15 @@ function EvidenceActionDetail({
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1", children: "Provenance" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: receipt.provenance_summary })
           ] }),
+          receipt.diff_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 mb-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-3.5 w-3.5 text-slate-400", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "What changed" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: receipt.diff_summary })
+          ] }),
           receipt.policy_decision === "block" && /* @__PURE__ */ jsxRuntimeExports.jsx(NextSafeCommandHint, { receipt }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection$1, { signals }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTimeline, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalSection, { receipt }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -18056,7 +18127,8 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+  const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label }));
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceHeader,
       {
@@ -18066,18 +18138,8 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
         onClear: handleOpenClear
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EvidenceFilterBar,
-      {
-        filters,
-        onChange: handleFilterChange,
-        totalCount: receiptItems.length,
-        filteredCount: filtered.length,
-        harnesses
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ViewTabBar, { view: filters.view, onViewChange: handleViewChange }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs: tabOptions, active: filters.view, onChange: handleViewChange }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-1", children: [
       filters.view === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
         {
@@ -18087,6 +18149,16 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
           className: selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : "",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                EvidenceFilterBar,
+                {
+                  filters,
+                  onChange: handleFilterChange,
+                  totalCount: receiptItems.length,
+                  filteredCount: filtered.length,
+                  harnesses
+                }
+              ),
               /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightStrip, { metrics }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 EvidenceActionList,
