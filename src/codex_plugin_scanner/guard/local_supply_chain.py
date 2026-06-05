@@ -726,6 +726,8 @@ def _build_package_manager_protection(store: GuardStore) -> dict[str, object]:
         "protected_managers": protected_managers,
         "unprotected_managers": unprotected_managers,
     }
+
+
 def _workspace_scan_intent(
     workspace_dir: Path,
     *,

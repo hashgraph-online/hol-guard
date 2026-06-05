@@ -381,9 +381,7 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
     bypasses: list[dict[str, str]] = []
     manager_details: list[dict[str, object]] = []
     path_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
-    path_contains_shim_dir = any(
-        Path(entry).expanduser() == shim_dir.expanduser() for entry in path_entries
-    )
+    path_contains_shim_dir = any(Path(entry).expanduser() == shim_dir.expanduser() for entry in path_entries)
     for manager in installed_managers:
         command = _PACKAGE_SHIM_COMMANDS[manager]
         shim_path = shim_dir / command
