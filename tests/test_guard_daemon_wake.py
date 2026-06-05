@@ -28,6 +28,12 @@ def _make_start_mock(guard_home: Path, port: int = 5700):
         def poll(self):
             return None
 
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
     def _popen(*_args, **_kwargs):
         state = {
             "port": port,
@@ -54,6 +60,11 @@ class TestNoDashboardApprovalURLWake:
         port = 5700
 
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [],
+        )
 
         url_iter = iter([None, None, f"http://127.0.0.1:{port}"])
         monkeypatch.setattr(
@@ -87,6 +98,11 @@ class TestNoDashboardApprovalURLWake:
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
         monkeypatch.setattr(
             daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [],
+        )
+        monkeypatch.setattr(
+            daemon_manager_module,
             "load_guard_daemon_url",
             lambda _gh: f"http://127.0.0.1:{port}",
         )
@@ -108,6 +124,11 @@ class TestNoDashboardApprovalURLWake:
         port = 5702
 
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [],
+        )
         monkeypatch.setattr(
             daemon_manager_module,
             "load_guard_daemon_url",
@@ -136,6 +157,11 @@ class TestNoDashboardApprovalURLWake:
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
         monkeypatch.setattr(
             daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [],
+        )
+        monkeypatch.setattr(
+            daemon_manager_module,
             "load_guard_daemon_url",
             lambda _gh: f"http://127.0.0.1:{port}",
         )
@@ -152,6 +178,11 @@ class TestNoDashboardApprovalURLWake:
         port = 5704
 
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [],
+        )
 
         stale_state = {
             "pid": 99999,
