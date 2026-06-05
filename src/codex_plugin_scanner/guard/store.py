@@ -11,7 +11,7 @@ import sqlite3
 import subprocess
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from hashlib import pbkdf2_hmac, sha256
 from pathlib import Path
@@ -165,6 +165,8 @@ _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "gl
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
 _SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
 _SECRET_FINGERPRINT_SALT = b"hol-guard-secret-fingerprint:v1"
+_OAUTH_REFRESH_LOCK_TIMEOUT_SECONDS = 30.0
+_OAUTH_REFRESH_LOCK_POLL_SECONDS = 0.05
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -200,6 +202,42 @@ def _secret_matches_hash(value: str, expected_hash: str) -> bool:
     if expected_hash.startswith(_SECRET_FINGERPRINT_PREFIX):
         return _secret_fingerprint(value) == expected_hash
     return _legacy_secret_sha256(value) == expected_hash
+
+
+def _acquire_advisory_file_lock(handle) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        try:
+            handle.seek(0)
+            if not handle.read(1):
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError as error:
+            raise BlockingIOError from error
+        return
+
+    import fcntl
+
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        raise BlockingIOError from error
+
+
+def _release_advisory_file_lock(handle) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 class SecretStore(Protocol):
@@ -669,6 +707,29 @@ class GuardStore:
                     "Guard store slow transaction (%.0fms); consider indexing hot query paths.",
                     elapsed_ms,
                 )
+
+    @contextmanager
+    def hold_oauth_refresh_lock(
+        self,
+        *,
+        timeout_seconds: float = _OAUTH_REFRESH_LOCK_TIMEOUT_SECONDS,
+    ) -> Iterator[None]:
+        lock_path = self.guard_home / "oauth-refresh.lock"
+        deadline = time.monotonic() + max(timeout_seconds, 0.0)
+        with lock_path.open("a+b") as handle:
+            while True:
+                try:
+                    _acquire_advisory_file_lock(handle)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Timed out waiting for Guard OAuth refresh lock.") from None
+                    time.sleep(_OAUTH_REFRESH_LOCK_POLL_SECONDS)
+            try:
+                yield
+            finally:
+                with suppress(OSError):
+                    _release_advisory_file_lock(handle)
 
     def _initialize(self) -> None:
         statements = (

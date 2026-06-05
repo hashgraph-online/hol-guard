@@ -13920,9 +13920,13 @@ function normalizePackageFirewallAction(value) {
 async function fetchPackageFirewallStatus() {
   return normalizePackageFirewallStatus(await readJson("/v1/supply-chain/package-shims"));
 }
-async function runPackageFirewallAction(action, manager) {
-  const payload = manager !== null ? { managers: [manager] } : {};
-  const response = await readJson(
+async function runPackageFirewallAction(action, manager, credentials) {
+  const payload = {
+    ...manager !== null ? { managers: [manager] } : {},
+    ...credentials?.approval_password !== void 0 ? { approval_password: credentials.approval_password } : {},
+    ...credentials?.approval_totp_code !== void 0 ? { approval_totp_code: credentials.approval_totp_code } : {}
+  };
+  const response = await fetchGuardApi(
     `/v1/supply-chain/package-shims/${action}`,
     {
       method: "POST",
@@ -13933,7 +13937,14 @@ async function runPackageFirewallAction(action, manager) {
       body: JSON.stringify(payload)
     }
   );
-  return normalizePackageFirewallAction(response);
+  const payloadBody = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
+    );
+  }
+  return normalizePackageFirewallAction(payloadBody);
 }
 async function runAuditRemediation(input) {
   if (isGuardDemoMode()) {
@@ -16917,20 +16928,20 @@ function EvidenceInsightStrip({ metrics }) {
     }
   );
 }
+const TONE_STYLES = {
+  blue: { bg: "bg-brand-blue/[0.04]", text: "text-brand-blue", accent: "bg-brand-blue" },
+  green: { bg: "bg-emerald-50", text: "text-emerald-700", accent: "bg-emerald-500" },
+  amber: { bg: "bg-amber-50", text: "text-amber-700", accent: "bg-amber-500" },
+  purple: { bg: "bg-purple-50", text: "text-purple-700", accent: "bg-purple-500" },
+  slate: { bg: "bg-slate-50", text: "text-slate-700", accent: "bg-slate-500" }
+};
 function StatCard({
   label,
   value,
   subtext,
   tone
 }) {
-  const toneStyles = {
-    blue: { bg: "bg-brand-blue/[0.04]", text: "text-brand-blue", accent: "bg-brand-blue" },
-    green: { bg: "bg-emerald-50", text: "text-emerald-700", accent: "bg-emerald-500" },
-    amber: { bg: "bg-amber-50", text: "text-amber-700", accent: "bg-amber-500" },
-    purple: { bg: "bg-purple-50", text: "text-purple-700", accent: "bg-purple-500" },
-    slate: { bg: "bg-slate-50", text: "text-slate-700", accent: "bg-slate-500" }
-  };
-  const style = toneStyles[tone];
+  const style = TONE_STYLES[tone];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `rounded-2xl ${style.bg} p-5`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-[11px] font-semibold uppercase tracking-wider ${style.text} opacity-70`, children: label }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 text-3xl font-bold tabular-nums ${style.text}`, children: value }),
@@ -16941,37 +16952,38 @@ function TrendChart({ buckets }) {
   const maxTotal = Math.max(...buckets.map((b) => b.allowed + b.blocked + b.reviewed), 1);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-4", children: "7-Day Activity" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-end gap-2 h-40", children: buckets.map((bucket) => {
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 h-40", children: buckets.map((bucket) => {
       const total = bucket.allowed + bucket.blocked + bucket.reviewed;
       const heightPct = maxTotal > 0 ? total / maxTotal * 100 : 0;
       const blockedHeight = total > 0 ? bucket.blocked / total * heightPct : 0;
       const allowedHeight = total > 0 ? bucket.allowed / total * heightPct : 0;
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 flex flex-col items-center gap-1.5 min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full flex-1 flex items-end rounded-lg overflow-hidden bg-slate-50", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full flex flex-col-reverse", children: [
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 flex flex-col justify-end gap-1.5 min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full flex-1 flex flex-col-reverse rounded-lg overflow-hidden bg-slate-50", children: [
           bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "div",
             {
-              className: "w-full bg-amber-400 rounded-b-sm",
-              style: { height: `${Math.max(blockedHeight, 2)}%` }
+              className: "w-full bg-amber-400",
+              style: { height: `${Math.max(blockedHeight, 2)}%`, minHeight: total > 0 ? "2%" : "0" }
             }
           ),
           bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "div",
             {
               className: "w-full bg-emerald-400",
-              style: { height: `${Math.max(allowedHeight, 2)}%` }
+              style: { height: `${Math.max(allowedHeight, 2)}%`, minHeight: total > 0 ? "2%" : "0" }
             }
           ),
           bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
             "div",
             {
-              className: "w-full bg-brand-blue rounded-t-sm",
+              className: "w-full bg-brand-blue",
               style: {
-                height: `${Math.max(heightPct - blockedHeight - allowedHeight, 2)}%`
+                height: `${Math.max(heightPct - blockedHeight - allowedHeight, 2)}%`,
+                minHeight: total > 0 ? "2%" : "0"
               }
             }
           )
-        ] }) }),
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] text-slate-400 truncate w-full text-center", children: bucket.label })
       ] }, bucket.dateKey);
     }) }),
@@ -17666,6 +17678,11 @@ function AppTabRaw({ receipts }) {
     }
     return items;
   }, [apps, selectedApp, decisionFilter, categoryFilter]);
+  const categories = reactExports.useMemo(() => {
+    if (!selectedApp) return [];
+    const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
+    return Array.from(new Set(allItems.map((r) => detectCategory(r))));
+  }, [apps, selectedApp]);
   if (appReceipts.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-12 text-center", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }),
@@ -17677,7 +17694,6 @@ function AppTabRaw({ receipts }) {
     const allowed = allItems.filter((r) => r.policy_decision === "allow").length;
     const blocked = allItems.filter((r) => r.policy_decision === "block").length;
     const color = harnessColor(selectedApp);
-    const categories = Array.from(new Set(allItems.map((r) => detectCategory(r))));
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -17855,19 +17871,6 @@ function AppSparkline({ items }) {
   ] });
 }
 const AppTab = reactExports.memo(AppTabRaw);
-const ICON_MAP = {
-  secret: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "h-5 w-5", "aria-hidden": "true" }),
-  network: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniGlobeAlt, { className: "h-5 w-5", "aria-hidden": "true" }),
-  destructive: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-5 w-5", "aria-hidden": "true" }),
-  hidden: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEyeSlash, { className: "h-5 w-5", "aria-hidden": "true" }),
-  "file-write": /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-5 w-5", "aria-hidden": "true" }),
-  "tool-call": /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5", "aria-hidden": "true" }),
-  other: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-5 w-5", "aria-hidden": "true" }),
-  mcp: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5", "aria-hidden": "true" }),
-  skill: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5", "aria-hidden": "true" }),
-  "supply-chain": /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-5 w-5", "aria-hidden": "true" }),
-  data: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-5 w-5", "aria-hidden": "true" })
-};
 function DecisionBadge({ decision }) {
   if (decision === "allow") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex shrink-0 items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700 ring-1 ring-green-200", children: [
@@ -17896,7 +17899,7 @@ function CategoryCard({ cat, count, blocked, onSelect }) {
       onClick: handleClick,
       className: "w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-300",
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 ${cat.color}`, children: ICON_MAP[cat.key] ?? ICON_MAP.other }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 ${cat.color}`, children: cat.icon }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: cat.label }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
@@ -17942,10 +17945,14 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
     }
     return items;
   }, [groups, selectedCategory, decisionFilter, harnessFilter]);
+  const harnesses = reactExports.useMemo(() => {
+    if (!selectedCategory) return [];
+    const allItems = groups.get(selectedCategory) ?? [];
+    return Array.from(new Set(allItems.map((r) => r.harness)));
+  }, [groups, selectedCategory]);
   if (selectedCategory) {
     const allItems = groups.get(selectedCategory) ?? [];
     const info = getCategoryInfo(selectedCategory);
-    const harnesses = Array.from(new Set(allItems.map((r) => r.harness)));
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
@@ -17960,7 +17967,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 ${info.color}`, children: ICON_MAP[selectedCategory] ?? ICON_MAP.other }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 ${info.color}`, children: info.icon }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: info.label }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: info.description })
@@ -22304,6 +22311,18 @@ function parseRequestId(pathname) {
   }
   return null;
 }
+function viewTitle(view) {
+  if (view === "home") return "Home";
+  if (view === "inbox") return "Inbox";
+  if (view === "fleet") return "Protect";
+  if (view === "evidence") return "Evidence";
+  if (view === "settings") return "Settings";
+  if (view === "supply-chain") return "Supply Chain";
+  if (view === "audit") return "Audit";
+  if (view === "policy") return "Policy";
+  if (view === "feed-health") return "Feed Health";
+  return "App detail";
+}
 function parseAppDetail(pathname) {
   if (!pathname.startsWith("/apps/")) {
     return null;
@@ -22768,7 +22787,7 @@ function App() {
         children: "Skip to content"
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : view === "supply-chain" || view === "audit" || view === "policy" || view === "feed-health" ? "Trust Center" : "App detail" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: viewTitle(view) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalCenterLayout,
       {
