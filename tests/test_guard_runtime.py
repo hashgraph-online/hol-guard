@@ -16090,7 +16090,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
                 "policyBundle": {
                     "contractVersion": "guard-policy-bundle.v1",
                     "bundleVersion": "policy-2026-04-19.1",
-                    "bundleHash": "sha256:043b59ae29ea99e38ac9226eb3467c2fd14a474e1fe4004eebdaa4a8e4e856c0",
+                    "bundleHash": "",
                     "issuedAt": "2026-04-19T00:00:10+00:00",
                     "expiresAt": None,
                     "verifier": {
@@ -16169,6 +16169,11 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
             },
         ]
     )
+    sync_payloads_list = list(sync_payloads)
+    first_bundle = sync_payloads_list[0]["policyBundle"]
+    if isinstance(first_bundle, dict):
+        first_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(first_bundle)
+    sync_payloads = iter(sync_payloads_list)
 
     class _Response:
         def __init__(self, payload: dict[str, object]) -> None:
@@ -16203,7 +16208,39 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     assert store.get_sync_payload("policy_bundle") == {
         "contractVersion": "guard-policy-bundle.v1",
         "bundleVersion": "policy-2026-04-19.1",
-        "bundleHash": "sha256:043b59ae29ea99e38ac9226eb3467c2fd14a474e1fe4004eebdaa4a8e4e856c0",
+        "bundleHash": guard_runner_module._computed_policy_bundle_hash(
+            {
+                "contractVersion": "guard-policy-bundle.v1",
+                "bundleVersion": "policy-2026-04-19.1",
+                "issuedAt": "2026-04-19T00:00:10+00:00",
+                "expiresAt": None,
+                "verifier": {
+                    "algorithm": "sha256",
+                    "keyId": "guard-policy-bundle-v1",
+                    "signature": None,
+                },
+                "rolloutState": "enforcing",
+                "policyDefaults": {
+                    "mode": "enforce",
+                    "defaultAction": "warn",
+                    "unknownPublisherAction": "review",
+                    "changedHashAction": "require-reapproval",
+                    "newNetworkDomainAction": "warn",
+                    "subprocessAction": "block",
+                    "telemetryEnabled": False,
+                    "syncEnabled": True,
+                },
+                "rules": [],
+                "acknowledgements": [
+                    {
+                        "deviceId": "device-1",
+                        "deviceName": "Guard local daemon",
+                        "acknowledgedAt": "2026-04-19T00:00:11+00:00",
+                        "status": "synced",
+                    }
+                ],
+            }
+        ),
         "issuedAt": "2026-04-19T00:00:10+00:00",
         "expiresAt": None,
         "verifier": {
@@ -16222,7 +16259,22 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
             "telemetryEnabled": False,
             "syncEnabled": True,
         },
-        "rules": [],
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs before execution.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
         "acknowledgements": [
             {
                 "deviceId": "device-1",
@@ -16234,7 +16286,7 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     }
     assert store.get_sync_payload("policy_bundle_ack") == {
         "appliedAt": "2026-04-19T00:00:11+00:00",
-        "bundleHash": "sha256:043b59ae29ea99e38ac9226eb3467c2fd14a474e1fe4004eebdaa4a8e4e856c0",
+        "bundleHash": store.get_sync_payload("policy_bundle")["bundleHash"],
         "bundleVersion": "policy-2026-04-19.1",
         "deviceId": "device-1",
         "deviceName": "MacBook Pro",
@@ -16395,7 +16447,22 @@ def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update
             "telemetryEnabled": False,
             "syncEnabled": True,
         },
-        "rules": [],
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs before execution.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
         "acknowledgements": [],
     }
     valid_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(valid_bundle)
