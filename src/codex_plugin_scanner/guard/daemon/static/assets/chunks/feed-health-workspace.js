@@ -85,7 +85,7 @@ function FeedHealthWorkspace({ snapshot, onOpenSettings }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Full feed syncing" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 mt-0.5", children: "Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600 mt-0.5", children: "Guard Cloud is connected. Local Guard is finishing the first shared proof automatically." })
         ] })
       ] }),
       sourceMode === "live" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-xl border border-brand-green/20 bg-brand-green/[0.04] px-3 py-2.5", children: [

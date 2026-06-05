@@ -419,6 +419,22 @@ def _queue_headless_cloud_sync(
     }
 
 
+def _maybe_queue_first_cloud_sync(*, store: GuardStore) -> dict[str, object] | None:
+    if store.get_cloud_sync_profile() is None:
+        return None
+    oauth_health = store.get_oauth_local_credential_health()
+    if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "degraded":
+        return None
+    latest_state = store.get_effective_guard_connect_state(now=_now())
+    if latest_state is None:
+        return None
+    if str(latest_state.get("status") or "") != "connected":
+        return None
+    if str(latest_state.get("milestone") or "") != "first_sync_pending":
+        return None
+    return _queue_headless_cloud_sync(store=store)
+
+
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
 
@@ -471,6 +487,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"items": store.list_guard_sessions(limit=200)})
             return
         if parsed.path == "/v1/runtime":
+            _maybe_queue_first_cloud_sync(store=store)
             config = load_guard_config(store.guard_home)
             snapshot = build_runtime_snapshot(
                 store=store,
@@ -3237,6 +3254,7 @@ class GuardDaemonServer:
             started_at=self._server.runtime_started_at,
             last_heartbeat_at=_now(),
         )
+        _maybe_queue_first_cloud_sync(store=self._server.store)
         self._start_watchdog()
         self._start_supply_chain_bundle_refresh()
 
