@@ -9415,7 +9415,18 @@ def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
             now,
         )
         return
-    store.set_sync_payload("policy_bundle_last_error", {}, now)
+    policy_bundle_last_error = store.get_sync_payload("policy_bundle_last_error")
+    policy_bundle_rejection_reason = (
+        _optional_string(policy_bundle_last_error.get("reason"))
+        if isinstance(policy_bundle_last_error, dict)
+        else None
+    )
+    if policy_bundle_rejection_reason not in {
+        "bundle_version_downgrade",
+        "invalid_policy_bundle",
+        "unsupported_daemon_version",
+    }:
+        store.set_sync_payload("policy_bundle_last_error", {}, now)
 
 
 def _guard_cloud_urls_for_connect(connect_url: str) -> dict[str, str]:
