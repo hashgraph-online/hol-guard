@@ -604,6 +604,24 @@ class GuardStore:
         if isinstance(secret_store, FallbackSecretStore):
             secret_store.promote_secret(secret_id, value)
 
+    def _mirror_oauth_secret_to_fallback(self, secret_id: str, value: str) -> None:
+        secret_store = self._oauth_secret_store
+        if not isinstance(secret_store, FallbackSecretStore):
+            return
+        if not isinstance(secret_store.fallback, EncryptedFileSecretStore):
+            return
+        fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
+        if fallback_value == value:
+            return
+        try:
+            secret_store.fallback.set_secret(secret_id, value)
+        except Exception:
+            _store_logger.warning(
+                "Failed to mirror OAuth credentials into encrypted fallback store; "
+                "headless environments may not be able to read credentials."
+            )
+            return
+
     def _get_secret_from_store(self, store: SecretStore, secret_id: str) -> str | None:
         try:
             return store.get_secret(secret_id)
@@ -3101,6 +3119,7 @@ class GuardStore:
         if runtime_label:
             payload["runtime_label"] = runtime_label
         self._oauth_secret_store.set_secret(self._oauth_local_credentials_ref, secret_json)
+        self._mirror_oauth_secret_to_fallback(self._oauth_local_credentials_ref, secret_json)
         self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
 
     def get_oauth_local_credentials(self) -> dict[str, object] | None:
@@ -3199,6 +3218,7 @@ class GuardStore:
                 continue
             if promote:
                 self._promote_secret_to_primary(self._oauth_secret_store, secret_ref, candidate)
+                self._mirror_oauth_secret_to_fallback(secret_ref, candidate)
             return secret_payload
         return None
 

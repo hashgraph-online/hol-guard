@@ -992,6 +992,11 @@ class TestGuardApprovals:
             "load_guard_daemon_url",
             lambda _guard_home: next(responses),
         )
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_running_guard_daemon_processes_for_guard_home",
+            lambda _guard_home: [],
+        )
         monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
         monkeypatch.setattr(
             daemon_manager_module,
