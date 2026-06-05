@@ -16131,6 +16131,38 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
                     }
                 ],
                 "policy": {"mode": "enforce"},
+                "policyBundle": {
+                    "contractVersion": "guard-policy-bundle.v1",
+                    "bundleVersion": "policy-2026-04-19.1",
+                    "bundleHash": "",
+                    "issuedAt": "2026-04-19T00:00:10+00:00",
+                    "expiresAt": None,
+                    "verifier": {
+                        "algorithm": "sha256",
+                        "keyId": "guard-policy-bundle-v1",
+                        "signature": None,
+                    },
+                    "rolloutState": "enforcing",
+                    "policyDefaults": {
+                        "mode": "enforce",
+                        "defaultAction": "warn",
+                        "unknownPublisherAction": "review",
+                        "changedHashAction": "require-reapproval",
+                        "newNetworkDomainAction": "warn",
+                        "subprocessAction": "block",
+                        "telemetryEnabled": False,
+                        "syncEnabled": True,
+                    },
+                    "rules": [],
+                    "acknowledgements": [
+                        {
+                            "deviceId": "device-1",
+                            "deviceName": "Guard local daemon",
+                            "acknowledgedAt": "2026-04-19T00:00:11+00:00",
+                            "status": "synced",
+                        }
+                    ],
+                },
                 "alertPreferences": {"advisoriesEnabled": True},
                 "teamPolicyPack": {
                     "name": "Team policy",
@@ -16181,6 +16213,11 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
             },
         ]
     )
+    sync_payloads_list = list(sync_payloads)
+    first_bundle = sync_payloads_list[0]["policyBundle"]
+    if isinstance(first_bundle, dict):
+        first_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(first_bundle)
+    sync_payloads = iter(sync_payloads_list)
 
     class _Response:
         def __init__(self, payload: dict[str, object]) -> None:
@@ -16212,6 +16249,78 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     assert payload["exceptions_stored"] == 2
     assert payload["remote_policies_stored"] == 6
     assert store.get_sync_payload("policy") == {"mode": "enforce"}
+    assert store.get_sync_payload("policy_bundle") == {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-04-19.1",
+        "bundleHash": guard_runner_module._computed_policy_bundle_hash(
+            {
+                "contractVersion": "guard-policy-bundle.v1",
+                "bundleVersion": "policy-2026-04-19.1",
+                "issuedAt": "2026-04-19T00:00:10+00:00",
+                "expiresAt": None,
+                "verifier": {
+                    "algorithm": "sha256",
+                    "keyId": "guard-policy-bundle-v1",
+                    "signature": None,
+                },
+                "rolloutState": "enforcing",
+                "policyDefaults": {
+                    "mode": "enforce",
+                    "defaultAction": "warn",
+                    "unknownPublisherAction": "review",
+                    "changedHashAction": "require-reapproval",
+                    "newNetworkDomainAction": "warn",
+                    "subprocessAction": "block",
+                    "telemetryEnabled": False,
+                    "syncEnabled": True,
+                },
+                "rules": [],
+                "acknowledgements": [
+                    {
+                        "deviceId": "device-1",
+                        "deviceName": "Guard local daemon",
+                        "acknowledgedAt": "2026-04-19T00:00:11+00:00",
+                        "status": "synced",
+                    }
+                ],
+            }
+        ),
+        "issuedAt": "2026-04-19T00:00:10+00:00",
+        "expiresAt": None,
+        "verifier": {
+            "algorithm": "sha256",
+            "keyId": "guard-policy-bundle-v1",
+            "signature": None,
+        },
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [],
+        "acknowledgements": [
+            {
+                "deviceId": "device-1",
+                "deviceName": "Guard local daemon",
+                "acknowledgedAt": "2026-04-19T00:00:11+00:00",
+                "status": "synced",
+            }
+        ],
+    }
+    assert store.get_sync_payload("policy_bundle_ack") == {
+        "appliedAt": "2026-04-19T00:00:11+00:00",
+        "bundleHash": store.get_sync_payload("policy_bundle")["bundleHash"],
+        "bundleVersion": "policy-2026-04-19.1",
+        "deviceId": "device-1",
+        "deviceName": "MacBook Pro",
+        "status": "synced",
+    }
     assert {item["artifactId"] for item in store.list_cached_advisories(limit=None)} == {"artifact-a", "artifact-b"}
     assert {item["artifact_id"] for item in store.list_policy_decisions() if item["artifact_id"]} >= {
         "allowed-one",
@@ -16225,6 +16334,474 @@ def test_sync_receipts_preserves_batch_metadata_and_reuses_device_metadata(tmp_p
     }
     assert len(store.list_events(event_name="premium_advisory")) == 2
     assert len(store.list_events(event_name="exception_expiring")) == 2
+
+
+def test_policy_bundle_validation_rejects_tampered_hash():
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-04-19.1",
+        "bundleHash": "sha256:tampered",
+        "issuedAt": "2026-04-19T00:00:10+00:00",
+        "expiresAt": None,
+        "verifier": {
+            "algorithm": "sha256",
+            "keyId": "guard-policy-bundle-v1",
+            "signature": None,
+        },
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs before execution.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
+        "acknowledgements": [],
+    }
+
+    validated_bundle, reason = guard_runner_module._validated_policy_bundle_payload(bundle)
+
+    assert validated_bundle is None
+    assert reason == "bundle_hash_mismatch"
+
+
+def test_receipt_sync_context_uploads_policy_bundle_acknowledgement(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_payload(
+        "policy_bundle_ack",
+        {
+            "appliedAt": "2026-04-19T00:00:11+00:00",
+            "bundleHash": "sha256:bundle",
+            "bundleVersion": "policy-2026-04-19.1",
+            "deviceId": "device-1",
+            "deviceName": "MacBook Pro",
+            "status": "synced",
+        },
+        "2026-04-19T00:00:11+00:00",
+    )
+
+    context = guard_runner_module._receipt_sync_context(
+        store,
+        local_guard_online_at="2026-04-19T00:01:00+00:00",
+    )
+
+    assert context["policyBundleAcknowledgement"] == {
+        "appliedAt": "2026-04-19T00:00:11+00:00",
+        "bundleHash": "sha256:bundle",
+        "bundleVersion": "policy-2026-04-19.1",
+        "deviceId": "device-1",
+        "deviceName": "MacBook Pro",
+        "status": "synced",
+    }
+
+
+def test_policy_bundle_validation_rejects_missing_rules_field():
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-04-19.1",
+        "bundleHash": "sha256:placeholder",
+        "issuedAt": "2026-04-19T00:00:10+00:00",
+        "expiresAt": None,
+        "verifier": {
+            "algorithm": "sha256",
+            "keyId": "guard-policy-bundle-v1",
+            "signature": None,
+        },
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "acknowledgements": [],
+    }
+
+    validated_bundle, reason = guard_runner_module._validated_policy_bundle_payload(bundle)
+
+    assert validated_bundle is None
+    assert reason == "missing_required_field"
+
+
+def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+
+    valid_bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-04-19.2",
+        "bundleHash": "",
+        "issuedAt": "2026-04-19T00:00:10+00:00",
+        "expiresAt": None,
+        "verifier": {
+            "algorithm": "sha256",
+            "keyId": "guard-policy-bundle-v1",
+            "signature": None,
+        },
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs before execution.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
+        "acknowledgements": [],
+    }
+    valid_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(valid_bundle)
+    invalid_bundle = dict(valid_bundle)
+    invalid_bundle["bundleVersion"] = "policy-2026-04-19.1"
+    invalid_bundle["issuedAt"] = "2026-04-18T23:59:00+00:00"
+    invalid_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(invalid_bundle)
+
+    responses = iter(
+        [
+            {
+                "syncedAt": "2026-04-19T00:00:11+00:00",
+                "receiptsStored": 0,
+                "policyBundle": valid_bundle,
+            },
+            {
+                "syncedAt": "2026-04-19T00:00:12+00:00",
+                "receiptsStored": 0,
+                "policyBundle": invalid_bundle,
+            },
+        ]
+    )
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        return _Response(next(responses))
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+    first_bundle = store.get_sync_payload("policy_bundle")
+    guard_runner_module.sync_receipts(store)
+
+    assert first_bundle == store.get_sync_payload("policy_bundle")
+    assert store.get_sync_payload("policy_bundle_last_error") == {
+        "reason": "bundle_version_downgrade",
+    }
+    assert store.resolve_policy("codex", "codex:project:package-request:persisted", "hash") == "block"
+
+
+def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    bundle = {
+        "bundleVersion": "policy-2026-04-19.2",
+        "expiresAt": None,
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            },
+            {
+                "ruleId": "mcp-review",
+                "action": "review",
+                "reason": "Review MCP server calls.",
+                "matcherFamilies": ["mcp"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": [],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            },
+            {
+                "ruleId": "file-allow",
+                "action": "allow",
+                "reason": "Allow benign file reads.",
+                "matcherFamilies": ["file-read"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": [],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            },
+            {
+                "ruleId": "shell-block",
+                "action": "block",
+                "reason": "Block destructive shell actions.",
+                "matcherFamilies": ["tool-action"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": [],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            },
+        ],
+    }
+
+    decisions = guard_runner_module._build_policy_bundle_decisions(
+        bundle,
+        device_id=guard_runner_module._guard_device_metadata(store)[0],
+        device_name="MacBook Pro",
+    )
+    store.replace_remote_policies(decisions, "2026-04-19T00:00:11+00:00")
+
+    assert store.resolve_policy("codex", "codex:project:package-request:abc", "hash") == "block"
+    assert store.resolve_policy("codex", "codex:project:mcp:shell", "hash") == "review"
+    assert store.resolve_policy("codex", "codex:project:file-read:abc", "hash") == "allow"
+    assert store.resolve_policy("codex", "codex:project:tool-action:abc", "hash") == "block"
+
+
+def test_policy_bundle_version_persists_after_store_reopen(tmp_path):
+    home = tmp_path / "guard-home"
+    store = GuardStore(home)
+    store.set_sync_payload(
+        "policy_bundle",
+        {
+            "bundleVersion": "policy-2026-06-05.1",
+            "bundleHash": "sha256:bundle-proof",
+            "issuedAt": "2026-06-05T13:30:00+00:00",
+        },
+        "2026-06-05T13:30:00+00:00",
+    )
+
+    reopened = GuardStore(home)
+
+    assert reopened.get_sync_payload("policy_bundle") == {
+        "bundleVersion": "policy-2026-06-05.1",
+        "bundleHash": "sha256:bundle-proof",
+        "issuedAt": "2026-06-05T13:30:00+00:00",
+    }
+
+
+def test_policy_bundle_downgrade_check_ignores_mixed_timezone_formats():
+    assert guard_runner_module._policy_bundle_is_version_downgrade(
+        {"issuedAt": "2026-06-05T13:30:00+00:00"},
+        {"issuedAt": "2026-06-05T13:29:00"},
+    ) is False
+
+
+def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-06-05T13:30:00+00:00",
+    )
+    requests: list[dict[str, object]] = []
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-06-05.3",
+        "bundleHash": "",
+        "issuedAt": "2026-06-05T13:30:00+00:00",
+        "expiresAt": None,
+        "verifier": {
+            "algorithm": "sha256",
+            "keyId": "guard-policy-bundle-v1",
+            "signature": None,
+        },
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [],
+        "acknowledgements": [],
+    }
+    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        if request.full_url.endswith("/api/v1/guard/events"):
+            return _Response({"accepted": 0, "rejected": 0, "statuses": []})
+        body = json.loads(request.data.decode("utf-8"))
+        requests.append(body)
+        return _Response(
+            {
+                "syncedAt": f"2026-06-05T13:30:0{len(requests)}+00:00",
+                "receiptsStored": 0,
+                "policyBundle": bundle,
+            }
+        )
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+    guard_runner_module.sync_receipts(store)
+    guard_runner_module.sync_receipts(store)
+
+    assert requests[1]["syncContext"]["policyBundleAcknowledgement"] == {
+        "appliedAt": "2026-06-05T13:30:01+00:00",
+        "bundleHash": bundle["bundleHash"],
+        "bundleVersion": "policy-2026-06-05.3",
+        "deviceId": guard_runner_module._guard_device_metadata(store)[0],
+        "deviceName": guard_runner_module._guard_device_metadata(store)[1],
+        "status": "synced",
+    }
+
+
+def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    store = GuardStore(guard_home)
+    bundle = {
+        "bundleVersion": "policy-2026-06-05.2",
+        "expiresAt": None,
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs before execution.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
+    }
+    store.replace_remote_policies(
+        guard_runner_module._build_policy_bundle_decisions(
+            bundle,
+            device_id=guard_runner_module._guard_device_metadata(store)[0],
+            device_name="MacBook Pro",
+        ),
+        "2026-06-05T13:31:00+00:00",
+    )
+
+    order: list[str] = []
+    original_resolve_policy = store.resolve_policy
+    original_add_receipt = store.add_receipt
+
+    def tracked_resolve_policy(*args, **kwargs):
+        order.append("resolve_policy")
+        return original_resolve_policy(*args, **kwargs)
+
+    def tracked_add_receipt(receipt):
+        order.append("add_receipt")
+        return original_add_receipt(receipt)
+
+    monkeypatch.setattr(store, "resolve_policy", tracked_resolve_policy)
+    monkeypatch.setattr(store, "add_receipt", tracked_add_receipt)
+
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(workspace / "opencode.json"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:package-request:proof",
+                name="npm install proof",
+                harness="codex",
+                artifact_type="package_request",
+                source_scope="project",
+                config_path=str(workspace / "opencode.json"),
+                metadata={"package_manager": "npm"},
+            ),
+        ),
+    )
+    config = GuardConfig(guard_home=guard_home, workspace=workspace, mode="enforce")
+
+    result = evaluate_detection(detection, store, config, persist=True)
+
+    assert result["artifacts"][0]["policy_action"] == "block"
+    assert order.index("resolve_policy") < order.index("add_receipt")
 
 
 def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):

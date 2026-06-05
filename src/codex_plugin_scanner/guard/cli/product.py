@@ -242,6 +242,8 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     advisories = store.list_cached_advisories(limit=3)
     alert_preferences = _coerce_payload_dict(store.get_sync_payload("alert_preferences"))
     remote_policy = _coerce_payload_dict(store.get_sync_payload("policy"))
+    policy_bundle = _coerce_payload_dict(store.get_sync_payload("policy_bundle"))
+    policy_bundle_last_error = _coerce_payload_dict(store.get_sync_payload("policy_bundle_last_error"))
     team_policy_pack = _coerce_payload_dict(store.get_sync_payload("team_policy_pack"))
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
@@ -280,6 +282,10 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         "advisory_count": len(advisories),
         "advisory_headline": _advisory_headline(advisories),
         "remote_policy_active": bool(remote_policy),
+        "cloud_policy_bundle_hash": _optional_string(policy_bundle.get("bundleHash")),
+        "cloud_policy_bundle_version": _optional_string(policy_bundle.get("bundleVersion")),
+        "cloud_policy_rollout_state": _optional_string(policy_bundle.get("rolloutState")),
+        "cloud_policy_sync_error": _optional_string(policy_bundle_last_error.get("reason")),
         "alert_preferences_active": bool(alert_preferences),
         "watchlist_enabled": bool(alert_preferences.get("watchlistEnabled")),
         "team_alerts_enabled": bool(alert_preferences.get("teamAlertsEnabled")),
