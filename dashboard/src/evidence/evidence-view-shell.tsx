@@ -55,7 +55,7 @@ export function EvidenceHeader({
           Every action Guard reviewed on this machine.
         </p>
         {lastActivityLabel && (
-          <p className="flex items-center gap-1 text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400">
             Last activity: {lastActivityLabel}
           </p>
         )}

@@ -199,7 +199,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
     );
   }
 
-  const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label }));
+  const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
 
   return (
     <div className="space-y-4">

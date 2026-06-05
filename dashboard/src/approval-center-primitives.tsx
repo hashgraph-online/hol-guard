@@ -874,7 +874,7 @@ export function ListRow(props: {
 }
 
 export function TabBar<T extends string>(props: {
-  tabs: Array<{ value: T; label: string }>;
+  tabs: Array<{ value: T; label: string; id?: string }>;
   active: T;
   onChange: (value: T) => void;
 }) {
@@ -883,6 +883,7 @@ export function TabBar<T extends string>(props: {
       {props.tabs.map((tab) => (
         <button
           key={tab.value}
+          id={tab.id ?? tab.value}
           type="button"
           role="tab"
           aria-selected={props.active === tab.value}

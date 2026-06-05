@@ -204,9 +204,6 @@ function TechnicalSection({ receipt }: TechnicalSectionProps) {
           {receipt.capabilities_summary && (
             <DetailRow label="Capabilities" value={receipt.capabilities_summary} />
           )}
-          {receipt.diff_summary && (
-            <DetailRow label="Diff summary" value={receipt.diff_summary} />
-          )}
         </div>
       )}
     </div>

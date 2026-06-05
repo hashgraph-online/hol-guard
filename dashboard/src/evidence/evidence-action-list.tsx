@@ -56,6 +56,15 @@ function DecisionChip({ decision }: DecisionChipProps) {
   );
 }
 
+const SORT_TOGGLE_MAP: Record<EvidenceSortKey, EvidenceSortKey> = {
+  newest: "oldest",
+  oldest: "newest",
+  artifact: "artifact",
+  app: "app",
+  category: "category",
+  decision: "decision",
+};
+
 function SortHeader({
   label,
   active,
@@ -72,6 +81,7 @@ function SortHeader({
   return (
     <th
       scope="col"
+      aria-sort={active ? (ascending ? "ascending" : "descending") : "none"}
       className={`px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${className}`}
     >
       <button
@@ -110,10 +120,8 @@ export function EvidenceActionList({
 
   const handleSort = useCallback(
     (key: EvidenceSortKey) => {
-      if (sort === key && key === "newest") {
-        onSortChange("oldest");
-      } else if (sort === key && key === "oldest") {
-        onSortChange("newest");
+      if (sort === key) {
+        onSortChange(SORT_TOGGLE_MAP[key]);
       } else {
         onSortChange(key);
       }
@@ -149,34 +157,34 @@ export function EvidenceActionList({
                 <SortHeader
                   label="Artifact"
                   active={sort === "artifact"}
-                  ascending={true}
+                  ascending={sort === "artifact"}
                   onClick={() => handleSort("artifact")}
                   className="min-w-[180px]"
                 />
                 <SortHeader
                   label="App"
                   active={sort === "app"}
-                  ascending={true}
+                  ascending={sort === "app"}
                   onClick={() => handleSort("app")}
                   className="hidden sm:table-cell"
                 />
                 <SortHeader
                   label="Category"
                   active={sort === "category"}
-                  ascending={true}
+                  ascending={sort === "category"}
                   onClick={() => handleSort("category")}
                   className="hidden md:table-cell"
                 />
                 <SortHeader
                   label="Decision"
                   active={sort === "decision"}
-                  ascending={true}
+                  ascending={sort === "decision"}
                   onClick={() => handleSort("decision")}
                 />
                 <SortHeader
                   label="Time"
                   active={sort === "newest" || sort === "oldest"}
-                  ascending={sort === "newest"}
+                  ascending={sort === "oldest"}
                   onClick={() => handleSort("newest")}
                   className="hidden lg:table-cell"
                 />
@@ -265,7 +273,6 @@ function ActionRow({
 
   return (
     <tr
-      role="button"
       tabIndex={0}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
