@@ -454,7 +454,8 @@ def _send_websocket_handshake(client: socket.socket) -> bytes:
     if not header_text.startswith("HTTP/1.1 101"):
         raise ValueError("websocket_upgrade_failed")
     # RFC 6455 requires SHA-1 for Sec-WebSocket-Accept handshake verification.
-    expected_accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode("ascii")  # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1  # noqa: E501
+    # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
+    expected_accept = base64.b64encode(hashlib.sha1((key + _WEBSOCKET_GUID).encode("ascii")).digest()).decode("ascii")
     headers = _parse_http_headers(header_text)
     if headers.get("sec-websocket-accept") != expected_accept:
         raise ValueError("websocket_accept_mismatch")
