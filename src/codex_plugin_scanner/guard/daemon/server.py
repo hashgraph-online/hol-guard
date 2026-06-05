@@ -2759,6 +2759,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "approvals": pending_approvals,
             "pending_approvals": pending_approvals,
             "uptime_seconds": uptime,
+            "pid": os.getpid(),
             "tables": store.list_table_names(),
             "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
             "package_version": __version__,

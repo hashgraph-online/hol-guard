@@ -179,6 +179,17 @@ def test_guard_daemon_port_from_command_supports_equals_syntax() -> None:
     assert daemon_manager_module._guard_daemon_port_from_command(command) == 5474
 
 
+def test_running_guard_daemon_processes_for_guard_home_returns_empty_on_ps_timeout(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+
+    def fake_run(*_args, **_kwargs):
+        raise daemon_manager_module.subprocess.TimeoutExpired(cmd=["ps"], timeout=5)
+
+    monkeypatch.setattr(daemon_manager_module.subprocess, "run", fake_run)
+
+    assert daemon_manager_module._running_guard_daemon_processes_for_guard_home(guard_home) == []
+
+
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     responses = iter((None, None, "http://127.0.0.1:5409"))
@@ -223,18 +234,14 @@ def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_p
     monkeypatch.setattr(
         daemon_manager_module,
         "_initialize_existing_guard_daemon",
-        lambda _guard_home, port: {"url": f"http://127.0.0.1:{port}", "auth_token": "secret-token"},
+        lambda _guard_home, port: {"url": f"http://127.0.0.1:{port}", "auth_token": "secret-token", "pid": 111},
     )
     monkeypatch.setattr(
         daemon_manager_module.subprocess,
         "Popen",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not spawn a new daemon")),
     )
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_running_guard_daemon_processes_for_guard_home",
-        lambda _guard_home: [(111, 5474)],
-    )
+    monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _guard_home: [])
 
     url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
