@@ -10,7 +10,11 @@ import {
   HiMiniExclamationTriangle,
 } from "react-icons/hi2";
 import { ActionButton, Tag } from "./approval-center-primitives";
-import type { PackageFirewallStatusResponse, PackageShimEntry } from "./guard-types";
+import type {
+  PackageFirewallActionState,
+  PackageFirewallStatusResponse,
+  PackageShimEntry,
+} from "./guard-types";
 
 type ShimStatusDotProps = {
   active: boolean;
@@ -75,6 +79,10 @@ function ActionBtn({ label, icon, variant, onClick, disabled }: ActionBtnProps) 
   );
 }
 
+function actionIsAvailable(state: PackageFirewallActionState | undefined): boolean {
+  return state === "available";
+}
+
 type ActionButtonRowProps = {
   shim: PackageShimEntry;
   actions: PackageFirewallStatusResponse["actions"];
@@ -98,16 +106,15 @@ function ActionButtonRow({
   const repairState = actions.repair ?? "disabled";
   const testState = actions.test ?? "disabled";
   const removeState = actions.remove ?? "disabled";
-  const installBlocked = installState === "paid_required" || installState === "reconnect_required";
-  const repairBlocked = repairState === "paid_required" || repairState === "reconnect_required";
-  const testBlocked = testState === "paid_required" || testState === "reconnect_required";
-  const removeBlocked = removeState === "paid_required" || removeState === "reconnect_required";
+  const installAvailable = actionIsAvailable(installState);
+  const repairAvailable = actionIsAvailable(repairState);
+  const testAvailable = actionIsAvailable(testState);
+  const removeAvailable = actionIsAvailable(removeState);
 
-  const showInstall = !shim.installed && installState !== "disabled";
-  const showRepair =
-    shim.installed && shim.activation_state !== "restart_required" && repairState !== "disabled";
-  const showTest = testState !== "disabled";
-  const showRemove = removeState !== "disabled" && shim.installed;
+  const showInstall = !shim.installed && installAvailable;
+  const showRepair = shim.installed && shim.activation_state === "repair_required" && repairAvailable;
+  const showTest = shim.installed && shim.activation_state === "protected" && testAvailable;
+  const showRemove = shim.installed && removeAvailable;
 
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -117,16 +124,16 @@ function ActionButtonRow({
           icon={<HiMiniShieldCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
           variant="primary"
           onClick={onInstall}
-          disabled={anyPending || installBlocked}
+          disabled={anyPending}
         />
       )}
       {showRepair && (
         <ActionBtn
-          label="Repair"
+          label="Fix PATH"
           icon={<HiMiniWrenchScrewdriver className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
-          variant="secondary"
+          variant="primary"
           onClick={onRepair}
-          disabled={anyPending || repairBlocked}
+          disabled={anyPending}
         />
       )}
       {showTest && (
@@ -135,7 +142,7 @@ function ActionButtonRow({
           icon={<HiMiniBeaker className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
           variant="outline"
           onClick={onTest}
-          disabled={anyPending || testBlocked}
+          disabled={anyPending}
         />
       )}
       {showRemove && (
@@ -144,7 +151,7 @@ function ActionButtonRow({
           icon={<HiMiniTrash className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
           variant="danger"
           onClick={onRemoveRequest}
-          disabled={anyPending || removeBlocked}
+          disabled={anyPending}
         />
       )}
     </div>
@@ -249,6 +256,12 @@ export function ManagerActionCard({
       {shim.activation_state === "restart_required" && (
         <p className="text-xs text-slate-500">
           Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim.
+        </p>
+      )}
+
+      {shim.activation_state === "repair_required" && (
+        <p className="text-xs text-slate-500">
+          Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart.
         </p>
       )}
 
