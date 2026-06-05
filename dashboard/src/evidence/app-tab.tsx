@@ -10,7 +10,7 @@ import {
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { harnessDisplayName, isDisplayableHarness, formatRelativeTime } from "../approval-center-utils";
-import { plainEnglishDescription, humanFileName } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionType } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
 import { Sparkline } from "./sparkline";
@@ -246,7 +246,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80">
                     <th scope="col" className="w-8 px-3 py-2.5" />
-                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Artifact</th>
+                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">What happened</th>
                     <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden md:table-cell">Category</th>
                     <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Decision</th>
                     <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden lg:table-cell">Time</th>
@@ -256,14 +256,18 @@ function AppTabRaw({ receipts }: AppTabProps) {
                   {selectedItems.map((receipt) => {
                     const category = detectCategory(receipt);
                     const catInfo = getCategoryInfo(category);
-                    const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+                    const actionTitle = resolveActionTitle(receipt);
+                    const actionType = resolveActionType(receipt);
                     return (
                       <tr key={receipt.receipt_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
                         <td className="px-3 py-2.5">
                           <span className={`${catInfo.color}`} aria-hidden="true">{catInfo.icon}</span>
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">{artifactLabel}</span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">{actionTitle}</span>
+                            <span className="text-[11px] text-slate-400 truncate block max-w-[200px]">{actionType}</span>
+                          </div>
                         </td>
                         <td className="px-3 py-2.5 hidden md:table-cell">
                           <span className="text-xs text-slate-500">{catInfo.label}</span>

@@ -47,10 +47,10 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
         </div>
       ) : (
         <>
-          <div className="flex gap-2 h-40 mt-4">
+          <div className="flex gap-2 h-44 mt-4">
             {buckets.map((bucket) => {
               const total = bucket.allowed + bucket.blocked + bucket.reviewed;
-              const heightPct = maxTotal > 0 ? Math.max((total / maxTotal) * 100, 4) : 0;
+              const heightPct = maxTotal > 0 ? Math.max((total / maxTotal) * 100, 6) : 0;
               const blockedPct = total > 0 ? (bucket.blocked / total) * 100 : 0;
               const allowedPct = total > 0 ? (bucket.allowed / total) * 100 : 0;
               const reviewedPct = total > 0 ? (bucket.reviewed / total) * 100 : 0;
@@ -59,40 +59,52 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
               return (
                 <div
                   key={bucket.dateKey}
-                  className="relative flex-1 flex flex-col justify-end gap-1.5 min-w-0"
+                  className="relative flex-1 flex flex-col justify-end gap-1 min-w-0"
                   onMouseEnter={() => setHoveredBucket(bucket.dateKey)}
                   onMouseLeave={() => setHoveredBucket(null)}
                 >
-                  <div className="relative w-full flex-1 flex items-end rounded-lg overflow-hidden bg-slate-50">
+                  {total > 0 && (
+                    <span className="text-[10px] font-semibold text-brand-dark tabular-nums text-center">
+                      {total}
+                    </span>
+                  )}
+                  <div
+                    className={`relative w-full flex-1 flex items-end rounded-lg overflow-hidden ${
+                      total > 0 ? "bg-slate-100/60 ring-1 ring-inset ring-slate-200" : "bg-slate-50 ring-1 ring-inset ring-slate-200"
+                    }`}
+                  >
                     {total > 0 ? (
-                      <div className="w-full flex flex-col-reverse">
+                      <div className="w-full flex flex-col-reverse rounded-lg overflow-hidden" style={{ height: `${heightPct}%` }}>
                         {bucket.blocked > 0 && (
                           <div
-                            className="w-full bg-amber-400 transition-all"
+                            className="w-full bg-amber-500 transition-all"
                             style={{ height: `${Math.max(blockedPct, 4)}%` }}
+                            aria-label={`${bucket.blocked} stopped`}
                           />
                         )}
                         {bucket.allowed > 0 && (
                           <div
-                            className="w-full bg-emerald-400 transition-all"
+                            className="w-full bg-emerald-500 transition-all"
                             style={{ height: `${Math.max(allowedPct, 4)}%` }}
+                            aria-label={`${bucket.allowed} allowed`}
                           />
                         )}
                         {bucket.reviewed > 0 && (
                           <div
                             className="w-full bg-brand-blue transition-all"
                             style={{ height: `${Math.max(reviewedPct, 4)}%` }}
+                            aria-label={`${bucket.reviewed} reviewed`}
                           />
                         )}
                       </div>
                     ) : (
-                      <div className="w-full h-full bg-slate-100/50" />
+                      <div className="w-full h-full" />
                     )}
                     {isHovered && total > 0 && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/5" />
                     )}
                   </div>
-                  <span className="text-[10px] text-slate-400 truncate w-full text-center">
+                  <span className="text-[10px] text-slate-500 truncate w-full text-center font-medium">
                     {bucket.label}
                   </span>
                   {isHovered && total > 0 && (
@@ -114,15 +126,15 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
           </div>
           <div className="mt-3 flex items-center gap-4 text-[11px] text-slate-500">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500" />
               Allowed
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-500" />
               Stopped
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-brand-blue" />
+              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand-blue" />
               Reviewed
             </span>
           </div>
