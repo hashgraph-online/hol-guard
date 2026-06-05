@@ -28,7 +28,11 @@ export function resolveActionType(receipt: GuardReceipt): string {
   const artifactType = getArtifactType(receipt);
   const artifactName = (receipt.artifact_name ?? "").toLowerCase();
 
-  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command") || artifactName === "bash") return "Shell command";
+  if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command")) return "Shell command";
+  if (
+    artifactName === "bash" &&
+    receipt.provenance_summary?.trim().toLowerCase().startsWith("hook event for")
+  ) return "Shell command";
   if (actionType === "prompt" || artifactType === "prompt_request") return "Prompt";
   if (actionType === "file_read" || artifactType === "file_read_request" || artifactType.includes("file_read")) return "File read";
   if (actionType === "file_write" || artifactType.includes("file_write") || artifactType.includes("write")) return "File write";
