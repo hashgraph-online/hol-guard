@@ -87,7 +87,7 @@ function resolvePackageManagerProtectionCopy(protection) {
     return {
       pathLabel: "Restart shell or apps to finish activation",
       pathDetail: protection.shell_profile_configured ? `Guard updated the shell profile for ${protection.shim_dir}. Open a new shell or restart AI apps so package-manager commands resolve through Guard.` : `Guard installed shims in ${protection.shim_dir}, but activation is still waiting for a fresh shell or app session.`,
-      pathTone: "attention",
+      pathTone: "blue",
       protectedList: protection.protected_managers,
       unprotectedList: protection.unprotected_managers
     };
