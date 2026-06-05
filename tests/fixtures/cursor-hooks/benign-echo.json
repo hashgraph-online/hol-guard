@@ -1,0 +1,4 @@
+{
+  "hook_event_name": "beforeShellExecution",
+  "command": "echo hol-guard-headless-ok"
+}
