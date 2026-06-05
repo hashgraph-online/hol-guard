@@ -16278,7 +16278,22 @@ def test_policy_bundle_validation_rejects_tampered_hash():
             "telemetryEnabled": False,
             "syncEnabled": True,
         },
-        "rules": [],
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs before execution.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            }
+        ],
         "acknowledgements": [],
     }
 
@@ -16433,6 +16448,7 @@ def test_sync_receipts_preserves_last_known_good_policy_bundle_on_invalid_update
     assert store.get_sync_payload("policy_bundle_last_error") == {
         "reason": "bundle_version_downgrade",
     }
+    assert store.resolve_policy("codex", "codex:project:package-request:persisted", "hash") == "block"
 
 
 def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):

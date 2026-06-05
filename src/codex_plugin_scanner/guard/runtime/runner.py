@@ -1317,6 +1317,18 @@ def sync_receipts(
                 )
             )
         else:
+            last_good_bundle_payload = store.get_sync_payload("policy_bundle_last_good")
+            preserved_bundle_payload = (
+                last_good_bundle_payload if isinstance(last_good_bundle_payload, dict) and last_good_bundle_payload else existing_policy_bundle
+            )
+            if isinstance(preserved_bundle_payload, dict) and preserved_bundle_payload:
+                remote_decisions.update(
+                    _build_policy_bundle_decisions(
+                        preserved_bundle_payload,
+                        device_id=device_id,
+                        device_name=device_name,
+                    )
+                )
             store.set_sync_payload(
                 "policy_bundle_last_error",
                 {"reason": policy_bundle_rejection_reason or "invalid_policy_bundle"},
