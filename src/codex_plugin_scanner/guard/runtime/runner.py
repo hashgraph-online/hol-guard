@@ -843,11 +843,12 @@ def sync_receipts(
     *,
     persist_sync_summary: bool = True,
     persist_connect_state: bool = True,
+    auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Push local receipts to the configured sync endpoint."""
 
-    auth_context = _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_receipts_sync_url(auth_context["sync_url"])
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+    sync_url = _normalized_receipts_sync_url(resolved_auth_context["sync_url"])
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
     inventory = store.list_inventory()
@@ -883,7 +884,7 @@ def sync_receipts(
             sync_url,
             data=body,
             method="POST",
-            headers=_guard_sync_headers(auth_context, request_url=sync_url, method="POST"),
+            headers=_guard_sync_headers(resolved_auth_context, request_url=sync_url, method="POST"),
         )
         try:
             payload = _urlopen_json_with_timeout_retry(
@@ -976,7 +977,7 @@ def sync_receipts(
         exceptions=deduped_exceptions,
         now=now,
     )
-    pain_signals_uploaded = sync_pain_signals(store, auth_context=auth_context)
+    pain_signals_uploaded = sync_pain_signals(store, auth_context=resolved_auth_context)
     value_metrics = _build_value_metrics(store)
     weekly_digest = _build_weekly_firewall_digest(metrics=value_metrics, now=now)
     summary = {
@@ -1003,7 +1004,7 @@ def sync_receipts(
     }
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
-    summary["guard_events_v1"] = sync_guard_events(store, auth_context=auth_context)
+    summary["guard_events_v1"] = sync_guard_events(store, auth_context=resolved_auth_context)
     if persist_sync_summary:
         store.set_sync_payload("sync_summary", summary, now)
     if persist_connect_state:
@@ -1309,7 +1310,7 @@ def sync_guard_events(
 ) -> dict[str, object]:
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
-    resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     sync_url = _guard_events_sync_url(resolved_auth_context["sync_url"])
     previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
@@ -1458,18 +1459,19 @@ def sync_runtime_session(
     store: GuardStore,
     *,
     session: dict[str, object],
+    auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
 
-    auth_context = _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_runtime_sessions_sync_url(auth_context["sync_url"])
+    resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
+    sync_url = _normalized_runtime_sessions_sync_url(resolved_auth_context["sync_url"])
     session_payload = _cloud_runtime_session_payload(store, session)
     body = json.dumps({"session": session_payload}).encode("utf-8")
     request = urllib.request.Request(
         sync_url,
         data=body,
         method="POST",
-        headers=_guard_sync_headers(auth_context, request_url=sync_url, method="POST"),
+        headers=_guard_sync_headers(resolved_auth_context, request_url=sync_url, method="POST"),
     )
     try:
         payload = _urlopen_json_with_timeout_retry(
@@ -1544,11 +1546,17 @@ def _local_guard_runtime_session() -> dict[str, object]:
 def sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
     """Publish the local Guard runtime session before syncing receipts."""
 
-    runtime_summary = sync_runtime_session(store, session=_local_guard_runtime_session())
+    auth_context = _resolve_guard_sync_auth_context(store)
+    runtime_summary = sync_runtime_session(
+        store,
+        session=_local_guard_runtime_session(),
+        auth_context=auth_context,
+    )
     receipts_summary = sync_receipts(
         store,
         persist_sync_summary=False,
         persist_connect_state=False,
+        auth_context=auth_context,
     )
     summary = dict(receipts_summary)
     summary.update(
