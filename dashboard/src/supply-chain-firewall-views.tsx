@@ -51,6 +51,7 @@ export function UpgradeCta({ entitlement }: UpgradeCtaProps) {
 }
 
 type ConnectFlowCardProps = {
+  compact?: boolean;
   connectError: string | null;
   connectStarting: boolean;
   connectFlow: NonNullable<PackageFirewallStatusResponse["connect_flow"]>;
@@ -126,6 +127,7 @@ function resolveConnectSteps(
 }
 
 export function ConnectFlowCard({
+  compact = false,
   connectError,
   connectStarting,
   connectFlow,
@@ -143,9 +145,69 @@ export function ConnectFlowCard({
     ? "Try connect again"
     : connectFlow.action_label;
   const steps = resolveConnectSteps(connectFlow);
-  const statusTone = mode === "repair" ? "attention" : "blue";
-  const statusLabel = mode === "repair" ? "Repair required" : "Connection required";
+  const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
+  const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  const hintCopy = localRecoveryHint ?? "Guard changes routing only after this machine receives signed cloud access.";
+  if (compact) {
+    return (
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue">
+              HOL Guard Cloud
+            </p>
+            <Tag tone={statusTone}>{statusLabel}</Tag>
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-semibold tracking-[-0.02em] text-brand-dark">
+              {connectFlow.title}
+            </p>
+            <p className="max-w-3xl text-sm leading-relaxed text-slate-500">
+              {connectFlow.detail}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-2 text-xs leading-relaxed text-slate-500 md:grid-cols-3">
+          {steps.map((step, index) => (
+            <div key={step.title} className="min-w-0">
+              <p className="font-semibold text-brand-dark">
+                {index + 1}. {step.title}
+              </p>
+              <p className="mt-0.5">{step.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs leading-relaxed text-slate-500">
+          <span>{hintCopy}</span>
+          <span>Guard changes routing only after this machine receives signed cloud access.</span>
+        </div>
+
+        {connectError !== null && (
+          <p className="text-xs leading-relaxed text-brand-attention">{connectError}</p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <ActionButton variant="primary" onClick={onStartConnect} disabled={primaryBusy}>
+            {primaryBusy ? (
+              <HiMiniArrowPath className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <HiMiniShieldCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {primaryLabel}
+          </ActionButton>
+          {showManualLink && (
+            <ActionButton href={manualHref} variant="outline">
+              Open sign-in page
+              <HiMiniArrowTopRightOnSquare className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            </ActionButton>
+          )}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4">
@@ -267,16 +329,24 @@ export function EntitlementNotice({
   const connectRequired =
     data.entitlement.reason === "guard_cloud_connect_required" ||
     data.entitlement.reason === "guard_cloud_reconnect_required";
-  const connectMode = data.entitlement.reason === "guard_cloud_reconnect_required" ? "repair" : "connect";
+  const reconnectLikeState =
+    data.entitlement.reason === "guard_cloud_reconnect_required" ||
+    (data.entitlement.reason === "guard_cloud_connect_required" &&
+      (data.entitlement.tier !== "unknown" || data.package_shims.some((shim) => shim.installed)));
+  const connectMode = reconnectLikeState ? "repair" : "connect";
   const localRecoveryHint = data.package_shims.some((shim) => shim.installed)
     ? connectRequired
       ? "Existing shims on this machine can still be fixed or removed locally. Connect is only needed for new installs and cloud-gated verification."
       : null
     : null;
+  const compactConnectNotice =
+    data.package_shims.some((shim) => shim.installed) ||
+    data.protection?.path_status === "restart_required";
   return (
     <div className="space-y-4 px-4 py-4">
       {connectRequired && data.connect_flow !== null ? (
         <ConnectFlowCard
+          compact={compactConnectNotice}
           connectError={connectError}
           connectStarting={connectStarting}
           connectFlow={data.connect_flow}
@@ -300,10 +370,20 @@ function activationHeadline(protection: PackageManagerProtection | null): string
 }
 
 type ActivationSummaryProps = {
+  activationAssistError: string | null;
+  openingShell: boolean;
+  onOpenShell: () => void;
+  onRefreshStatus: () => void;
   protection: PackageManagerProtection | null;
 };
 
-export function ActivationSummary({ protection }: ActivationSummaryProps) {
+export function ActivationSummary({
+  activationAssistError,
+  openingShell,
+  onOpenShell,
+  onRefreshStatus,
+  protection,
+}: ActivationSummaryProps) {
   if (protection === null) {
     return null;
   }
@@ -326,6 +406,11 @@ export function ActivationSummary({ protection }: ActivationSummaryProps) {
       : protection.path_status === "restart_required"
       ? "text-brand-blue"
       : "text-brand-attention";
+  const canOpenShell =
+    protection.path_status === "restart_required" &&
+    protection.shell_profile_configured &&
+    typeof navigator !== "undefined" &&
+    navigator.platform.toLowerCase().includes("mac");
   return (
     <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
       <div className="flex items-start gap-2.5">
@@ -333,6 +418,21 @@ export function ActivationSummary({ protection }: ActivationSummaryProps) {
         <div className="min-w-0">
           <p className="text-sm font-medium text-brand-dark">{activationHeadline(protection)}</p>
           <p className="mt-0.5 text-xs text-slate-600">{copy.pathDetail}</p>
+          {protection.path_status === "restart_required" && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {canOpenShell && (
+                <ActionButton variant="primary" onClick={onOpenShell} disabled={openingShell}>
+                  {openingShell ? "Opening shell…" : "Open new shell"}
+                </ActionButton>
+              )}
+              <ActionButton variant="outline" onClick={onRefreshStatus} disabled={openingShell}>
+                Refresh after restart
+              </ActionButton>
+            </div>
+          )}
+          {activationAssistError !== null && (
+            <p className="mt-2 text-xs text-brand-attention">{activationAssistError}</p>
+          )}
         </div>
       </div>
     </div>

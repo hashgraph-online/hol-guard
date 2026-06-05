@@ -12,6 +12,7 @@ import mimetypes
 import os
 import platform
 import secrets
+import subprocess
 import threading
 import time
 import uuid
@@ -137,7 +138,17 @@ from .manager import (
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
-_SUPPLY_CHAIN_PACKAGE_ACTIONS = {"install", "repair", "test", "audit", "sync", "remove", "uninstall", "connect"}
+_SUPPLY_CHAIN_PACKAGE_ACTIONS = {
+    "install",
+    "repair",
+    "test",
+    "audit",
+    "sync",
+    "remove",
+    "uninstall",
+    "connect",
+    "open-shell",
+}
 _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS = 1_500
 _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 
@@ -482,8 +493,15 @@ def _package_firewall_connect_url(store: GuardStore) -> str:
     return "https://hol.org/guard/connect"
 
 
-def _package_firewall_connect_action_label(reason: str) -> str:
+def _package_firewall_connect_needs_repair(store: GuardStore, reason: str) -> bool:
     if reason == "guard_cloud_reconnect_required":
+        return True
+    oauth_health = store.get_oauth_local_credential_health()
+    return bool(oauth_health.get("configured"))
+
+
+def _package_firewall_connect_action_label(reason: str, *, repair_copy: bool = False) -> str:
+    if reason == "guard_cloud_reconnect_required" or repair_copy:
         return "Repair Guard Cloud access"
     return "Connect HOL Guard Cloud"
 
@@ -505,12 +523,13 @@ def _default_package_firewall_connect_flow(
     reason: str,
 ) -> dict[str, object]:
     connect_url = _package_firewall_connect_url(store)
-    action_label = _package_firewall_connect_action_label(reason)
-    if reason == "guard_cloud_reconnect_required":
+    repair_copy = _package_firewall_connect_needs_repair(store, reason)
+    action_label = _package_firewall_connect_action_label(reason, repair_copy=repair_copy)
+    if repair_copy:
         title = "Repair Guard Cloud access to restore package firewall"
         detail = (
-            "Guard has package-firewall coverage on your plan, but local cloud authorization on this machine is not "
-            "healthy. Repair it here and Guard will unlock the firewall again."
+            "Guard already has package-firewall coverage for this machine, but the local cloud authorization is not "
+            "usable right now. Repair it here and Guard will unlock the firewall again."
         )
     else:
         title = "Connect HOL Guard Cloud to enable package firewall"
@@ -529,6 +548,58 @@ def _default_package_firewall_connect_flow(
         "request_id": None,
         "poll_after_ms": None,
     }
+
+
+def _open_package_firewall_activation_shell() -> tuple[int, dict[str, object]]:
+    system_name = platform.system().lower()
+    if system_name != "darwin":
+        return (
+            501,
+            {
+                "error": "activation_shell_unsupported",
+                "message": "Opening a new shell from the dashboard is only supported on macOS right now.",
+            },
+        )
+    osascript_path = Path("/usr/bin/osascript")
+    if not osascript_path.exists():
+        return (
+            500,
+            {
+                "error": "activation_shell_unavailable",
+                "message": "macOS automation support is unavailable on this machine.",
+            },
+        )
+    command = [
+        str(osascript_path),
+        "-e",
+        'tell application "Terminal" to do script ""',
+        "-e",
+        'tell application "Terminal" to activate',
+    ]
+    try:
+        subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as error:
+        return (
+            500,
+            {
+                "error": "activation_shell_launch_failed",
+                "message": f"Guard could not open a new shell automatically. {error}",
+            },
+        )
+    return (
+        200,
+        {
+            "status": "opened",
+            "message": "Opened a new Terminal window with a fresh shell session.",
+            "platform": "macos",
+        },
+    )
 
 
 def _resolve_package_firewall_connect_flow(
@@ -575,7 +646,7 @@ def _finalize_daemon_guard_connect_payload(
     payload: dict[str, object],
     now: str,
 ) -> dict[str, object]:
-    sync_auth_context = payload.pop("_guard_sync_auth_context", None)
+    payload.pop("_guard_sync_auth_context", None)
     normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     sync_url = f"{allowed_origin}/api/guard/receipts/sync"
     dashboard_url = f"{allowed_origin}/guard"
@@ -628,10 +699,7 @@ def _finalize_daemon_guard_connect_payload(
         return payload
     payload["sync_attempted"] = True
     try:
-        if isinstance(sync_auth_context, dict):
-            sync_payload = sync_local_guard_cloud_proof(store, auth_context=sync_auth_context)
-        else:
-            sync_payload = sync_local_guard_cloud_proof(store)
+        sync_payload = sync_local_guard_cloud_proof(store)
     except GuardSyncNotAvailableError as error:
         store.record_latest_guard_connect_sync_result(
             status="connected",
@@ -1745,6 +1813,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if action == "connect":
             self._handle_supply_chain_package_firewall_connect()
             return
+        if action == "open-shell":
+            status, response = _open_package_firewall_activation_shell()
+            self._write_json(response, status=status)
+            return
         operation = "remove" if action == "uninstall" else action
         entitlement = self._supply_chain_entitlement()
         context = self._supply_chain_context(payload)
@@ -1887,7 +1959,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         store = self.server.store  # type: ignore[attr-defined]
         connect_url = _package_firewall_connect_url(store)
-        action_label = _package_firewall_connect_action_label(reason)
+        action_label = _package_firewall_connect_action_label(
+            reason,
+            repair_copy=_package_firewall_connect_needs_repair(store, reason),
+        )
         try:
             device = store.get_device_metadata()
             session = start_guard_browser_session(
@@ -3095,7 +3170,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return "supply_chain_entitlement"
         if len(path_parts) == 4 and path_parts[:3] == ["v1", "supply-chain", "package-shims"]:
             action = "remove" if path_parts[3] == "uninstall" else path_parts[3]
-            if action in {"install", "repair", "test", "remove"}:
+            if action in {"install", "repair", "test", "remove", "open-shell"}:
                 return f"package_shims_{action}"
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
             return f"package_shims_{path_parts[2]}"

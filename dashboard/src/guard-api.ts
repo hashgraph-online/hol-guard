@@ -1822,6 +1822,25 @@ export async function runPackageFirewallAction(
   return normalizePackageFirewallAction(payloadBody);
 }
 
+export async function openPackageFirewallShell(): Promise<void> {
+  const response = await fetchGuardApi("/v1/supply-chain/package-shims/open-shell", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders(),
+    },
+    body: JSON.stringify({}),
+  });
+  if (response.ok) {
+    return;
+  }
+  const payloadBody = (await response.json().catch(() => null)) as unknown;
+  if (isRecord(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
+    throw new Error(payloadBody.message);
+  }
+  throw new Error("Unable to open a new shell.");
+}
+
 export type AuditRemediationAction = "package_shim_path";
 
 export type AuditRemediationInput = {

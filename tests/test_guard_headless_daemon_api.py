@@ -603,6 +603,36 @@ def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp
     }
 
 
+def test_supply_chain_package_firewall_open_shell_endpoint_returns_activation_launch_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        daemon_server,
+        "_open_package_firewall_activation_shell",
+        lambda: (200, {"status": "opened", "message": "Opened a new Terminal window with a fresh shell session."}),
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/open-shell",
+                token=token,
+                payload={},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["status"] == "opened"
+    assert "fresh shell session" in payload["message"]
+
+
 def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
