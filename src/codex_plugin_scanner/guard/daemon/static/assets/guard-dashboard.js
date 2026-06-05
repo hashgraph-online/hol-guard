@@ -16322,14 +16322,14 @@ function plainEnglishDescription(receipt) {
   const firstSignal = signals[0];
   if (receipt.policy_decision === "allow") {
     if (firstSignal?.plain_reason) {
-      return `${app} ${pastTenseVerb(type)} ${title.toLowerCase()}. Guard reviewed it and allowed it.`;
+      return `${app} ${pastTenseVerb(type)} ${title}. Guard reviewed it and allowed it.`;
     }
-    return `${app} ${pastTenseVerb(type)} ${title.toLowerCase()}. Guard allowed it.`;
+    return `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it.`;
   }
   if (firstSignal?.plain_reason) {
-    return `${app} tried to ${infinitiveVerb(type)} ${title.toLowerCase()}. Guard stopped it: ${firstSignal.plain_reason}`;
+    return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${firstSignal.plain_reason}`;
   }
-  return `${app} tried to ${infinitiveVerb(type)} ${title.toLowerCase()}. Guard stopped it.`;
+  return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
 }
 function pastTenseVerb(type) {
   switch (type) {
@@ -17097,13 +17097,14 @@ function StatCard({
 }
 function TrendChart({ buckets }) {
   const [hoveredBucket, setHoveredBucket] = reactExports.useState(null);
-  Math.max(...buckets.map((b) => b.allowed + b.blocked + b.reviewed), 1);
+  const maxTotal = Math.max(...buckets.map((b) => b.allowed + b.blocked + b.reviewed), 1);
   const hasAnyData = buckets.some((b) => b.allowed + b.blocked + b.reviewed > 0);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "7-Day Activity" }),
     !hasAnyData ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col items-center justify-center h-40 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "No activity in the last 7 days" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 h-44 mt-4", children: buckets.map((bucket) => {
         const total = bucket.allowed + bucket.blocked + bucket.reviewed;
+        const heightPct = maxTotal > 0 ? Math.max(total / maxTotal * 100, 6) : 0;
         const blockedPct = total > 0 ? bucket.blocked / total * 100 : 0;
         const allowedPct = total > 0 ? bucket.allowed / total * 100 : 0;
         const reviewedPct = total > 0 ? bucket.reviewed / total * 100 : 0;
@@ -17121,7 +17122,7 @@ function TrendChart({ buckets }) {
                 {
                   className: `relative w-full flex-1 flex items-end rounded-lg overflow-hidden ${total > 0 ? "bg-slate-100/60 ring-1 ring-inset ring-slate-200" : "bg-slate-50 ring-1 ring-inset ring-slate-200"}`,
                   children: [
-                    total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full flex flex-col-reverse rounded-lg overflow-hidden", children: [
+                    total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full flex flex-col-reverse rounded-lg overflow-hidden", style: { height: `${heightPct}%` }, children: [
                       bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
                         "div",
                         {

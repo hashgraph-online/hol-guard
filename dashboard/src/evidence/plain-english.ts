@@ -3,7 +3,7 @@ import { harnessDisplayName } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
 
 function getArtifactType(receipt: GuardReceipt): string {
-  return ((receipt as GuardReceipt & { artifact_type?: string }).artifact_type ?? "").toLowerCase();
+  return (receipt.artifact_type ?? "").toLowerCase();
 }
 
 export function humanFileName(artifactName: string | null | undefined): string {
@@ -77,15 +77,15 @@ export function plainEnglishDescription(receipt: GuardReceipt): string {
 
   if (receipt.policy_decision === "allow") {
     if (firstSignal?.plain_reason) {
-      return `${app} ${pastTenseVerb(type)} ${title.toLowerCase()}. Guard reviewed it and allowed it.`;
+      return `${app} ${pastTenseVerb(type)} ${title}. Guard reviewed it and allowed it.`;
     }
-    return `${app} ${pastTenseVerb(type)} ${title.toLowerCase()}. Guard allowed it.`;
+    return `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it.`;
   }
 
   if (firstSignal?.plain_reason) {
-    return `${app} tried to ${infinitiveVerb(type)} ${title.toLowerCase()}. Guard stopped it: ${firstSignal.plain_reason}`;
+    return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${firstSignal.plain_reason}`;
   }
-  return `${app} tried to ${infinitiveVerb(type)} ${title.toLowerCase()}. Guard stopped it.`;
+  return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
 }
 
 function pastTenseVerb(type: string): string {

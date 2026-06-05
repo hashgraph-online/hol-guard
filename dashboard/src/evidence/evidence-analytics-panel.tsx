@@ -50,6 +50,7 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
           <div className="flex gap-2 h-44 mt-4">
             {buckets.map((bucket) => {
               const total = bucket.allowed + bucket.blocked + bucket.reviewed;
+              const heightPct = maxTotal > 0 ? Math.max((total / maxTotal) * 100, 6) : 0;
               const blockedPct = total > 0 ? (bucket.blocked / total) * 100 : 0;
               const allowedPct = total > 0 ? (bucket.allowed / total) * 100 : 0;
               const reviewedPct = total > 0 ? (bucket.reviewed / total) * 100 : 0;
@@ -73,7 +74,7 @@ function TrendChart({ buckets }: { buckets: TrendBucket[] }) {
                     }`}
                   >
                     {total > 0 ? (
-                      <div className="w-full flex flex-col-reverse rounded-lg overflow-hidden">
+                      <div className="w-full flex flex-col-reverse rounded-lg overflow-hidden" style={{ height: `${heightPct}%` }}>
                         {bucket.blocked > 0 && (
                           <div
                             className="w-full bg-amber-500 transition-all"
