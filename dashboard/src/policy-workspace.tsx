@@ -65,6 +65,31 @@ export function resolveSecurityModeCopy(
   };
 }
 
+export function resolveCloudPolicyBundleCopy(snapshot: GuardRuntimeSnapshot): {
+  label: string;
+  detail: string;
+  tone: "green" | "attention" | "slate";
+} | null {
+  const bundleVersion = snapshot.cloud_policy_bundle_version?.trim();
+  if (!bundleVersion) {
+    return null;
+  }
+  const rollout = snapshot.cloud_policy_rollout_state?.trim() || "unknown";
+  const syncError = snapshot.cloud_policy_sync_error?.trim();
+  if (syncError) {
+    return {
+      label: `Cloud bundle ${bundleVersion}`,
+      detail: `Guard Cloud Controls owns rollout and authoring. Latest sync issue: ${syncError}.`,
+      tone: "attention",
+    };
+  }
+  return {
+    label: `Cloud bundle ${bundleVersion}`,
+    detail: `Guard Cloud Controls owns authoring and rollout. This local workspace reflects rollout state ${rollout}.`,
+    tone: "green",
+  };
+}
+
 type PolicyRowProps = {
   policy: GuardPolicyDecision;
   onClear?: (policy: GuardPolicyDecision) => void;
@@ -175,21 +200,32 @@ export function PolicyWorkspace({
   );
 
   const policyByHarness = useMemo(() => groupPoliciesByHarness(policies), [policies]);
+  const cloudBundleCopy = useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">
-            Guard rules, exceptions, and remembered decisions.
+            Local remembered decisions and synced Guard Cloud bundle posture.
           </p>
         </div>
         {onOpenSettings && (
           <ActionButton variant="outline" onClick={onOpenSettings}>
-            Open Settings
+            Open Guard Cloud Controls
           </ActionButton>
         )}
       </div>
+
+      {cloudBundleCopy && (
+        <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 shadow-sm">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <SectionLabel>Guard Cloud bundle</SectionLabel>
+            <Tag tone={cloudBundleCopy.tone}>{cloudBundleCopy.label}</Tag>
+          </div>
+          <p className="text-sm text-brand-dark/75">{cloudBundleCopy.detail}</p>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -200,7 +236,7 @@ export function PolicyWorkspace({
         {onOpenSettings && (
           <div className="mt-3">
             <ActionButton variant="ghost" onClick={onOpenSettings}>
-              Change mode in Settings
+              Review rollout in Guard Cloud Controls
             </ActionButton>
           </div>
         )}

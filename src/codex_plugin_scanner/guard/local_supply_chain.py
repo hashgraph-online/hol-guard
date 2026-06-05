@@ -530,6 +530,14 @@ def build_package_protect_payload(
     )
     verdict_action = _protect_action_for_decision(evaluation.decision)
     risk_signals = tuple(_evaluation_risk_signals(evaluation))
+    receipt_policy_metadata = {
+        "bundle_version": evaluation.bundle_version,
+        "matched_rule_id": evaluation.matched_rule_id,
+        "package_manager": sanitized_intent.package_manager,
+        "package_targets": [target.raw_spec for target in sanitized_intent.targets],
+        "policy_version": evaluation.policy_version,
+        "redacted_command": sanitized_intent.redacted_command,
+    }
     receipt = build_receipt(
         harness=_LOCAL_SUPPLY_CHAIN_HARNESS,
         artifact_id=artifact.artifact_id,
@@ -540,6 +548,7 @@ def build_package_protect_payload(
         provenance_summary=evaluation.user_copy.harness_message,
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
+        action_envelope_json=receipt_policy_metadata,
     )
     payload: dict[str, object] = {
         "generated_at": now,
