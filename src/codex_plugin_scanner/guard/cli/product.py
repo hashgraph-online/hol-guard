@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ..approvals import _connect_retry_refresh_race_from_reason
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
@@ -525,8 +526,7 @@ def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
 def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
     if latest_state is None or not _connect_retry_required(latest_state):
         return False
-    reason = _optional_string(latest_state.get("reason"))
-    return isinstance(reason, str) and "already consumed" in reason.lower()
+    return _connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _advisory_headline(advisories: list[dict[str, object]]) -> str | None:

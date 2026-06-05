@@ -1,6 +1,6 @@
-import { j as jsxRuntimeExports, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, ab as HiMiniArrowPath, T as Tag, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, D as fetchSettings, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, S as SectionLabel, E as EmptyState, ao as HiMiniBugAnt, b as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, ab as HiMiniArrowPath, T as Tag, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, S as SectionLabel, E as EmptyState, ao as HiMiniBugAnt, b as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
-import { A as ApprovalProofModal } from "./approval-proof-modal.js";
+import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 function UpgradeCta({ entitlement }) {
   const reconnectRequired = entitlement.reason === "guard_cloud_reconnect_required";
   const upgradeUrl = reconnectRequired ? "https://hol.org/guard/connect" : entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
@@ -479,10 +479,7 @@ function PackageFirewallPanel(props) {
   const [lastFailed, setLastFailed] = reactExports.useState(null);
   const [confirmRemoveManager, setConfirmRemoveManager] = reactExports.useState(null);
   const [pendingApprovalOp, setPendingApprovalOp] = reactExports.useState(null);
-  const [resolvedApprovalGate, setResolvedApprovalGate] = reactExports.useState(approvalGate);
-  reactExports.useEffect(() => {
-    setResolvedApprovalGate(approvalGate);
-  }, [approvalGate]);
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
   const load = reactExports.useCallback(async () => {
     setPanelLoad({ phase: "loading" });
     try {
@@ -505,19 +502,6 @@ function PackageFirewallPanel(props) {
       setPanelLoad({ phase: "error", message });
     }
   }, []);
-  const resolveApprovalGate = reactExports.useCallback(async () => {
-    if (resolvedApprovalGate !== null) {
-      return resolvedApprovalGate;
-    }
-    try {
-      const payload = await fetchSettings();
-      const gate = payload.settings.approval_gate ?? null;
-      setResolvedApprovalGate(gate);
-      return gate;
-    } catch {
-      return null;
-    }
-  }, [resolvedApprovalGate]);
   const handleAction = reactExports.useCallback(
     async (op, manager, credentials) => {
       setPendingOp({ op, manager });

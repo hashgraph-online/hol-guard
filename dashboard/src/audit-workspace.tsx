@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { ChangeEvent } from "react";
 import {
   HiMiniExclamationTriangle,
@@ -15,9 +15,10 @@ import {
 import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
 import { ApprovalProofModal } from "./approval-proof-modal";
 import { formatRelativeTime, harnessDisplayName } from "./approval-center-utils";
-import { fetchSettings, GuardHarnessActionError, runAuditRemediation } from "./guard-api";
+import { GuardHarnessActionError, runAuditRemediation } from "./guard-api";
 import type { AuditRemediationAction } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -220,26 +221,7 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
   const [pendingRemediation, setPendingRemediation] = useState<AuditResult | null>(null);
   const [runningRemediationId, setRunningRemediationId] = useState<string | null>(null);
   const [remediationMessages, setRemediationMessages] = useState<Record<string, string>>({});
-  const [resolvedApprovalGate, setResolvedApprovalGate] =
-    useState<GuardApprovalGatePublicConfig | null>(approvalGate);
-
-  useEffect(() => {
-    setResolvedApprovalGate(approvalGate);
-  }, [approvalGate]);
-
-  const resolveApprovalGate = useCallback(async () => {
-    if (resolvedApprovalGate !== null) {
-      return resolvedApprovalGate;
-    }
-    try {
-      const payload = await fetchSettings();
-      const gate = payload.settings.approval_gate ?? null;
-      setResolvedApprovalGate(gate);
-      return gate;
-    } catch {
-      return null;
-    }
-  }, [resolvedApprovalGate]);
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
 
   const handleSearchChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setFilter((f) => ({ ...f, searchQuery: e.target.value }));
