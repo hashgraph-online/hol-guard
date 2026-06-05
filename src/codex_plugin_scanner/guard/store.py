@@ -1155,7 +1155,8 @@ class GuardStore:
             from runtime_receipts
             where action_envelope_json is not null
               and not exists (
-                select 1 from runtime_receipt_envelopes where runtime_receipt_envelopes.receipt_id = runtime_receipts.receipt_id
+                select 1 from runtime_receipt_envelopes
+                where runtime_receipt_envelopes.receipt_id = runtime_receipts.receipt_id
               )
             """
         )
