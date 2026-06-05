@@ -1077,11 +1077,12 @@ wheels = [
 
 [[package]]
 name = "hol-guard"
-version = "2.0.303"
+version = "2.0.345"
 source = { editable = "." }
 dependencies = [
     { name = "cisco-ai-skill-scanner" },
     { name = "cryptography" },
+    { name = "keyring" },
     { name = "packaging" },
     { name = "rich" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
@@ -1110,6 +1111,7 @@ requires-dist = [
     { name = "cisco-ai-skill-scanner", specifier = "~=2.0.9" },
     { name = "cryptography", specifier = ">=47.0.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.26.0" },
+    { name = "keyring", specifier = ">=25.0" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },

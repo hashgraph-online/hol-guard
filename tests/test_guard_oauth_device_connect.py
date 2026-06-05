@@ -1,11 +1,14 @@
 import base64
 import io
 import json
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.cli import _build_parser
 from codex_plugin_scanner.guard.cli import commands as guard_commands
@@ -13,7 +16,43 @@ from codex_plugin_scanner.guard.cli import connect_flow
 from codex_plugin_scanner.guard.cli.commands import run_guard_command
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store import GuardStore, SystemKeyringSecretStore
+
+
+def _decode_connect_flow_jwt_segment(segment: str) -> dict[str, object]:
+    padding = "=" * (-len(segment) % 4)
+    return json.loads(base64.urlsafe_b64decode(f"{segment}{padding}".encode("ascii")).decode("utf-8"))
+
+
+def _decode_connect_flow_dpop_claims(proof: str) -> dict[str, object]:
+    return _decode_connect_flow_jwt_segment(proof.split(".")[1])
+
+
+class _FakeSystemKeyringModule:
+    def __init__(self) -> None:
+        self._secrets: dict[tuple[str, str], str] = {}
+
+    @staticmethod
+    def get_keyring():
+        class _Backend:
+            priority = 1
+
+        return _Backend()
+
+    def set_password(self, service_name: str, secret_id: str, value: str) -> None:
+        self._secrets[(service_name, secret_id)] = value
+
+    def get_password(self, service_name: str, secret_id: str) -> str | None:
+        return self._secrets.get((service_name, secret_id))
+
+    def delete_password(self, service_name: str, secret_id: str) -> None:
+        self._secrets.pop((service_name, secret_id), None)
+
+
+def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
+    module = _FakeSystemKeyringModule()
+    monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
+    return module
 
 
 class _Args:
@@ -748,6 +787,69 @@ def test_headless_connect_slows_down_polling_when_server_requests_it(tmp_path: P
     assert sleeps == [7]
 
 
+def test_headless_connect_avoids_keychain_password_prompts_when_system_keyring_is_available(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    _install_fake_system_keyring(monkeypatch)
+
+    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("device connect should not shell out to macOS keychain prompts")
+
+    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
+    store = GuardStore(guard_home)
+
+    def fake_request(_url: str, _body: str) -> dict[str, object]:
+        return {
+            "device_code": "device-secret-value",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://hol.org/guard/oauth/device",
+            "verification_uri_complete": "https://hol.org/guard/oauth/device?user_code=ABCD-EFGH",
+            "expires_in": 600,
+            "interval": 2,
+        }
+
+    class _Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+    payload = connect_flow.run_guard_device_connect_command(
+        store=store,
+        connect_url="https://hol.org/guard/connect",
+        request_device_authorization=fake_request,
+        token_urlopen=lambda request, timeout: _Response(
+            {
+                "access_token": _fake_access_token(
+                    grant_id="grant-123",
+                    machine_id="machine-123",
+                    workspace_id="workspace-123",
+                ),
+                "refresh_token": "refresh-123",
+                "expires_in": 3600,
+                "scope": "guard:runtime.sync guard:offline_access",
+                "token_type": "Bearer",
+            }
+        ),
+        now="2026-06-01T12:00:00+00:00",
+    )
+
+    assert payload["status"] == "connected"
+    credentials = store.get_oauth_local_credentials()
+    assert credentials is not None
+    assert credentials["refresh_token"] == "refresh-123"
+    assert credentials["grant_id"] == "grant-123"
+
+
 def test_headless_connect_expired_code_surfaces_retry_command(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
@@ -1412,6 +1514,7 @@ def test_browser_connect_persists_local_oauth_credentials(tmp_path: Path) -> Non
             grant_id="grant-123",
             machine_id="machine-123",
             workspace_id="workspace-123",
+            supply_chain_entitlement=None,
         )
 
     payload = connect_flow.run_guard_browser_connect_command(
@@ -1597,3 +1700,209 @@ def test_connect_browser_reports_loopback_timeout_without_traceback(
     assert "Traceback" not in captured.err
     assert store.get_sync_credentials() is None
     assert store.get_oauth_local_credentials() is None
+
+
+def test_exchange_authorization_code_retries_with_dpop_nonce_challenge() -> None:
+    dpop_key_material = generate_dpop_key_pair()
+    challenge_nonce = "nonce-authorization"
+    captured_headers: list[dict[str, str]] = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": "access-123",
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                    "grant_id": "grant-123",
+                    "machine_id": "machine-123",
+                    "workspace_id": "workspace-123",
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        captured_headers.append({str(key).lower(): str(value) for key, value in dict(request.header_items()).items()})
+        if len(captured_headers) == 1:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                400,
+                "Bad Request",
+                {"DPoP-Nonce": challenge_nonce},
+                io.BytesIO(json.dumps({"error": "use_dpop_nonce"}).encode("utf-8")),
+            )
+        return _Response()
+
+    result = connect_flow.exchange_guard_authorization_code(
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        client_id="guard-local-daemon",
+        code="auth-code-123",
+        redirect_uri="http://127.0.0.1:61234/oauth/callback",
+        code_verifier="verifier-123",
+        dpop_key_material=dpop_key_material,
+        urlopen=fake_urlopen,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    first_claims = _decode_connect_flow_dpop_claims(captured_headers[0]["dpop"])
+    second_claims = _decode_connect_flow_dpop_claims(captured_headers[1]["dpop"])
+
+    assert len(captured_headers) == 2
+    assert "nonce" not in first_claims
+    assert second_claims["nonce"] == challenge_nonce
+    assert result.access_token == "access-123"
+    assert result.refresh_token == "refresh-123"
+
+
+def test_exchange_authorization_code_limits_dpop_nonce_retries() -> None:
+    dpop_key_material = generate_dpop_key_pair()
+    captured_headers: list[dict[str, str]] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        captured_headers.append({str(key).lower(): str(value) for key, value in dict(request.header_items()).items()})
+        attempt = len(captured_headers)
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "Bad Request",
+            {"dpop-nonce": f"nonce-{attempt}"},
+            io.BytesIO(json.dumps({"error": "use_dpop_nonce"}).encode("utf-8")),
+        )
+
+    with pytest.raises(urllib.error.HTTPError):
+        connect_flow.exchange_guard_authorization_code(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            client_id="guard-local-daemon",
+            code="auth-code-123",
+            redirect_uri="http://127.0.0.1:61234/oauth/callback",
+            code_verifier="verifier-123",
+            dpop_key_material=dpop_key_material,
+            urlopen=fake_urlopen,
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+    assert len(captured_headers) == 4
+
+
+def test_exchange_guard_device_code_retries_with_dpop_nonce_challenge() -> None:
+    dpop_key_material = generate_dpop_key_pair()
+    challenge_nonce = "nonce-device"
+    captured_headers: list[dict[str, str]] = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "access_token": "access-123",
+                    "refresh_token": "refresh-123",
+                    "expires_in": 3600,
+                    "scope": "guard:runtime.sync guard:offline_access",
+                    "token_type": "Bearer",
+                    "grant_id": "grant-123",
+                    "machine_id": "machine-123",
+                    "workspace_id": "workspace-123",
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        captured_headers.append({str(key).lower(): str(value) for key, value in dict(request.header_items()).items()})
+        if len(captured_headers) == 1:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                400,
+                "Bad Request",
+                {"DPoP-Nonce": challenge_nonce},
+                io.BytesIO(json.dumps({"error": "use_dpop_nonce"}).encode("utf-8")),
+            )
+        return _Response()
+
+    result = connect_flow.exchange_guard_device_code(
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        client_id="guard-local-daemon",
+        device_code="device-code-123",
+        dpop_key_material=dpop_key_material,
+        interval_seconds=5,
+        expires_in_seconds=60,
+        urlopen=fake_urlopen,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    first_claims = _decode_connect_flow_dpop_claims(captured_headers[0]["dpop"])
+    second_claims = _decode_connect_flow_dpop_claims(captured_headers[1]["dpop"])
+
+    assert len(captured_headers) == 2
+    assert "nonce" not in first_claims
+    assert second_claims["nonce"] == challenge_nonce
+    assert result.access_token == "access-123"
+    assert result.refresh_token == "refresh-123"
+
+
+def test_revoke_guard_self_oauth_grant_retries_with_dpop_nonce_challenge() -> None:
+    oauth_client = connect_flow.GuardOAuthClientConfig(
+        issuer="https://hol.org",
+        authorize_endpoint="https://hol.org/api/guard/oauth/authorize",
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        device_authorization_endpoint="https://hol.org/api/guard/oauth/device",
+        jwks_endpoint="https://hol.org/api/guard/oauth/jwks",
+        client_id="guard-local-daemon",
+    )
+    dpop_key_material = generate_dpop_key_pair()
+    challenge_nonce = "nonce-revoke"
+    captured_headers: list[dict[str, str]] = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b""
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        captured_headers.append({str(key).lower(): str(value) for key, value in dict(request.header_items()).items()})
+        if len(captured_headers) == 1:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                401,
+                "Unauthorized",
+                {"DPoP-Nonce": challenge_nonce},
+                io.BytesIO(json.dumps({"error": "use_dpop_nonce"}).encode("utf-8")),
+            )
+        return _Response()
+
+    connect_flow.revoke_guard_self_oauth_grant(
+        oauth_client=oauth_client,
+        access_token="oauth-access-token-1",
+        workspace_id="workspace-123",
+        revoke_cloud_grant=True,
+        dpop_key_material=dpop_key_material,
+        urlopen=fake_urlopen,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    first_claims = _decode_connect_flow_dpop_claims(captured_headers[0]["dpop"])
+    second_claims = _decode_connect_flow_dpop_claims(captured_headers[1]["dpop"])
+
+    assert len(captured_headers) == 2
+    assert "nonce" not in first_claims
+    assert second_claims["nonce"] == challenge_nonce
+    assert captured_headers[1]["authorization"] == "Bearer oauth-access-token-1"

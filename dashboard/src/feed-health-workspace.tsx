@@ -107,8 +107,7 @@ export function FeedHealthWorkspace({ snapshot, onOpenSettings }: FeedHealthWork
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-brand-dark">Feed Health</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="text-sm text-slate-500">
             Intel feed source mode, freshness, and cloud sync status.
           </p>
         </div>
@@ -146,7 +145,7 @@ export function FeedHealthWorkspace({ snapshot, onOpenSettings }: FeedHealthWork
             <div>
               <p className="text-sm font-semibold text-brand-dark">Full feed syncing</p>
               <p className="text-xs text-slate-600 mt-0.5">
-                Cloud pairing is complete. Feed sync is in progress. First proof will arrive shortly.
+                Guard Cloud is connected. Local Guard is finishing the first shared proof automatically.
               </p>
             </div>
           </div>

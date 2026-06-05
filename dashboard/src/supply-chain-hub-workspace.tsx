@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback } from "react";
 import { TabBar } from "./approval-center-primitives";
-import type { GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
 const SupplyChainWorkspace = lazy(() =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
@@ -24,6 +24,10 @@ const hubTabs: Array<{ value: HubTab; label: string }> = [
   { value: "feed-health", label: "Feed Health" },
 ];
 
+export function hubTitleForTab(tab: HubTab): string {
+  return hubTabs.find((item) => item.value === tab)?.label ?? "Supply Chain";
+}
+
 function viewToTab(view: string): HubTab {
   if (view === "supply-chain" || view === "audit" || view === "policy" || view === "feed-health") {
     return view;
@@ -33,10 +37,11 @@ function viewToTab(view: string): HubTab {
 
 export function SupplyChainHubWorkspace(props: {
   activeView: string;
-  snapshot: GuardRuntimeSnapshot;
-  receipts: GuardReceipt[];
-  policies: GuardPolicyDecision[];
-  onClearPolicy: (policy: GuardPolicyDecision) => void;
+	  snapshot: GuardRuntimeSnapshot;
+	  receipts: GuardReceipt[];
+	  policies: GuardPolicyDecision[];
+	  approvalGate: GuardApprovalGatePublicConfig | null;
+	  onClearPolicy: (policy: GuardPolicyDecision) => void;
   onOpenSettings: () => void;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -54,16 +59,23 @@ export function SupplyChainHubWorkspace(props: {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">Trust Center</h1>
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Trust Center</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{hubTitleForTab(tab)}</h1>
+        </div>
         <TabBar tabs={hubTabs} active={tab} onChange={handleTabChange} />
       </div>
       <Suspense fallback={<LazyFallback />}>
         {tab === "supply-chain" && (
-          <SupplyChainWorkspace snapshot={props.snapshot} onGoHome={props.onGoHome} />
-        )}
-        {tab === "audit" && (
-          <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} />
-        )}
+          <SupplyChainWorkspace
+            snapshot={props.snapshot}
+            approvalGate={props.approvalGate}
+            onGoHome={props.onGoHome}
+          />
+	        )}
+	        {tab === "audit" && (
+	          <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} approvalGate={props.approvalGate} />
+	        )}
         {tab === "policy" && (
           <PolicyWorkspace
             policies={props.policies}

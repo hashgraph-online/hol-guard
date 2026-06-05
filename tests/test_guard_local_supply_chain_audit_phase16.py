@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 from codex_plugin_scanner.guard.store import GuardStore
 
 WORKSPACE_ID = "2de4fcb4-a5b2-447a-a67f-21c6eb4c5f3c"
@@ -606,4 +607,65 @@ def test_run_cloud_workspace_audit_falls_back_after_page_limit(monkeypatch: pyte
     assert fallback_reason == {
         "code": "cloud_page_limit",
         "message": "Guard cloud evaluation exceeded the maximum page count, so Guard fell back locally.",
+    }
+
+
+def test_guard_supply_chain_scan_falls_back_when_oauth_refresh_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(
+        workspace_dir / "package.json",
+        '{"name":"demo","dependencies":{"minimist":"^1.2.0"}}\n',
+    )
+    _write_text(
+        workspace_dir / "package-lock.json",
+        json.dumps(
+            {
+                "name": "demo",
+                "lockfileVersion": 3,
+                "packages": {
+                    "": {"dependencies": {"minimist": "^1.2.0"}},
+                    "node_modules/minimist": {"version": "1.2.5"},
+                },
+            }
+        )
+        + "\n",
+    )
+    store = GuardStore(home_dir)
+    _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
+
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "_resolve_guard_sync_auth_context",
+        lambda _store: (_ for _ in ()).throw(GuardSyncAuthorizationExpiredError("expired")),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "evaluate_package_request_artifact",
+        lambda **_kwargs: _FakeEvaluation(decision="warn"),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "supply-chain",
+            "scan",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["source"] == "local"
+    assert output["evaluation"]["decision"] == "warn"
+    assert output["fallback_reason"] == {
+        "code": "cloud_auth_error",
+        "message": "Guard cloud authorization could not be refreshed, so Guard fell back locally.",
     }

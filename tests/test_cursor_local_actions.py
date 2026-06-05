@@ -142,7 +142,8 @@ def test_cursor_editor_install_wraps_workspace_config_and_remove_restores(
     monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
-    config_path = context.workspace_dir / ".cursor" / "mcp.json"
+    config_path = context.home_dir / ".cursor" / "mcp.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     original_payload = {
         "mcpServers": {
             "filesystem": {
@@ -177,6 +178,7 @@ def test_cursor_editor_install_wraps_workspace_config_and_remove_restores(
     assert "node" in server["args"]
     assert "--arg=server.js" in server["args"]
     assert server["env"]["SAFE_FLAG"] == "1"
+    assert not (context.workspace_dir / ".cursor" / "hooks.json").exists()
 
     remove_payload = apply_managed_install(
         "uninstall",

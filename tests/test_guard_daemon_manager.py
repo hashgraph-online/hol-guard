@@ -12,6 +12,18 @@ from types import SimpleNamespace
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 
 
+def _disable_daemon_adoption(monkeypatch) -> None:
+    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda _guard_home: None)
+
+
+def _disable_duplicate_retire(monkeypatch) -> None:
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_retire_duplicate_guard_daemons",
+        lambda _guard_home, *, keep_port: None,
+    )
+
+
 def test_write_guard_daemon_state_keeps_auth_token_out_of_state_file(tmp_path):
     guard_home = tmp_path / "guard-home"
 
@@ -81,6 +93,8 @@ def test_load_guard_daemon_url_rejects_live_port_when_state_pid_is_not_guard_dae
 def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_process_daemon(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     daemon_manager_module.write_guard_daemon_state(guard_home, 4833, "secret-token")
+    requested_urls: list[str] = []
+    requested_headers: list[dict[str, str]] = []
 
     class FakeResponse:
         status = 200
@@ -107,13 +121,24 @@ def test_load_guard_daemon_url_accepts_matching_healthz_guard_home_for_in_proces
         "_guard_daemon_pid_matches_command",
         lambda _pid, expected_guard_home=None: False,
     )
-    monkeypatch.setattr(
-        daemon_manager_module.urllib.request,
-        "urlopen",
-        lambda *_args, **_kwargs: FakeResponse(),
-    )
+
+    def fake_urlopen(request, *_args, **_kwargs):
+        requested_urls.append(request.full_url if hasattr(request, "full_url") else str(request))
+        if hasattr(request, "header_items"):
+            requested_headers.append(dict(request.header_items()))
+        else:
+            requested_headers.append({})
+        return FakeResponse()
+
+    monkeypatch.setattr(daemon_manager_module.urllib.request, "urlopen", fake_urlopen)
 
     assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:4833"
+    assert requested_urls == [
+        "http://127.0.0.1:4833/healthz",
+        "http://127.0.0.1:4833/v1/healthz/details",
+    ]
+    assert requested_headers[0] == {}
+    assert requested_headers[1]["X-guard-token"] == "secret-token"
 
 
 def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
@@ -131,10 +156,46 @@ def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_pat
     assert all(mode == 0o600 for _, mode in fchmod_calls)
 
 
+def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:
+    payload = json.dumps(
+        {
+            "ok": True,
+            "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        }
+    )
+
+    assert daemon_manager_module._healthz_payload_is_current(payload) is True
+
+
+def test_guard_daemon_url_port_rejects_invalid_port_text() -> None:
+    assert daemon_manager_module._guard_daemon_url_port("http://127.0.0.1:not-a-port") is None
+
+
+def test_guard_daemon_port_from_command_supports_equals_syntax() -> None:
+    command = (
+        "python -m codex_plugin_scanner.cli guard daemon --serve "
+        "--guard-home /tmp/guard-home --port=5474"
+    )
+    assert daemon_manager_module._guard_daemon_port_from_command(command) == 5474
+
+
+def test_running_guard_daemon_processes_for_guard_home_returns_empty_on_ps_timeout(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+
+    def fake_run(*_args, **_kwargs):
+        raise daemon_manager_module.subprocess.TimeoutExpired(cmd=["ps"], timeout=5)
+
+    monkeypatch.setattr(daemon_manager_module.subprocess, "run", fake_run)
+
+    assert daemon_manager_module._running_guard_daemon_processes_for_guard_home(guard_home) == []
+
+
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     responses = iter((None, None, "http://127.0.0.1:5409"))
 
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
     monkeypatch.setattr(
         daemon_manager_module,
@@ -164,6 +225,71 @@ def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, mon
     assert url == "http://127.0.0.1:5409"
 
 
+def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+
+    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
+    monkeypatch.setattr(daemon_manager_module, "_adoptable_guard_daemon_ports", lambda _guard_home: [5474])
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_initialize_existing_guard_daemon",
+        lambda _guard_home, port: {"url": f"http://127.0.0.1:{port}", "auth_token": "secret-token", "pid": 111},
+    )
+    monkeypatch.setattr(
+        daemon_manager_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not spawn a new daemon")),
+    )
+    monkeypatch.setattr(daemon_manager_module, "_running_guard_daemon_processes_for_guard_home", lambda _guard_home: [])
+
+    url = daemon_manager_module.ensure_guard_daemon(guard_home)
+
+    assert url == "http://127.0.0.1:5474"
+    assert daemon_manager_module.load_guard_daemon_auth_token(guard_home) == "secret-token"
+    state_payload = json.loads(daemon_manager_module._state_path(guard_home).read_text(encoding="utf-8"))
+    assert state_payload["port"] == 5474
+    assert state_payload["pid"] == 111
+
+
+def test_adopt_existing_guard_daemon_skips_scan_on_windows(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+
+    monkeypatch.setattr(daemon_manager_module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_initialize_existing_guard_daemon",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not attempt adoption")),
+    )
+
+    url = daemon_manager_module._adopt_existing_guard_daemon(guard_home)
+
+    assert url is None
+
+
+def test_ensure_guard_daemon_retires_duplicate_ports_for_same_guard_home(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    killed: list[int] = []
+
+    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_running_guard_daemon_processes_for_guard_home",
+        lambda _guard_home: [(111, 5474), (222, 5475)],
+    )
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_retire_guard_daemon_pid",
+        lambda pid, *, expected_guard_home=None: killed.append(pid) or True,
+    )
+
+    url = daemon_manager_module.ensure_guard_daemon(guard_home)
+
+    assert url == "http://127.0.0.1:5474"
+    assert killed == [222]
+
+
 def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     launched_commands: list[list[str]] = []
@@ -171,6 +297,8 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
     launched_event = threading.Event()
     barrier = threading.Barrier(8)
 
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
 
     def fake_load_guard_daemon_url(_guard_home):
@@ -220,6 +348,8 @@ def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, m
     launched_commands: list[list[str]] = []
     poll_count = {"value": 0}
 
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
 
     class FakeProcess:
@@ -258,6 +388,8 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp
     launched_commands: list[list[str]] = []
     killed: list[int] = []
 
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     def fake_load_guard_daemon_url(_guard_home):
         if launched_commands:
             return "http://127.0.0.1:5412"
@@ -302,6 +434,8 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     responses = iter((None, None, "http://127.0.0.1:5412"))
     captured_env: dict[str, str] = {}
 
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     def fake_load_guard_daemon_url(_guard_home):
         return next(responses, "http://127.0.0.1:5412")
 
@@ -326,6 +460,8 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
 
 
 def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monkeypatch):
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     guard_home = tmp_path / "guard-home"
     stale_guard_home = tmp_path / "pytest-of-user" / "pytest-1" / "test-stale" / "home"
     stale_guard_home.mkdir(parents=True)
@@ -414,6 +550,8 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
 
 
 def test_ensure_guard_daemon_keeps_ephemeral_state_with_recent_runtime_heartbeat(tmp_path, monkeypatch):
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     guard_home = tmp_path / "guard-home"
     active_guard_home = tmp_path / "pytest-of-user" / "pytest-3" / "test-active" / "home"
     active_guard_home.mkdir(parents=True)
@@ -466,6 +604,8 @@ def test_ensure_guard_daemon_keeps_ephemeral_state_with_recent_runtime_heartbeat
 
 
 def test_ensure_guard_daemon_does_not_clobber_unowned_ephemeral_state_files(tmp_path, monkeypatch):
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     guard_home = tmp_path / "guard-home"
     foreign_guard_home = tmp_path / "pytest-of-user" / "pytest-7" / "test-foreign" / "home"
     foreign_guard_home.mkdir(parents=True)
@@ -499,6 +639,8 @@ def test_ensure_guard_daemon_does_not_clobber_unowned_ephemeral_state_files(tmp_
 
 
 def test_ensure_guard_daemon_keeps_stale_state_when_pid_no_longer_matches_guard_home(tmp_path, monkeypatch):
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     guard_home = tmp_path / "guard-home"
     stale_guard_home = tmp_path / "pytest-of-user" / "pytest-8" / "test-reused-pid" / "home"
     stale_guard_home.mkdir(parents=True)
@@ -545,6 +687,8 @@ def test_ensure_guard_daemon_keeps_stale_state_when_pid_no_longer_matches_guard_
 
 
 def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(tmp_path, monkeypatch):
+    _disable_daemon_adoption(monkeypatch)
+    _disable_duplicate_retire(monkeypatch)
     guard_home = tmp_path / "guard-home"
     stale_guard_home = tmp_path / "pytest-of-user" / "pytest-9" / "test-stale" / "home"
     stale_guard_home.mkdir(parents=True)

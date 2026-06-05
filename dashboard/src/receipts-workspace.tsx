@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiMiniArrowDownTray } from "react-icons/hi2";
 
-import { EmptyState } from "./approval-center-primitives";
+import { EmptyState, TabBar, ActionButton, SectionLabel } from "./approval-center-primitives";
 import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
 import type { EvidenceFilterState, EvidenceView, EvidenceSortKey } from "./evidence/evidence-types";
@@ -16,8 +16,8 @@ import {
 import {
   EvidenceLoadingState,
   EvidenceErrorState,
-  EvidenceHeader,
-  ViewTabBar,
+  EvidenceHero,
+  VIEW_TABS,
 } from "./evidence/evidence-view-shell";
 import { EvidenceFilterBar } from "./evidence/evidence-filter-bar";
 import { EvidenceActionList } from "./evidence/evidence-action-list";
@@ -27,7 +27,6 @@ import { EvidenceAnalyticsPanel } from "./evidence/evidence-analytics-panel";
 import { EvidenceExportDrawer } from "./evidence/evidence-export-drawer";
 import { EvidenceClearModal } from "./evidence/evidence-clear-modal";
 import { AppTab } from "./evidence/app-tab";
-import { StoryTab } from "./evidence/story-tab";
 import { CategoryTab } from "./evidence/category-tab";
 
 export type ReceiptsState =
@@ -90,7 +89,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.day, filters.category, filters.sourceScope]);
+  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.category, filters.sourceScope]);
 
   const effectiveFilters = useMemo(
     () => ({ ...filters, search: debouncedSearch }),
@@ -145,10 +144,6 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
     handleFilterChange({ sort });
   }, [handleFilterChange]);
 
-  const handleSelectDay = useCallback((day: string) => {
-    setFilters((prev) => ({ ...prev, day }));
-  }, []);
-
   const handleLoadMore = useCallback(() => {
     setPage((prev) => prev + 1);
   }, []);
@@ -199,34 +194,35 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
     );
   }
 
+  const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
+
   return (
-    <div className="space-y-2">
-      <EvidenceHeader
+    <div className="space-y-4">
+      <EvidenceHero
         totalCount={receiptItems.length}
         lastActivityAt={metrics.lastActivityAt}
         onExport={handleOpenExport}
         onClear={handleOpenClear}
       />
 
-      <EvidenceFilterBar
-        filters={filters}
-        onChange={handleFilterChange}
-        totalCount={receiptItems.length}
-        filteredCount={filtered.length}
-        harnesses={harnesses}
-      />
+      <TabBar tabs={tabOptions} active={filters.view} onChange={handleViewChange} />
 
-      <ViewTabBar view={filters.view} onViewChange={handleViewChange} />
-
-      <div className="pt-2">
+      <div className="pt-1">
         {filters.view === "actions" && (
           <div
             id="tabpanel-actions"
             role="tabpanel"
             aria-labelledby="tab-actions"
-            className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}
+            className={`guard-fade-in ${selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}`}
           >
             <div className="space-y-3">
+              <EvidenceFilterBar
+                filters={filters}
+                onChange={handleFilterChange}
+                totalCount={receiptItems.length}
+                filteredCount={filtered.length}
+                harnesses={harnesses}
+              />
               <EvidenceInsightStrip metrics={metrics} />
               <EvidenceActionList
                 receipts={sorted}
@@ -242,7 +238,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
               />
             </div>
             {selectedReceipt && (
-              <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
                 <EvidenceActionDetail
                   receipt={selectedReceipt}
                   onClose={handleCloseDetail}
@@ -257,7 +253,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-insights"
             role="tabpanel"
             aria-labelledby="tab-insights"
-            className="max-w-2xl"
+            className="guard-fade-in"
           >
             <EvidenceAnalyticsPanel
               metrics={metrics}
@@ -272,24 +268,9 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-apps"
             role="tabpanel"
             aria-labelledby="tab-apps"
-            className="max-w-2xl"
+            className="guard-fade-in"
           >
             <AppTab receipts={filtered} />
-          </div>
-        )}
-
-        {filters.view === "story" && (
-          <div
-            id="tabpanel-story"
-            role="tabpanel"
-            aria-labelledby="tab-story"
-            className="max-w-2xl"
-          >
-            <StoryTab
-              receipts={filtered}
-              selectedDay={filters.day ?? ""}
-              onSelectDay={handleSelectDay}
-            />
           </div>
         )}
 
@@ -298,7 +279,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-categories"
             role="tabpanel"
             aria-labelledby="tab-categories"
-            className="max-w-2xl"
+            className="guard-fade-in"
           >
             <CategoryTab receipts={filtered} onFilterCategory={handleFilterCategory} />
           </div>
@@ -309,22 +290,24 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-export"
             role="tabpanel"
             aria-labelledby="tab-export"
+            className="space-y-4 guard-fade-in"
           >
-            <p className="text-sm text-slate-500 mb-3">
-              Download your evidence records as CSV or JSON.
-            </p>
-            <button
-              type="button"
-              onClick={handleOpenExport}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-3 py-2 text-sm font-semibold text-white hover:bg-brand-blue/90 transition-colors"
-            >
-              <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
-              Open export options
-            </button>
-            <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-1">
-              <p className="text-xs font-semibold text-brand-dark">Keep evidence in sync across devices</p>
-              <p className="text-xs text-slate-500">
-                Cloud backup lets you access your evidence history from any device. Available in HOL Guard Cloud.
+            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+              <SectionLabel>Export Evidence</SectionLabel>
+              <p className="mt-2 text-sm text-brand-dark/70 leading-relaxed">
+                Download your evidence records as CSV or JSON for analysis or backup.
+              </p>
+              <div className="mt-4">
+                <ActionButton onClick={handleOpenExport}>
+                  <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
+                  Open export options
+                </ActionButton>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+              <SectionLabel>Cloud Sync</SectionLabel>
+              <p className="mt-2 text-sm text-brand-dark/70 leading-relaxed">
+                Keep evidence in sync across devices. Cloud backup lets you access your evidence history from any device. Available in HOL Guard Cloud.
               </p>
             </div>
           </div>

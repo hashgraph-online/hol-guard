@@ -3,12 +3,19 @@ import {
   HiMiniChevronRight,
   HiMiniChevronLeft,
   HiMiniArrowTopRightOnSquare,
+  HiMiniFunnel,
+  HiMiniShieldCheck,
+  HiMiniNoSymbol,
+  HiMiniQuestionMarkCircle,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
-import { harnessDisplayName, isDisplayableHarness } from "../approval-center-utils";
-import { plainEnglishDescription } from "./plain-english";
-import { formatRelativeTime } from "../approval-center-utils";
+import { harnessDisplayName, isDisplayableHarness, formatRelativeTime } from "../approval-center-utils";
+import { plainEnglishDescription, humanFileName } from "./plain-english";
+import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
+import { Sparkline } from "./sparkline";
+import { DecisionBadge } from "./decision-badge";
+import { Badge } from "../approval-center-primitives";
 
 interface AppTabProps {
   receipts: GuardReceipt[];
@@ -32,13 +39,13 @@ function harnessColor(harness: string): string {
   return `hsl(${hue} 70% 45%)`;
 }
 
-interface AppListRowProps {
+interface AppListCardProps {
   harness: string;
   items: GuardReceipt[];
   onSelect: (harness: string) => void;
 }
 
-function AppListRow({ harness, items, onSelect }: AppListRowProps) {
+function AppListCard({ harness, items, onSelect }: AppListCardProps) {
   const allowed = items.filter((r) => r.policy_decision === "allow").length;
   const blocked = items.filter((r) => r.policy_decision === "block").length;
   const lastActive = items[0]?.timestamp;
@@ -48,17 +55,17 @@ function AppListRow({ harness, items, onSelect }: AppListRowProps) {
   return (
     <button
       onClick={handleClick}
-      className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/50 rounded-lg px-2 -mx-2"
+      className="w-full rounded-2xl border border-slate-100 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-200 shadow-sm"
     >
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-center gap-3">
         <span
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shrink-0"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white shrink-0"
           style={{ backgroundColor: color }}
         >
           {harness[0]?.toUpperCase()}
         </span>
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-brand-dark truncate">{harnessDisplayName(harness)}</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-brand-dark truncate">{harnessDisplayName(harness)}</p>
           <p className="text-xs text-slate-500">
             {items.length} actions · {allowed} allowed · {blocked} stopped
           </p>
@@ -66,8 +73,8 @@ function AppListRow({ harness, items, onSelect }: AppListRowProps) {
             <p className="text-xs text-slate-400">Last active {formatRelativeTime(lastActive)}</p>
           )}
         </div>
+        <HiMiniChevronRight className="h-4 w-4 text-slate-300 shrink-0" aria-hidden="true" />
       </div>
-      <HiMiniChevronRight className="h-4 w-4 text-slate-300 shrink-0" aria-hidden="true" />
     </button>
   );
 }
@@ -75,7 +82,13 @@ function AppListRow({ harness, items, onSelect }: AppListRowProps) {
 function AppTabRaw({ receipts }: AppTabProps) {
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const appReceipts = useMemo(() => receipts.filter((receipt) => isDisplayableHarness(receipt.harness)), [receipts]);
+  const [decisionFilter, setDecisionFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
+
+  const appReceipts = useMemo(
+    () => receipts.filter((receipt) => isDisplayableHarness(receipt.harness)),
+    [receipts]
+  );
 
   const apps = useMemo(() => {
     const map = new Map<string, GuardReceipt[]>();
@@ -99,8 +112,35 @@ function AppTabRaw({ receipts }: AppTabProps) {
     setSearchTerm(e.target.value);
   }, []);
 
-  const handleBack = useCallback(() => setSelectedApp(null), []);
-  const handleSelectApp = useCallback((h: string) => setSelectedApp(h), []);
+  const handleBack = useCallback(() => {
+    setSelectedApp(null);
+    setDecisionFilter("all");
+    setCategoryFilter("");
+  }, []);
+
+  const handleSelectApp = useCallback((h: string) => {
+    setSelectedApp(h);
+    setDecisionFilter("all");
+    setCategoryFilter("");
+  }, []);
+
+  const selectedItems = useMemo(() => {
+    if (!selectedApp) return [];
+    let items = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
+    if (decisionFilter !== "all") {
+      items = items.filter((r) => r.policy_decision === decisionFilter);
+    }
+    if (categoryFilter) {
+      items = items.filter((r) => detectCategory(r) === categoryFilter);
+    }
+    return items;
+  }, [apps, selectedApp, decisionFilter, categoryFilter]);
+
+  const categories = useMemo(() => {
+    if (!selectedApp) return [];
+    const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
+    return Array.from(new Set(allItems.map((r) => detectCategory(r))));
+  }, [apps, selectedApp]);
 
   if (appReceipts.length === 0) {
     return (
@@ -112,9 +152,9 @@ function AppTabRaw({ receipts }: AppTabProps) {
   }
 
   if (selectedApp) {
-    const items = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
-    const allowed = items.filter((r) => r.policy_decision === "allow").length;
-    const blocked = items.filter((r) => r.policy_decision === "block").length;
+    const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
+    const allowed = allItems.filter((r) => r.policy_decision === "allow").length;
+    const blocked = allItems.filter((r) => r.policy_decision === "block").length;
     const color = harnessColor(selectedApp);
 
     return (
@@ -138,45 +178,116 @@ function AppTabRaw({ receipts }: AppTabProps) {
           </a>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
-            style={{ backgroundColor: color }}
-          >
-            {selectedApp[0]?.toUpperCase()}
-          </span>
-          <div>
-            <h2 className="text-base font-semibold text-brand-dark">{harnessDisplayName(selectedApp)}</h2>
-            <p className="text-xs text-slate-500">
-              {items.length} action{items.length !== 1 ? "s" : ""} · {allowed} allowed · {blocked} stopped
-            </p>
-          </div>
-        </div>
-
-        <AppSparkline items={items} />
-
-        <div className="space-y-0 divide-y divide-slate-100/60">
-          {items.map((receipt) => (
-            <div
-              key={receipt.receipt_id}
-              className="flex items-start justify-between gap-3 py-2"
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold text-white"
+              style={{ backgroundColor: color }}
             >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-brand-dark">{plainEnglishDescription(receipt)}</p>
-                <p className="mt-0.5 text-xs text-slate-400">{formatRelativeTime(receipt.timestamp)}</p>
-              </div>
-              <span className={`shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-emerald-500" : "text-brand-attention"}`}>
-                {receipt.policy_decision === "allow" ? "Allowed" : "Stopped"}
-              </span>
+              {selectedApp[0]?.toUpperCase()}
+            </span>
+            <div>
+              <h2 className="text-base font-semibold text-brand-dark">{harnessDisplayName(selectedApp)}</h2>
+              <p className="text-xs text-slate-500">
+                {allItems.length} action{allItems.length !== 1 ? "s" : ""} · {allowed} allowed · {blocked} stopped
+              </p>
             </div>
-          ))}
+          </div>
+
+          <Sparkline items={allItems} />
         </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <HiMiniFunnel className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Filter:</span>
+          </div>
+          <select
+            value={decisionFilter}
+            onChange={(e) => setDecisionFilter(e.target.value)}
+            className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+          >
+            <option value="all">All decisions</option>
+            <option value="allow">Allowed</option>
+            <option value="block">Stopped</option>
+          </select>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+          >
+            <option value="">All categories</option>
+            {categories.map((cat) => {
+              const info = getCategoryInfo(cat);
+              return (
+                <option key={cat} value={cat}>{info.label}</option>
+              );
+            })}
+          </select>
+          {(decisionFilter !== "all" || categoryFilter) && (
+            <button
+              type="button"
+              onClick={() => { setDecisionFilter("all"); setCategoryFilter(""); }}
+              className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        {selectedItems.length === 0 ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-slate-500">No actions match the selected filters.</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" aria-label={`${harnessDisplayName(selectedApp)} actions`}>
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/80">
+                    <th scope="col" className="w-8 px-3 py-2.5" />
+                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Artifact</th>
+                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden md:table-cell">Category</th>
+                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Decision</th>
+                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden lg:table-cell">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedItems.map((receipt) => {
+                    const category = detectCategory(receipt);
+                    const catInfo = getCategoryInfo(category);
+                    const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+                    return (
+                      <tr key={receipt.receipt_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <span className={`${catInfo.color}`} aria-hidden="true">{catInfo.icon}</span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="text-sm font-medium text-brand-dark truncate block max-w-[200px]">{artifactLabel}</span>
+                        </td>
+                        <td className="px-3 py-2.5 hidden md:table-cell">
+                          <span className="text-xs text-slate-500">{catInfo.label}</span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <DecisionBadge decision={receipt.policy_decision} />
+                        </td>
+                        <td className="px-3 py-2.5 hidden lg:table-cell">
+                          <span className="text-xs text-slate-400 whitespace-nowrap">{formatRelativeTime(receipt.timestamp)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <label className="block">
         <span className="sr-only">Search apps</span>
         <input
@@ -188,9 +299,9 @@ function AppTabRaw({ receipts }: AppTabProps) {
         />
       </label>
 
-      <div className="space-y-0 divide-y divide-slate-100/60">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {filteredApps.map(([harness, items]) => (
-          <AppListRow
+          <AppListCard
             key={harness}
             harness={harness}
             items={items}
@@ -204,39 +315,6 @@ function AppTabRaw({ receipts }: AppTabProps) {
           <p className="text-sm text-slate-500">No apps match your search.</p>
         </div>
       )}
-    </div>
-  );
-}
-
-function AppSparkline({ items }: { items: GuardReceipt[] }) {
-  const buckets = useMemo(() => {
-    const days = 7;
-    const now = new Date();
-    const counts: number[] = new Array(days).fill(0);
-    for (const item of items) {
-      const d = new Date(item.timestamp);
-      const diff = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-      if (diff >= 0 && diff < days) {
-        counts[days - 1 - diff] += 1;
-      }
-    }
-    return counts;
-  }, [items]);
-
-  const max = Math.max(...buckets, 1);
-
-  return (
-    <div className="py-1">
-      <p className="text-[11px] font-medium text-slate-400">Last 7 days</p>
-      <div className="mt-1 flex h-8 w-full items-end gap-0.5">
-        {buckets.map((count, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-sm bg-brand-blue/30"
-            style={{ height: `${Math.max((count / max) * 100, count > 0 ? 8 : 0)}%` }}
-          />
-        ))}
-      </div>
     </div>
   );
 }

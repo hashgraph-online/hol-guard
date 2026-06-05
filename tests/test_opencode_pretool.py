@@ -11,6 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.hook_python import package_root_from_python, resolve_guard_hook_python
 from codex_plugin_scanner.guard.adapters.opencode_pretool import (
     _HOOK_ARGV_ENV,
     _pretool_hook_env,
@@ -82,9 +83,11 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     ctx = HarnessContext(home_dir=tmp_path / "home", workspace_dir=workspace, guard_home=guard_home)
-    launcher = _pretool_hook_launcher_code()
+    guard_python = resolve_guard_hook_python(ctx)
+    package_root = package_root_from_python(guard_python)
+    launcher = _pretool_hook_launcher_code(package_root=package_root)
     inherit_env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
-    env = {**inherit_env, **_pretool_hook_env(), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
+    env = {**inherit_env, **_pretool_hook_env(package_root=package_root), _HOOK_ARGV_ENV: '["guard","hook","--json"]'}
     completed = subprocess.run(
         [sys.executable, "-c", launcher],
         cwd=workspace,

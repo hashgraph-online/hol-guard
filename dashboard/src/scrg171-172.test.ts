@@ -1,4 +1,5 @@
-import { resolveView } from "./app";
+import { resolveView, viewTitle } from "./app";
+import { hubTitleForTab } from "./supply-chain-hub-workspace";
 import {
   buildDemoRuntimeSnapshot,
   loadStatusPage,
@@ -230,6 +231,22 @@ assert(
 );
 
 assert(
+  viewTitle("supply-chain") === "Supply Chain" &&
+    viewTitle("audit") === "Audit" &&
+    viewTitle("policy") === "Policy" &&
+    viewTitle("feed-health") === "Feed Health",
+  "SCRG171-H2: route titles stay specific inside Trust Center views",
+);
+
+assert(
+  hubTitleForTab("supply-chain") === "Supply Chain" &&
+    hubTitleForTab("audit") === "Audit" &&
+    hubTitleForTab("policy") === "Policy" &&
+    hubTitleForTab("feed-health") === "Feed Health",
+  "SCRG171-H3: hub header mirrors active Trust Center tab",
+);
+
+assert(
   typeof loadStatusPage === "function",
   "SCRG171-I: loadStatusPage is exported as a function",
 );
@@ -308,6 +325,15 @@ assert(
 assert(
   auditResults.some((r) => r.severity === "high"),
   "SCRG171-V: audit loader data: unprotected manager appears as high severity",
+);
+const unprotectedManagerAudit = auditResults.find((r) => r.id === "unprotected-pip");
+assert(
+  unprotectedManagerAudit?.remediationAction?.action === "package_shim_path",
+  "SCRG171-V2: unprotected manager audit issue exposes a daemon remediation action",
+);
+assert(
+  unprotectedManagerAudit?.remediationAction?.manager === "pip",
+  "SCRG171-V3: unprotected manager remediation action targets the affected manager",
 );
 assert(
   auditResults.some((r) => r.severity === "medium"),

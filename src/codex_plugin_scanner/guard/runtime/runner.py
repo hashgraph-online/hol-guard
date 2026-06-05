@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -14,7 +15,7 @@ import urllib.parse
 import urllib.request
 from base64 import urlsafe_b64encode
 from collections.abc import Callable
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -28,11 +29,16 @@ from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
-from ..cli.oauth_client import GuardDpopKeyMaterial, resolve_guard_oauth_client_config
+from ..cli.oauth_client import (
+    GuardDpopKeyMaterial,
+    resolve_guard_oauth_client_config,
+    validate_guard_sync_endpoint,
+)
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
@@ -74,6 +80,12 @@ def _get_default_detector_registry() -> DetectorRegistry:
             cached = (factory, DetectorRegistry(factory()))
             _DEFAULT_DETECTOR_REGISTRY = cached
     return cached[1]
+
+
+@contextmanager
+def _guard_sync_auth_lock(store: GuardStore):
+    with store.hold_oauth_refresh_lock():
+        yield
 
 
 _PAIN_SIGNAL_EVENTS = frozenset(
@@ -1150,11 +1162,17 @@ def _build_policy_bundle_decisions(
     return decisions
 
 
-def sync_receipts(store: GuardStore) -> dict[str, object]:
+def sync_receipts(
+    store: GuardStore,
+    *,
+    persist_sync_summary: bool = True,
+    persist_connect_state: bool = True,
+    auth_context: dict[str, object] | None = None,
+) -> dict[str, object]:
     """Push local receipts to the configured sync endpoint."""
 
-    auth_context = _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_receipts_sync_url(auth_context["sync_url"])
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+    sync_url = _normalized_receipts_sync_url(resolved_auth_context["sync_url"])
     prior_receipt_cursor = _receipt_sync_cursor_rowid(store)
     receipts = _receipt_sync_rows_for_upload(store, cursor_rowid=prior_receipt_cursor)
     inventory = store.list_inventory()
@@ -1169,7 +1187,12 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
     local_guard_online_at = _now()
-    sync_context = _receipt_sync_context(store=store, local_guard_online_at=local_guard_online_at)
+    sync_context = _receipt_sync_context(
+        store=store,
+        local_guard_online_at=local_guard_online_at,
+        device_id=device_id,
+        device_name=device_name,
+    )
     latest_uploaded_rowid: int | None = None
     for receipt_batch in _iter_receipt_sync_batches(receipts):
         body = json.dumps(
@@ -1182,11 +1205,12 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
                 "syncContext": sync_context,
             }
         ).encode("utf-8")
-        request = urllib.request.Request(
-            sync_url,
-            data=body,
+        request = _guard_sync_request(
+            resolved_auth_context,
+            request_url=sync_url,
             method="POST",
-            headers=_guard_sync_headers(auth_context, request_url=sync_url, method="POST"),
+            data=body,
+            extra_headers=None,
         )
         try:
             payload = _urlopen_json_with_timeout_retry(
@@ -1338,7 +1362,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         exceptions=deduped_exceptions,
         now=now,
     )
-    pain_signals_uploaded = sync_pain_signals(store, auth_context=auth_context)
+    pain_signals_uploaded = sync_pain_signals(store, auth_context=resolved_auth_context)
     value_metrics = _build_value_metrics(store)
     weekly_digest = _build_weekly_firewall_digest(metrics=value_metrics, now=now)
     summary = {
@@ -1365,9 +1389,11 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     }
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
-    summary["guard_events_v1"] = sync_guard_events(store, auth_context=auth_context)
-    store.set_sync_payload("sync_summary", summary, now)
-    store.record_latest_guard_connect_sync_success(sync_payload=summary, now=now)
+    summary["guard_events_v1"] = sync_guard_events(store, auth_context=resolved_auth_context)
+    if persist_sync_summary:
+        store.set_sync_payload("sync_summary", summary, now)
+    if persist_connect_state:
+        store.record_latest_guard_connect_sync_success(sync_payload=summary, now=now)
     return summary
 
 
@@ -1430,15 +1456,12 @@ def _sync_supply_chain_bundle_incremental(
     trusted_keys: tuple[object, ...],
     workspace_id: str,
 ) -> dict[str, object] | None:
-    index_request = urllib.request.Request(
-        _normalized_supply_chain_bundle_index_url(bundle_url),
+    index_request = _guard_sync_request(
+        auth_context,
+        request_url=_normalized_supply_chain_bundle_index_url(bundle_url),
         method="GET",
-        headers=_guard_sync_headers(
-            auth_context,
-            request_url=_normalized_supply_chain_bundle_index_url(bundle_url),
-            method="GET",
-            extra_headers={"Accept-Encoding": "identity"},
-        ),
+        data=None,
+        extra_headers={"Accept-Encoding": "identity"},
     )
     try:
         index_payload = _fetch_supply_chain_bundle_payload(index_request)
@@ -1482,23 +1505,14 @@ def _sync_supply_chain_bundle_incremental(
                     response = None
         if response is None:
             try:
-                partition_request = urllib.request.Request(
-                    _supply_chain_partition_bundle_url(
-                        bundle_url,
-                        ecosystem=ecosystem,
-                        partition=partition,
+                partition_request = _guard_sync_request(
+                    auth_context,
+                    request_url=_supply_chain_partition_bundle_url(
+                        bundle_url, ecosystem=ecosystem, partition=partition
                     ),
                     method="GET",
-                    headers=_guard_sync_headers(
-                        auth_context,
-                        request_url=_supply_chain_partition_bundle_url(
-                            bundle_url,
-                            ecosystem=ecosystem,
-                            partition=partition,
-                        ),
-                        method="GET",
-                        extra_headers={"Accept-Encoding": "identity"},
-                    ),
+                    data=None,
+                    extra_headers={"Accept-Encoding": "identity"},
                 )
                 partition_payload = _fetch_supply_chain_bundle_payload(partition_request)
                 response = load_supply_chain_bundle_response(partition_payload)
@@ -1573,15 +1587,12 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
             )
         except SupplyChainBundleError:
             try:
-                request = urllib.request.Request(
-                    bundle_url,
+                request = _guard_sync_request(
+                    auth_context,
+                    request_url=bundle_url,
                     method="GET",
-                    headers=_guard_sync_headers(
-                        auth_context,
-                        request_url=bundle_url,
-                        method="GET",
-                        extra_headers={"Accept-Encoding": "identity"},
-                    ),
+                    data=None,
+                    extra_headers={"Accept-Encoding": "identity"},
                 )
                 payload = _fetch_supply_chain_bundle_payload(request)
                 response = load_supply_chain_bundle_response(payload)
@@ -1593,15 +1604,12 @@ def sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
             except (RuntimeError, SupplyChainBundleError) as error:
                 raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
     else:
-        request = urllib.request.Request(
-            bundle_url,
+        request = _guard_sync_request(
+            auth_context,
+            request_url=bundle_url,
             method="GET",
-            headers=_guard_sync_headers(
-                auth_context,
-                request_url=bundle_url,
-                method="GET",
-                extra_headers={"Accept-Encoding": "identity"},
-            ),
+            data=None,
+            extra_headers={"Accept-Encoding": "identity"},
         )
         payload = _fetch_supply_chain_bundle_payload(request)
         try:
@@ -1669,7 +1677,7 @@ def sync_guard_events(
 ) -> dict[str, object]:
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
-    resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     sync_url = _guard_events_sync_url(resolved_auth_context["sync_url"])
     previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
@@ -1687,11 +1695,12 @@ def sync_guard_events(
                 return previous_summary
             break
         body = json.dumps({"events": [event["payload"] for event in pending_events]}).encode("utf-8")
-        request = urllib.request.Request(
-            sync_url,
-            data=body,
+        request = _guard_sync_request(
+            resolved_auth_context,
+            request_url=sync_url,
             method="POST",
-            headers=_guard_sync_headers(resolved_auth_context, request_url=sync_url, method="POST"),
+            data=body,
+            extra_headers=None,
         )
         try:
             payload = _urlopen_json_with_timeout_retry(
@@ -1818,18 +1827,20 @@ def sync_runtime_session(
     store: GuardStore,
     *,
     session: dict[str, object],
+    auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
 
-    auth_context = _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_runtime_sessions_sync_url(auth_context["sync_url"])
+    resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
+    sync_url = _normalized_runtime_sessions_sync_url(resolved_auth_context["sync_url"])
     session_payload = _cloud_runtime_session_payload(store, session)
     body = json.dumps({"session": session_payload}).encode("utf-8")
-    request = urllib.request.Request(
-        sync_url,
-        data=body,
+    request = _guard_sync_request(
+        resolved_auth_context,
+        request_url=sync_url,
         method="POST",
-        headers=_guard_sync_headers(auth_context, request_url=sync_url, method="POST"),
+        data=body,
+        extra_headers=None,
     )
     try:
         payload = _urlopen_json_with_timeout_retry(
@@ -1888,6 +1899,60 @@ def sync_runtime_session(
     return summary
 
 
+def _local_guard_runtime_session() -> dict[str, object]:
+    return {
+        "harness": "hol-guard",
+        "surface": "cli",
+        "status": "active",
+        "client_name": "hol-guard",
+        "client_title": "HOL Guard CLI",
+        "client_version": __version__,
+        "workspace": "local-machine",
+        "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+    }
+
+
+def sync_local_guard_cloud_proof(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Publish the local Guard runtime session before syncing receipts."""
+
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+    runtime_summary = sync_runtime_session(
+        store,
+        session=_local_guard_runtime_session(),
+        auth_context=resolved_auth_context,
+    )
+    receipts_summary = sync_receipts(
+        store,
+        persist_sync_summary=False,
+        persist_connect_state=False,
+        auth_context=resolved_auth_context,
+    )
+    summary = dict(receipts_summary)
+    summary.update(
+        {
+            "runtime_session_id": runtime_summary.get("runtime_session_id"),
+            "runtime_session_synced_at": runtime_summary.get("runtime_session_synced_at"),
+            "runtime_sessions_visible": runtime_summary.get("runtime_sessions_visible"),
+            "local_guard_online_at": runtime_summary.get("local_guard_online_at")
+            or receipts_summary.get("local_guard_online_at"),
+            "runtime_harness": runtime_summary.get("runtime_harness"),
+            "runtime_surface": runtime_summary.get("runtime_surface"),
+            "runtime_workspace": runtime_summary.get("runtime_workspace"),
+            "runtime_device_id": runtime_summary.get("runtime_device_id"),
+            "runtime": runtime_summary,
+            "receipts": dict(receipts_summary),
+        }
+    )
+    recorded_at = str(summary.get("synced_at") or summary.get("runtime_session_synced_at") or _now())
+    store.set_sync_payload("sync_summary", summary, recorded_at)
+    store.record_latest_guard_connect_sync_success(sync_payload=summary, now=recorded_at)
+    return summary
+
+
 def sync_pain_signals(
     store: GuardStore,
     *,
@@ -1926,15 +1991,12 @@ def sync_pain_signals(
             if pain_signal is not None:
                 signal_items.append(pain_signal)
         if signal_items:
-            request = urllib.request.Request(
-                _pain_signal_sync_url(normalized_sync_url),
-                data=json.dumps({"items": signal_items}).encode("utf-8"),
+            request = _guard_sync_request(
+                resolved_auth_context,
+                request_url=_pain_signal_sync_url(normalized_sync_url),
                 method="POST",
-                headers=_guard_sync_headers(
-                    resolved_auth_context,
-                    request_url=_pain_signal_sync_url(normalized_sync_url),
-                    method="POST",
-                ),
+                data=json.dumps({"items": signal_items}).encode("utf-8"),
+                extra_headers=None,
             )
             try:
                 _urlopen_with_timeout_retry(
@@ -2054,6 +2116,7 @@ def _sign_guard_dpop_proof(
     method: str,
     dpop_key_material: GuardDpopKeyMaterial,
     access_token: str | None = None,
+    nonce: str | None = None,
     now: datetime | None = None,
 ) -> str:
     issued_at = int((now or datetime.now(timezone.utc)).timestamp())
@@ -2070,6 +2133,10 @@ def _sign_guard_dpop_proof(
     }
     if isinstance(access_token, str) and access_token:
         claims["ath"] = _dpop_access_token_confirmation_claim(access_token)
+    if isinstance(nonce, str):
+        normalized_nonce = nonce.strip()
+        if normalized_nonce:
+            claims["nonce"] = normalized_nonce
     signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
     private_key = serialization.load_pem_private_key(
         dpop_key_material.private_key_pem.encode("ascii"),
@@ -2081,6 +2148,96 @@ def _sign_guard_dpop_proof(
     r_value, s_value = decode_dss_signature(der_signature)
     jose_signature = _base64url_encode(r_value.to_bytes(32, byteorder="big") + s_value.to_bytes(32, byteorder="big"))
     return f"{signing_input.decode('ascii')}.{jose_signature}"
+
+
+def _guard_http_header_value(response: object, header_name: str) -> str | None:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    value = headers.get(header_name)
+    if value is None:
+        header_items = getattr(headers, "items", None)
+        if callable(header_items):
+            target_header = header_name.lower()
+            for current_name, current_value in header_items():
+                if isinstance(current_name, str) and current_name.lower() == target_header:
+                    value = current_value
+                    break
+    if not isinstance(value, str):
+        return None
+    normalized_value = value.strip()
+    return normalized_value or None
+
+
+def _http_error_payload(error: urllib.error.HTTPError) -> object:
+    try:
+        raw_body = error.read()
+    except OSError:
+        raw_body = b""
+    error.fp = io.BytesIO(raw_body)
+    if not raw_body:
+        return None
+    try:
+        return json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+def _dpop_nonce_from_http_error(error: urllib.error.HTTPError, payload: object) -> str | None:
+    if error.code not in {400, 401}:
+        return None
+    nonce = _guard_http_header_value(error, "DPoP-Nonce")
+    if nonce is None:
+        return None
+    if isinstance(payload, dict):
+        oauth_error = str(payload.get("error") or "").strip()
+        if oauth_error and oauth_error not in {"use_dpop_nonce", "invalid_dpop_proof"}:
+            return None
+    return nonce
+
+
+_GUARD_DPOP_REQUEST_CONTEXTS: dict[str, dict[str, object]] = {}
+_GUARD_DPOP_REQUEST_CONTEXT_LIMIT = 1000
+
+
+def _remember_guard_dpop_request_context(dpop_header: str, context: dict[str, object]) -> None:
+    if len(_GUARD_DPOP_REQUEST_CONTEXTS) >= _GUARD_DPOP_REQUEST_CONTEXT_LIMIT:
+        oldest_header = next(iter(_GUARD_DPOP_REQUEST_CONTEXTS), None)
+        if isinstance(oldest_header, str):
+            _GUARD_DPOP_REQUEST_CONTEXTS.pop(oldest_header, None)
+    _GUARD_DPOP_REQUEST_CONTEXTS[dpop_header] = context
+
+
+def _guard_sync_request(
+    auth_context: dict[str, object],
+    *,
+    request_url: str,
+    method: str,
+    data: bytes | None = None,
+    extra_headers: dict[str, str] | None = None,
+    dpop_nonce: str | None = None,
+) -> urllib.request.Request:
+    headers = _guard_sync_headers(
+        auth_context,
+        request_url=request_url,
+        method=method,
+        extra_headers=extra_headers,
+        dpop_nonce=dpop_nonce,
+    )
+    request = urllib.request.Request(
+        request_url,
+        data=data,
+        method=method,
+        headers=headers,
+    )
+    request._guard_dpop_retry_context = {
+        "auth_context": auth_context,
+        "request_url": request_url,
+        "method": method,
+        "extra_headers": None if extra_headers is None else dict(extra_headers),
+        "dpop_nonce": dpop_nonce,
+    }
+    return request
 
 
 def _oauth_refresh_error_message(error: urllib.error.HTTPError) -> str:
@@ -2109,6 +2266,19 @@ def _guard_oauth_reauthorization_message() -> str:
     return "Guard authorization expired. Run `hol-guard connect` to sign in again."
 
 
+def _guard_sync_reconnect_message() -> str:
+    return "Guard Cloud sync endpoint is not trusted. Run `hol-guard connect` to restore Cloud sync."
+
+
+def _validate_guard_sync_url(sync_url: str, *, issuer: str | None = None) -> str:
+    try:
+        return validate_guard_sync_endpoint(sync_url, issuer=issuer)
+    except ValueError as error:
+        if issuer is not None:
+            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
+        raise GuardSyncNotConfiguredError(f"{_guard_sync_reconnect_message()} {error}") from error
+
+
 def _refresh_guard_oauth_access_token(
     *,
     token_endpoint: str,
@@ -2123,42 +2293,57 @@ def _refresh_guard_oauth_access_token(
             "refresh_token": refresh_token,
         }
     ).encode("utf-8")
-    request = urllib.request.Request(
-        token_endpoint,
-        data=request_body,
-        method="POST",
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "DPoP": _sign_guard_dpop_proof(
-                request_url=token_endpoint,
-                method="POST",
-                dpop_key_material=dpop_key_material,
+    dpop_nonce: str | None = None
+    nonce_retry_count = 0
+    while True:
+        request = urllib.request.Request(
+            token_endpoint,
+            data=request_body,
+            method="POST",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "User-Agent": _GUARD_SYNC_USER_AGENT,
+                "DPoP": _sign_guard_dpop_proof(
+                    request_url=token_endpoint,
+                    method="POST",
+                    dpop_key_material=dpop_key_material,
+                    nonce=dpop_nonce,
+                ),
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            payload = _http_error_payload(error) if error.code in {400, 401} else None
+            challenge_nonce = _dpop_nonce_from_http_error(error, payload)
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
+                dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
+                continue
+            refresh_error_message = _oauth_refresh_error_message(error)
+            if error.code in {400, 401, 403}:
+                raise GuardSyncAuthorizationExpiredError(
+                    f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
+                ) from error
+            raise RuntimeError(f"Guard OAuth token refresh failed: {refresh_error_message}") from error
+        except OSError as error:
+            raise RuntimeError(_sync_url_error_message(error)) from error
+        if not isinstance(payload, dict):
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+        access_token = _optional_string(payload.get("access_token"))
+        token_type = _optional_string(payload.get("token_type"))
+        if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+        return {
+            "access_token": access_token,
+            "package_firewall_entitlement": build_oauth_package_firewall_entitlement(
+                payload,
+                now=datetime.now(timezone.utc),
             ),
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        refresh_error_message = _oauth_refresh_error_message(error)
-        if error.code in {400, 401, 403}:
-            raise GuardSyncAuthorizationExpiredError(
-                f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
-            ) from error
-        raise RuntimeError(f"Guard OAuth token refresh failed: {refresh_error_message}") from error
-    except OSError as error:
-        raise RuntimeError(_sync_url_error_message(error)) from error
-    if not isinstance(payload, dict):
-        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-    access_token = _optional_string(payload.get("access_token"))
-    token_type = _optional_string(payload.get("token_type"))
-    if access_token is None or token_type is None or token_type.lower() not in {"bearer", "dpop"}:
-        raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-    return {
-        "access_token": access_token,
-        "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
-    }
+            "refresh_token": _optional_string(payload.get("refresh_token")) or refresh_token,
+        }
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -2184,6 +2369,7 @@ def _persist_rotated_oauth_refresh_token(
     *,
     store: GuardStore,
     credentials: dict[str, object],
+    package_firewall_entitlement: dict[str, object] | None = None,
     refresh_token: str,
 ) -> None:
     issuer = _optional_string(credentials.get("issuer"))
@@ -2208,46 +2394,84 @@ def _persist_rotated_oauth_refresh_token(
         dpop_public_jwk_thumbprint=dpop_public_jwk_thumbprint,
         grant_id=_optional_string(credentials.get("grant_id")),
         machine_id=_optional_string(credentials.get("machine_id")),
+        supply_chain_entitlement_expires_at=(
+            _optional_string(package_firewall_entitlement.get("supply_chain_entitlement_expires_at"))
+            if isinstance(package_firewall_entitlement, dict)
+            else _optional_string(credentials.get("supply_chain_entitlement_expires_at"))
+        ),
+        supply_chain_firewall=(
+            package_firewall_entitlement.get("supply_chain_firewall")
+            if isinstance(package_firewall_entitlement, dict)
+            and isinstance(package_firewall_entitlement.get("supply_chain_firewall"), bool)
+            else (
+                credentials.get("supply_chain_firewall")
+                if isinstance(credentials.get("supply_chain_firewall"), bool)
+                else None
+            )
+        ),
+        supply_chain_plan_id=(
+            _optional_string(package_firewall_entitlement.get("supply_chain_plan_id"))
+            if isinstance(package_firewall_entitlement, dict)
+            else _optional_string(credentials.get("supply_chain_plan_id"))
+        ),
         workspace_id=_optional_string(credentials.get("workspace_id")),
         now=_now(),
     )
 
 
 def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
-    oauth_credentials = store.get_oauth_local_credentials()
-    if oauth_credentials is not None:
-        issuer = _optional_string(oauth_credentials.get("issuer"))
-        client_id = _optional_string(oauth_credentials.get("client_id"))
-        refresh_token = _optional_string(oauth_credentials.get("refresh_token"))
-        if issuer is None or client_id is None or refresh_token is None:
-            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
-        dpop_key_material = _oauth_dpop_key_material(oauth_credentials)
-        refreshed = _refresh_guard_oauth_access_token(
-            token_endpoint=resolve_guard_oauth_client_config(issuer).token_endpoint,
-            client_id=client_id,
-            refresh_token=refresh_token,
-            dpop_key_material=dpop_key_material,
-        )
-        rotated_refresh_token = str(refreshed["refresh_token"])
-        if rotated_refresh_token != refresh_token:
-            _persist_rotated_oauth_refresh_token(
-                store=store,
-                credentials=oauth_credentials,
-                refresh_token=rotated_refresh_token,
+    with _guard_sync_auth_lock(store):
+        oauth_health = store.get_oauth_local_credential_health()
+        oauth_credentials = store.get_oauth_local_credentials()
+        if oauth_credentials is not None:
+            issuer = _optional_string(oauth_credentials.get("issuer"))
+            client_id = _optional_string(oauth_credentials.get("client_id"))
+            refresh_token = _optional_string(oauth_credentials.get("refresh_token"))
+            if issuer is None or client_id is None or refresh_token is None:
+                raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+            dpop_key_material = _oauth_dpop_key_material(oauth_credentials)
+            try:
+                oauth_client = resolve_guard_oauth_client_config(issuer)
+            except ValueError as error:
+                raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
+            refreshed = _refresh_guard_oauth_access_token(
+                token_endpoint=oauth_client.token_endpoint,
+                client_id=client_id,
+                refresh_token=refresh_token,
+                dpop_key_material=dpop_key_material,
             )
+            rotated_refresh_token = str(refreshed["refresh_token"])
+            package_firewall_entitlement = (
+                refreshed["package_firewall_entitlement"]
+                if isinstance(refreshed.get("package_firewall_entitlement"), dict)
+                else None
+            )
+            if rotated_refresh_token != refresh_token or package_firewall_entitlement is not None:
+                _persist_rotated_oauth_refresh_token(
+                    store=store,
+                    credentials=oauth_credentials,
+                    package_firewall_entitlement=package_firewall_entitlement,
+                    refresh_token=rotated_refresh_token,
+                )
+            sync_url = _validate_guard_sync_url(
+                _oauth_sync_url_from_issuer(oauth_client.issuer),
+                issuer=oauth_client.issuer,
+            )
+            return {
+                "sync_url": sync_url,
+                "access_token": str(refreshed["access_token"]),
+                "dpop_key_material": dpop_key_material,
+            }
+        if bool(oauth_health.get("configured")):
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
+        credentials = store.get_sync_credentials()
+        if credentials is None:
+            raise GuardSyncNotConfiguredError("Guard is not logged in.")
         return {
-            "sync_url": _oauth_sync_url_from_issuer(issuer),
-            "access_token": str(refreshed["access_token"]),
-            "dpop_key_material": dpop_key_material,
+            "sync_url": _validate_guard_sync_url(str(credentials["sync_url"])),
+            "access_token": str(credentials["token"]),
+            "dpop_key_material": None,
         }
-    credentials = store.get_sync_credentials()
-    if credentials is None:
-        raise GuardSyncNotConfiguredError("Guard is not logged in.")
-    return {
-        "sync_url": str(credentials["sync_url"]),
-        "access_token": str(credentials["token"]),
-        "dpop_key_material": None,
-    }
 
 
 def _guard_sync_headers(
@@ -2256,6 +2480,7 @@ def _guard_sync_headers(
     request_url: str,
     method: str,
     extra_headers: dict[str, str] | None = None,
+    dpop_nonce: str | None = None,
 ) -> dict[str, str]:
     access_token = str(auth_context["access_token"])
     headers = {
@@ -2266,15 +2491,65 @@ def _guard_sync_headers(
     }
     dpop_key_material = auth_context.get("dpop_key_material")
     if isinstance(dpop_key_material, GuardDpopKeyMaterial):
-        headers["DPoP"] = _sign_guard_dpop_proof(
+        dpop_header = _sign_guard_dpop_proof(
             request_url=request_url,
             method=method,
             dpop_key_material=dpop_key_material,
             access_token=access_token,
+            nonce=dpop_nonce,
+        )
+        headers["DPoP"] = dpop_header
+        _remember_guard_dpop_request_context(
+            dpop_header,
+            {
+                "auth_context": auth_context,
+                "request_url": request_url,
+                "method": method,
+                "extra_headers": None if extra_headers is None else dict(extra_headers),
+                "dpop_nonce": dpop_nonce,
+            },
         )
     if isinstance(extra_headers, dict):
         headers.update(extra_headers)
     return headers
+
+
+def _guard_sync_request_with_nonce(
+    request: urllib.request.Request,
+    dpop_nonce: str,
+) -> urllib.request.Request | None:
+    request_context = getattr(request, "_guard_dpop_retry_context", None)
+    if not isinstance(request_context, dict):
+        current_dpop = request.get_header("DPoP")
+        if not isinstance(current_dpop, str):
+            for header_name, header_value in request.header_items():
+                if header_name.lower() == "dpop":
+                    current_dpop = header_value
+                    break
+        if not isinstance(current_dpop, str):
+            return None
+        request_context = _GUARD_DPOP_REQUEST_CONTEXTS.get(current_dpop)
+        if not isinstance(request_context, dict):
+            return None
+    auth_context = request_context.get("auth_context")
+    request_url = request_context.get("request_url")
+    method = request_context.get("method")
+    extra_headers = request_context.get("extra_headers")
+    current_dpop_nonce = request_context.get("dpop_nonce")
+    if not isinstance(auth_context, dict) or not isinstance(request_url, str) or not isinstance(method, str):
+        return None
+    if extra_headers is not None and not isinstance(extra_headers, dict):
+        return None
+    if current_dpop_nonce == dpop_nonce:
+        return None
+    return _guard_sync_request(
+        auth_context,
+        request_url=request_url,
+        method=method,
+        data=request.data,
+        extra_headers=None if extra_headers is None else {str(key): str(value) for key, value in extra_headers.items()},
+        dpop_nonce=dpop_nonce,
+    )
 
 
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
@@ -2375,17 +2650,38 @@ def _urlopen_json_with_timeout_retry(
     timeout_seconds: int,
     retry_timeout_seconds: int,
 ) -> dict[str, object]:
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except OSError as error:
-        if not _is_timeout_error(error):
+    current_request = request
+    current_timeout_seconds = timeout_seconds
+    retried_timeout = False
+    nonce_retry_count = 0
+    while True:
+        try:
+            with urllib.request.urlopen(current_request, timeout=current_timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            error_payload = _http_error_payload(error) if error.code in {400, 401} else None
+            dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
+            retry_request = (
+                None
+                if dpop_nonce is None or nonce_retry_count >= 3
+                else _guard_sync_request_with_nonce(current_request, dpop_nonce)
+            )
+            if retry_request is not None:
+                nonce_retry_count += 1
+                current_request = retry_request
+                current_timeout_seconds = timeout_seconds
+                retried_timeout = False
+                continue
             raise
-        with urllib.request.urlopen(request, timeout=retry_timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    if not isinstance(payload, dict):
-        raise RuntimeError("Invalid sync response")
-    return payload
+        except OSError as error:
+            if not retried_timeout and _is_timeout_error(error):
+                current_timeout_seconds = retry_timeout_seconds
+                retried_timeout = True
+                continue
+            raise
+        if not isinstance(payload, dict):
+            raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
+        return payload
 
 
 def _urlopen_with_timeout_retry(
@@ -2394,14 +2690,35 @@ def _urlopen_with_timeout_retry(
     timeout_seconds: int,
     retry_timeout_seconds: int,
 ) -> None:
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds):
-            return
-    except OSError as error:
-        if not _is_timeout_error(error):
+    current_request = request
+    current_timeout_seconds = timeout_seconds
+    retried_timeout = False
+    nonce_retry_count = 0
+    while True:
+        try:
+            with urllib.request.urlopen(current_request, timeout=current_timeout_seconds):
+                return
+        except urllib.error.HTTPError as error:
+            error_payload = _http_error_payload(error) if error.code in {400, 401} else None
+            dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
+            retry_request = (
+                None
+                if dpop_nonce is None or nonce_retry_count >= 3
+                else _guard_sync_request_with_nonce(current_request, dpop_nonce)
+            )
+            if retry_request is not None:
+                nonce_retry_count += 1
+                current_request = retry_request
+                current_timeout_seconds = timeout_seconds
+                retried_timeout = False
+                continue
             raise
-        with urllib.request.urlopen(request, timeout=retry_timeout_seconds):
-            return
+        except OSError as error:
+            if not retried_timeout and _is_timeout_error(error):
+                current_timeout_seconds = retry_timeout_seconds
+                retried_timeout = True
+                continue
+            raise
 
 
 def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
@@ -2645,7 +2962,7 @@ def _normalized_receipts_sync_url(sync_url: str) -> str:
             (
                 parsed.scheme,
                 parsed.netloc,
-                "/api/guard/receipts/sync",
+                "/registry/api/v1/guard/receipts/sync",
                 parsed.query,
                 "",
             )
@@ -2656,6 +2973,16 @@ def _normalized_receipts_sync_url(sync_url: str) -> str:
 def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
     normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
     parsed = urllib.parse.urlsplit(normalized_receipts_url)
+    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
+        return urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/registry/api/v1/guard/runtime/sessions/sync",
+                parsed.query,
+                "",
+            )
+        )
     if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
         return urllib.parse.urlunsplit(
             (
@@ -2690,7 +3017,9 @@ def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
 def _normalized_supply_chain_bundle_url(sync_url: str, workspace_id: str) -> str:
     normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
     parsed = urllib.parse.urlsplit(normalized_receipts_url)
-    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
+    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
+        next_path = "/registry/api/v1/guard/supply-chain/bundle"
+    elif parsed.path.rstrip("/") == "/api/guard/receipts/sync":
         next_path = "/api/guard/supply-chain/bundle"
     elif parsed.path.rstrip("/") == "/guard/receipts/sync":
         next_path = "/guard/supply-chain/bundle"
@@ -2719,9 +3048,9 @@ def _guard_events_sync_url(sync_url: str) -> str:
         return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), parsed.query, ""))
     path = parsed.path.rstrip("/")
     for suffix in (
+        "/registry/api/v1/guard/receipts/sync",
         "/api/guard/receipts/sync",
         "/guard/receipts/sync",
-        "/registry/api/v1/guard/receipts/sync",
     ):
         if path.endswith(suffix):
             path = path[: -len(suffix)]
@@ -2808,22 +3137,32 @@ def _receipt_sync_rows_for_upload(store: GuardStore, *, cursor_rowid: int | None
     return store.list_receipts_since_rowid(after_rowid=cursor_rowid, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
 
 
-def _receipt_sync_context(store: GuardStore, *, local_guard_online_at: str) -> dict[str, object]:
+def _receipt_sync_context(
+    store: GuardStore,
+    *,
+    local_guard_online_at: str,
+    device_id: str | None = None,
+    device_name: str | None = None,
+) -> dict[str, object]:
+    resolved_device_id = device_id
+    resolved_device_name = device_name
+    if resolved_device_id is None or resolved_device_name is None:
+        resolved_device_id, resolved_device_name = _guard_device_metadata(store)
     runtime_summary = store.get_sync_payload("runtime_session_summary")
     runtime_synced_at = (
         _optional_string(runtime_summary.get("runtime_session_synced_at"))
         if isinstance(runtime_summary, dict)
         else None
     )
-    prior_summary = store.get_sync_payload("sync_summary")
-    receipt_synced_at = (
-        _optional_string(prior_summary.get("synced_at")) or _optional_string(prior_summary.get("syncedAt"))
-        if isinstance(prior_summary, dict)
-        else None
+    runtime_harness = (
+        _optional_string(runtime_summary.get("runtime_harness")) if isinstance(runtime_summary, dict) else None
     )
     sync_health = "healthy" if runtime_synced_at is not None else "degraded"
     policy_bundle_ack = store.get_sync_payload("policy_bundle_ack")
     context: dict[str, object] = {
+        "deviceId": resolved_device_id,
+        "deviceName": resolved_device_name,
+        "harness": runtime_harness or "hol-guard",
         "localGuardOnlineAt": local_guard_online_at,
         "syncHealth": sync_health,
     }
@@ -2831,8 +3170,6 @@ def _receipt_sync_context(store: GuardStore, *, local_guard_online_at: str) -> d
         context["policyBundleAcknowledgement"] = policy_bundle_ack
     if runtime_synced_at is not None:
         context["lastRuntimeSyncAt"] = runtime_synced_at
-    if receipt_synced_at is not None:
-        context["lastReceiptSyncAt"] = receipt_synced_at
     return context
 
 
@@ -2917,11 +3254,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         workspace=workspace,
         generated_at=updated_at,
     )
-    local_identity = _cloud_local_identity_payload(
-        device_id,
-        daemon_version=_optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
-        observed_at=updated_at,
-    )
+    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
     return {
         "sessionId": session_id,
         "harness": _optional_string(session.get("harness")) or "hol-guard",
@@ -2944,23 +3277,12 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     }
 
 
-def _cloud_local_identity_payload(
-    device_id: str,
-    *,
-    daemon_version: str,
-    observed_at: str,
-) -> dict[str, object]:
+def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:
     hostname = _safe_hostname()
     private_ip = _safe_private_ip()
     if private_ip is None:
         private_ip = _safe_private_ipv6()
-    payload: dict[str, object] = {
-        "daemonId": device_id,
-        "daemonVersion": daemon_version,
-        "daemonStatus": "healthy",
-        "relayState": "online",
-        "lastSyncedAt": observed_at,
-    }
+    payload: dict[str, object] = {"lastSyncedAt": observed_at}
     if hostname is not None:
         payload["hostname"] = hostname
     if private_ip is not None:

@@ -8,10 +8,12 @@ from urllib.parse import urlparse
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..approvals import _connect_retry_refresh_race_from_reason
 from ..config import GuardConfig
-from ..consumer import detect_all, evaluate_detection
+from ..consumer import detect_all
+from ..consumer.service import diff_artifact
 from ..daemon import load_guard_daemon_url
-from ..models import HarnessDetection
+from ..models import GuardArtifact, HarnessDetection
 from ..redaction import redact_local_path
 from ..store import GuardStore
 from .connect_flow import CONNECT_COMMAND, CONNECT_REPAIR_COMMAND, CONNECT_STATUS_COMMAND, connect_recovery_command
@@ -87,7 +89,7 @@ def _build_guard_product_payload(
         "generated_at": _now(),
         "guard_home": _redacted_path(context.guard_home, context.home_dir),
         "workspace": _redacted_path(context.workspace_dir, context.home_dir),
-        "sync_configured": store.get_sync_credentials() is not None,
+        "sync_configured": store.get_cloud_sync_profile() is not None,
         "oauth_storage_health": store.get_oauth_local_credential_health(),
         "receipt_count": receipt_count,
         "pending_approvals": store.count_approval_requests(),
@@ -110,10 +112,9 @@ def _summarize_harness(
     config: GuardConfig,
     home_dir: Path,
 ) -> dict[str, object]:
-    evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
     managed_install = store.get_managed_install(detection.harness)
     approval_flow = get_adapter(detection.harness).approval_flow(managed_install=managed_install)
-    review_count = sum(1 for artifact in evaluation["artifacts"] if bool(artifact["changed"]))
+    review_count = _count_review_artifacts(store, detection.artifacts, detection.harness)
     managed = bool(managed_install and managed_install.get("active"))
     shim_path = None
     if managed_install is not None:
@@ -138,6 +139,15 @@ def _summarize_harness(
         "receipts_command": f"{GUARD_COMMAND} receipts",
         "approval_flow": approval_flow,
     }
+
+
+def _count_review_artifacts(store: GuardStore, artifacts: tuple[GuardArtifact, ...], harness: str) -> int:
+    previous_snapshots = store.list_snapshots(harness)
+    return sum(
+        1
+        for artifact in artifacts
+        if bool(diff_artifact(previous_snapshots.get(artifact.artifact_id), artifact)["changed"])
+    )
 
 
 def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:
@@ -222,8 +232,12 @@ def _resolve_runtime_status(runtime_state: dict[str, object] | None, approval_ce
 
 
 def _build_cloud_context(store: GuardStore) -> dict[str, object]:
-    credentials = store.get_sync_credentials()
-    sync_url = credentials["sync_url"] if credentials is not None else None
+    cloud_profile = store.get_cloud_sync_profile()
+    oauth_storage_health = store.get_oauth_local_credential_health()
+    oauth_repair_required = (
+        bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
+    )
+    sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     dashboard_url, connect_url, inbox_url, fleet_url = _resolve_guard_urls(sync_url)
     advisories = store.list_cached_advisories(limit=3)
     alert_preferences = _coerce_payload_dict(store.get_sync_payload("alert_preferences"))
@@ -233,17 +247,26 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     team_policy_pack = _coerce_payload_dict(store.get_sync_payload("team_policy_pack"))
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
-    latest_connect_state = store.get_latest_guard_connect_state(now=_now())
+    latest_connect_state = store.get_effective_guard_connect_state(now=_now())
+    connect_retry_required = _connect_retry_required(latest_connect_state)
+    connect_retry_refresh_race = _connect_retry_refresh_race(latest_connect_state)
     remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
     cloud_state = _resolve_cloud_state(
-        sync_configured=credentials is not None,
+        sync_configured=cloud_profile is not None,
         sync_completed=bool(sync_summary),
         remote_payload_active=remote_payload_active,
     )
     return {
         "cloud_state": cloud_state,
         "cloud_state_label": _cloud_state_label(cloud_state),
-        "cloud_state_detail": _cloud_state_detail(cloud_state, connect_url, dashboard_url),
+        "cloud_state_detail": _cloud_state_detail(
+            cloud_state,
+            connect_url,
+            dashboard_url,
+            oauth_repair_required=oauth_repair_required,
+            connect_retry_required=connect_retry_required,
+            connect_retry_refresh_race=connect_retry_refresh_race,
+        ),
         "sync_url": sync_url,
         "dashboard_url": dashboard_url,
         "inbox_url": inbox_url,
@@ -318,8 +341,8 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
                 "title": "Finish the first cloud sync",
                 "command": str(payload.get("sync_command") or f"{GUARD_COMMAND} sync"),
                 "detail": (
-                    "Older pairing flows may still need one explicit sync before this machine has cloud history, "
-                    "advisories, and team defaults."
+                    "Keep Local Guard running so it can finish the first cloud sync automatically. "
+                    "Use the sync command only when you want to force the retry now."
                 ),
             }
         ]
@@ -453,11 +476,35 @@ def _cloud_state_label(cloud_state: str) -> str:
     return labels.get(cloud_state, "Local only")
 
 
-def _cloud_state_detail(cloud_state: str, connect_url: str, dashboard_url: str) -> str:
+def _cloud_state_detail(
+    cloud_state: str,
+    connect_url: str,
+    dashboard_url: str,
+    *,
+    oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
+    connect_retry_refresh_race: bool = False,
+) -> str:
+    if oauth_repair_required:
+        return (
+            "Guard Cloud sign-in on this machine is incomplete. "
+            f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair local authorization and resume sync."
+        )
+    if connect_retry_refresh_race:
+        return (
+            "This machine stays locally protected. The first shared Guard Cloud proof stalled after a refresh-token "
+            f"race. Run `{GUARD_COMMAND} connect` or reopen {connect_url} when you want shared proof restored."
+        )
+    if connect_retry_required:
+        return (
+            "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
+            f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair the first sync."
+        )
     if cloud_state == "paired_waiting":
         return (
-            "Guard Cloud credentials are saved, but this machine has not finished a full sync yet. "
-            f"Run `{GUARD_COMMAND} sync` or reopen {connect_url} to finish the pairing loop."
+            "Guard Cloud credentials are saved, but this machine has not finished the first shared sync yet. "
+            f"Keep Local Guard running so it can retry automatically, or run "
+            f"`{GUARD_COMMAND} sync` to force a retry now."
         )
     if cloud_state == "paired_active":
         return (
@@ -472,6 +519,20 @@ def _cloud_state_detail(cloud_state: str, connect_url: str, dashboard_url: str) 
 
 def _coerce_payload_dict(payload: dict[str, object] | list[object] | None) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
+
+
+def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None:
+        return False
+    status = _optional_string(latest_state.get("status"))
+    milestone = _optional_string(latest_state.get("milestone"))
+    return status == "retry_required" or milestone == "first_sync_failed"
+
+
+def _connect_retry_refresh_race(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None or not _connect_retry_required(latest_state):
+        return False
+    return _connect_retry_refresh_race_from_reason(_optional_string(latest_state.get("reason")))
 
 
 def _advisory_headline(advisories: list[dict[str, object]]) -> str | None:

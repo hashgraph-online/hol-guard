@@ -58,8 +58,8 @@ class CursorHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _target_editor_config_path(context: HarnessContext) -> Path:
-        if context.workspace_dir is not None:
-            return context.workspace_dir / ".cursor" / "mcp.json"
+        """Managed Cursor editor installs always target the global config."""
+
         return context.home_dir / ".cursor" / "mcp.json"
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
@@ -217,6 +217,15 @@ class CursorHarnessAdapter(HarnessAdapter):
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         hooks_manifest = install_cursor_hooks(context)
+        notes = [
+            "Guard Cursor editor MCP proxies added to the global Cursor mcp.json config.",
+            "Guard native Cursor hooks installed globally for shell, MCP, and file-read interception.",
+        ]
+        if context.workspace_dir is not None:
+            notes.append(
+                "Workspace policy context uses the detected project directory; "
+                "Guard does not write project-local hook files."
+            )
         return {
             "harness": self.harness,
             "active": True,
@@ -228,10 +237,7 @@ class CursorHarnessAdapter(HarnessAdapter):
             "skipped_servers": list(skipped_servers),
             "managed_hooks_path": hooks_manifest.get("managed_hooks_path"),
             "managed_hook_script_path": hooks_manifest.get("managed_hook_script_path"),
-            "notes": [
-                "Guard Cursor editor MCP proxies added to the selected Cursor mcp.json config.",
-                "Guard native Cursor hooks installed for shell, MCP, and file-read interception.",
-            ],
+            "notes": notes,
         }
 
     def _uninstall_editor(self, context: HarnessContext) -> dict[str, object]:

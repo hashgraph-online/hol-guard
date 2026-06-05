@@ -3,16 +3,19 @@ import {
   clearReviewQueue,
   fetchAllPendingRequests,
   fetchApprovalPage,
+  GuardHarnessActionError,
   fetchQueueSummary,
-  fetchResumeStatus,
-  formatHarnessCommand,
-  normalizeRuntimeSnapshot,
-  normalizeApprovalRequest,
-  parseActionEnvelope,
-  parseDecisionV2,
-  resolveRequestWithQueueResult,
-  retryResume,
-} from "./guard-api";
+	  fetchResumeStatus,
+	  formatHarnessCommand,
+	  normalizeRuntimeSnapshot,
+	  normalizeApprovalRequest,
+	  parseActionEnvelope,
+	  parseDecisionV2,
+	  runPackageFirewallAction,
+	  runAuditRemediation,
+	  resolveRequestWithQueueResult,
+	  retryResume,
+	} from "./guard-api";
 import { resolveCloudSyncHealthCopy } from "./runtime-overview";
 import {
   resolveDecisionV2Detail,
@@ -753,6 +756,158 @@ const clearQueueGate = clearQueueBody["approval_gate"] as Record<string, unknown
 assert(clearQueueGate["password"] === "local-password", "L079b: clearReviewQueue sends approval password");
 assert(clearQueueGate["totp_code"] === "123456", "L079b: clearReviewQueue sends authenticator code");
 assert(clearQueueResult.cleared === 2, "L079b: clearReviewQueue returns cleared count");
+
+installGuardWindow("?guard-token=token-remediate&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const remediationCalls = installFetchStub({
+  "/v1/audit/remediations/package_shim_path": {
+    entitlement: { allowed: true },
+    operation: "package_shim_path",
+    receipt: null,
+    result: { manager: "pnpm" },
+    status: "completed"
+  }
+});
+const remediation = await runAuditRemediation({
+  action: "package_shim_path",
+  manager: "pnpm",
+  approval_password: "local-password",
+  approval_totp_code: "123456"
+});
+const remediationBody = JSON.parse(String(remediationCalls[0].init?.body)) as Record<string, unknown>;
+assert(
+  remediationCalls[0].url === "http://127.0.0.1:4781/v1/audit/remediations/package_shim_path",
+  "L079c: runAuditRemediation posts to daemon remediation route"
+);
+assert(headerValue(remediationCalls[0].init, "X-Guard-Token") === "token-remediate", "L079c: runAuditRemediation sends Guard token");
+assert(remediationBody["manager"] === "pnpm", "L079c: runAuditRemediation sends manager");
+assert(remediationBody["approval_password"] === "local-password", "L079c: runAuditRemediation sends approval password");
+assert(remediationBody["approval_totp_code"] === "123456", "L079c: runAuditRemediation sends approval TOTP code");
+assert(remediation.operation === "package_shim_path", "L079c: runAuditRemediation normalizes response");
+
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const remediationBootstrapCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  remediationBootstrapCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/initialize") {
+    return new Response(JSON.stringify({ auth_token: "fresh-remediate-token" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  if (path === "/v1/audit/remediations/package_shim_path") {
+    const token = headerValue(init, "X-Guard-Token");
+    if (token !== "fresh-remediate-token") {
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }
+    return new Response(JSON.stringify({
+      entitlement: { allowed: true },
+      operation: "package_shim_path",
+      receipt: null,
+      result: { manager: "pnpm" },
+      status: "completed"
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+
+const remediationBootstrap = await runAuditRemediation({
+  action: "package_shim_path",
+  manager: "pnpm",
+});
+assert(remediationBootstrapCalls.length === 3, "L079d: remediation bootstraps token after 401 and retries");
+assert(new URL(remediationBootstrapCalls[1].url).pathname === "/v1/initialize", "L079d: remediation calls initialize after unauthorized");
+assert(
+  headerValue(remediationBootstrapCalls[2].init, "X-Guard-Token") === "fresh-remediate-token",
+  "L079d: remediation retries with refreshed Guard token"
+);
+assert(remediationBootstrap.operation === "package_shim_path", "L079d: remediation succeeds after token bootstrap");
+
+installGuardWindow("?guard-token=token-firewall&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const firewallCalls = installFetchStub({
+  "/v1/supply-chain/package-shims/install": {
+    entitlement: { allowed: true },
+    operation: "install",
+    receipt: null,
+    result: { manager: "pnpm" },
+    status: "completed"
+  }
+});
+const firewallAction = await runPackageFirewallAction("install", "pnpm", {
+  approval_password: "local-password",
+  approval_totp_code: "123456"
+});
+const firewallBody = JSON.parse(String(firewallCalls[0].init?.body)) as Record<string, unknown>;
+assert(
+  firewallCalls[0].url === "http://127.0.0.1:4781/v1/supply-chain/package-shims/install",
+  "L079da: runPackageFirewallAction posts to the install route"
+);
+assert(headerValue(firewallCalls[0].init, "X-Guard-Token") === "token-firewall", "L079da: runPackageFirewallAction sends Guard token");
+assert(Array.isArray(firewallBody["managers"]) && (firewallBody["managers"] as unknown[])[0] === "pnpm", "L079da: runPackageFirewallAction sends selected manager");
+assert(firewallBody["approval_password"] === "local-password", "L079da: runPackageFirewallAction sends approval password");
+assert(firewallBody["approval_totp_code"] === "123456", "L079da: runPackageFirewallAction sends approval TOTP code");
+assert(firewallAction.operation === "install", "L079da: runPackageFirewallAction normalizes response");
+
+installGuardWindow("?guard-token=token-firewall-error&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  const parsed = new URL(url, "http://127.0.0.1:4174");
+  if (parsed.pathname === "/v1/supply-chain/package-shims/install") {
+    return new Response(
+      JSON.stringify({
+        error: "approval_gate_required",
+        message: "Approval password is required."
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+let firewallError: unknown = null;
+try {
+  await runPackageFirewallAction("install", "pnpm");
+} catch (error) {
+  firewallError = error;
+}
+assert(firewallError instanceof GuardHarnessActionError, "L079db: runPackageFirewallAction throws GuardHarnessActionError on structured failures");
+assert(
+  firewallError instanceof GuardHarnessActionError && firewallError.payload?.error === "approval_gate_required",
+  "L079db: runPackageFirewallAction preserves daemon error code for approval modal fallback"
+);
+
+installGuardWindow("?guard-token=token-remediate-error&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  const parsed = new URL(url, "http://127.0.0.1:4174");
+  if (parsed.pathname === "/v1/audit/remediations/package_shim_path") {
+    return new Response(
+      JSON.stringify({
+        error: "approval_gate_required",
+        message: "Approval password required."
+      }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+let remediationError: unknown = null;
+try {
+  await runAuditRemediation({
+    action: "package_shim_path",
+    manager: "pnpm"
+  });
+} catch (error) {
+  remediationError = error;
+}
+assert(remediationError instanceof GuardHarnessActionError, "L079e: runAuditRemediation throws GuardHarnessActionError on structured failures");
+assert(
+  remediationError instanceof GuardHarnessActionError && remediationError.payload?.error === "approval_gate_required",
+  "L079e: runAuditRemediation preserves daemon error code for approval modal fallback"
+);
 
 installGuardWindow("?guard-token=token-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchResolveCalls = installFetchStub({

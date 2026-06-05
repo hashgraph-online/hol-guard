@@ -118,6 +118,19 @@ function parseRequestId(pathname: string): string | null {
 
 type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
 
+export function viewTitle(view: AppView): string {
+  if (view === "home") return "Home";
+  if (view === "inbox") return "Inbox";
+  if (view === "fleet") return "Protect";
+  if (view === "evidence") return "Evidence";
+  if (view === "settings") return "Settings";
+  if (view === "supply-chain") return "Supply Chain";
+  if (view === "audit") return "Audit";
+  if (view === "policy") return "Policy";
+  if (view === "feed-health") return "Feed Health";
+  return "App detail";
+}
+
 export function parseAppDetail(pathname: string): string | null {
   if (!pathname.startsWith("/apps/")) {
     return null;
@@ -647,7 +660,7 @@ export function App() {
         Skip to content
       </a>
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {view === "home" ? "Home" : view === "inbox" ? "Inbox" : view === "fleet" ? "Protect" : view === "evidence" ? "Evidence" : view === "settings" ? "Settings" : view === "supply-chain" || view === "audit" || view === "policy" || view === "feed-health" ? "Trust Center" : "App detail"}
+        {viewTitle(view)}
       </div>
     <ApprovalCenterLayout
       view={view}
@@ -721,14 +734,15 @@ export function App() {
       supplyChainHubContent={
         runtime.kind === "ready" ? (
           <Suspense fallback={<LazyFallback />}>
-            <SupplyChainHubWorkspace
-              activeView={view}
-              snapshot={runtime.snapshot}
-              receipts={receipts.kind === "ready" ? receipts.items : []}
-              policies={policies.kind === "ready" ? policies.items : []}
-              onClearPolicy={handleClearPolicy}
-              onOpenSettings={handleOpenSettings}
-              onGoHome={handleGoHome}
+	            <SupplyChainHubWorkspace
+	              activeView={view}
+	              snapshot={runtime.snapshot}
+	              receipts={receipts.kind === "ready" ? receipts.items : []}
+	              policies={policies.kind === "ready" ? policies.items : []}
+	              approvalGate={approvalGate}
+	              onClearPolicy={handleClearPolicy}
+	              onOpenSettings={handleOpenSettings}
+	              onGoHome={handleGoHome}
               onNavigate={navigate}
             />
           </Suspense>
