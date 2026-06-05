@@ -376,10 +376,10 @@ def build_runtime_snapshot(
     first_request_id = str(queue_items[0]["request_id"]) if queue_items else None
     next_request_id = active_request_id if active_is_pending else first_request_id
     latest_receipts = store.list_receipts(limit=receipt_limit)
-    cloud_context = _build_runtime_cloud_context(store)
     snapshot_now = now or _now()
     config = load_guard_config(store.guard_home)
     latest_connect_state = _build_latest_connect_state(store, snapshot_now)
+    cloud_context = _build_runtime_cloud_context(store, latest_connect_state=latest_connect_state)
     headline_state = _resolve_runtime_headline_state(
         pending_count=store.count_approval_requests(),
         runtime_state=store.get_runtime_state(),
@@ -567,12 +567,16 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
+def _build_runtime_cloud_context(
+    store: GuardStore,
+    latest_connect_state: dict[str, object] | None,
+) -> dict[str, object]:
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
+    connect_retry_required = _connect_retry_required(latest_connect_state)
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
     remote_policy = store.get_sync_payload("policy") or {}
@@ -590,6 +594,7 @@ def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
         cloud_profile is not None,
         cloud_state,
         oauth_repair_required=oauth_repair_required,
+        connect_retry_required=connect_retry_required,
     )
     return {
         "sync_configured": cloud_profile is not None,
@@ -598,6 +603,7 @@ def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
         "cloud_state_detail": _runtime_cloud_state_detail(
             cloud_state,
             oauth_repair_required=oauth_repair_required,
+            connect_retry_required=connect_retry_required,
         ),
         "cloud_sync_health": sync_health,
         "cloud_pairing_state": {
@@ -606,6 +612,7 @@ def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
             "detail": _runtime_cloud_state_detail(
                 cloud_state,
                 oauth_repair_required=oauth_repair_required,
+                connect_retry_required=connect_retry_required,
             ),
             "sync_configured": cloud_profile is not None,
             "dashboard_url": dashboard_url,
@@ -750,12 +757,21 @@ def _runtime_proof_status_detail(state: str) -> str:
     return details.get(state, "Connect Guard Cloud to sync this device proof.")
 
 
+def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None:
+        return False
+    status = _optional_string(latest_state.get("status"))
+    milestone = _optional_string(latest_state.get("milestone"))
+    return status == "retry_required" or milestone == "first_sync_failed"
+
+
 def _build_cloud_sync_health(
     store: GuardStore,
     sync_configured: bool,
     cloud_state: str,
     *,
     oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
 ) -> dict[str, object]:
     pending_events = store.count_guard_events_v1(uploaded=False)
     event_summary = store.get_sync_payload("guard_events_v1_summary") or {}
@@ -766,7 +782,7 @@ def _build_cloud_sync_health(
         sync_summary.get("synced_at"),
         runtime_summary.get("synced_at"),
     )
-    if oauth_repair_required:
+    if oauth_repair_required or connect_retry_required:
         state = "failed"
     elif not sync_configured:
         state = "disabled"
@@ -791,6 +807,7 @@ def _build_cloud_sync_health(
             state,
             pending_events=pending_events,
             oauth_repair_required=oauth_repair_required,
+            connect_retry_required=connect_retry_required,
         ),
         "pending_events": pending_events,
         "last_synced_at": last_synced_at,
@@ -840,11 +857,17 @@ def _cloud_sync_health_label(state: str) -> str:
     return labels.get(state, "Cloud sync pending")
 
 
-def _cloud_sync_health_detail(state: str, *, pending_events: int, oauth_repair_required: bool = False) -> str:
+def _cloud_sync_health_detail(
+    state: str,
+    *,
+    pending_events: int,
+    oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
+) -> str:
     if state == "healthy":
         return "Guard Cloud has the latest local proof from this machine."
     if state == "failed":
-        if oauth_repair_required:
+        if oauth_repair_required or connect_retry_required:
             return (
                 "Guard Cloud authorization on this machine needs repair. Run hol-guard connect again to restore sync."
             )
@@ -882,11 +905,21 @@ def _runtime_cloud_state_label(cloud_state: str) -> str:
     return labels.get(cloud_state, "Local only")
 
 
-def _runtime_cloud_state_detail(cloud_state: str, *, oauth_repair_required: bool = False) -> str:
+def _runtime_cloud_state_detail(
+    cloud_state: str,
+    *,
+    oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
+) -> str:
     if oauth_repair_required:
         return (
             "Guard Cloud sign-in on this machine is incomplete. "
             "Run hol-guard connect again to repair local authorization and resume sync."
+        )
+    if connect_retry_required:
+        return (
+            "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
+            "Run hol-guard connect again."
         )
     if cloud_state == "paired_waiting":
         return (

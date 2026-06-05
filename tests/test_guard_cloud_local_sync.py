@@ -569,6 +569,13 @@ def test_runtime_snapshot_exposes_latest_connect_proof_without_pairing_secrets(t
             ),
         ),
         (
+            "retry_required",
+            "first_sync_failed",
+            "failed",
+            "First proof needs retry",
+            "Guard Cloud sign-in on this machine needs repair. Run hol-guard connect again.",
+        ),
+        (
             "waiting",
             "waiting_for_browser",
             "waiting",
@@ -781,10 +788,6 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     assert isinstance(session_payload, dict)
     assert session_payload["deviceId"] == store.get_or_create_installation_id()
     assert session_payload["deviceName"] == store.get_device_metadata()["device_label"]
-    assert session_payload["localIdentity"]["daemonId"] == store.get_or_create_installation_id()
-    assert session_payload["localIdentity"]["daemonVersion"] == guard_runner_module.__version__
-    assert session_payload["localIdentity"]["daemonStatus"] == "healthy"
-    assert session_payload["localIdentity"]["relayState"] == "online"
     assert session_payload["localIdentity"]["lastSyncedAt"] == "2026-04-24T00:01:00+00:00"
     assert session_payload["localIdentitySource"]["daemonId"] == "local-guard"
     assert session_payload["localIdentitySource"]["daemonVersion"] == "local-guard"
@@ -903,5 +906,5 @@ def test_sync_runtime_session_keeps_local_identity_when_package_coverage_missing
 
     session_payload = captured_body["session"]
     assert isinstance(session_payload, dict)
-    assert session_payload["localIdentity"]["daemonId"] == store.get_or_create_installation_id()
+    assert "daemonId" not in session_payload["localIdentity"]
     assert session_payload["localIdentitySource"]["daemonId"] == "local-guard"

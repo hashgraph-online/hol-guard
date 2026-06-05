@@ -162,6 +162,7 @@ from ..runtime.runner import (
     extract_prompt_requests,
     guard_run,
     prompt_requests_to_artifacts,
+    sync_local_guard_cloud_proof,
     sync_receipts,
     sync_runtime_session,
     sync_supply_chain_bundle,
@@ -9441,7 +9442,7 @@ def _finalize_guard_connect_payload(
         return payload
     payload["sync_attempted"] = True
     try:
-        sync_payload = sync_receipts(store)
+        sync_payload = sync_local_guard_cloud_proof(store)
     except GuardSyncNotAvailableError as error:
         store.record_latest_guard_connect_sync_result(
             status="connected",

@@ -838,7 +838,12 @@ def _prompt_config_candidates(detection: HarnessDetection, context: HarnessConte
     return detection.config_paths
 
 
-def sync_receipts(store: GuardStore) -> dict[str, object]:
+def sync_receipts(
+    store: GuardStore,
+    *,
+    persist_sync_summary: bool = True,
+    persist_connect_state: bool = True,
+) -> dict[str, object]:
     """Push local receipts to the configured sync endpoint."""
 
     auth_context = _resolve_guard_sync_auth_context(store)
@@ -856,7 +861,12 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     remote_decisions: set[PolicyDecision] = set()
     device_id, device_name = _guard_device_metadata(store)
     local_guard_online_at = _now()
-    sync_context = _receipt_sync_context(store=store, local_guard_online_at=local_guard_online_at)
+    sync_context = _receipt_sync_context(
+        store=store,
+        local_guard_online_at=local_guard_online_at,
+        device_id=device_id,
+        device_name=device_name,
+    )
     latest_uploaded_rowid: int | None = None
     for receipt_batch in _iter_receipt_sync_batches(receipts):
         body = json.dumps(
@@ -994,8 +1004,10 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
     summary["guard_events_v1"] = sync_guard_events(store, auth_context=auth_context)
-    store.set_sync_payload("sync_summary", summary, now)
-    store.record_latest_guard_connect_sync_success(sync_payload=summary, now=now)
+    if persist_sync_summary:
+        store.set_sync_payload("sync_summary", summary, now)
+    if persist_connect_state:
+        store.record_latest_guard_connect_sync_success(sync_payload=summary, now=now)
     return summary
 
 
@@ -1513,6 +1525,50 @@ def sync_runtime_session(
                 device_id=device_id,
             )
         )
+    return summary
+
+
+def _local_guard_runtime_session() -> dict[str, object]:
+    return {
+        "harness": "hol-guard",
+        "surface": "cli",
+        "status": "active",
+        "client_name": "hol-guard",
+        "client_title": "HOL Guard CLI",
+        "client_version": __version__,
+        "workspace": "local-machine",
+        "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+    }
+
+
+def sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
+    """Publish the local Guard runtime session before syncing receipts."""
+
+    runtime_summary = sync_runtime_session(store, session=_local_guard_runtime_session())
+    receipts_summary = sync_receipts(
+        store,
+        persist_sync_summary=False,
+        persist_connect_state=False,
+    )
+    summary = dict(receipts_summary)
+    summary.update(
+        {
+            "runtime_session_id": runtime_summary.get("runtime_session_id"),
+            "runtime_session_synced_at": runtime_summary.get("runtime_session_synced_at"),
+            "runtime_sessions_visible": runtime_summary.get("runtime_sessions_visible"),
+            "local_guard_online_at": runtime_summary.get("local_guard_online_at")
+            or receipts_summary.get("local_guard_online_at"),
+            "runtime_harness": runtime_summary.get("runtime_harness"),
+            "runtime_surface": runtime_summary.get("runtime_surface"),
+            "runtime_workspace": runtime_summary.get("runtime_workspace"),
+            "runtime_device_id": runtime_summary.get("runtime_device_id"),
+            "runtime": runtime_summary,
+            "receipts": dict(receipts_summary),
+        }
+    )
+    recorded_at = str(summary.get("synced_at") or summary.get("runtime_session_synced_at") or _now())
+    store.set_sync_payload("sync_summary", summary, recorded_at)
+    store.record_latest_guard_connect_sync_success(sync_payload=summary, now=recorded_at)
     return summary
 
 
@@ -2503,28 +2559,36 @@ def _receipt_sync_rows_for_upload(store: GuardStore, *, cursor_rowid: int | None
     return store.list_receipts_since_rowid(after_rowid=cursor_rowid, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
 
 
-def _receipt_sync_context(store: GuardStore, *, local_guard_online_at: str) -> dict[str, object]:
+def _receipt_sync_context(
+    store: GuardStore,
+    *,
+    local_guard_online_at: str,
+    device_id: str | None = None,
+    device_name: str | None = None,
+) -> dict[str, object]:
+    resolved_device_id = device_id
+    resolved_device_name = device_name
+    if resolved_device_id is None or resolved_device_name is None:
+        resolved_device_id, resolved_device_name = _guard_device_metadata(store)
     runtime_summary = store.get_sync_payload("runtime_session_summary")
     runtime_synced_at = (
         _optional_string(runtime_summary.get("runtime_session_synced_at"))
         if isinstance(runtime_summary, dict)
         else None
     )
-    prior_summary = store.get_sync_payload("sync_summary")
-    receipt_synced_at = (
-        _optional_string(prior_summary.get("synced_at")) or _optional_string(prior_summary.get("syncedAt"))
-        if isinstance(prior_summary, dict)
-        else None
+    runtime_harness = (
+        _optional_string(runtime_summary.get("runtime_harness")) if isinstance(runtime_summary, dict) else None
     )
     sync_health = "healthy" if runtime_synced_at is not None else "degraded"
     context: dict[str, object] = {
+        "deviceId": resolved_device_id,
+        "deviceName": resolved_device_name,
+        "harness": runtime_harness or "hol-guard",
         "localGuardOnlineAt": local_guard_online_at,
         "syncHealth": sync_health,
     }
     if runtime_synced_at is not None:
         context["lastRuntimeSyncAt"] = runtime_synced_at
-    if receipt_synced_at is not None:
-        context["lastReceiptSyncAt"] = receipt_synced_at
     return context
 
 
@@ -2609,11 +2673,7 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
         workspace=workspace,
         generated_at=updated_at,
     )
-    local_identity = _cloud_local_identity_payload(
-        device_id,
-        daemon_version=_optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
-        observed_at=updated_at,
-    )
+    local_identity = _cloud_local_identity_payload(observed_at=updated_at)
     return {
         "sessionId": session_id,
         "harness": _optional_string(session.get("harness")) or "hol-guard",
@@ -2636,23 +2696,12 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
     }
 
 
-def _cloud_local_identity_payload(
-    device_id: str,
-    *,
-    daemon_version: str,
-    observed_at: str,
-) -> dict[str, object]:
+def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:
     hostname = _safe_hostname()
     private_ip = _safe_private_ip()
     if private_ip is None:
         private_ip = _safe_private_ipv6()
-    payload: dict[str, object] = {
-        "daemonId": device_id,
-        "daemonVersion": daemon_version,
-        "daemonStatus": "healthy",
-        "relayState": "online",
-        "lastSyncedAt": observed_at,
-    }
+    payload: dict[str, object] = {"lastSyncedAt": observed_at}
     if hostname is not None:
         payload["hostname"] = hostname
     if private_ip is not None:
