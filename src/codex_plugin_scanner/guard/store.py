@@ -616,6 +616,10 @@ class GuardStore:
         try:
             secret_store.fallback.set_secret(secret_id, value)
         except Exception:
+            _store_logger.warning(
+                "Failed to mirror OAuth credentials into encrypted fallback store; "
+                "headless environments may not be able to read credentials."
+            )
             return
 
     def _get_secret_from_store(self, store: SecretStore, secret_id: str) -> str | None:
