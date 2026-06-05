@@ -6576,13 +6576,31 @@ url = http://127.0.0.1:8787/guard-canary
                 "workspace_id": "workspace-123",
             }
 
-        def fake_sync_receipts(store: GuardStore) -> dict[str, object]:
+        def fake_sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
             del store
-            sync_calls.append("receipts")
+            sync_calls.append("first-proof")
             return {
                 "synced_at": "2026-06-04T18:31:00+00:00",
                 "receipts_stored": 4,
                 "inventory_tracked": 2,
+                "runtime_session_synced_at": "2026-06-04T18:30:59+00:00",
+                "runtime_session_id": "runtime-session-123",
+                "runtime_sessions_visible": 1,
+                "runtime_harness": "hol-guard",
+                "runtime_surface": "cli",
+                "runtime_workspace": "local-machine",
+                "runtime_device_id": "machine-123",
+                "local_guard_online_at": "2026-06-04T18:30:59+00:00",
+                "runtime": {
+                    "synced_at": "2026-06-04T18:30:59+00:00",
+                    "runtime_session_synced_at": "2026-06-04T18:30:59+00:00",
+                    "runtime_session_id": "runtime-session-123",
+                },
+                "receipts": {
+                    "synced_at": "2026-06-04T18:31:00+00:00",
+                    "receipts_stored": 4,
+                    "inventory_tracked": 2,
+                },
             }
 
         def fake_sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
@@ -6591,7 +6609,7 @@ url = http://127.0.0.1:8787/guard-canary
             return {"synced_at": "2026-06-04T18:31:05+00:00", "status": "synced"}
 
         monkeypatch.setattr(guard_commands_module, "_run_guard_device_connect_flow", fake_device_flow)
-        monkeypatch.setattr(guard_commands_module, "sync_receipts", fake_sync_receipts)
+        monkeypatch.setattr(guard_commands_module, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof)
         monkeypatch.setattr(guard_commands_module, "sync_supply_chain_bundle", fake_sync_supply_chain_bundle)
 
         rc = main(
@@ -6611,7 +6629,7 @@ url = http://127.0.0.1:8787/guard-canary
         latest_state = store.get_latest_guard_connect_state(now="2026-06-04T18:31:00+00:00")
 
         assert rc == 0
-        assert sync_calls == ["receipts"]
+        assert sync_calls == ["first-proof"]
         assert bundle_calls == ["bundle"]
         assert output["status"] == "connected"
         assert output["milestone"] == "first_sync_succeeded"
@@ -6621,9 +6639,12 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["sync_url"] == "https://hol.org/api/guard/receipts/sync"
         assert output["last_sync_at"] == "2026-06-04T18:31:00+00:00"
         assert output["sync"]["receipts_stored"] == 4
+        assert output["sync"]["runtime_session_id"] == "runtime-session-123"
         assert isinstance(latest_state, dict)
         assert latest_state["status"] == "connected"
         assert latest_state["milestone"] == "first_sync_succeeded"
+        assert latest_state["proof"]["runtime_session_id"] == "runtime-session-123"
+        assert latest_state["proof"]["runtime_session_synced_at"] == "2026-06-04T18:30:59+00:00"
 
     def test_guard_status_reports_oauth_key_storage_health(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

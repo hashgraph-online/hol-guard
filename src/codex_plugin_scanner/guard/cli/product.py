@@ -245,6 +245,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
     latest_connect_state = store.get_effective_guard_connect_state(now=_now())
+    connect_retry_required = _connect_retry_required(latest_connect_state)
     remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
     cloud_state = _resolve_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -259,6 +260,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
             connect_url,
             dashboard_url,
             oauth_repair_required=oauth_repair_required,
+            connect_retry_required=connect_retry_required,
         ),
         "sync_url": sync_url,
         "dashboard_url": dashboard_url,
@@ -330,8 +332,8 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
                 "title": "Finish the first cloud sync",
                 "command": str(payload.get("sync_command") or f"{GUARD_COMMAND} sync"),
                 "detail": (
-                    "Older pairing flows may still need one explicit sync before this machine has cloud history, "
-                    "advisories, and team defaults."
+                    "Keep Local Guard running so it can finish the first cloud sync automatically. "
+                    "Use the sync command only when you want to force the retry now."
                 ),
             }
         ]
@@ -471,16 +473,23 @@ def _cloud_state_detail(
     dashboard_url: str,
     *,
     oauth_repair_required: bool = False,
+    connect_retry_required: bool = False,
 ) -> str:
     if oauth_repair_required:
         return (
             "Guard Cloud sign-in on this machine is incomplete. "
             f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair local authorization and resume sync."
         )
+    if connect_retry_required:
+        return (
+            "Guard Cloud connection on this machine needs repair before the first shared proof can land. "
+            f"Run `{GUARD_COMMAND} connect` or reopen {connect_url} to repair the first sync."
+        )
     if cloud_state == "paired_waiting":
         return (
-            "Guard Cloud credentials are saved, but this machine has not finished a full sync yet. "
-            f"Run `{GUARD_COMMAND} sync` or reopen {connect_url} to finish the pairing loop."
+            "Guard Cloud credentials are saved, but this machine has not finished the first shared sync yet. "
+            f"Keep Local Guard running so it can retry automatically, or run "
+            f"`{GUARD_COMMAND} sync` to force a retry now."
         )
     if cloud_state == "paired_active":
         return (
@@ -495,6 +504,14 @@ def _cloud_state_detail(
 
 def _coerce_payload_dict(payload: dict[str, object] | list[object] | None) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
+
+
+def _connect_retry_required(latest_state: dict[str, object] | None) -> bool:
+    if latest_state is None:
+        return False
+    status = _optional_string(latest_state.get("status"))
+    milestone = _optional_string(latest_state.get("milestone"))
+    return status == "retry_required" or milestone == "first_sync_failed"
 
 
 def _advisory_headline(advisories: list[dict[str, object]]) -> str | None:
