@@ -35,13 +35,14 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Run Trivy on release surfaces
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
         with:
           scan-type: fs
           scan-ref: .
           scanners: vuln,misconfig,secret
           severity: HIGH,CRITICAL
           skip-dirs: tests/fixtures
+          skip-files: .clusterfuzzlite/Dockerfile
           hide-progress: true
           exit-code: "1"
 
@@ -53,6 +54,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version: "1.23"
+      - name: Install Gitleaks
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/gitleaks/gitleaks/v8@v8.24.2
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Run Gitleaks
+        run: gitleaks detect --source . --no-banner --redact --exit-code 1
