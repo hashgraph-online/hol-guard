@@ -3431,9 +3431,8 @@ def run_guard_command(
                     if policy_action == "require-reapproval"
                     else "policy"
                 ),
-                action_envelope_json=action_envelope.to_dict() if action_envelope is not None else None,
             )
-            store.add_receipt(receipt)
+            store.add_receipt(receipt, action_envelope=action_envelope)
             response_payload = {
                 "recorded": True,
                 "harness": _canonical_harness_name(args.harness),
@@ -3850,9 +3849,8 @@ def run_guard_command(
                 source_scope=_coalesce_string(payload.get("source_scope"), "project"),
                 user_override=_optional_string(payload.get("user_override")),
                 approval_source=("inline" if _optional_string(payload.get("user_override")) is not None else "policy"),
-                action_envelope_json=action_envelope.to_dict() if action_envelope is not None else None,
             )
-            store.add_receipt(receipt)
+            store.add_receipt(receipt, action_envelope=action_envelope)
         _record_harness_usage_for_hook(
             store=store,
             action_envelope=action_envelope,

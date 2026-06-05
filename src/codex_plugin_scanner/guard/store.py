@@ -26,6 +26,7 @@ from .approval_gate import ApprovalGateGrant, require_policy_clear, require_poli
 from .cli.oauth_client import resolve_guard_oauth_client_config, validate_guard_sync_endpoint
 from .edge_events import build_receipt_event
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
+from .runtime.actions import GuardActionEnvelope
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .store_approvals import (
@@ -952,6 +953,13 @@ class GuardStore:
             )
             """,
             """
+            create table if not exists runtime_receipt_envelopes (
+              receipt_id text primary key references runtime_receipts(receipt_id) on delete cascade,
+              envelope_full_json text,
+              envelope_redacted_json text not null
+            )
+            """,
+            """
             create table if not exists publisher_cache (
               publisher_key text primary key,
               payload_json text not null,
@@ -1128,7 +1136,11 @@ class GuardStore:
             self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_runtime_receipts_column(connection, "diff_summary", "text")
             self._ensure_runtime_receipts_column(connection, "approval_source", "text")
-            self._ensure_runtime_receipts_column(connection, "action_envelope_json", "text")
+            self._ensure_runtime_receipts_column(connection, "approval_request_id", "text")
+            self._ensure_runtime_receipt_envelopes_table(connection)
+            if not self._schema_version_applied(connection, version=5):
+                self._migrate_v5_receipt_envelopes(connection)
+                self._record_schema_version(connection, version=5)
             self._ensure_approval_column(connection, "artifact_type", "text not null default 'artifact'")
             self._ensure_approval_column(connection, "launch_target", "text")
             self._ensure_approval_column(connection, "transport", "text")
@@ -1177,6 +1189,78 @@ class GuardStore:
         if column_name in existing:
             return
         connection.execute(f"alter table runtime_receipts add column {column_name} {column_type}")
+
+    @staticmethod
+    def _ensure_runtime_receipt_envelopes_table(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            create table if not exists runtime_receipt_envelopes (
+              receipt_id text primary key references runtime_receipts(receipt_id) on delete cascade,
+              envelope_full_json text,
+              envelope_redacted_json text not null
+            )
+            """
+        )
+
+    @staticmethod
+    def _migrate_v5_receipt_envelopes(connection: sqlite3.Connection) -> None:
+        rows = connection.execute("pragma table_info(runtime_receipts)").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if "action_envelope_json" not in existing:
+            return
+        connection.execute(
+            """
+            insert into runtime_receipt_envelopes (receipt_id, envelope_full_json, envelope_redacted_json)
+            select receipt_id, action_envelope_json, '{}'
+            from runtime_receipts
+            where action_envelope_json is not null
+              and not exists (
+                select 1 from runtime_receipt_envelopes
+                where runtime_receipt_envelopes.receipt_id = runtime_receipts.receipt_id
+              )
+            """
+        )
+        connection.execute("drop table if exists runtime_receipts_new")
+        connection.execute(
+            """
+            create table runtime_receipts_new (
+              receipt_id text primary key,
+              harness text not null,
+              artifact_id text not null,
+              artifact_hash text not null,
+              policy_decision text not null,
+              capabilities_summary text not null default '',
+              changed_capabilities_json text not null,
+              provenance_summary text not null,
+              user_override text,
+              artifact_name text,
+              source_scope text,
+              scanner_evidence_json text not null default '[]',
+              timestamp text not null,
+              diff_summary text,
+              approval_source text,
+              approval_request_id text
+            )
+            """
+        )
+        connection.execute(
+            """
+            insert into runtime_receipts_new (
+              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+              capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
+              artifact_name, source_scope, scanner_evidence_json, timestamp, diff_summary,
+              approval_source, approval_request_id
+            )
+            select
+              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
+              capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
+              artifact_name, source_scope, scanner_evidence_json, timestamp, diff_summary,
+              approval_source, null
+            from runtime_receipts
+            """
+        )
+        connection.execute("drop table runtime_receipts")
+        connection.execute("alter table runtime_receipts_new rename to runtime_receipts")
 
     @staticmethod
     def _ensure_approval_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -1877,7 +1961,12 @@ class GuardStore:
         publisher = decision.publisher if decision.scope == "publisher" else None
         return artifact_id, artifact_hash, workspace, publisher
 
-    def add_receipt(self, receipt: GuardReceipt) -> None:
+    def add_receipt(
+        self,
+        receipt: GuardReceipt,
+        *,
+        action_envelope: GuardActionEnvelope | None = None,
+    ) -> None:
         with self._connect() as connection:
             connection.execute(
                 """
@@ -1885,7 +1974,7 @@ class GuardStore:
                   receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                   changed_capabilities_json,
                   provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                  diff_summary, approval_source, timestamp, action_envelope_json
+                  diff_summary, approval_source, approval_request_id, timestamp
                 )
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -1904,10 +1993,24 @@ class GuardStore:
                     json.dumps(list(receipt.scanner_evidence), sort_keys=True),
                     receipt.diff_summary,
                     receipt.approval_source,
+                    receipt.approval_request_id,
                     receipt.timestamp,
-                    json.dumps(receipt.action_envelope_json) if receipt.action_envelope_json is not None else None,
                 ),
             )
+            if action_envelope is not None:
+                from .receipts.manager import _redacted_envelope_dict
+
+                connection.execute(
+                    """
+                    insert into runtime_receipt_envelopes (receipt_id, envelope_full_json, envelope_redacted_json)
+                    values (?, ?, ?)
+                    """,
+                    (
+                        receipt.receipt_id,
+                        json.dumps(action_envelope.to_dict()),
+                        json.dumps(_redacted_envelope_dict(action_envelope)),
+                    ),
+                )
             self._ensure_local_device(connection)
             row = connection.execute(
                 "select installation_id from guard_devices where device_key = ?",
@@ -1924,37 +2027,44 @@ class GuardStore:
                 ),
             )
 
-    def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
-        if harness is not None:
-            query = """
-                select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
-                       capabilities_summary,
-                       changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                       diff_summary, approval_source, timestamp, action_envelope_json
-                from runtime_receipts
-                where harness = ?
-                order by timestamp desc
-                limit ?
-                """
-            params: tuple[object, ...] = (harness, limit)
-        else:
-            query = """
-                select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
-                       capabilities_summary,
-                       changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                       diff_summary, approval_source, timestamp, action_envelope_json
-                from runtime_receipts
-                order by timestamp desc
-                limit ?
-                """
-            params = (limit,)
-        with self._connect() as connection:
-            rows = connection.execute(query, params).fetchall()
-        return [
+    @staticmethod
+    def _receipt_base_query(where_clause: str = "") -> str:
+        base = """
+            select
+              r.rowid as receipt_rowid,
+              r.receipt_id,
+              r.harness,
+              r.artifact_id,
+              r.artifact_hash,
+              r.policy_decision,
+              r.capabilities_summary,
+              r.changed_capabilities_json,
+              r.provenance_summary,
+              r.user_override,
+              r.artifact_name,
+              r.source_scope,
+              r.scanner_evidence_json,
+              r.diff_summary,
+              r.approval_source,
+              r.approval_request_id,
+              r.timestamp,
+              e.envelope_full_json as envelope_full_json,
+              e.envelope_redacted_json as envelope_redacted_json,
+              a.action_envelope_json as approval_envelope_json
+            from runtime_receipts r
+            left join runtime_receipt_envelopes e on e.receipt_id = r.receipt_id
+            left join approval_requests a on a.request_id = r.approval_request_id
+        """
+        return f"{base} {where_clause}".strip()
+
+    @staticmethod
+    def _receipt_dict_from_row(row: sqlite3.Row, *, include_rowid: bool = True) -> dict[str, object]:
+        envelope = _json_object(row["envelope_full_json"]) or _json_object(row["approval_envelope_json"])
+        result: dict[str, object] = {}
+        if include_rowid:
+            result["receipt_rowid"] = int(row["receipt_rowid"])
+        result.update(
             {
-                "receipt_rowid": int(row["receipt_rowid"]),
                 "receipt_id": str(row["receipt_id"]),
                 "harness": str(row["harness"]),
                 "artifact_id": str(row["artifact_id"]),
@@ -1969,11 +2079,24 @@ class GuardStore:
                 "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
                 "diff_summary": row["diff_summary"],
                 "approval_source": row["approval_source"],
+                "approval_request_id": row["approval_request_id"],
                 "timestamp": str(row["timestamp"]),
-                "action_envelope_json": _json_object(row["action_envelope_json"]),
+                "action_envelope_json": envelope,
+                "envelope_redacted_json": _json_object(row["envelope_redacted_json"]),
             }
-            for row in rows
-        ]
+        )
+        return result
+
+    def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
+        if harness is not None:
+            query = self._receipt_base_query("where r.harness = ? order by r.timestamp desc limit ?")
+            params: tuple[object, ...] = (harness, limit)
+        else:
+            query = self._receipt_base_query("order by r.timestamp desc limit ?")
+            params = (limit,)
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [self._receipt_dict_from_row(row) for row in rows]
 
     def list_receipts_since_rowid(
         self,
@@ -1983,57 +2106,18 @@ class GuardStore:
         harness: str | None = None,
     ) -> list[dict[str, object]]:
         if harness is not None:
-            query = """
-                select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
-                       capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
-                       artifact_name, source_scope, scanner_evidence_json, diff_summary, approval_source, timestamp,
-                       action_envelope_json
-                from runtime_receipts
-                where rowid > ? and harness = ?
-                order by rowid asc
-                limit ?
-                """
+            query = self._receipt_base_query("where r.rowid > ? and r.harness = ? order by r.rowid asc limit ?")
             params: tuple[object, ...] = (
                 after_rowid if after_rowid is not None else 0,
                 harness,
                 limit,
             )
         else:
-            query = """
-                select rowid as receipt_rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
-                       capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
-                       artifact_name, source_scope, scanner_evidence_json, diff_summary, approval_source, timestamp,
-                       action_envelope_json
-                from runtime_receipts
-                where rowid > ?
-                order by rowid asc
-                limit ?
-                """
+            query = self._receipt_base_query("where r.rowid > ? order by r.rowid asc limit ?")
             params = (after_rowid if after_rowid is not None else 0, limit)
         with self._connect() as connection:
             rows = connection.execute(query, params).fetchall()
-        return [
-            {
-                "receipt_rowid": int(row["receipt_rowid"]),
-                "receipt_id": str(row["receipt_id"]),
-                "harness": str(row["harness"]),
-                "artifact_id": str(row["artifact_id"]),
-                "artifact_hash": str(row["artifact_hash"]),
-                "policy_decision": str(row["policy_decision"]),
-                "capabilities_summary": str(row["capabilities_summary"]),
-                "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
-                "provenance_summary": str(row["provenance_summary"]),
-                "user_override": row["user_override"],
-                "artifact_name": row["artifact_name"],
-                "source_scope": row["source_scope"],
-                "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
-                "diff_summary": row["diff_summary"],
-                "approval_source": row["approval_source"],
-                "timestamp": str(row["timestamp"]),
-                "action_envelope_json": _json_object(row["action_envelope_json"]),
-            }
-            for row in rows
-        ]
+        return [self._receipt_dict_from_row(row) for row in rows]
 
     def latest_receipt_rowid(self, *, harness: str | None = None) -> int | None:
         query = "select max(rowid) as max_rowid from runtime_receipts"
@@ -2053,74 +2137,20 @@ class GuardStore:
         return None
 
     def get_receipt(self, receipt_id: str) -> dict[str, object] | None:
+        query = self._receipt_base_query("where r.receipt_id = ?")
         with self._connect() as connection:
-            row = connection.execute(
-                """
-                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-                        changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                       diff_summary, approval_source, timestamp, action_envelope_json
-                from runtime_receipts
-                where receipt_id = ?
-                """,
-                (receipt_id,),
-            ).fetchone()
+            row = connection.execute(query, (receipt_id,)).fetchone()
         if row is None:
             return None
-        return {
-            "receipt_id": str(row["receipt_id"]),
-            "harness": str(row["harness"]),
-            "artifact_id": str(row["artifact_id"]),
-            "artifact_hash": str(row["artifact_hash"]),
-            "policy_decision": str(row["policy_decision"]),
-            "capabilities_summary": str(row["capabilities_summary"]),
-            "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
-            "provenance_summary": str(row["provenance_summary"]),
-            "user_override": row["user_override"],
-            "artifact_name": row["artifact_name"],
-            "source_scope": row["source_scope"],
-            "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
-            "diff_summary": row["diff_summary"],
-            "approval_source": row["approval_source"],
-            "timestamp": str(row["timestamp"]),
-            "action_envelope_json": _json_object(row["action_envelope_json"]),
-        }
+        return self._receipt_dict_from_row(row, include_rowid=False)
 
     def get_latest_receipt(self, harness: str, artifact_id: str) -> dict[str, object] | None:
+        query = self._receipt_base_query("where r.harness = ? and r.artifact_id = ? order by r.timestamp desc limit 1")
         with self._connect() as connection:
-            row = connection.execute(
-                """
-                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-                        changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json,
-                       diff_summary, approval_source, timestamp, action_envelope_json
-                from runtime_receipts
-                where harness = ? and artifact_id = ?
-                order by timestamp desc
-                limit 1
-                """,
-                (harness, artifact_id),
-            ).fetchone()
+            row = connection.execute(query, (harness, artifact_id)).fetchone()
         if row is None:
             return None
-        return {
-            "receipt_id": str(row["receipt_id"]),
-            "harness": str(row["harness"]),
-            "artifact_id": str(row["artifact_id"]),
-            "artifact_hash": str(row["artifact_hash"]),
-            "policy_decision": str(row["policy_decision"]),
-            "capabilities_summary": str(row["capabilities_summary"]),
-            "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
-            "provenance_summary": str(row["provenance_summary"]),
-            "user_override": row["user_override"],
-            "artifact_name": row["artifact_name"],
-            "source_scope": row["source_scope"],
-            "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
-            "diff_summary": row["diff_summary"],
-            "approval_source": row["approval_source"],
-            "timestamp": str(row["timestamp"]),
-            "action_envelope_json": _json_object(row["action_envelope_json"]),
-        }
+        return self._receipt_dict_from_row(row, include_rowid=False)
 
     def count_receipts(self, harness: str | None = None) -> int:
         query = "select count(*) as total from runtime_receipts"
