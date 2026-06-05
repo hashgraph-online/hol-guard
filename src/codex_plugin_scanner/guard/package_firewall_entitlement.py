@@ -133,7 +133,11 @@ def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str,
         return None
     status = _optional_string(latest_state.get("status"))
     milestone = _optional_string(latest_state.get("milestone"))
-    if status not in {"retry_required", "expired"} and milestone not in {"first_sync_failed", "expired", "sync_not_available"}:
+    if status not in {"retry_required", "expired"} and milestone not in {
+        "first_sync_failed",
+        "expired",
+        "sync_not_available",
+    }:
         return None
     tier = "unknown"
     if isinstance(oauth_credentials, dict):
