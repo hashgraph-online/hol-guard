@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeResult
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -23,6 +24,7 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -124,6 +126,17 @@ def _dashboard_token_for(store: GuardStore) -> str:
     return _dashboard_token(auth_token)
 
 
+def _install_local_package_shim(store: GuardStore, home_dir: Path, manager: str) -> None:
+    install_package_shims(
+        HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=None,
+            guard_home=store.guard_home,
+        ),
+        managers=(manager,),
+    )
+
+
 def test_headless_capabilities_endpoint_reports_safe_action_contract(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -197,11 +210,11 @@ def test_supply_chain_package_firewall_status_reports_connect_gate_when_cloud_is
     assert payload["connect_flow"]["state"] == "idle"
     assert payload["actions"] == {
         "install": "connect_required",
-        "repair": "connect_required",
+        "repair": "disabled",
         "test": "connect_required",
         "audit": "connect_required",
         "sync": "connect_required",
-        "remove": "connect_required",
+        "remove": "disabled",
     }
 
 
@@ -396,6 +409,8 @@ def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired
         "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
     }
     assert payload["actions"]["install"] == "reconnect_required"
+    assert payload["actions"]["repair"] == "disabled"
+    assert payload["actions"]["remove"] == "disabled"
 
 
 def test_supply_chain_package_firewall_install_requires_reconnect_when_cloud_auth_expired(
@@ -580,11 +595,11 @@ def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp
     }
     assert payload["actions"] == {
         "install": "available",
-        "repair": "available",
+        "repair": "disabled",
         "test": "available",
         "audit": "available",
         "sync": "available",
-        "remove": "available",
+        "remove": "disabled",
     }
 
 
@@ -666,7 +681,101 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     assert test_payload["operation"] == "test"
     assert test_payload["status"] == "completed"
     assert test_payload["result"]["tested_managers"] == ["npm"]
-    assert test_payload["result"]["blocked_execution"] is True
+    assert test_payload["result"]["blocked_execution"] is False
+    assert test_payload["result"]["path_repair_required"] == ["npm"]
+
+
+def test_supply_chain_package_firewall_status_exposes_local_recovery_when_connect_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    store = GuardStore(tmp_path / "guard-home")
+    _install_local_package_shim(store, home_dir, "npm")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["entitlement"]["reason"] == "guard_cloud_connect_required"
+    assert payload["actions"]["install"] == "connect_required"
+    assert payload["actions"]["repair"] == "available"
+    assert payload["actions"]["remove"] == "available"
+
+
+def test_supply_chain_package_firewall_repair_runs_without_guard_cloud_connect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    store = GuardStore(tmp_path / "guard-home")
+    _install_local_package_shim(store, home_dir, "npm")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/repair",
+                token=token,
+                payload={"managers": ["npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["entitlement"]["reason"] == "guard_cloud_connect_required"
+    assert payload["result"]["activation_state"] == "restart_required"
+    assert payload["result"]["profile"]["changed"] is True
+
+
+def test_supply_chain_package_firewall_remove_runs_without_guard_cloud_connect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    store = GuardStore(tmp_path / "guard-home")
+    _install_local_package_shim(store, home_dir, "npm")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/remove",
+                token=token,
+                payload={"managers": ["npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["entitlement"]["reason"] == "guard_cloud_connect_required"
+    assert payload["result"]["removed_managers"] == ["npm"]
 
 
 def test_audit_package_shim_path_remediation_requires_approval_gate_proof(tmp_path: Path) -> None:

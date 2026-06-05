@@ -9358,7 +9358,9 @@ def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, 
     assert rc == 0
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "approve it in hol guard, then retry." in reason
+    assert "open hol guard to approve or keep this blocked" in reason
+    assert "http://127.0.0.1:" in reason
+    assert "approve it in hol guard, then retry." not in reason
 
 
 def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
@@ -12435,7 +12437,9 @@ def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path,
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "HOL Guard" in reason
-    assert "Approve it in HOL Guard, then retry." in reason
+    assert "Open HOL Guard to approve or keep this blocked" in reason
+    assert "http://127.0.0.1:4455/approvals/" in reason
+    assert "Approve it in HOL Guard, then retry." not in reason
 
 
 def test_guard_hook_codex_emits_no_native_output_for_safe_requests(tmp_path, capsys, monkeypatch):
@@ -12559,8 +12563,12 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     assert rc == 0
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "Approve it in HOL Guard, then retry." in payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert len(pending) == 1
+    review_url = str(pending[0]["approval_url"])
+    reason = str(payload["hookSpecificOutput"]["permissionDecisionReason"])
+    assert "Open HOL Guard to approve or keep this blocked" in reason
+    assert review_url in reason
+    assert "Approve it in HOL Guard, then retry." not in reason
     assert pending[0]["artifact_type"] == "tool_action_request"
 
 
