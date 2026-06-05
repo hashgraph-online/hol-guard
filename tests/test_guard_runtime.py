@@ -4370,6 +4370,7 @@ clearer UX and an implementation plan with technical references.
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "Open HOL Guard to approve or keep this blocked" in reason
         assert "http://127.0.0.1:4455/approvals/request-1" in reason
+        assert "Approve it in HOL Guard, then retry." not in reason
 
     def test_guard_hook_fallback_artifact_id_uses_scope(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

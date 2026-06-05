@@ -3859,25 +3859,28 @@ def run_guard_command(
             or _decision_v2_harness_message(payload)
             or payload.get("permission_decision_reason")
         )
+        approval_context = _native_approval_center_context(payload, harness=args.harness)
         if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
             _emit_native_hook_block_stderr(
                 _native_hook_reason_for_harness(
                     args.harness,
                     incoming_reason,
-                    _native_approval_center_context(payload, harness=args.harness),
+                    approval_context,
                 )
             )
             return 2
-        if _canonical_harness_name(args.harness) == "codex" and hook_event_name == "UserPromptSubmit":
+        if _canonical_harness_name(args.harness) == "codex" and (
+            hook_event_name == "UserPromptSubmit" or approval_context is not None
+        ):
             reason = _native_hook_reason(
                 incoming_reason,
-                _native_approval_center_context(payload, harness=args.harness),
+                approval_context,
             )
         else:
             reason = _native_hook_reason_for_harness(
                 args.harness,
                 incoming_reason,
-                _native_approval_center_context(payload, harness=args.harness),
+                approval_context,
             )
         if _should_emit_claude_native_pretooluse_notice(
             args,

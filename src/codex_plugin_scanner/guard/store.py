@@ -14,6 +14,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from hashlib import pbkdf2_hmac, sha256
 from pathlib import Path
 from typing import Protocol
@@ -336,6 +337,7 @@ class SystemKeyringSecretStore:
         return importlib.import_module("keyring")
 
     @staticmethod
+    @lru_cache(maxsize=1)
     def _macos_default_keychain_path() -> Path | None:
         if sys.platform != "darwin":
             return None
@@ -348,6 +350,7 @@ class SystemKeyringSecretStore:
                 check=False,
                 capture_output=True,
                 text=True,
+                timeout=5,
             )
         except Exception:
             return None
