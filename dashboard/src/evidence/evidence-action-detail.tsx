@@ -15,7 +15,7 @@ import {
 import { useState } from "react";
 import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
-import { plainEnglishDescription, humanFileName } from "./plain-english";
+import { plainEnglishDescription, resolveActionTitle, resolveActionType } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { SectionLabel } from "../approval-center-primitives";
 import { DecisionBadge } from "./decision-badge";
@@ -152,7 +152,7 @@ function TechnicalSection({ receipt }: TechnicalSectionProps) {
       {open && (
         <div className="border-t border-slate-100 px-4 py-3 space-y-2">
           <DetailRow label="Receipt ID" value={receipt.receipt_id} mono />
-          <DetailRow label="Artifact ID" value={receipt.artifact_id} mono />
+          <DetailRow label="Action ID" value={receipt.artifact_id} mono />
           <DetailRow
             label="Hash"
             value={(receipt.artifact_hash ?? "").slice(0, 16) + "…"}
@@ -292,7 +292,8 @@ export function EvidenceActionDetail({
   const category = detectCategory(receipt);
   const catInfo = getCategoryInfo(category);
   const description = plainEnglishDescription(receipt);
-  const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  const actionTitle = resolveActionTitle(receipt);
+  const actionType = resolveActionType(receipt);
   const signals = receipt.scanner_evidence ?? [];
   let copyLabel = "Copy receipt ID";
   if (copied) {
@@ -315,9 +316,14 @@ export function EvidenceActionDetail({
           >
             {catInfo.icon}
           </span>
-          <span className="font-semibold text-brand-dark truncate text-sm">
-            {artifactLabel}
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="font-semibold text-brand-dark truncate text-sm">
+              {actionTitle}
+            </span>
+            <span className="text-[11px] text-slate-400 truncate">
+              {actionType}
+            </span>
+          </div>
         </div>
         <button
           type="button"

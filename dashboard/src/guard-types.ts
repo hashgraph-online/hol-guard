@@ -335,10 +335,12 @@ export type GuardReceipt = {
   provenance_summary: string;
   user_override: string | null;
   artifact_name: string | null;
+  artifact_type?: string | null;
   source_scope: string | null;
   timestamp: string;
   diff_summary?: string | null;
   scanner_evidence?: RiskSignalV2[];
+  action_envelope_json?: GuardActionEnvelope | null;
 };
 
 export type GuardArtifactDiff = {

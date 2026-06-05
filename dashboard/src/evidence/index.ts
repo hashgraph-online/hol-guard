@@ -3,7 +3,7 @@ export { CategoryTab } from "./category-tab";
 export { AppTab } from "./app-tab";
 export { ExploreTab } from "./explore-tab";
 export { detectCategory, getCategoryInfo, groupByCategory, CATEGORIES } from "./categories";
-export { plainEnglishDescription, plainEnglishRequestTitle, whyPaused, humanFileName } from "./plain-english";
+export { plainEnglishDescription, plainEnglishRequestTitle, whyPaused, humanFileName, resolveActionTitle, resolveActionType } from "./plain-english";
 
 export type {
   EvidenceDecision,
