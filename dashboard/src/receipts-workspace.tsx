@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiMiniArrowDownTray } from "react-icons/hi2";
 
-import { EmptyState } from "./approval-center-primitives";
+import { EmptyState, TabBar } from "./approval-center-primitives";
 import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
 import type { EvidenceFilterState, EvidenceView, EvidenceSortKey } from "./evidence/evidence-types";
@@ -17,7 +17,7 @@ import {
   EvidenceLoadingState,
   EvidenceErrorState,
   EvidenceHeader,
-  ViewTabBar,
+  VIEW_TABS,
 } from "./evidence/evidence-view-shell";
 import { EvidenceFilterBar } from "./evidence/evidence-filter-bar";
 import { EvidenceActionList } from "./evidence/evidence-action-list";
@@ -199,8 +199,10 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
     );
   }
 
+  const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       <EvidenceHeader
         totalCount={receiptItems.length}
         lastActivityAt={metrics.lastActivityAt}
@@ -208,17 +210,9 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
         onClear={handleOpenClear}
       />
 
-      <EvidenceFilterBar
-        filters={filters}
-        onChange={handleFilterChange}
-        totalCount={receiptItems.length}
-        filteredCount={filtered.length}
-        harnesses={harnesses}
-      />
+      <TabBar tabs={tabOptions} active={filters.view} onChange={handleViewChange} />
 
-      <ViewTabBar view={filters.view} onViewChange={handleViewChange} />
-
-      <div className="pt-2">
+      <div className="pt-1">
         {filters.view === "actions" && (
           <div
             id="tabpanel-actions"
@@ -227,6 +221,13 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             className={selectedReceipt ? "grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]" : ""}
           >
             <div className="space-y-3">
+              <EvidenceFilterBar
+                filters={filters}
+                onChange={handleFilterChange}
+                totalCount={receiptItems.length}
+                filteredCount={filtered.length}
+                harnesses={harnesses}
+              />
               <EvidenceInsightStrip metrics={metrics} />
               <EvidenceActionList
                 receipts={sorted}

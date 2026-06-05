@@ -7,9 +7,13 @@ import {
   HiMiniQuestionMarkCircle,
   HiMiniChevronDown,
   HiMiniChevronUp,
+  HiMiniExclamationTriangle,
+  HiMiniInformationCircle,
+  HiMiniBolt,
+  HiMiniDocumentText,
 } from "react-icons/hi2";
 import { useState } from "react";
-import type { GuardReceipt } from "../guard-types";
+import type { GuardReceipt, RiskSignalV2 } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { plainEnglishDescription, humanFileName } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
@@ -45,6 +49,108 @@ function DecisionBadge({ decision }: DecisionBadgeProps) {
       <HiMiniQuestionMarkCircle className="h-3.5 w-3.5" aria-hidden="true" />
       Reviewed
     </span>
+  );
+}
+
+function SeverityIcon({ severity }: { severity: string }) {
+  if (severity === "critical" || severity === "high") {
+    return <HiMiniExclamationTriangle className="h-4 w-4 text-amber-500" aria-hidden="true" />;
+  }
+  if (severity === "medium") {
+    return <HiMiniBolt className="h-4 w-4 text-orange-400" aria-hidden="true" />;
+  }
+  return <HiMiniInformationCircle className="h-4 w-4 text-brand-blue" aria-hidden="true" />;
+}
+
+function SeverityBadge({ severity }: { severity: string }) {
+  const styles: Record<string, string> = {
+    critical: "bg-amber-100 text-amber-800 ring-amber-200",
+    high: "bg-amber-50 text-amber-700 ring-amber-200",
+    medium: "bg-orange-50 text-orange-700 ring-orange-200",
+    low: "bg-blue-50 text-brand-blue ring-blue-200",
+    info: "bg-slate-100 text-slate-600 ring-slate-200",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ${styles[severity] ?? styles.info}`}
+    >
+      {severity}
+    </span>
+  );
+}
+
+function ScannerEvidenceSection({ signals }: { signals: RiskSignalV2[] }) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const toggle = useCallback((id: string) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  if (signals.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+        Scanner findings ({signals.length})
+      </p>
+      <div className="space-y-2">
+        {signals.map((signal) => {
+          const isOpen = expanded[signal.signal_id] ?? false;
+          return (
+            <div
+              key={signal.signal_id}
+              className="rounded-lg border border-slate-200 bg-white overflow-hidden"
+            >
+              <button
+                type="button"
+                onClick={() => toggle(signal.signal_id)}
+                aria-expanded={isOpen}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+              >
+                <SeverityIcon severity={signal.severity} />
+                <span className="flex-1 text-xs font-medium text-brand-dark truncate">
+                  {signal.title}
+                </span>
+                <SeverityBadge severity={signal.severity} />
+                {isOpen ? (
+                  <HiMiniChevronUp className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                ) : (
+                  <HiMiniChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                )}
+              </button>
+              {isOpen && (
+                <div className="border-t border-slate-100 px-3 py-2.5 space-y-2">
+                  <p className="text-xs text-brand-dark/80 leading-relaxed">
+                    {signal.plain_reason}
+                  </p>
+                  {signal.technical_detail && (
+                    <div className="rounded-md bg-slate-50 px-2.5 py-2">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 mb-1">
+                        Technical detail
+                      </p>
+                      <p className="text-xs font-mono text-brand-dark/70 break-all leading-relaxed">
+                        {signal.technical_detail}
+                      </p>
+                    </div>
+                  )}
+                  {signal.false_positive_hint && (
+                    <p className="text-[11px] text-slate-500 italic">
+                      {signal.false_positive_hint}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                    <span>Detector: {signal.detector}</span>
+                    {signal.advisory_id && (
+                      <span>· Advisory: {signal.advisory_id}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -222,6 +328,7 @@ export function EvidenceActionDetail({
   const catInfo = getCategoryInfo(category);
   const description = plainEnglishDescription(receipt);
   const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  const signals = receipt.scanner_evidence ?? [];
   let copyLabel = "Copy receipt ID";
   if (copied) {
     copyLabel = "Copied!";
@@ -286,9 +393,23 @@ export function EvidenceActionDetail({
           </div>
         )}
 
+        {receipt.diff_summary && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <HiMiniDocumentText className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                What changed
+              </p>
+            </div>
+            <p className="text-xs text-slate-700">{receipt.diff_summary}</p>
+          </div>
+        )}
+
         {receipt.policy_decision === "block" && (
           <NextSafeCommandHint receipt={receipt} />
         )}
+
+        <ScannerEvidenceSection signals={signals} />
 
         <EvidenceTimeline receipt={receipt} />
 

@@ -69,7 +69,7 @@ export function plainEnglishRequestTitle(request: GuardApprovalRequest): string 
     timestamp: request.created_at,
     policy_decision: request.policy_action === "block" ? "block" : "allow",
     receipt_id: request.request_id,
-  } as GuardReceipt);
+  } as unknown as GuardReceipt);
   const app = harnessDisplayName(request.harness);
   const name = humanFileName(request.artifact_name ?? request.artifact_id);
 
@@ -97,7 +97,7 @@ export function whyPaused(request: GuardApprovalRequest): string {
     timestamp: request.created_at,
     policy_decision: request.policy_action === "block" ? "block" : "allow",
     receipt_id: request.request_id,
-  } as GuardReceipt);
+  } as unknown as GuardReceipt);
 
   switch (category) {
     case "secret":
