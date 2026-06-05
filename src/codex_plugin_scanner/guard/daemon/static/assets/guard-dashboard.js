@@ -16261,6 +16261,9 @@ function EvidenceFilterBar({
 function getArtifactType(receipt) {
   return (receipt.artifact_type ?? "").toLowerCase();
 }
+function getEnvelope(receipt) {
+  return receipt.action_envelope_json ?? null;
+}
 function humanFileName(artifactName) {
   if (!artifactName) return "a file";
   const name = artifactName.split("/").pop() ?? artifactName;
@@ -16273,8 +16276,9 @@ function humanFileName(artifactName) {
   return name;
 }
 function resolveActionType(receipt) {
+  const envelope = getEnvelope(receipt);
+  const actionType = (envelope?.action_type ?? "").toLowerCase();
   const artifactType = getArtifactType(receipt);
-  const actionType = (receipt.action_envelope_json?.action_type ?? "").toLowerCase();
   if (actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command")) return "Shell command";
   if (actionType === "prompt" || artifactType === "prompt_request") return "Prompt";
   if (actionType === "file_read" || artifactType === "file_read_request" || artifactType.includes("file_read")) return "File read";
@@ -16288,7 +16292,42 @@ function resolveActionType(receipt) {
   if (artifactType.includes("plugin")) return "Plugin";
   return "Action";
 }
+function looksLikeId(text) {
+  if (/^\w+:[a-f0-9]{8,}$/i.test(text)) return true;
+  if (/^[a-f0-9]{8,}$/i.test(text)) return true;
+  return false;
+}
 function resolveActionTitle(receipt) {
+  const envelope = getEnvelope(receipt);
+  const type = resolveActionType(receipt);
+  const command = envelope?.command?.trim();
+  if (type === "Shell command" && command && command.length > 0) {
+    return truncate(command, 80);
+  }
+  const targetPath = envelope?.target_paths?.[0]?.trim();
+  if ((type === "File read" || type === "File write") && targetPath && targetPath.length > 0) {
+    return truncate(targetPath, 80);
+  }
+  const promptExcerpt = envelope?.prompt_excerpt?.trim();
+  if (type === "Prompt" && promptExcerpt && promptExcerpt.length > 0) {
+    return truncate(promptExcerpt, 80);
+  }
+  const host = envelope?.network_hosts?.[0]?.trim();
+  if (type === "Network request" && host && host.length > 0) {
+    return host;
+  }
+  const mcpTool = envelope?.mcp_tool?.trim() ?? envelope?.tool_name?.trim();
+  if (type === "Tool call" && mcpTool && mcpTool.length > 0) {
+    return mcpTool;
+  }
+  const packageName = envelope?.package_name?.trim();
+  if (type === "Package" && packageName && packageName.length > 0) {
+    return packageName;
+  }
+  const signals = receipt.scanner_evidence ?? [];
+  if (signals.length > 0 && signals[0]?.title) {
+    return signals[0].title;
+  }
   const artifactName = receipt.artifact_name?.trim();
   if (artifactName && artifactName.length > 0 && !looksLikeId(artifactName)) {
     return artifactName;
@@ -16297,42 +16336,93 @@ function resolveActionTitle(receipt) {
   if (caps && caps.length > 0 && !caps.startsWith("Guard local daemon completed")) {
     return caps;
   }
-  const signals = receipt.scanner_evidence ?? [];
-  if (signals.length > 0 && signals[0]?.title) {
-    return signals[0].title;
-  }
   const provenance = receipt.provenance_summary?.trim();
   if (provenance && provenance.length > 0 && !provenance.startsWith("hook event for")) {
     return provenance;
   }
   const name = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
-  const type = resolveActionType(receipt);
-  if (name && name !== type.toLowerCase()) {
+  if (name && name.toLowerCase() !== type.toLowerCase()) {
     return `${type}: ${name}`;
   }
   return type;
 }
-function looksLikeId(text) {
-  if (/^\w+:[a-f0-9]{8,}$/i.test(text)) return true;
-  if (/^[a-f0-9]{8,}$/i.test(text)) return true;
-  return false;
+function resolveActionSubtitle(receipt) {
+  const signals = receipt.scanner_evidence ?? [];
+  const firstSignal = signals[0];
+  if (firstSignal?.plain_reason) {
+    return firstSignal.plain_reason;
+  }
+  const envelope = getEnvelope(receipt);
+  const type = resolveActionType(receipt);
+  const parts = [];
+  if (type === "Shell command" && envelope?.command) {
+    if (envelope.tool_name) parts.push(`via ${envelope.tool_name}`);
+  }
+  if ((type === "File read" || type === "File write") && envelope?.target_paths && envelope.target_paths.length > 1) {
+    parts.push(`${envelope.target_paths.length} paths`);
+  }
+  if (type === "Network request" && envelope?.network_hosts && envelope.network_hosts.length > 1) {
+    parts.push(`${envelope.network_hosts.length} hosts`);
+  }
+  if (receipt.capabilities_summary && receipt.capabilities_summary !== "hook artifact · codex") {
+    parts.push(receipt.capabilities_summary);
+  }
+  if (parts.length > 0) {
+    return parts.join(" · ");
+  }
+  return null;
+}
+function resolveActionDetail(receipt) {
+  const envelope = getEnvelope(receipt);
+  if (!envelope) return null;
+  const type = resolveActionType(receipt);
+  if (type === "Shell command" && envelope.command) {
+    return envelope.command;
+  }
+  if ((type === "File read" || type === "File write") && envelope.target_paths && envelope.target_paths.length > 0) {
+    return envelope.target_paths.join("\n");
+  }
+  if (type === "Prompt" && (envelope.prompt_text || envelope.prompt_excerpt)) {
+    return envelope.prompt_text || envelope.prompt_excerpt;
+  }
+  if (type === "Network request" && envelope.network_hosts && envelope.network_hosts.length > 0) {
+    return envelope.network_hosts.join("\n");
+  }
+  if (type === "Tool call") {
+    const server = envelope.mcp_server ?? envelope.tool_name;
+    const tool = envelope.mcp_tool;
+    if (server && tool) return `${server} → ${tool}`;
+    if (tool) return tool;
+    if (server) return server;
+  }
+  if (type === "Package") {
+    const pm = envelope.package_manager;
+    const name = envelope.package_name;
+    if (pm && name) return `${pm} install ${name}`;
+    if (name) return name;
+  }
+  return null;
+}
+function formatSubtitle(subtitle) {
+  if (subtitle.endsWith(".") || subtitle.endsWith("?") || subtitle.endsWith("!")) return subtitle + " ";
+  return subtitle + ". ";
+}
+function truncate(text, max) {
+  if (text.length <= max) return text;
+  return text.slice(0, max - 1) + "…";
 }
 function plainEnglishDescription(receipt) {
   const app = harnessDisplayName(receipt.harness);
   const type = resolveActionType(receipt);
   const title = resolveActionTitle(receipt);
-  const signals = receipt.scanner_evidence ?? [];
-  const firstSignal = signals[0];
+  const subtitle = resolveActionSubtitle(receipt);
   if (receipt.policy_decision === "allow") {
     if (receipt.user_override !== null) {
-      return `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
+      return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and allowed it.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and allowed it.`;
     }
-    return `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
+    return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} Guard allowed it automatically.` : `${app} ${pastTenseVerb(type)} ${title}. Guard allowed it automatically.`;
   }
-  if (firstSignal?.plain_reason) {
-    return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${firstSignal.plain_reason}`;
-  }
-  return `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
+  return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it: ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. Guard stopped it.`;
 }
 function pastTenseVerb(type) {
   switch (type) {
@@ -16621,6 +16711,7 @@ function ActionRow({
   const catInfo = getCategoryInfo(category);
   const actionTitle = resolveActionTitle(receipt);
   const actionType = resolveActionType(receipt);
+  const actionSubtitle = resolveActionSubtitle(receipt);
   const handleClick = reactExports.useCallback(() => {
     onSelect(receipt.receipt_id);
   }, [receipt.receipt_id, onSelect]);
@@ -16659,8 +16750,8 @@ function ActionRow({
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col min-w-0", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[200px]", children: actionTitle }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[200px]", children: actionType })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[260px]", children: actionTitle }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[260px]", children: actionSubtitle ?? actionType })
         ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden sm:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
@@ -16905,7 +16996,10 @@ function EvidenceActionDetail({
   const description = plainEnglishDescription(receipt);
   const actionTitle = resolveActionTitle(receipt);
   const actionType = resolveActionType(receipt);
+  resolveActionSubtitle(receipt);
+  const actionDetail = resolveActionDetail(receipt);
   const signals = receipt.scanner_evidence ?? [];
+  const primarySignal = signals[0];
   let copyLabel = "Copy receipt ID";
   if (copied) {
     copyLabel = "Copied!";
@@ -16953,7 +17047,23 @@ function EvidenceActionDetail({
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: formatRelativeTime(receipt.timestamp) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark leading-relaxed", children: description }),
-          receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 italic leading-relaxed", children: receipt.capabilities_summary }),
+          actionDetail && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: actionType }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs font-mono text-brand-dark break-all whitespace-pre-line leading-relaxed", children: actionDetail })
+          ] }),
+          primarySignal && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SeverityIcon, { severity: primarySignal.severity }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Scanner finding" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SeverityBadge, { severity: primarySignal.severity })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm font-medium text-brand-dark", children: primarySignal.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/80 leading-relaxed", children: primarySignal.plain_reason }),
+            primarySignal.false_positive_hint && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-[11px] text-slate-500 italic", children: [
+              "Might be safe if: ",
+              primarySignal.false_positive_hint
+            ] })
+          ] }),
           receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Provenance" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-700", children: receipt.provenance_summary })
@@ -17938,11 +18048,12 @@ function AppTabRaw({ receipts }) {
           const catInfo = getCategoryInfo(category);
           const actionTitle = resolveActionTitle(receipt);
           const actionType = resolveActionType(receipt);
+          const actionSubtitle = resolveActionSubtitle(receipt);
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col min-w-0", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[200px]", children: actionTitle }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[200px]", children: actionType })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[260px]", children: actionTitle }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[260px]", children: actionSubtitle ?? actionType })
             ] }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden md:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: catInfo.label }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision }) }),
@@ -18126,11 +18237,12 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
           const catInfo = getCategoryInfo(category);
           const actionTitle = resolveActionTitle(receipt);
           const actionType = resolveActionType(receipt);
+          const actionSubtitle = resolveActionSubtitle(receipt);
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col min-w-0", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[200px]", children: actionTitle }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[200px]", children: actionType })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[260px]", children: actionTitle }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[260px]", children: actionSubtitle ?? actionType })
             ] }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden md:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: harnessDisplayName(receipt.harness) }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision }) }),

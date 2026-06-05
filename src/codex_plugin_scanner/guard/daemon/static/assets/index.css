@@ -1155,6 +1155,10 @@
     max-width: 240px;
   }
 
+  .max-w-\[260px\] {
+    max-width: 260px;
+  }
+
   .max-w-lg {
     max-width: var(--container-lg);
   }
@@ -3385,6 +3389,10 @@
 
   .whitespace-nowrap {
     white-space: nowrap;
+  }
+
+  .whitespace-pre-line {
+    white-space: pre-line;
   }
 
   .whitespace-pre-wrap {
