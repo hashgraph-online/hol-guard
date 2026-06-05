@@ -45,6 +45,7 @@ export function SupplyChainHubWorkspace(props: {
   onOpenSettings: () => void;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
+  onRuntimeRefresh?: () => Promise<void> | void;
 }) {
   const tab = viewToTab(props.activeView);
 
@@ -71,6 +72,7 @@ export function SupplyChainHubWorkspace(props: {
             snapshot={props.snapshot}
             approvalGate={props.approvalGate}
             onGoHome={props.onGoHome}
+            onRuntimeRefresh={props.onRuntimeRefresh}
           />
 	        )}
 	        {tab === "audit" && (

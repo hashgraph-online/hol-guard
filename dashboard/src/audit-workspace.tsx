@@ -57,20 +57,29 @@ export function deriveFrontendAuditResults(
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (protection && protection.unprotected_managers.length > 0) {
     for (const mgr of protection.unprotected_managers) {
+      const restartRequired =
+        protection.path_status === "restart_required" &&
+        protection.installed_managers.includes(mgr);
       results.push({
         id: `unprotected-${mgr}`,
-        severity: "high",
-        title: `${mgr} is not intercepted by Guard`,
-        detail: `The ${mgr} shim is missing from PATH. Installs via ${mgr} bypass Guard's supply chain protection.`,
+        severity: restartRequired ? "medium" : "high",
+        title: restartRequired ? `${mgr} is waiting for restart` : `${mgr} is not intercepted by Guard`,
+        detail: restartRequired
+          ? `Guard already updated your shell profile for ${mgr}. Open a new shell or restart AI apps so ${mgr} resolves through Guard.`
+          : `The ${mgr} shim is missing from PATH. Installs via ${mgr} bypass Guard's supply chain protection.`,
         harness: "global",
         workspace: null,
         timestamp: snapshot.generated_at,
-        remediation: `Add ${protection.shim_dir} to PATH and restart your shell. Then run hol-guard supply-chain verify.`,
-        remediationAction: {
-          action: "package_shim_path",
-          manager: mgr,
-          label: `Install Guard for ${mgr}`,
-        },
+        remediation: restartRequired
+          ? "Open a new shell or restart AI apps to finish package-manager interception."
+          : `Guard can install the shim and update PATH for ${mgr} from this dashboard.`,
+        remediationAction: restartRequired
+          ? null
+          : {
+              action: "package_shim_path",
+              manager: mgr,
+              label: `Install Guard for ${mgr}`,
+            },
         resolved: false,
       });
     }
