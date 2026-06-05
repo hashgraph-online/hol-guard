@@ -201,12 +201,14 @@ def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth
 def _guard_daemon_url_port(url: str) -> int | None:
     try:
         parsed = urllib.parse.urlparse(url)
+        return parsed.port
     except ValueError:
         return None
-    return parsed.port
 
 
 def _adopt_existing_guard_daemon(guard_home: Path) -> str | None:
+    if os.name == "nt":
+        return None
     candidate_ports = _adoptable_guard_daemon_ports(guard_home)
     for port in candidate_ports:
         adopted = _initialize_existing_guard_daemon(guard_home, port)
@@ -713,6 +715,12 @@ def _guard_daemon_port_from_command(command: str) -> int | None:
     except ValueError:
         return None
     for index, part in enumerate(parts):
+        if part.startswith("--port="):
+            try:
+                port = int(part.split("=", 1)[1])
+            except ValueError:
+                return None
+            return port if port > 0 else None
         if part != "--port" or index + 1 >= len(parts):
             continue
         try:

@@ -276,6 +276,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
             GuardSyncAuthorizationExpiredError,
             GuardSyncNotAvailableError,
             GuardSyncNotConfiguredError,
+            OSError,
             RuntimeError,
         ):
             continue

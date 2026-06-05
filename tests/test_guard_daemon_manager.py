@@ -167,6 +167,18 @@ def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:
     assert daemon_manager_module._healthz_payload_is_current(payload) is True
 
 
+def test_guard_daemon_url_port_rejects_invalid_port_text() -> None:
+    assert daemon_manager_module._guard_daemon_url_port("http://127.0.0.1:not-a-port") is None
+
+
+def test_guard_daemon_port_from_command_supports_equals_syntax() -> None:
+    command = (
+        "python -m codex_plugin_scanner.cli guard daemon --serve "
+        "--guard-home /tmp/guard-home --port=5474"
+    )
+    assert daemon_manager_module._guard_daemon_port_from_command(command) == 5474
+
+
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     responses = iter((None, None, "http://127.0.0.1:5409"))
@@ -231,6 +243,21 @@ def test_ensure_guard_daemon_adopts_running_guard_daemon_before_respawning(tmp_p
     state_payload = json.loads(daemon_manager_module._state_path(guard_home).read_text(encoding="utf-8"))
     assert state_payload["port"] == 5474
     assert state_payload["pid"] == 111
+
+
+def test_adopt_existing_guard_daemon_skips_scan_on_windows(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+
+    monkeypatch.setattr(daemon_manager_module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_initialize_existing_guard_daemon",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not attempt adoption")),
+    )
+
+    url = daemon_manager_module._adopt_existing_guard_daemon(guard_home)
+
+    assert url is None
 
 
 def test_ensure_guard_daemon_retires_duplicate_ports_for_same_guard_home(tmp_path, monkeypatch):
