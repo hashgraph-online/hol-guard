@@ -187,15 +187,23 @@ def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.re
     return urllib.request.Request(url, headers=headers, method="GET")
 
 
-def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth_token: str) -> bool:
+def _daemon_healthz_details_payload(url: str, auth_token: str) -> dict[str, object] | None:
     try:
         request = _daemon_health_request(f"{url}/v1/healthz/details", auth_token)
         with urllib.request.urlopen(request, timeout=1) as response:
             if response.status != 200:
-                return False
-            return _healthz_payload_matches_guard_home(response.read().decode("utf-8"), guard_home)
-    except (OSError, ValueError, urllib.error.URLError):
+                return None
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _daemon_healthz_details_match_guard_home(url: str, guard_home: Path, *, auth_token: str) -> bool:
+    payload = _daemon_healthz_details_payload(url, auth_token)
+    if payload is None:
         return False
+    return _healthz_payload_matches_guard_home(json.dumps(payload), guard_home)
 
 
 def _guard_daemon_url_port(url: str) -> int | None:
@@ -214,10 +222,7 @@ def _adopt_existing_guard_daemon(guard_home: Path) -> str | None:
         adopted = _initialize_existing_guard_daemon(guard_home, port)
         if adopted is None:
             continue
-        pid = _guard_daemon_pid_for_guard_home_port(guard_home, port)
-        if pid is None:
-            continue
-        write_guard_daemon_state(guard_home, port, adopted["auth_token"], pid=pid)
+        write_guard_daemon_state(guard_home, port, adopted["auth_token"], pid=adopted["pid"])
         return adopted["url"]
     return None
 
@@ -243,7 +248,7 @@ def _adoptable_guard_daemon_ports(guard_home: Path) -> list[int]:
     return ordered
 
 
-def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> dict[str, str] | None:
+def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> dict[str, str | int] | None:
     url = f"http://127.0.0.1:{port}"
     try:
         with urllib.request.urlopen(_daemon_health_request(f"{url}/healthz"), timeout=1) as response:
@@ -275,9 +280,13 @@ def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> dict[str, 
     auth_token = payload.get("auth_token")
     if not isinstance(auth_token, str) or not auth_token.strip():
         return None
-    if not _daemon_healthz_details_match_guard_home(url, guard_home, auth_token=auth_token):
+    details_payload = _daemon_healthz_details_payload(url, auth_token)
+    if details_payload is None or not _healthz_payload_matches_guard_home(json.dumps(details_payload), guard_home):
         return None
-    return {"url": url, "auth_token": auth_token}
+    pid = details_payload.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    return {"url": url, "auth_token": auth_token, "pid": pid}
 
 
 def _retire_duplicate_guard_daemons(guard_home: Path, *, keep_port: int | None) -> None:
@@ -740,8 +749,9 @@ def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tup
             check=False,
             capture_output=True,
             text=True,
+            timeout=5,
         )
-    except OSError:
+    except (OSError, subprocess.TimeoutExpired):
         return []
     processes: list[tuple[int, int]] = []
     for line in result.stdout.splitlines():
