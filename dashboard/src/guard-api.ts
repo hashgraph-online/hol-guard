@@ -1572,7 +1572,14 @@ function normalizePackageFirewallActions(
   if (!isRecord(value)) {
     return {};
   }
-  const allowedStates = new Set(["available", "paid_required", "reconnect_required", "pending", "disabled"]);
+  const allowedStates = new Set([
+    "available",
+    "connect_required",
+    "paid_required",
+    "reconnect_required",
+    "pending",
+    "disabled",
+  ]);
   const entries = Object.entries(value).filter(
     (entry): entry is [PackageFirewallActionType | PackageFirewallGlobalActionType, PackageFirewallActionState] =>
       typeof entry[1] === "string" && allowedStates.has(entry[1]),
@@ -1585,9 +1592,13 @@ function normalizePackageFirewallCliFallback(value: unknown): PackageFirewallCli
     return null;
   }
   const fallback: PackageFirewallCliFallback = {};
+  const connect = stringValue(value.connect);
   const install = stringValue(value.install);
   const status = stringValue(value.status);
   const remove = stringValue(value.remove);
+  if (connect !== null) {
+    fallback.connect = connect;
+  }
   if (install !== null) {
     fallback.install = install;
   }
@@ -1598,6 +1609,36 @@ function normalizePackageFirewallCliFallback(value: unknown): PackageFirewallCli
     fallback.remove = remove;
   }
   return Object.keys(fallback).length > 0 ? fallback : null;
+}
+
+function normalizePackageFirewallConnectFlow(
+  value: unknown,
+): PackageFirewallStatusResponse["connect_flow"] {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const state = value.state;
+  if (state !== "idle" && state !== "running" && state !== "failed") {
+    return null;
+  }
+  const title = stringValue(value.title);
+  const detail = stringValue(value.detail);
+  const actionLabel = stringValue(value.action_label);
+  const connectUrl = stringValue(value.connect_url);
+  if (title === null || detail === null || actionLabel === null || connectUrl === null) {
+    return null;
+  }
+  return {
+    state,
+    title,
+    detail,
+    action_label: actionLabel,
+    connect_url: connectUrl,
+    authorize_url: isStringOrNull(value.authorize_url) ? value.authorize_url : null,
+    browser_opened: value.browser_opened === true ? true : value.browser_opened === false ? false : null,
+    request_id: isStringOrNull(value.request_id) ? value.request_id : null,
+    poll_after_ms: numberValue(value.poll_after_ms),
+  };
 }
 
 function normalizePackageShimEntry(
@@ -1705,6 +1746,7 @@ function normalizePackageFirewallStatus(value: unknown): PackageFirewallStatusRe
   return {
     actions: normalizePackageFirewallActions(record.actions),
     cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
+    connect_flow: normalizePackageFirewallConnectFlow(record.connect_flow),
     entitlement: normalizePackageFirewallEntitlement(record.entitlement),
     operation: stringValue(record.operation) ?? "status",
     package_shims: packageShims,
@@ -1730,6 +1772,16 @@ function normalizePackageFirewallAction(value: unknown): PackageFirewallActionRe
 
 export async function fetchPackageFirewallStatus(): Promise<PackageFirewallStatusResponse> {
   return normalizePackageFirewallStatus(await readJson<unknown>("/v1/supply-chain/package-shims"));
+}
+
+export async function startPackageFirewallConnect(): Promise<PackageFirewallStatusResponse["connect_flow"]> {
+  return normalizePackageFirewallConnectFlow(
+    await readJson<unknown>("/v1/supply-chain/package-shims/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }),
+  );
 }
 
 export async function runPackageFirewallAction(

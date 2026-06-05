@@ -73,15 +73,23 @@ def _seed_retry_required_oauth_connect(home_dir: Path) -> None:
     )
 
 
-def test_package_shims_install_requires_paid_entitlement(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_package_shims_install_requires_guard_cloud_connect_first(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     guard_home = tmp_path / "guard-home"
 
     rc = main(["guard", "package-shims", "install", "--manager", "npm", "--home", str(guard_home), "--json"])
 
     payload = json.loads(capsys.readouterr().out)
     assert rc == 2
-    assert payload["error"] == "paid_guard_cloud_required"
-    assert payload["entitlement"]["tier"] == "free"
+    assert payload["error"] == "guard_cloud_connect_required"
+    assert payload["entitlement"] == {
+        "allowed": False,
+        "reason": "guard_cloud_connect_required",
+        "tier": "unknown",
+        "upgrade_cta": "Connect HOL Guard Cloud to check package firewall access and run package firewall actions.",
+    }
 
 
 def test_package_shims_status_reports_reconnect_required_when_cloud_auth_expired(

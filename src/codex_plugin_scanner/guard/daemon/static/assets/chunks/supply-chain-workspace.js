@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, g as HiMiniCheckCircle, ab as HiMiniArrowPath, b as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, T as Tag, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, S as SectionLabel, E as EmptyState, ao as HiMiniBugAnt, a as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, g as HiMiniCheckCircle, ab as HiMiniArrowPath, b as HiMiniExclamationTriangle, T as Tag, A as ActionButton, H as HiMiniShieldCheck, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, ao as startPackageFirewallConnect, S as SectionLabel, E as EmptyState, ap as HiMiniBugAnt, a as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 function UpgradeCta({ entitlement }) {
@@ -24,21 +24,134 @@ function UpgradeCta({ entitlement }) {
     ] })
   ] });
 }
+function ConnectStep({ body, current, done, index, title }) {
+  const toneClass = done ? "border-brand-green/20 bg-brand-green/[0.04]" : current ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-slate-200 bg-white/85";
+  const badgeClass = done ? "bg-brand-green/10 text-brand-green" : current ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-100 text-slate-500";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-[18px] border px-3.5 py-3 ${toneClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${badgeClass}`, children: done ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : index }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: body })
+    ] })
+  ] }) });
+}
+function resolveConnectSteps(connectFlow) {
+  const running = connectFlow.state === "running";
+  const failed = connectFlow.state === "failed";
+  const browserOpened = connectFlow.browser_opened === true;
+  return [
+    {
+      title: "Start local connect",
+      body: failed ? "Guard started the local connect flow, but it needs another attempt." : "The local daemon opens a secure HOL Guard Cloud sign-in flow for this machine.",
+      done: running || failed,
+      current: !running && !failed
+    },
+    {
+      title: "Approve in browser",
+      body: browserOpened ? "Finish sign-in in the browser window Guard opened." : "If your browser did not open automatically, use the manual sign-in link below.",
+      done: false,
+      current: running
+    },
+    {
+      title: "Unlock firewall actions",
+      body: "Guard verifies package-firewall access before it changes package-manager routing.",
+      done: false,
+      current: false
+    }
+  ];
+}
+function ConnectFlowCard({
+  connectError,
+  connectStarting,
+  connectFlow,
+  mode,
+  onStartConnect
+}) {
+  const manualHref = connectFlow.authorize_url ?? connectFlow.connect_url;
+  const running = connectFlow.state === "running";
+  const failed = connectFlow.state === "failed";
+  const primaryBusy = connectStarting || running;
+  const primaryLabel = running ? "Waiting for browser approval" : failed ? "Try connect again" : connectFlow.action_label;
+  const steps = resolveConnectSteps(connectFlow);
+  const statusTone = mode === "repair" ? "attention" : "blue";
+  const statusLabel = mode === "repair" ? "Repair required" : "Connection required";
+  const showManualLink = connectFlow.authorize_url !== null || running || failed;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-[24px] border border-brand-blue/20 bg-gradient-to-br from-brand-blue/[0.05] via-white to-brand-purple/[0.04] px-4 py-4 shadow-[0_18px_45px_-34px_rgba(39,80,180,0.5)]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "HOL Guard Cloud" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: statusTone, children: statusLabel })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold tracking-[-0.02em] text-brand-dark", children: connectFlow.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-3xl text-sm leading-relaxed text-slate-500", children: connectFlow.detail })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[18px] border border-slate-200 bg-white/85 px-3.5 py-3 sm:max-w-xs", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Security" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: "Guard does not change package-manager routing until this machine receives signed cloud access." })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2.5 sm:grid-cols-3", children: steps.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ConnectStep,
+      {
+        index: index + 1,
+        title: step.title,
+        body: step.body,
+        current: step.current,
+        done: step.done
+      },
+      step.title
+    )) }),
+    connectError !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[18px] border border-brand-attention/25 bg-brand-attention/[0.05] px-3.5 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Guard could not start local connect" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-600", children: connectError })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: onStartConnect, disabled: primaryBusy, children: [
+        primaryBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
+        primaryLabel
+      ] }),
+      showManualLink && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: manualHref, variant: "outline", children: [
+        "Open sign-in page",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
+      ] })
+    ] })
+  ] }) });
+}
 function CliFallback({ commands }) {
   const items = Object.entries(commands);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-slate-50 px-4 py-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "CLI fallback" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-1.5", children: items.map(([label, command]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: "CLI fallback" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 space-y-1.5", children: items.map(([label, command]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mr-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400", children: label }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all font-mono text-xs text-brand-dark", children: command })
     ] }, label)) })
   ] });
 }
-function FreeUserView({ data }) {
+function FreeUserView({
+  connectError,
+  connectStarting,
+  data,
+  onStartConnect
+}) {
+  const connectRequired = data.entitlement.reason === "guard_cloud_connect_required" || data.entitlement.reason === "guard_cloud_reconnect_required";
+  const connectMode = data.entitlement.reason === "guard_cloud_reconnect_required" ? "repair" : "connect";
+  const supportedManagersLabel = connectRequired ? "Protected after connect" : "Would be protected";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(UpgradeCta, { entitlement: data.entitlement }),
+    connectRequired && data.connect_flow !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ConnectFlowCard,
+      {
+        connectError,
+        connectStarting,
+        connectFlow: data.connect_flow,
+        mode: connectMode,
+        onStartConnect
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(UpgradeCta, { entitlement: data.entitlement }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400", children: "Would be protected" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400", children: supportedManagersLabel }),
       data.supported_managers.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "No supported managers detected on this machine." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1.5", children: data.supported_managers.map((mgr) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         "span",
         {
@@ -506,6 +619,8 @@ function PackageFirewallPanel(props) {
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
   const [lastFailed, setLastFailed] = reactExports.useState(null);
+  const [connectError, setConnectError] = reactExports.useState(null);
+  const [startingConnect, setStartingConnect] = reactExports.useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = reactExports.useState(null);
   const [pendingApprovalOp, setPendingApprovalOp] = reactExports.useState(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
@@ -531,10 +646,24 @@ function PackageFirewallPanel(props) {
       setPanelLoad({ phase: "error", message });
     }
   }, []);
+  reactExports.useEffect(() => {
+    if (panelLoad.phase !== "loaded") {
+      return;
+    }
+    const flow = panelLoad.data.connect_flow;
+    if (flow === null || flow.state !== "running") {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void refreshAfterOp();
+    }, flow.poll_after_ms ?? 1500);
+    return () => window.clearTimeout(handle);
+  }, [panelLoad, refreshAfterOp]);
   const handleAction = reactExports.useCallback(
     async (op, manager, credentials) => {
       setPendingOp({ op, manager });
       setLastFailed(null);
+      setConnectError(null);
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
@@ -558,6 +687,7 @@ function PackageFirewallPanel(props) {
     async (op) => {
       setPendingOp({ op, manager: null });
       setLastFailed(null);
+      setConnectError(null);
       try {
         const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
         setLastCompleted({ op, manager: null, response });
@@ -600,6 +730,21 @@ function PackageFirewallPanel(props) {
   const handleSync = reactExports.useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
   const handleDismissResult = reactExports.useCallback(() => setLastCompleted(null), []);
   const handleRetry = reactExports.useCallback(() => void load(), [load]);
+  const handleStartConnect = reactExports.useCallback(async () => {
+    setStartingConnect(true);
+    setConnectError(null);
+    try {
+      await startPackageFirewallConnect();
+      await refreshAfterOp();
+      await onStateChanged?.();
+    } catch (error) {
+      setConnectError(
+        error instanceof Error ? error.message : "Unable to start Guard Cloud connect."
+      );
+    } finally {
+      setStartingConnect(false);
+    }
+  }, [onStateChanged, refreshAfterOp]);
   const handleApprovalCancel = reactExports.useCallback(() => setPendingApprovalOp(null), []);
   const handleApprovalConfirm = reactExports.useCallback(
     (credentials) => {
@@ -639,7 +784,15 @@ function PackageFirewallPanel(props) {
         onSync: handleSync,
         onDismissResult: handleDismissResult
       }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(FreeUserView, { data: panelLoad.data })),
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FreeUserView,
+      {
+        connectError,
+        connectStarting: startingConnect,
+        data: panelLoad.data,
+        onStartConnect: handleStartConnect
+      }
+    )),
     pendingApprovalOp !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalProofModal,
       {

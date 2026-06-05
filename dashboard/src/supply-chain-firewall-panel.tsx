@@ -17,6 +17,7 @@ import {
   runPackageFirewallAction,
   runPackageAudit,
   runPackageSync,
+  startPackageFirewallConnect,
 } from "./guard-api";
 import { FreeUserView, ActionResultPanel, ActivationSummary } from "./supply-chain-firewall-views";
 import type { CompletedOp } from "./supply-chain-firewall-views";
@@ -271,6 +272,8 @@ export function PackageFirewallPanel(props: {
   const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
   const [lastFailed, setLastFailed] = useState<FailedOp | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [startingConnect, setStartingConnect] = useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = useState<string | null>(null);
   const [pendingApprovalOp, setPendingApprovalOp] = useState<ApprovalOp | null>(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
@@ -302,6 +305,20 @@ export function PackageFirewallPanel(props: {
     }
   }, []);
 
+  useEffect(() => {
+    if (panelLoad.phase !== "loaded") {
+      return;
+    }
+    const flow = panelLoad.data.connect_flow;
+    if (flow === null || flow.state !== "running") {
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void refreshAfterOp();
+    }, flow.poll_after_ms ?? 1500);
+    return () => window.clearTimeout(handle);
+  }, [panelLoad, refreshAfterOp]);
+
   const handleAction = useCallback(
     async (
       op: PackageFirewallActionType,
@@ -310,6 +327,7 @@ export function PackageFirewallPanel(props: {
     ) => {
       setPendingOp({ op, manager });
       setLastFailed(null);
+      setConnectError(null);
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
@@ -339,6 +357,7 @@ export function PackageFirewallPanel(props: {
     async (op: "audit" | "sync") => {
       setPendingOp({ op, manager: null });
       setLastFailed(null);
+      setConnectError(null);
       try {
         const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
         setLastCompleted({ op, manager: null, response });
@@ -382,6 +401,21 @@ export function PackageFirewallPanel(props: {
   const handleSync = useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
   const handleDismissResult = useCallback(() => setLastCompleted(null), []);
   const handleRetry = useCallback(() => void load(), [load]);
+  const handleStartConnect = useCallback(async () => {
+    setStartingConnect(true);
+    setConnectError(null);
+    try {
+      await startPackageFirewallConnect();
+      await refreshAfterOp();
+      await onStateChanged?.();
+    } catch (error) {
+      setConnectError(
+        error instanceof Error ? error.message : "Unable to start Guard Cloud connect.",
+      );
+    } finally {
+      setStartingConnect(false);
+    }
+  }, [onStateChanged, refreshAfterOp]);
   const handleApprovalCancel = useCallback(() => setPendingApprovalOp(null), []);
   const handleApprovalConfirm = useCallback(
     (credentials: { approval_password?: string; approval_totp_code?: string }) => {
@@ -433,7 +467,12 @@ export function PackageFirewallPanel(props: {
             onDismissResult={handleDismissResult}
           />
         ) : (
-          <FreeUserView data={panelLoad.data} />
+          <FreeUserView
+            connectError={connectError}
+            connectStarting={startingConnect}
+            data={panelLoad.data}
+            onStartConnect={handleStartConnect}
+          />
         ))}
 
       {pendingApprovalOp !== null && (

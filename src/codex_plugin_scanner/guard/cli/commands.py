@@ -1158,6 +1158,8 @@ def _package_firewall_action_states(entitlement: dict[str, object]) -> dict[str,
     reason = str(entitlement.get("reason") or "").strip().lower()
     if allowed:
         state = "available"
+    elif reason == "guard_cloud_connect_required":
+        state = "connect_required"
     elif reason == "guard_cloud_reconnect_required":
         state = "reconnect_required"
     else:
