@@ -188,8 +188,12 @@ def test_package_shims_install_self_heals_retry_required_cloud_auth(
         "tier": "pro",
         "upgrade_cta": None,
     }
+    assert payload["activation_state"] == "restart_required"
     assert payload["installed_managers"] == ["npm"]
+    assert payload["profile"]["changed"] is True
     assert shim_path.exists()
+    profile_path = Path(str(payload["profile"]["profile_path"]))
+    assert str(guard_home / "package-shims" / "bin") in profile_path.read_text(encoding="utf-8")
 
 
 def test_package_shims_status_reports_paid_oauth_entitlement(

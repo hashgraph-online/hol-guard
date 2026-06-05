@@ -183,7 +183,10 @@ assert(
 const baseProtection: PackageManagerProtection = {
   path_status: "in_path",
   path_contains_shim_dir: true,
-  shim_dir: "/home/user/.hol/shims",
+  restart_shell_required: false,
+  shell_profile_configured: true,
+  shell_profile_path: "/mock-home/.zshrc",
+  shim_dir: "/mock-home/.hol/shims",
   supported_managers: ["npm", "pip", "cargo"],
   installed_managers: ["npm", "pip"],
   active_managers: ["npm", "pip"],
@@ -205,6 +208,7 @@ const missingFromPathProtection: PackageManagerProtection = {
   ...baseProtection,
   path_status: "missing_from_path",
   path_contains_shim_dir: false,
+  restart_shell_required: false,
   protected_managers: ["npm"],
   unprotected_managers: ["pip", "cargo"],
 };
@@ -223,6 +227,26 @@ assert(missingFromPathCopy.unprotectedList.includes("pip"), "SC2: pip should app
 assert(missingFromPathCopy.unprotectedList.includes("cargo"), "SC2: cargo should appear in unprotected list");
 assert(missingFromPathCopy.protectedList.includes("npm"), "SC2: npm should still appear in protected list");
 assert(missingFromPathCopy.protectedList.length === 1, "SC2: protected list should contain only npm");
+
+const restartRequiredProtection: PackageManagerProtection = {
+  ...baseProtection,
+  path_status: "restart_required",
+  path_contains_shim_dir: false,
+  restart_shell_required: true,
+  protected_managers: [],
+  unprotected_managers: ["npm", "pip", "cargo"],
+};
+
+const restartRequiredCopy = resolvePackageManagerProtectionCopy(restartRequiredProtection);
+assert(restartRequiredCopy.pathTone === "attention", "SC2b: restart_required tone should stay attention");
+assert(
+  restartRequiredCopy.pathLabel.toLowerCase().includes("restart"),
+  `SC2b: restart_required label should mention restart — got: "${restartRequiredCopy.pathLabel}"`
+);
+assert(
+  restartRequiredCopy.pathDetail.toLowerCase().includes("restart") || restartRequiredCopy.pathDetail.toLowerCase().includes("new shell"),
+  `SC2b: restart_required detail should explain next step — got: "${restartRequiredCopy.pathDetail}"`
+);
 
 const absentCopy = resolvePackageManagerProtectionCopy(undefined);
 assert(absentCopy.pathTone === "slate", "SC3: absent supply-chain data should use slate tone (no crash)");

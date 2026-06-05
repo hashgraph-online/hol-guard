@@ -1,9 +1,12 @@
-import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniExclamationTriangle, b as HiMiniInformationCircle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, i as harnessDisplayName, k as isDisplayableHarness, E as EmptyState, G as GuardHero, P as ProofStrip, l as formatNumber, m as HiMiniSparkles, n as HiMiniXMark, o as HiMiniCloud, p as HiMiniQuestionMarkCircle, q as HiMiniBolt, B as Badge, s as HiMiniChevronRight, t as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, i as harnessDisplayName, k as isDisplayableHarness, E as EmptyState, G as GuardHero, P as ProofStrip, l as formatNumber, m as HiMiniSparkles, n as HiMiniXMark, o as HiMiniCloud, p as HiMiniQuestionMarkCircle, q as HiMiniBolt, B as Badge, s as HiMiniChevronRight, t as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 import { D as DeviceProofCard, r as resolveCloudIntelCopy } from "./runtime-overview.js";
 function resolveHomeProtectionStatus(snapshot) {
   const protection = snapshot.supply_chain?.package_manager_protection;
   if (!protection) return "unknown";
+  if (protection.path_status === "restart_required" && protection.installed_managers.length > 0) {
+    return "staged";
+  }
   if (protection.unprotected_managers.length === 0 && protection.protected_managers.length > 0) {
     return "protected";
   }
@@ -63,10 +66,10 @@ function HomeProtectionModule({
   const defaultExpanded = totalCount <= 4;
   const [expanded, setExpanded] = reactExports.useState(defaultExpanded);
   const hasManagers = totalCount > 0;
-  const statusBorderClass = status === "protected" ? "border-brand-green/20 bg-brand-green/[0.04]" : status === "partial" ? "border-brand-attention/20 bg-brand-attention/[0.04]" : status === "unprotected" ? "border-red-200 bg-red-50/60" : "border-slate-200 bg-slate-50/60";
-  const StatusIcon = status === "protected" ? HiMiniShieldCheck : status === "partial" || status === "unprotected" ? HiMiniExclamationTriangle : HiMiniInformationCircle;
-  const statusIconClass = status === "protected" ? "text-brand-green" : status === "partial" || status === "unprotected" ? "text-brand-attention" : "text-slate-400";
-  const statusLabel = status === "protected" ? "Package managers protected" : status === "partial" ? "Some package managers unprotected" : status === "unprotected" ? "Package managers unprotected" : "Supply chain status unknown";
+  const statusBorderClass = status === "protected" ? "border-brand-green/20 bg-brand-green/[0.04]" : status === "staged" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : status === "partial" ? "border-brand-attention/20 bg-brand-attention/[0.04]" : status === "unprotected" ? "border-red-200 bg-red-50/60" : "border-slate-200 bg-slate-50/60";
+  const StatusIcon = status === "protected" ? HiMiniShieldCheck : status === "staged" ? HiMiniInformationCircle : status === "partial" || status === "unprotected" ? HiMiniExclamationTriangle : HiMiniInformationCircle;
+  const statusIconClass = status === "protected" ? "text-brand-green" : status === "staged" ? "text-brand-blue" : status === "partial" || status === "unprotected" ? "text-brand-attention" : "text-slate-400";
+  const statusLabel = status === "protected" ? "Package managers protected" : status === "staged" ? "Protection staged — restart shell or apps" : status === "partial" ? "Some package managers unprotected" : status === "unprotected" ? "Package managers unprotected" : "Supply chain status unknown";
   const handleToggle = () => setExpanded((prev) => !prev);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
@@ -110,15 +113,20 @@ function HomeProtectionModule({
               }
             )
           ] }),
+          status === "staged" && onOpenSupplyChain && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: onOpenSupplyChain, variant: "secondary", children: [
+            "Finish activation",
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { className: "ml-1.5 h-3.5 w-3.5", "aria-hidden": "true" })
+          ] }) }),
           hasManagers && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: protectedCount === totalCount ? "green" : protectedCount > 0 ? "attention" : "slate", children: [
-                  protectedCount,
-                  " of ",
-                  totalCount,
-                  " protected"
-                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Tag,
+                  {
+                    tone: status === "staged" ? "blue" : protectedCount === totalCount ? "green" : protectedCount > 0 ? "attention" : "slate",
+                    children: status === "staged" ? `${protection?.installed_managers.length ?? totalCount} ready after restart` : `${protectedCount} of ${totalCount} protected`
+                  }
+                ),
                 lastBlocked && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-slate-500", children: [
                   "Last blocked",
                   " ",

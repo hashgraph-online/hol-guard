@@ -475,7 +475,14 @@ def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp
     }
 
 
-def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(tmp_path: Path) -> None:
+def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("SHELL", "/bin/zsh")
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync",
@@ -500,6 +507,22 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(tmp_path:
                 payload={"managers": ["npm", "pip"]},
             ),
         )
+        status_status, status_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+        runtime_status, runtime_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/runtime",
+                method="GET",
+                token=token,
+            ),
+        )
         test_status, test_payload = _read_json_response(
             _request(
                 daemon.port,
@@ -515,7 +538,17 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(tmp_path:
     assert install_payload["operation"] == "install"
     assert install_payload["status"] == "completed"
     assert install_payload["result"]["installed_managers"] == ["npm", "pip"]
+    assert install_payload["result"]["profile"]["changed"] is True
+    assert install_payload["result"]["activation_state"] == "restart_required"
     assert install_payload["receipt"]["operation"] == "install"
+    assert status_status == 200
+    assert status_payload["package_shims"]["path_status"] == "restart_required"
+    assert status_payload["package_shims"]["shell_profile_configured"] is True
+    assert status_payload["package_shims"]["restart_shell_required"] is True
+    assert runtime_status == 200
+    assert runtime_payload["supply_chain"]["package_manager_protection"]["path_status"] == "restart_required"
+    assert runtime_payload["supply_chain"]["package_manager_protection"]["shell_profile_configured"] is True
+    assert str(store.guard_home / "package-shims" / "bin") in (home_dir / ".zshrc").read_text(encoding="utf-8")
     assert test_status == 200
     assert test_payload["operation"] == "test"
     assert test_payload["status"] == "completed"

@@ -4,13 +4,16 @@ import {
   HiMiniCheckCircle,
   HiMiniXCircle,
   HiMiniExclamationTriangle,
+  HiMiniArrowPath,
 } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
 import type {
+  PackageManagerProtection,
   PackageFirewallStatusResponse,
   PackageFirewallActionResponse,
   PackageFirewallEntitlement,
 } from "./guard-types";
+import { resolvePackageManagerProtectionCopy } from "./runtime-overview";
 
 type UpgradeCtaProps = {
   entitlement: PackageFirewallEntitlement;
@@ -104,6 +107,53 @@ export function FreeUserView({ data }: FreeUserViewProps) {
   );
 }
 
+function activationHeadline(protection: PackageManagerProtection | null): string {
+  if (protection === null) return "Activation status unavailable";
+  if (protection.path_status === "in_path") return "Protection live now";
+  if (protection.path_status === "restart_required") return "Restart shell or apps to finish activation";
+  return "PATH repair still needed";
+}
+
+type ActivationSummaryProps = {
+  protection: PackageManagerProtection | null;
+};
+
+export function ActivationSummary({ protection }: ActivationSummaryProps) {
+  if (protection === null) {
+    return null;
+  }
+  const copy = resolvePackageManagerProtectionCopy(protection);
+  const Icon =
+    protection.path_status === "in_path"
+      ? HiMiniCheckCircle
+      : protection.path_status === "restart_required"
+      ? HiMiniArrowPath
+      : HiMiniExclamationTriangle;
+  const toneClass =
+    protection.path_status === "in_path"
+      ? "border-brand-green/20 bg-brand-green/[0.04]"
+      : protection.path_status === "restart_required"
+      ? "border-brand-blue/20 bg-brand-blue/[0.04]"
+      : "border-brand-attention/20 bg-brand-attention/[0.04]";
+  const iconClass =
+    protection.path_status === "in_path"
+      ? "text-brand-green"
+      : protection.path_status === "restart_required"
+      ? "text-brand-blue"
+      : "text-brand-attention";
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
+      <div className="flex items-start gap-2.5">
+        <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-brand-dark">{activationHeadline(protection)}</p>
+          <p className="mt-0.5 text-xs text-slate-600">{copy.pathDetail}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ReceiptProofCardProps = {
   receipt: PackageFirewallActionResponse["receipt"];
 };
@@ -166,6 +216,13 @@ type ActionResultPanelProps = {
 export function ActionResultPanel({ completed, onDismiss }: ActionResultPanelProps) {
   const { response } = completed;
   const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
+  const detail = response.result_detail;
+  const resultMessage =
+    detail["activation_state"] === "restart_required"
+      ? "Guard installed the shim and updated your shell profile. Open a new shell or restart AI apps to route package-manager commands through Guard."
+      : detail["activation_state"] === "in_path"
+      ? "Guard installed the shim and protection is live in this session."
+      : response.result;
   return (
     <div
       className={`rounded-xl border px-4 py-3 ${
@@ -194,7 +251,7 @@ export function ActionResultPanel({ completed, onDismiss }: ActionResultPanelPro
               {completed.op}
               {completed.manager !== null ? ` — ${completed.manager}` : ""}
             </p>
-            <p className="mt-0.5 text-xs text-slate-600">{response.result}</p>
+            <p className="mt-0.5 text-xs text-slate-600">{resultMessage}</p>
           </div>
         </div>
         <DismissButton onDismiss={onDismiss} />

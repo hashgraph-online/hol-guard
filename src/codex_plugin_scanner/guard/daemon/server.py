@@ -93,11 +93,9 @@ from ..runtime.runner import (
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..shims import (
-    ensure_package_shim_path_in_shell_profile,
-    install_package_shims,
+    activate_package_shims,
     package_shim_status,
     package_shim_supported_managers,
-    repair_package_shims,
     uninstall_package_shims,
 )
 from ..stable_digest import stable_digest_hex
@@ -1353,9 +1351,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 purpose="supply_chain_firewall",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
             )
-            install_result = install_package_shims(context, managers=managers)
-            profile_result = ensure_package_shim_path_in_shell_profile(context)
-            status = package_shim_status(context)
+            activation_result = activate_package_shims(context, managers=managers)
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)
             return
@@ -1364,10 +1360,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         result = {
             "manager": manager,
-            "install": install_result,
-            "profile": profile_result,
-            "package_shims": status,
-            "restart_shell_required": True,
+            **activation_result,
         }
         receipt = self._record_headless_receipt(
             harness="package-firewall",
@@ -1466,9 +1459,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         managers: tuple[str, ...] | None,
     ) -> dict[str, object]:
         if operation == "install":
-            return install_package_shims(context, managers=managers)
+            return activate_package_shims(context, managers=managers)
         if operation == "repair":
-            return repair_package_shims(context, managers=managers)
+            return activate_package_shims(context, managers=managers, repair=True)
         if operation == "remove":
             return uninstall_package_shims(context, managers=managers)
         if operation == "test":

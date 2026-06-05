@@ -744,6 +744,7 @@ export function App() {
 	              onOpenSettings={handleOpenSettings}
 	              onGoHome={handleGoHome}
               onNavigate={navigate}
+              onRuntimeRefresh={refreshStateAfterAction}
             />
           </Suspense>
         ) : null
