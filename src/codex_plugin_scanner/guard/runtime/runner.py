@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -1767,19 +1768,57 @@ def _guard_http_header_value(response: object, header_name: str) -> str | None:
     if headers is None:
         return None
     value = headers.get(header_name)
+    if value is None:
+        header_items = getattr(headers, "items", None)
+        if callable(header_items):
+            target_header = header_name.lower()
+            for current_name, current_value in header_items():
+                if isinstance(current_name, str) and current_name.lower() == target_header:
+                    value = current_value
+                    break
     if not isinstance(value, str):
         return None
     normalized_value = value.strip()
     return normalized_value or None
 
 
-def _dpop_nonce_from_http_error(error: urllib.error.HTTPError) -> str | None:
+def _http_error_payload(error: urllib.error.HTTPError) -> object:
+    try:
+        raw_body = error.read()
+    except OSError:
+        raw_body = b""
+    error.fp = io.BytesIO(raw_body)
+    if not raw_body:
+        return None
+    try:
+        return json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+def _dpop_nonce_from_http_error(error: urllib.error.HTTPError, payload: object) -> str | None:
     if error.code not in {400, 401}:
         return None
-    return _guard_http_header_value(error, "DPoP-Nonce")
+    nonce = _guard_http_header_value(error, "DPoP-Nonce")
+    if nonce is None:
+        return None
+    if isinstance(payload, dict):
+        oauth_error = str(payload.get("error") or "").strip()
+        if oauth_error and oauth_error not in {"use_dpop_nonce", "invalid_dpop_proof"}:
+            return None
+    return nonce
 
 
 _GUARD_DPOP_REQUEST_CONTEXTS: dict[str, dict[str, object]] = {}
+_GUARD_DPOP_REQUEST_CONTEXT_LIMIT = 1000
+
+
+def _remember_guard_dpop_request_context(dpop_header: str, context: dict[str, object]) -> None:
+    if len(_GUARD_DPOP_REQUEST_CONTEXTS) >= _GUARD_DPOP_REQUEST_CONTEXT_LIMIT:
+        oldest_header = next(iter(_GUARD_DPOP_REQUEST_CONTEXTS), None)
+        if isinstance(oldest_header, str):
+            _GUARD_DPOP_REQUEST_CONTEXTS.pop(oldest_header, None)
+    _GUARD_DPOP_REQUEST_CONTEXTS[dpop_header] = context
 
 
 def _guard_sync_request(
@@ -1868,6 +1907,7 @@ def _refresh_guard_oauth_access_token(
         }
     ).encode("utf-8")
     dpop_nonce: str | None = None
+    nonce_retry_count = 0
     while True:
         request = urllib.request.Request(
             token_endpoint,
@@ -1889,9 +1929,11 @@ def _refresh_guard_oauth_access_token(
             with urllib.request.urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            challenge_nonce = _dpop_nonce_from_http_error(error)
-            if challenge_nonce is not None and challenge_nonce != dpop_nonce:
+            payload = _http_error_payload(error)
+            challenge_nonce = _dpop_nonce_from_http_error(error, payload)
+            if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
                 dpop_nonce = challenge_nonce
+                nonce_retry_count += 1
                 continue
             refresh_error_message = _oauth_refresh_error_message(error)
             if error.code in {400, 401, 403}:
@@ -2069,13 +2111,16 @@ def _guard_sync_headers(
             nonce=dpop_nonce,
         )
         headers["DPoP"] = dpop_header
-        _GUARD_DPOP_REQUEST_CONTEXTS[dpop_header] = {
-            "auth_context": auth_context,
-            "request_url": request_url,
-            "method": method,
-            "extra_headers": None if extra_headers is None else dict(extra_headers),
-            "dpop_nonce": dpop_nonce,
-        }
+        _remember_guard_dpop_request_context(
+            dpop_header,
+            {
+                "auth_context": auth_context,
+                "request_url": request_url,
+                "method": method,
+                "extra_headers": None if extra_headers is None else dict(extra_headers),
+                "dpop_nonce": dpop_nonce,
+            },
+        )
     if isinstance(extra_headers, dict):
         headers.update(extra_headers)
     return headers
@@ -2220,14 +2265,21 @@ def _urlopen_json_with_timeout_retry(
     current_request = request
     current_timeout_seconds = timeout_seconds
     retried_timeout = False
+    nonce_retry_count = 0
     while True:
         try:
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            dpop_nonce = _dpop_nonce_from_http_error(error)
-            retry_request = None if dpop_nonce is None else _guard_sync_request_with_nonce(current_request, dpop_nonce)
+            error_payload = _http_error_payload(error)
+            dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
+            retry_request = (
+                None
+                if dpop_nonce is None or nonce_retry_count >= 3
+                else _guard_sync_request_with_nonce(current_request, dpop_nonce)
+            )
             if retry_request is not None:
+                nonce_retry_count += 1
                 current_request = retry_request
                 current_timeout_seconds = timeout_seconds
                 retried_timeout = False
@@ -2253,14 +2305,21 @@ def _urlopen_with_timeout_retry(
     current_request = request
     current_timeout_seconds = timeout_seconds
     retried_timeout = False
+    nonce_retry_count = 0
     while True:
         try:
             with urllib.request.urlopen(current_request, timeout=current_timeout_seconds):
                 return
         except urllib.error.HTTPError as error:
-            dpop_nonce = _dpop_nonce_from_http_error(error)
-            retry_request = None if dpop_nonce is None else _guard_sync_request_with_nonce(current_request, dpop_nonce)
+            error_payload = _http_error_payload(error)
+            dpop_nonce = _dpop_nonce_from_http_error(error, error_payload)
+            retry_request = (
+                None
+                if dpop_nonce is None or nonce_retry_count >= 3
+                else _guard_sync_request_with_nonce(current_request, dpop_nonce)
+            )
             if retry_request is not None:
+                nonce_retry_count += 1
                 current_request = retry_request
                 current_timeout_seconds = timeout_seconds
                 retried_timeout = False
