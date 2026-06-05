@@ -41,11 +41,14 @@ const makeProtection = (
   unprotected_managers,
   path_status: "in_path",
   path_contains_shim_dir: true,
+  restart_shell_required: false,
+  shell_profile_configured: true,
+  shell_profile_path: "/mock-home/.zshrc",
   shim_dir: "/usr/local/hol-guard/shims",
   supported_managers: [...protected_managers, ...unprotected_managers],
-  installed_managers: [...protected_managers, ...unprotected_managers],
+  installed_managers: protected_managers,
   active_managers: protected_managers,
-  missing_shims: unprotected_managers,
+  missing_shims: [],
 });
 
 const freeSnapshot: GuardRuntimeSnapshot = {

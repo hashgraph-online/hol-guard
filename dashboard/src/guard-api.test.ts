@@ -42,6 +42,8 @@ const partialSupplyChainSnapshot = normalizeRuntimeSnapshot({
     package_manager_protection: {
       path_status: "in_path",
       protected_managers: ["npm"],
+      restart_shell_required: false,
+      shell_profile_configured: false,
     },
   },
 });
@@ -56,6 +58,10 @@ assert(
 assert(
   partialSupplyChainSnapshot.supply_chain?.package_manager_protection.shim_dir === "",
   "T761: runtime normalizer defaults missing supply-chain strings"
+);
+assert(
+  partialSupplyChainSnapshot.supply_chain?.package_manager_protection.shell_profile_path === null,
+  "T761: runtime normalizer defaults missing shell profile path"
 );
 
 const malformedManagedInstallsSnapshot = normalizeRuntimeSnapshot({

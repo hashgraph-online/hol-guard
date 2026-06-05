@@ -1,6 +1,6 @@
-import { j as jsxRuntimeExports, g as HiMiniCheckCircle, a as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, ab as HiMiniArrowPath, T as Tag, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, S as SectionLabel, E as EmptyState, ao as HiMiniBugAnt, b as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
-import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
+import { j as jsxRuntimeExports, g as HiMiniCheckCircle, ab as HiMiniArrowPath, b as HiMiniExclamationTriangle, H as HiMiniShieldCheck, A as ActionButton, ai as HiMiniArrowTopRightOnSquare, h as HiMiniXCircle, r as reactExports, T as Tag, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, S as SectionLabel, E as EmptyState, ao as HiMiniBugAnt, a as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
+import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 function UpgradeCta({ entitlement }) {
   const reconnectRequired = entitlement.reason === "guard_cloud_reconnect_required";
   const upgradeUrl = reconnectRequired ? "https://hol.org/guard/connect" : entitlement.upgrade_url ?? "https://hol.org/guard/pricing";
@@ -51,6 +51,28 @@ function FreeUserView({ data }) {
     data.cli_fallback !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CliFallback, { commands: data.cli_fallback })
   ] });
 }
+function activationHeadline(protection) {
+  if (protection === null) return "Activation status unavailable";
+  if (protection.path_status === "in_path") return "Protection live now";
+  if (protection.path_status === "restart_required") return "Restart shell or apps to finish activation";
+  return "PATH repair still needed";
+}
+function ActivationSummary({ protection }) {
+  if (protection === null) {
+    return null;
+  }
+  const copy = resolvePackageManagerProtectionCopy(protection);
+  const Icon = protection.path_status === "in_path" ? HiMiniCheckCircle : protection.path_status === "restart_required" ? HiMiniArrowPath : HiMiniExclamationTriangle;
+  const toneClass = protection.path_status === "in_path" ? "border-brand-green/20 bg-brand-green/[0.04]" : protection.path_status === "restart_required" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-brand-attention/20 bg-brand-attention/[0.04]";
+  const iconClass = protection.path_status === "in_path" ? "text-brand-green" : protection.path_status === "restart_required" ? "text-brand-blue" : "text-brand-attention";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-xl border px-4 py-3 ${toneClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: activationHeadline(protection) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: copy.pathDetail })
+    ] })
+  ] }) });
+}
 function ReceiptProofCard({ receipt }) {
   if (receipt === null) {
     return null;
@@ -84,6 +106,8 @@ function DismissButton({ onDismiss }) {
 function ActionResultPanel({ completed, onDismiss }) {
   const { response } = completed;
   const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
+  const detail = response.result_detail;
+  const resultMessage = detail["activation_state"] === "restart_required" ? "Guard installed the shim and updated your shell profile. Open a new shell or restart AI apps to route package-manager commands through Guard." : detail["activation_state"] === "in_path" ? "Guard installed the shim and protection is live in this session." : response.result;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
@@ -111,7 +135,7 @@ function ActionResultPanel({ completed, onDismiss }) {
                 completed.op,
                 completed.manager !== null ? ` — ${completed.manager}` : ""
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: response.result })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: resultMessage })
             ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DismissButton, { onDismiss })
@@ -183,7 +207,7 @@ function ActionButtonRow({
   const testBlocked = testState === "paid_required" || testState === "reconnect_required";
   const removeBlocked = removeState === "paid_required" || removeState === "reconnect_required";
   const showInstall = !shim.installed && installState !== "disabled";
-  const showRepair = shim.installed && repairState !== "disabled";
+  const showRepair = shim.installed && shim.activation_state !== "restart_required" && repairState !== "disabled";
   const showTest = testState !== "disabled";
   const showRemove = removeState !== "disabled" && shim.installed;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
@@ -266,12 +290,15 @@ function ManagerActionCard({
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: shim.active ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "green", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: shim.activation_state === "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "green", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mr-0.5 inline h-3 w-3", "aria-hidden": "true" }),
         "Protected"
-      ] }) : shim.installed ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
+      ] }) : shim.activation_state === "restart_required" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "blue", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-0.5 inline h-3 w-3", "aria-hidden": "true" }),
+        "Restart required"
+      ] }) : shim.activation_state === "repair_required" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mr-0.5 inline h-3 w-3", "aria-hidden": "true" }),
-        "Inactive"
+        "Needs PATH repair"
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "Uninstalled" }) })
     ] }),
     isConfirmingRemove ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -294,6 +321,7 @@ function ManagerActionCard({
         onRemoveRequest: handleRemoveRequest
       }
     ),
+    shim.activation_state === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim." }),
     shim.shim_path !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-[10px] text-slate-400", children: shim.shim_path })
   ] });
 }
@@ -414,7 +442,7 @@ function PaidUserView({
   const anyPending = pendingOp !== null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package manager actions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Per-manager controls" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         GlobalActionsBar,
         {
@@ -425,6 +453,7 @@ function PaidUserView({
         }
       )
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActivationSummary, { protection: data.protection }),
     lastFailed !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(FailureBanner, { failed: lastFailed }),
     lastCompleted !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionResultPanel, { completed: lastCompleted, onDismiss: onDismissResult }),
     data.package_shims.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -472,7 +501,7 @@ function RefreshButton({ disabled, spinning, onRefresh }) {
   );
 }
 function PackageFirewallPanel(props) {
-  const { approvalGate } = props;
+  const { approvalGate, onStateChanged } = props;
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
@@ -510,6 +539,7 @@ function PackageFirewallPanel(props) {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
         await refreshAfterOp();
+        await onStateChanged?.();
       } catch (err) {
         if (credentials === void 0 && manager !== null && err instanceof GuardHarnessActionError && err.payload?.error === "approval_gate_required") {
           await resolveApprovalGate();
@@ -522,7 +552,7 @@ function PackageFirewallPanel(props) {
         setPendingOp(null);
       }
     },
-    [refreshAfterOp, resolveApprovalGate]
+    [onStateChanged, refreshAfterOp, resolveApprovalGate]
   );
   const handleGlobalOp = reactExports.useCallback(
     async (op) => {
@@ -532,6 +562,7 @@ function PackageFirewallPanel(props) {
         const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
         setLastCompleted({ op, manager: null, response });
         await refreshAfterOp();
+        await onStateChanged?.();
       } catch (err) {
         const message = err instanceof Error ? err.message : "Operation failed.";
         setLastFailed({ op, manager: null, message });
@@ -539,7 +570,7 @@ function PackageFirewallPanel(props) {
         setPendingOp(null);
       }
     },
-    [refreshAfterOp]
+    [onStateChanged, refreshAfterOp]
   );
   const handleInstall = reactExports.useCallback(
     (manager) => void handleAction("install", manager),
@@ -583,8 +614,8 @@ function PackageFirewallPanel(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package firewall actions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-slate-500", children: "Protect, repair, test, or remove package manager shims." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package manager firewall" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-slate-500", children: "Install Guard shims, activate PATH routing, and verify protection on this machine." })
       ] }),
       panelLoad.phase === "loaded" && /* @__PURE__ */ jsxRuntimeExports.jsx(RefreshButton, { disabled: anyPending, spinning: anyPending, onRefresh: handleRetry })
     ] }),
@@ -625,15 +656,39 @@ function PackageFirewallPanel(props) {
 function actionLabel(op) {
   return op.charAt(0).toUpperCase() + op.slice(1);
 }
+function resolveManagerCoverageStatus(protection, manager) {
+  if (!protection) return "unprotected";
+  if (protection.protected_managers.includes(manager)) return "protected";
+  if (protection.installed_managers.includes(manager)) {
+    if (protection.path_status === "restart_required") return "restart_required";
+    return "path_repair";
+  }
+  return "unprotected";
+}
 function buildSupplyChainStats(snapshot) {
   const managedInstalls = snapshot.managed_installs ?? [];
   const protection = snapshot.supply_chain?.package_manager_protection;
+  const supportedManagers = protection?.supported_managers ?? [];
+  const protectedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "protected"
+  ).length;
+  const stagedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required"
+  ).length;
+  const repairRequiredManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair"
+  ).length;
+  const unprotectedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected"
+  ).length;
   return {
     totalApps: managedInstalls.length,
     activeApps: managedInstalls.filter((i) => i.active).length,
     preventedInstalls: managedInstalls.filter((i) => !i.active).length,
-    protectedManagers: protection?.protected_managers.length ?? 0,
-    unprotectedManagers: protection?.unprotected_managers.length ?? 0
+    protectedManagers,
+    stagedManagers,
+    repairRequiredManagers,
+    unprotectedManagers
   };
 }
 function StatCard({ label, value, tone = "slate" }) {
@@ -687,7 +742,12 @@ function AppFirewallRow({ install, protection }) {
     ] })
   ] });
 }
-function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }) {
+function SupplyChainWorkspace({
+  snapshot,
+  approvalGate,
+  onGoHome,
+  onRuntimeRefresh
+}) {
   const [filter, setFilter] = reactExports.useState({
     statusFilter: "all",
     managerFilter: ""
@@ -700,7 +760,6 @@ function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }) {
   }, []);
   const stats = reactExports.useMemo(() => buildSupplyChainStats(snapshot), [snapshot]);
   const protection = snapshot.supply_chain?.package_manager_protection;
-  const copy = reactExports.useMemo(() => resolvePackageManagerProtectionCopy(protection), [protection]);
   const allManagers = reactExports.useMemo(() => {
     if (!protection) return [];
     const all = /* @__PURE__ */ new Set([...protection.protected_managers, ...protection.unprotected_managers]);
@@ -709,7 +768,7 @@ function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }) {
   const filteredManagers = reactExports.useMemo(() => {
     return allManagers.filter((mgr) => {
       const matchesText = filter.managerFilter === "" || mgr.toLowerCase().includes(filter.managerFilter.toLowerCase());
-      const isProtected = protection?.protected_managers.includes(mgr) ?? false;
+      const isProtected = resolveManagerCoverageStatus(protection, mgr) === "protected";
       const matchesStatus = filter.statusFilter === "all" || filter.statusFilter === "protected" && isProtected || filter.statusFilter === "unprotected" && !isProtected;
       return matchesText && matchesStatus;
     });
@@ -726,17 +785,21 @@ function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Active apps", value: stats.activeApps, tone: "green" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Prevented installs", value: stats.preventedInstalls, tone: stats.preventedInstalls > 0 ? "attention" : "slate" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Protected managers", value: stats.protectedManagers, tone: "green" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        StatCard,
+        {
+          label: stats.stagedManagers > 0 ? "Ready after restart" : stats.repairRequiredManagers > 0 ? "Needs PATH repair" : "Protected managers",
+          value: stats.stagedManagers > 0 ? stats.stagedManagers : stats.repairRequiredManagers > 0 ? stats.repairRequiredManagers : stats.protectedManagers,
+          tone: stats.stagedManagers > 0 ? "blue" : stats.repairRequiredManagers > 0 ? "attention" : "green"
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Unprotected managers", value: stats.unprotectedManagers, tone: stats.unprotectedManagers > 0 ? "attention" : "slate" })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(PackageFirewallPanel, { approvalGate }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PackageFirewallPanel, { approvalGate, onStateChanged: onRuntimeRefresh }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package manager firewall" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: copy.pathTone === "green" ? "green" : copy.pathTone === "attention" ? "attention" : "slate", children: copy.pathLabel })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: copy.pathDetail })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Coverage by manager" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Live protection state and next activation step for each supported package manager." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5", children: [
@@ -778,7 +841,7 @@ function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Status" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "rowgroup", children: filteredManagers.map((mgr) => {
-          const isProtected = protection?.protected_managers.includes(mgr) ?? false;
+          const status = resolveManagerCoverageStatus(protection, mgr);
           return /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "div",
             {
@@ -786,9 +849,15 @@ function SupplyChainWorkspace({ snapshot, approvalGate, onGoHome }) {
               className: "grid grid-cols-[1fr_auto] gap-2 border-b border-slate-100 px-4 py-2.5 last:border-b-0",
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-mono text-brand-dark", role: "cell", children: mgr }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "cell", children: isProtected ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "green", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "cell", children: status === "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "green", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 mr-1 inline", "aria-hidden": "true" }),
                   "Protected"
+                ] }) : status === "restart_required" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "blue", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3.5 w-3.5 mr-1 inline", "aria-hidden": "true" }),
+                  "Restart required"
+                ] }) : status === "path_repair" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-3.5 w-3.5 mr-1 inline", "aria-hidden": "true" }),
+                  "Needs PATH repair"
                 ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-3.5 w-3.5 mr-1 inline", "aria-hidden": "true" }),
                   "Unprotected"

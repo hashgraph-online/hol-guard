@@ -13078,11 +13078,14 @@ function normalizePackageManagerProtection(raw) {
   if (!isRecord(raw)) {
     return void 0;
   }
-  const pathStatus = raw["path_status"] === "in_path" ? "in_path" : "missing_from_path";
+  const pathStatus = raw["path_status"] === "in_path" ? "in_path" : raw["path_status"] === "restart_required" ? "restart_required" : "missing_from_path";
   const shimDir = typeof raw["shim_dir"] === "string" ? raw["shim_dir"] : "";
   return {
     path_status: pathStatus,
     path_contains_shim_dir: raw["path_contains_shim_dir"] === true,
+    restart_shell_required: raw["restart_shell_required"] === true,
+    shell_profile_configured: raw["shell_profile_configured"] === true,
+    shell_profile_path: isStringOrNull(raw["shell_profile_path"]) ? raw["shell_profile_path"] : null,
     shim_dir: shimDir,
     supported_managers: normalizeStringArray(raw["supported_managers"]),
     installed_managers: normalizeStringArray(raw["installed_managers"]),
@@ -13846,10 +13849,14 @@ function normalizePackageFirewallCliFallback(value) {
   }
   return Object.keys(fallback).length > 0 ? fallback : null;
 }
-function normalizePackageShimEntry(manager, detail) {
+function normalizePackageShimEntry(manager, detail, pathStatus) {
+  const installed = detail !== null && stringValue(detail.integrity) !== "missing";
+  const active = booleanValue(detail?.path_active);
+  const activation_state = !installed ? "uninstalled" : active ? "protected" : pathStatus === "restart_required" ? "restart_required" : "repair_required";
   return {
-    active: booleanValue(detail?.path_active),
-    installed: detail !== null && stringValue(detail.integrity) !== "missing",
+    active,
+    activation_state,
+    installed,
     integrity: stringValue(detail?.integrity) ?? "uninstalled",
     manager,
     path_index: numberValue(detail?.path_index),
@@ -13859,7 +13866,7 @@ function normalizePackageShimEntry(manager, detail) {
     shim_path: stringValue(detail?.shim_path)
   };
 }
-function normalizePackageShimEntries(value, supportedManagers) {
+function normalizePackageShimEntries(value, supportedManagers, pathStatus) {
   const status = isRecord(value) ? value : {};
   const detailRows = Array.isArray(status.manager_details) ? status.manager_details.filter(isRecord) : [];
   const detailByManager = /* @__PURE__ */ new Map();
@@ -13875,7 +13882,7 @@ function normalizePackageShimEntries(value, supportedManagers) {
     ...normalizeStringArray(status.active_managers),
     ...detailByManager.keys()
   ]);
-  return Array.from(managers).sort().map((manager) => normalizePackageShimEntry(manager, detailByManager.get(manager) ?? null));
+  return Array.from(managers).sort().map((manager) => normalizePackageShimEntry(manager, detailByManager.get(manager) ?? null, pathStatus));
 }
 function actionResultSummary(operation, detail) {
   const countKeys = ["installed_now_count", "repaired_count"];
@@ -13894,12 +13901,35 @@ function actionResultSummary(operation, detail) {
 function normalizePackageFirewallStatus(value) {
   const record = isRecord(value) ? value : {};
   const supportedManagers = normalizeStringArray(record.supported_managers);
+  const shimStatus = isRecord(record.package_shims) ? record.package_shims : {};
+  const installedManagers = normalizeStringArray(shimStatus.installed_managers);
+  const activeManagers = normalizeStringArray(shimStatus.active_managers);
+  const missingManagers = normalizeStringArray(shimStatus.missing_managers);
+  const rawPathStatus = shimStatus["path_status"] === "in_path" ? "in_path" : shimStatus["path_status"] === "restart_required" ? "restart_required" : "missing_from_path";
+  const packageShims = normalizePackageShimEntries(record.package_shims, supportedManagers, rawPathStatus);
+  const protectedManagers = packageShims.filter((shim) => shim.activation_state === "protected").map((shim) => shim.manager);
+  const protectedSet = new Set(protectedManagers);
+  const protection = {
+    path_status: rawPathStatus,
+    path_contains_shim_dir: shimStatus["path_contains_shim_dir"] === true,
+    restart_shell_required: shimStatus["restart_shell_required"] === true,
+    shell_profile_configured: shimStatus["shell_profile_configured"] === true,
+    shell_profile_path: isStringOrNull(shimStatus["shell_profile_path"]) ? shimStatus["shell_profile_path"] : null,
+    shim_dir: stringValue(shimStatus["shim_dir"]) ?? "",
+    supported_managers: supportedManagers,
+    installed_managers: installedManagers,
+    active_managers: activeManagers,
+    missing_shims: missingManagers,
+    protected_managers: protectedManagers,
+    unprotected_managers: supportedManagers.filter((manager) => !protectedSet.has(manager))
+  };
   return {
     actions: normalizePackageFirewallActions(record.actions),
     cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
     entitlement: normalizePackageFirewallEntitlement(record.entitlement),
     operation: stringValue(record.operation) ?? "status",
-    package_shims: normalizePackageShimEntries(record.package_shims, supportedManagers),
+    package_shims: packageShims,
+    protection,
     status: stringValue(record.status) ?? "unknown",
     supported_managers: supportedManagers
   };
@@ -23059,7 +23089,8 @@ function App() {
             onClearPolicy: handleClearPolicy,
             onOpenSettings: handleOpenSettings,
             onGoHome: handleGoHome,
-            onNavigate: navigate
+            onNavigate: navigate,
+            onRuntimeRefresh: refreshStateAfterAction
           }
         ) }) : null
       }
@@ -23103,7 +23134,7 @@ export {
   HiMiniCog6Tooth as Y,
   HiMiniBellAlert as Z,
   approvalGateCooldownLabel as _,
-  HiMiniExclamationTriangle as a,
+  HiMiniInformationCircle as a,
   fetchPolicy as a0,
   HiMiniArrowLeft as a1,
   HiMiniHome as a2,
@@ -23132,7 +23163,7 @@ export {
   runAuditRemediation as ap,
   HiMiniSignal as aq,
   HiMiniClock as ar,
-  HiMiniInformationCircle as b,
+  HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,
   HiMiniChevronDown as e,
