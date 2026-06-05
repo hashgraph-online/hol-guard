@@ -26,7 +26,7 @@ def _redacted_envelope_dict(envelope: GuardActionEnvelope) -> dict[str, object]:
         "mcp_server": envelope.mcp_server,
         "mcp_tool": envelope.mcp_tool,
         "package_manager": envelope.package_manager,
-        "package_name": envelope.package_name,
+        "has_package_name": envelope.package_name is not None and len(envelope.package_name) > 0,
         "package_intent_kind": envelope.package_intent_kind,
         "package_targets_count": len(envelope.package_targets),
         "pre_execution_result": envelope.pre_execution_result,

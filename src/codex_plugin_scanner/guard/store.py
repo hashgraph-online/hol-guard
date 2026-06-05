@@ -1159,7 +1159,44 @@ class GuardStore:
               )
             """
         )
-        connection.execute("alter table runtime_receipts drop column action_envelope_json")
+        connection.execute(
+            """
+            create table runtime_receipts_new (
+              receipt_id text primary key,
+              harness text not null,
+              artifact_id text not null,
+              artifact_hash text not null,
+              policy_decision text not null,
+              capabilities_summary text not null default '',
+              changed_capabilities_json text not null,
+              provenance_summary text not null,
+              user_override text,
+              artifact_name text,
+              source_scope text,
+              scanner_evidence_json text not null default '[]',
+              timestamp text not null,
+              diff_summary text,
+              approval_source text,
+              approval_request_id text
+            )
+            """
+        )
+        connection.execute(
+            """
+            insert into runtime_receipts_new (
+              receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+              changed_capabilities_json, provenance_summary, user_override, artifact_name, source_scope,
+              scanner_evidence_json, timestamp, diff_summary, approval_source, approval_request_id
+            )
+            select
+              receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+              changed_capabilities_json, provenance_summary, user_override, artifact_name, source_scope,
+              scanner_evidence_json, timestamp, diff_summary, approval_source, null
+            from runtime_receipts
+            """
+        )
+        connection.execute("drop table runtime_receipts")
+        connection.execute("alter table runtime_receipts_new rename to runtime_receipts")
 
     @staticmethod
     def _ensure_approval_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -1957,10 +1994,12 @@ class GuardStore:
         return f"{base} {where_clause}".strip()
 
     @staticmethod
-    def _receipt_dict_from_row(row: sqlite3.Row) -> dict[str, object]:
+    def _receipt_dict_from_row(row: sqlite3.Row, *, include_rowid: bool = True) -> dict[str, object]:
         envelope = _json_object(row["envelope_full_json"]) or _json_object(row["approval_envelope_json"])
-        return {
-            "receipt_rowid": int(row["receipt_rowid"]),
+        result: dict[str, object] = {}
+        if include_rowid:
+            result["receipt_rowid"] = int(row["receipt_rowid"])
+        result.update({
             "receipt_id": str(row["receipt_id"]),
             "harness": str(row["harness"]),
             "artifact_id": str(row["artifact_id"]),
@@ -1979,7 +2018,8 @@ class GuardStore:
             "timestamp": str(row["timestamp"]),
             "action_envelope_json": envelope,
             "envelope_redacted_json": _json_object(row["envelope_redacted_json"]),
-        }
+        })
+        return result
 
     def list_receipts(self, limit: int = 50, harness: str | None = None) -> list[dict[str, object]]:
         if harness is not None:
@@ -2036,7 +2076,7 @@ class GuardStore:
             row = connection.execute(query, (receipt_id,)).fetchone()
         if row is None:
             return None
-        return self._receipt_dict_from_row(row)
+        return self._receipt_dict_from_row(row, include_rowid=False)
 
     def get_latest_receipt(self, harness: str, artifact_id: str) -> dict[str, object] | None:
         query = self._receipt_base_query("where r.harness = ? and r.artifact_id = ? order by r.timestamp desc limit 1")
@@ -2044,7 +2084,7 @@ class GuardStore:
             row = connection.execute(query, (harness, artifact_id)).fetchone()
         if row is None:
             return None
-        return self._receipt_dict_from_row(row)
+        return self._receipt_dict_from_row(row, include_rowid=False)
 
     def count_receipts(self, harness: str | None = None) -> int:
         query = "select count(*) as total from runtime_receipts"

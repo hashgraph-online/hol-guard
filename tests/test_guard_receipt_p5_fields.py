@@ -246,6 +246,7 @@ class TestReceiptFieldRoundtrip:
         assert isinstance(result["envelope_redacted_json"], dict)
         assert result["envelope_redacted_json"]["command_length"] == len("ls -la")
         assert "command" not in result["envelope_redacted_json"]
+        assert "package_name" not in result["envelope_redacted_json"]
 
         receipts = store.list_receipts(harness="codex", limit=10)
         assert len(receipts) == 1
