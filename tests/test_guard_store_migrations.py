@@ -59,6 +59,7 @@ def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
 def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_missing(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    SystemKeyringSecretStore._clear_macos_keychain_health_cache()
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "_macos_default_keychain_path",
@@ -77,6 +78,7 @@ def test_oauth_secret_store_skips_system_keyring_when_macos_user_keychain_search
 ):
     _install_fake_system_keyring(monkeypatch)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    SystemKeyringSecretStore._clear_macos_keychain_health_cache()
     usable_keychain = tmp_path / "Library" / "Keychains" / "login.keychain-db"
     usable_keychain.parent.mkdir(parents=True, exist_ok=True)
     usable_keychain.write_text("", encoding="utf-8")
