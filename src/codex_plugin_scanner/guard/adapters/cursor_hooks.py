@@ -220,11 +220,14 @@ def _uninstall_cursor_hooks_at_paths(
         backup_path.unlink()
     if restored and state_path.is_file():
         state_path.unlink()
-    if not restored and hooks_path.is_file():
-        if _remove_managed_hook_entries(hooks_path=hooks_path, script_path=script_path):
-            restored = True
-            if state_path.is_file():
-                state_path.unlink()
+    if (
+        not restored
+        and hooks_path.is_file()
+        and _remove_managed_hook_entries(hooks_path=hooks_path, script_path=script_path)
+    ):
+        restored = True
+        if state_path.is_file():
+            state_path.unlink()
     if script_path.is_file():
         try:
             script_source = script_path.read_text(encoding="utf-8")
