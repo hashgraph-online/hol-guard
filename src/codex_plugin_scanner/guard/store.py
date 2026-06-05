@@ -2027,6 +2027,23 @@ class GuardStore:
                 ),
             )
 
+    def set_receipt_action_envelope(self, receipt_id: str, action_envelope: dict[str, object]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into runtime_receipt_envelopes (receipt_id, envelope_full_json, envelope_redacted_json)
+                values (?, ?, ?)
+                on conflict(receipt_id) do update set
+                  envelope_full_json = excluded.envelope_full_json,
+                  envelope_redacted_json = excluded.envelope_redacted_json
+                """,
+                (
+                    receipt_id,
+                    json.dumps(action_envelope, sort_keys=True),
+                    json.dumps(action_envelope, sort_keys=True),
+                ),
+            )
+
     @staticmethod
     def _receipt_base_query(where_clause: str = "") -> str:
         base = """

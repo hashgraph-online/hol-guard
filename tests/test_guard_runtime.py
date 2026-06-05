@@ -16633,6 +16633,183 @@ def test_policy_bundle_decisions_map_to_runtime_families(tmp_path):
     assert store.resolve_policy("codex", "codex:project:tool-action:abc", "hash") == "block"
 
 
+def test_simulate_policy_bundle_receipts_replays_recent_receipts_without_enforcing(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-package",
+            timestamp="2026-06-05T13:25:00+00:00",
+            harness="codex",
+            artifact_id="codex:project:package-request:abc",
+            artifact_hash="sha256:package",
+            policy_decision="review",
+            capabilities_summary="package install request",
+            changed_capabilities=("package-request",),
+            provenance_summary="local package install",
+            artifact_name="npm install minimist",
+            source_scope="project",
+        )
+    )
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-file",
+            timestamp="2026-06-05T13:26:00+00:00",
+            harness="codex",
+            artifact_id="codex:project:file-read:def",
+            artifact_hash="sha256:file",
+            policy_decision="review",
+            capabilities_summary="file read request",
+            changed_capabilities=("file-read",),
+            provenance_summary="local file read",
+            artifact_name="open config",
+            source_scope="project",
+        )
+    )
+    bundle = {
+        "bundleVersion": "policy-2026-06-05.3",
+        "bundleHash": "sha256:bundle-proof",
+        "expiresAt": None,
+        "rules": [
+            {
+                "ruleId": "pkg-block",
+                "action": "block",
+                "reason": "Block risky package installs.",
+                "matcherFamilies": ["package-request"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": ["npm"],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            },
+            {
+                "ruleId": "file-allow",
+                "action": "allow",
+                "reason": "Allow benign file reads.",
+                "matcherFamilies": ["file-read"],
+                "scope": {
+                    "agents": [],
+                    "devices": [],
+                    "ecosystems": [],
+                    "environments": ["development"],
+                    "harnesses": ["codex"],
+                    "locations": [],
+                },
+            },
+        ],
+    }
+
+    simulation = guard_runner_module.simulate_policy_bundle_receipts(
+        store,
+        bundle,
+        now="2026-06-05T13:30:00+00:00",
+    )
+
+    assert simulation["policy_bundle_version"] == "policy-2026-06-05.3"
+    assert simulation["policy_version"] == "sha256:bundle-proof"
+    assert simulation["summary"] == {
+        "allow": 1,
+        "block": 1,
+        "review": 0,
+        "ignore": 0,
+        "matched": 2,
+        "unchanged": 0,
+    }
+    assert simulation["matches"] == [
+        {
+            "receipt_id": "receipt-file",
+            "artifact_id": "codex:project:file-read:def",
+            "harness": "codex",
+            "matcher_family": "file-read",
+            "observed_action": "review",
+            "simulated_action": "allow",
+            "matched_rule_id": "file-allow",
+            "policy_version": "sha256:bundle-proof",
+            "timestamp": "2026-06-05T13:26:00+00:00",
+        },
+        {
+            "receipt_id": "receipt-package",
+            "artifact_id": "codex:project:package-request:abc",
+            "harness": "codex",
+            "matcher_family": "package-request",
+            "observed_action": "review",
+            "simulated_action": "block",
+            "matched_rule_id": "pkg-block",
+            "policy_version": "sha256:bundle-proof",
+            "timestamp": "2026-06-05T13:25:00+00:00",
+        },
+    ]
+
+
+def test_simulate_policy_bundle_receipts_reports_event_freshness(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-old",
+            timestamp="2026-06-01T10:00:00+00:00",
+            harness="codex",
+            artifact_id="codex:project:package-request:old",
+            artifact_hash="sha256:old",
+            policy_decision="review",
+            capabilities_summary="old package request",
+            changed_capabilities=("package-request",),
+            provenance_summary="older request",
+            artifact_name="old install",
+            source_scope="project",
+        )
+    )
+
+    simulation = guard_runner_module.simulate_policy_bundle_receipts(
+        store,
+        {"bundleVersion": "policy-2026-06-05.3", "bundleHash": "sha256:bundle-proof", "rules": []},
+        now="2026-06-05T13:30:00+00:00",
+    )
+
+    assert simulation["event_freshness"] == {
+        "latest_receipt_at": "2026-06-01T10:00:00+00:00",
+        "oldest_receipt_at": "2026-06-01T10:00:00+00:00",
+        "sampled_receipts": 1,
+        "stale": True,
+    }
+
+
+def test_simulate_policy_bundle_receipts_clamps_unknown_actions_to_review(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_receipt(
+        GuardReceipt(
+            receipt_id="receipt-warn",
+            timestamp="2026-06-05T13:25:00+00:00",
+            harness="codex",
+            artifact_id="codex:project:file-read:warn",
+            artifact_hash="sha256:warn",
+            policy_decision="warn",
+            capabilities_summary="warn receipt",
+            changed_capabilities=("file-read",),
+            provenance_summary="warn fallback",
+            artifact_name="warn receipt",
+            source_scope="project",
+        )
+    )
+
+    simulation = guard_runner_module.simulate_policy_bundle_receipts(
+        store,
+        {"bundleVersion": "policy-2026-06-05.3", "bundleHash": "sha256:bundle-proof", "rules": []},
+        now="2026-06-05T13:30:00+00:00",
+    )
+
+    assert simulation["summary"] == {
+        "allow": 0,
+        "block": 0,
+        "review": 1,
+        "ignore": 0,
+        "matched": 0,
+        "unchanged": 1,
+    }
+    assert simulation["matches"][0]["simulated_action"] == "review"
+
+
 def test_policy_bundle_version_persists_after_store_reopen(tmp_path):
     home = tmp_path / "guard-home"
     store = GuardStore(home)
@@ -16733,6 +16910,84 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement(tmp_path, monkeypat
         "appliedAt": "2026-06-05T13:30:01+00:00",
         "bundleHash": bundle["bundleHash"],
         "bundleVersion": "policy-2026-06-05.3",
+        "deviceId": guard_runner_module._guard_device_metadata(store)[0],
+        "deviceName": guard_runner_module._guard_device_metadata(store)[1],
+        "status": "synced",
+    }
+
+
+def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "policy-2026-06-05.4",
+        "bundleHash": "",
+        "issuedAt": "2026-06-05T13:30:00+00:00",
+        "expiresAt": None,
+        "verifier": {
+            "algorithm": "sha256",
+            "keyId": "guard-policy-bundle-v1",
+            "signature": None,
+        },
+        "rolloutState": "enforcing",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "warn",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "warn",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": True,
+        },
+        "rules": [],
+        "acknowledgements": [],
+    }
+    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
+
+    class _AckSyncHandler(BaseHTTPRequestHandler):
+        requests: ClassVar[list[dict[str, object]]] = []
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            _AckSyncHandler.requests.append(payload)
+            response_payload = {
+                "syncedAt": f"2026-06-05T13:30:0{len(_AckSyncHandler.requests)}+00:00",
+                "receiptsStored": len(payload.get("receipts", [])),
+                "policyBundle": bundle,
+            }
+            encoded = json.dumps(response_payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, format, *args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), _AckSyncHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store.set_sync_credentials(
+            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            "guard-live-token",
+            "2026-06-05T13:30:00+00:00",
+        )
+        monkeypatch.setattr(guard_runner_module, "sync_pain_signals", lambda _store, auth_context=None: 0)
+
+        guard_runner_module.sync_receipts(store)
+        guard_runner_module.sync_receipts(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert _AckSyncHandler.requests[1]["syncContext"]["policyBundleAcknowledgement"] == {
+        "appliedAt": "2026-06-05T13:30:01+00:00",
+        "bundleHash": bundle["bundleHash"],
+        "bundleVersion": "policy-2026-06-05.4",
         "deviceId": guard_runner_module._guard_device_metadata(store)[0],
         "deviceName": guard_runner_module._guard_device_metadata(store)[1],
         "status": "synced",

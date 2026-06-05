@@ -1167,6 +1167,100 @@ def _build_policy_bundle_decisions(
     return decisions
 
 
+def _parse_policy_simulation_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _receipt_policy_bundle_matcher_family(receipt: dict[str, object]) -> str | None:
+    artifact_id = _non_empty_string(receipt.get("artifact_id"))
+    if artifact_id is None:
+        return None
+    for family in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES:
+        if f":{family}:" in artifact_id:
+            return family
+    return None
+
+
+def simulate_policy_bundle_receipts(
+    store: GuardStore,
+    policy_bundle: dict[str, object],
+    *,
+    limit: int = 50,
+    now: str | None = None,
+) -> dict[str, object]:
+    receipts = store.list_receipts(limit=limit)
+    device_id, device_name = _guard_device_metadata(store)
+    decisions = _build_policy_bundle_decisions(policy_bundle, device_id=device_id, device_name=device_name)
+    generated_at = now or _now()
+    generated_at_dt = _parse_policy_simulation_timestamp(generated_at)
+    latest_receipt_at: str | None = None
+    oldest_receipt_at: str | None = None
+    latest_dt: datetime | None = None
+    oldest_dt: datetime | None = None
+    matches: list[dict[str, object]] = []
+    summary = {"allow": 0, "block": 0, "review": 0, "ignore": 0, "matched": 0, "unchanged": 0}
+    for receipt in receipts:
+        receipt_dt = _parse_policy_simulation_timestamp(receipt.get("timestamp"))
+        if receipt_dt is not None and (latest_dt is None or receipt_dt > latest_dt):
+            latest_dt = receipt_dt
+            latest_receipt_at = str(receipt.get("timestamp"))
+        if receipt_dt is not None and (oldest_dt is None or receipt_dt < oldest_dt):
+            oldest_dt = receipt_dt
+            oldest_receipt_at = str(receipt.get("timestamp"))
+        family = _receipt_policy_bundle_matcher_family(receipt)
+        if family is None:
+            continue
+        harness = _non_empty_string(receipt.get("harness")) or "*"
+        matched = next(
+            (item for item in decisions if item.artifact_id == f"family:{family}" and item.harness in {harness, "*"}),
+            None,
+        )
+        simulated_action = matched.action if matched is not None else str(receipt.get("policy_decision") or "review")
+        if simulated_action not in {"allow", "block", "review", "ignore"}:
+            simulated_action = "review"
+        summary[simulated_action] = summary.get(simulated_action, 0) + 1
+        if matched is not None:
+            summary["matched"] += 1
+        else:
+            summary["unchanged"] += 1
+        matches.append(
+            {
+                "receipt_id": receipt.get("receipt_id"),
+                "artifact_id": receipt.get("artifact_id"),
+                "harness": harness,
+                "matcher_family": family,
+                "observed_action": receipt.get("policy_decision"),
+                "simulated_action": simulated_action,
+                "matched_rule_id": matched.owner if matched is not None else None,
+                "policy_version": _non_empty_string(policy_bundle.get("bundleHash")),
+                "timestamp": receipt.get("timestamp"),
+            }
+        )
+    stale = False
+    if generated_at_dt is not None and latest_dt is not None:
+        stale = (generated_at_dt - latest_dt).total_seconds() > 24 * 60 * 60
+    return {
+        "generated_at": generated_at,
+        "policy_bundle_version": _non_empty_string(policy_bundle.get("bundleVersion")),
+        "policy_version": _non_empty_string(policy_bundle.get("bundleHash")),
+        "receipt_count": len(receipts),
+        "summary": summary,
+        "matches": matches,
+        "event_freshness": {
+            "latest_receipt_at": latest_receipt_at,
+            "oldest_receipt_at": oldest_receipt_at,
+            "sampled_receipts": len(receipts),
+            "stale": stale,
+        },
+    }
+
+
 def sync_receipts(
     store: GuardStore,
     *,

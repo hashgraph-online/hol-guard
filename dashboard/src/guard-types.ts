@@ -312,6 +312,10 @@ export type GuardRuntimeSnapshot = {
   cloud_state: "local_only" | "paired_waiting" | "paired_active";
   cloud_state_label: string;
   cloud_state_detail: string;
+  cloud_policy_bundle_hash?: string | null;
+  cloud_policy_bundle_version?: string | null;
+  cloud_policy_rollout_state?: string | null;
+  cloud_policy_sync_error?: string | null;
   cloud_pairing_state: GuardCloudPairingState;
   cloud_sync_health: GuardCloudSyncHealth;
   dashboard_url: string;

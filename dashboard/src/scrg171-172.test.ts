@@ -17,7 +17,7 @@ import {
 } from "./guard-api";
 import { buildSupplyChainStats } from "./supply-chain-workspace";
 import { deriveFrontendAuditResults } from "./audit-workspace";
-import { groupPoliciesByHarness, resolveSecurityModeCopy } from "./policy-workspace";
+import { groupPoliciesByHarness, resolveCloudPolicyBundleCopy, resolveSecurityModeCopy } from "./policy-workspace";
 import { resolveFeedSourceMode, resolveFeedStaleness } from "./feed-health-workspace";
 import type {
   GuardRuntimeSnapshot,
@@ -158,6 +158,12 @@ const degradedSnapshot: GuardRuntimeSnapshot = {
   },
 };
 
+const pairedPolicySnapshot: GuardRuntimeSnapshot = {
+  ...paidSnapshot,
+  cloud_policy_bundle_version: "policy-2026-06-05.1",
+  cloud_policy_rollout_state: "enforcing",
+};
+
 const makeInstall = (active: boolean): GuardManagedInstall => ({
   harness: "claude",
   active,
@@ -258,6 +264,11 @@ assert(
   typeof loadSupplyChainPage === "function",
   "SCRG171-J: loadSupplyChainPage is exported as a function",
 );
+
+const cloudBundleCopy = resolveCloudPolicyBundleCopy(pairedPolicySnapshot);
+assert(cloudBundleCopy !== null, "SCRG171-K: paired cloud bundle should expose policy workspace copy");
+assert(cloudBundleCopy!.label.includes("policy-2026-06-05.1"), "SCRG171-L: cloud bundle label includes version");
+assert(cloudBundleCopy!.detail.includes("Guard Cloud Controls"), "SCRG171-M: cloud bundle detail preserves cloud ownership");
 
 assert(
   typeof loadAuditPage === "function",
