@@ -1216,7 +1216,8 @@ class TestGuardSurfaceServer:
 
         try:
             stream_request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/events/stream?token={daemon._server.auth_token}",
+                f"http://127.0.0.1:{daemon.port}/v1/events/stream",
+                headers={"X-Guard-Token": daemon._server.auth_token},
                 method="GET",
             )
             response = urllib.request.urlopen(stream_request, timeout=5)

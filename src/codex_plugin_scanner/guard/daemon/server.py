@@ -679,8 +679,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_static_asset(parsed.path.removeprefix("/"))
             return
         if parsed.path == "/v1/events/stream":
-            if not self._token_is_valid(parsed.query):
-                self._write_json({"error": "unauthorized"}, status=401)
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized()
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized()
                 return
             self._stream_events(_int_query_value(parsed.query, "cursor"))
             return
@@ -2390,10 +2394,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json(hook_payload)
 
-    def _token_is_valid(self, query: str) -> bool:
-        params = parse_qs(query)
-        token = params.get("token", [None])[-1]
-        return self._tokens_match(token)
+    def _query_has_guard_token(self, query: str) -> bool:
+        return any(key == "token" for key, _value in parse_qsl(query, keep_blank_values=True))
 
     def _write_unauthorized(self, *, extra_headers: dict[str, str] | None = None) -> None:
         self._record_auth_audit_event()
@@ -2414,6 +2416,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "has_authorization": isinstance(self.headers.get("Authorization"), str),
                 "has_dashboard_session": isinstance(self.headers.get("X-Guard-Dashboard-Session"), str),
                 "has_guard_token": isinstance(self.headers.get("X-Guard-Token"), str),
+            },
+            _now(),
+        )
+
+    def _record_query_token_rejection(self) -> None:
+        self._daemon_server().store.add_event(
+            "daemon.auth.query_token_rejected",
+            {
+                "method": self.command,
+                "path": urlparse(self.path).path,
+                "has_query_token": True,
             },
             _now(),
         )
