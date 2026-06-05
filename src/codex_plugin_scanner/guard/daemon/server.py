@@ -3254,7 +3254,6 @@ class GuardDaemonServer:
             started_at=self._server.runtime_started_at,
             last_heartbeat_at=_now(),
         )
-        _maybe_queue_first_cloud_sync(store=self._server.store)
         self._start_watchdog()
         self._start_supply_chain_bundle_refresh()
 
