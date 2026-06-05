@@ -2118,6 +2118,7 @@ def _guard_sync_request_with_nonce(
         dpop_nonce=dpop_nonce,
     )
 
+
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     try:
         raw_body = error.read().decode("utf-8")
