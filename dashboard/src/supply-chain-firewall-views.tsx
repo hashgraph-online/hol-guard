@@ -60,6 +60,12 @@ type ConnectFlowCardProps = {
   onStartConnect: () => void;
 };
 
+type NavigatorWithUserAgentData = Navigator & {
+  userAgentData?: {
+    platform?: string;
+  };
+};
+
 type ConnectStepProps = {
   body: string;
   current: boolean;
@@ -126,6 +132,16 @@ function resolveConnectSteps(
   ];
 }
 
+function isMacClient(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  const navigatorWithUserAgentData = navigator as NavigatorWithUserAgentData;
+  const platformHint =
+    navigatorWithUserAgentData.userAgentData?.platform ?? navigator.userAgent ?? navigator.platform;
+  return platformHint.toLowerCase().includes("mac");
+}
+
 export function ConnectFlowCard({
   compact = false,
   connectError,
@@ -148,7 +164,6 @@ export function ConnectFlowCard({
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
-  const hintCopy = localRecoveryHint ?? "Guard changes routing only after this machine receives signed cloud access.";
   if (compact) {
     return (
       <div className="space-y-3">
@@ -181,7 +196,7 @@ export function ConnectFlowCard({
         </div>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs leading-relaxed text-slate-500">
-          <span>{hintCopy}</span>
+          {localRecoveryHint !== null && <span>{localRecoveryHint}</span>}
           <span>Guard changes routing only after this machine receives signed cloud access.</span>
         </div>
 
@@ -409,8 +424,7 @@ export function ActivationSummary({
   const canOpenShell =
     protection.path_status === "restart_required" &&
     protection.shell_profile_configured &&
-    typeof navigator !== "undefined" &&
-    navigator.platform.toLowerCase().includes("mac");
+    isMacClient();
   return (
     <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
       <div className="flex items-start gap-2.5">

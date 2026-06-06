@@ -3529,9 +3529,7 @@ class GuardStore:
         fallback_store: EncryptedFileSecretStore | None
         if isinstance(secret_store, FallbackSecretStore):
             fallback_store = (
-                secret_store.fallback
-                if isinstance(secret_store.fallback, EncryptedFileSecretStore)
-                else None
+                secret_store.fallback if isinstance(secret_store.fallback, EncryptedFileSecretStore) else None
             )
         elif isinstance(secret_store, EncryptedFileSecretStore):
             fallback_store = secret_store
