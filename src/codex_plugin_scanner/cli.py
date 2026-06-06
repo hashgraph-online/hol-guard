@@ -63,7 +63,7 @@ def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", help="Path to a scanner config file such as .plugin-scanner.toml")
     parser.add_argument("--baseline", help="Path to baseline suppression file")
     parser.add_argument("--strict", action="store_true", help="Fail if any finding is present")
-    parser.add_argument("--diff-base", help="Reserved for future diff-aware gating")
+    parser.add_argument("--diff-base", help="Not implemented yet. Guard exits with an error if this flag is used.")
 
 
 def _is_guard_program(program_name: str) -> bool:
@@ -508,6 +508,8 @@ def main(argv: list[str] | None = None) -> int:
         for ecosystem in list_supported_ecosystems():
             print(ecosystem)
         return 0
+    if getattr(args, "diff_base", None):
+        parser.error("--diff-base is not implemented yet. Remove the flag and rerun without diff-aware gating.")
     if args.command in {None, "scan"}:
         return _run_scan(args)
     if args.command == "lint":

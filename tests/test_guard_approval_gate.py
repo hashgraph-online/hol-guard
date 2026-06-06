@@ -45,7 +45,7 @@ from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.totp import TotpSecretStore, totp_code_at_counter
+from codex_plugin_scanner.guard.totp import TotpSecretStore, _temporary_atomic_path, totp_code_at_counter
 
 PASSWORD = "correct-password"
 WRONG_PASSWORD = "wrong-password"
@@ -152,6 +152,23 @@ def _enable_totp(store: GuardStore, *, now: str) -> str:
         now=now,
     )
     return secret
+
+
+def test_totp_atomic_temp_paths_are_random(tmp_path: Path) -> None:
+    target_path = tmp_path / "guard-home" / "totp-secrets" / "seed.secret"
+    first = _temporary_atomic_path(target_path)
+    second = _temporary_atomic_path(target_path)
+    try:
+        assert first != second
+        assert first.parent == target_path.parent
+        assert second.parent == target_path.parent
+        assert first.name != f"{target_path.name}.tmp"
+        assert second.name != f"{target_path.name}.tmp"
+    finally:
+        if first.exists():
+            first.unlink()
+        if second.exists():
+            second.unlink()
 
 
 def test_approval_gate_missing_password_fails_closed(tmp_path: Path) -> None:

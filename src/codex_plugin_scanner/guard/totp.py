@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import os
 import secrets
+import tempfile
 import urllib.parse
 from pathlib import Path
 
@@ -76,20 +77,28 @@ class TotpSecretStore:
     @staticmethod
     def _atomic_write_bytes(path: Path, payload: bytes, mode: int) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-        tmp_path.write_bytes(payload)
-        os.chmod(tmp_path, mode)
-        tmp_path.replace(path)
-        os.chmod(path, mode)
+        tmp_path = _temporary_atomic_path(path)
+        try:
+            tmp_path.write_bytes(payload)
+            os.chmod(tmp_path, mode)
+            tmp_path.replace(path)
+            os.chmod(path, mode)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
 
     @staticmethod
     def _atomic_write_text(path: Path, payload: str, mode: int) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-        tmp_path.write_text(payload, encoding="utf-8")
-        os.chmod(tmp_path, mode)
-        tmp_path.replace(path)
-        os.chmod(path, mode)
+        tmp_path = _temporary_atomic_path(path)
+        try:
+            tmp_path.write_text(payload, encoding="utf-8")
+            os.chmod(tmp_path, mode)
+            tmp_path.replace(path)
+            os.chmod(path, mode)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
 
 
 def generate_totp_secret() -> str:
@@ -153,3 +162,11 @@ def _normalize_base32(value: str) -> str:
     normalized = value.strip().replace(" ", "").replace("-", "").upper()
     padding = "=" * ((8 - len(normalized) % 8) % 8)
     return normalized + padding
+
+
+def _temporary_atomic_path(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    prefix = f"{path.name}."
+    fd, raw_path = tempfile.mkstemp(prefix=prefix, suffix=".tmp", dir=path.parent)
+    os.close(fd)
+    return Path(raw_path)

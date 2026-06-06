@@ -118,6 +118,13 @@ class TestMain:
 
         assert args.cisco_mcp_scan == "on"
 
+    def test_diff_base_fails_loudly_until_implemented(self, capsys):
+        with pytest.raises(SystemExit) as error:
+            main(["scan", str(FIXTURES / "good-plugin"), "--diff-base", "HEAD~1"])
+
+        assert error.value.code == 2
+        assert "--diff-base is not implemented yet" in capsys.readouterr().err
+
     def test_scan_help_explains_cisco_mcp_extra_requirement(self, capsys):
         parser = cli_module._build_parser("plugin-scanner", program_mode="scanner")
 
