@@ -141,7 +141,6 @@ function AuditResultRow({ result, onMarkResolved, onRunRemediation, running, act
   const [expanded, setExpanded] = useState(false);
   const toggle = useCallback(() => setExpanded((p) => !p), []);
   const handleResolve = useCallback(() => onMarkResolved?.(result.id), [onMarkResolved, result.id]);
-  const handleRunRemediation = useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
   const showInlineAction = !result.resolved && (result.remediationAction !== null || onMarkResolved);
 
   return (

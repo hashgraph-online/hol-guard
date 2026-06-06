@@ -66,7 +66,6 @@ function AuditResultRow({ result, onMarkResolved, onRunRemediation, running, act
   const [expanded, setExpanded] = reactExports.useState(false);
   const toggle = reactExports.useCallback(() => setExpanded((p) => !p), []);
   const handleResolve = reactExports.useCallback(() => onMarkResolved?.(result.id), [onMarkResolved, result.id]);
-  reactExports.useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
   const showInlineAction = !result.resolved && (result.remediationAction !== null || onMarkResolved);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `border-b border-slate-100 last:border-b-0 ${result.resolved ? "opacity-60" : ""}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 hover:bg-slate-50/60", children: [
