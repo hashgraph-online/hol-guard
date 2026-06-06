@@ -362,6 +362,23 @@ class TestOpenCodeInstall:
         assert "project-mcp" not in managed_config.get("mcp", {})
         assert "hol-guard::project-mcp" not in managed_config.get("mcp", {})
 
+    def test_install_keeps_global_companion_when_workspace_shadows_name(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, workspace=True)
+        assert ctx.workspace_dir is not None
+        global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        _write_mcp_config(
+            global_config,
+            {"shared-lab": {"type": "local", "command": ["node", "global-shared-lab.js"]}},
+        )
+        _write_mcp_config(
+            ctx.workspace_dir / "opencode.json",
+            {"shared-lab": {"type": "local", "command": ["node", "project-shared-lab.js"]}},
+        )
+        OpenCodeHarnessAdapter().install(ctx)
+        managed_config = json.loads(global_config.read_text(encoding="utf-8"))
+        assert managed_config["mcp"]["shared-lab"]["command"] == ["node", "global-shared-lab.js"]
+        assert "hol-guard::shared-lab" in managed_config["mcp"]
+
     def test_install_preserves_explicit_bash_ask_permission(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
