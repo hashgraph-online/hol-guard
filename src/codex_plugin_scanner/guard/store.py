@@ -776,6 +776,7 @@ class GuardStore:
         _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
         self._secret_store = _build_secret_store(self.guard_home)
         self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
+        self._cached_oauth_secret_payload: tuple[str, str, str] | None = None
         self._sync_token_ref = self._build_scoped_secret_ref(_SYNC_TOKEN_REF)
         self._oauth_local_credentials_ref = self._build_scoped_secret_ref(_OAUTH_LOCAL_CREDENTIALS_REF)
         self._guard_event_queue_limit = max(1, guard_event_queue_limit)
@@ -851,10 +852,13 @@ class GuardStore:
         expected_hash_value: str | None,
         *,
         prefer_fallback_first: bool = False,
+        fallback_token_hint: str | None = None,
     ) -> list[str]:
         if isinstance(secret_store, FallbackSecretStore):
             if prefer_fallback_first and isinstance(secret_store.fallback, EncryptedFileSecretStore):
-                fallback_token = self._get_secret_from_store(secret_store.fallback, secret_id)
+                fallback_token = fallback_token_hint
+                if fallback_token is None:
+                    fallback_token = self._get_secret_from_store(secret_store.fallback, secret_id)
                 if fallback_token is not None and (
                     expected_hash_value is None or _secret_matches_hash(fallback_token, expected_hash_value)
                 ):
@@ -3474,6 +3478,7 @@ class GuardStore:
         return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
 
     def clear_oauth_local_credentials(self) -> None:
+        self._clear_oauth_secret_payload_cache()
         payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if isinstance(payload, dict):
             secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
@@ -3584,82 +3589,88 @@ class GuardStore:
             return None
         if not isinstance(secret_hash, str) or not secret_hash:
             return None
-        fallback_secret_payload = self._load_validated_oauth_fallback_secret_payload(secret_ref, secret_hash)
+        cached_secret_payload = self._get_cached_oauth_secret_payload(secret_ref, secret_hash)
+        if cached_secret_payload is not None:
+            return cached_secret_payload
+        fallback_secret_json = self._load_oauth_fallback_secret_json(secret_ref)
+        fallback_secret_payload = self._load_validated_oauth_fallback_secret_payload(fallback_secret_json, secret_hash)
         if fallback_secret_payload is not None:
+            self._remember_oauth_secret_payload(secret_ref, secret_hash, fallback_secret_json)
             return fallback_secret_payload
         for candidate in self._get_secret_candidates(
             self._oauth_secret_store,
             secret_ref,
             secret_hash,
             prefer_fallback_first=True,
+            fallback_token_hint=fallback_secret_json,
         ):
             if not _secret_matches_hash(candidate, secret_hash):
                 continue
-            try:
-                secret_payload = json.loads(candidate)
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(secret_payload, dict):
+            secret_payload = self._parse_oauth_secret_payload(candidate)
+            if secret_payload is None:
                 continue
             if promote:
                 self._mirror_oauth_secret_to_fallback(secret_ref, candidate)
+            self._remember_oauth_secret_payload(secret_ref, secret_hash, candidate)
             return secret_payload
         return None
 
-    def _load_validated_oauth_fallback_secret_payload(
-        self,
-        secret_ref: str,
-        secret_hash: str,
-    ) -> dict[str, object] | None:
+    def _resolve_oauth_fallback_store(self) -> EncryptedFileSecretStore | None:
         secret_store = self._oauth_secret_store
-        fallback_store: EncryptedFileSecretStore | None
         if isinstance(secret_store, FallbackSecretStore):
-            fallback_store = (
-                secret_store.fallback
-                if isinstance(secret_store.fallback, EncryptedFileSecretStore)
-                else None
-            )
-        elif isinstance(secret_store, EncryptedFileSecretStore):
-            fallback_store = secret_store
-        else:
-            fallback_store = None
+            return secret_store.fallback if isinstance(secret_store.fallback, EncryptedFileSecretStore) else None
+        if isinstance(secret_store, EncryptedFileSecretStore):
+            return secret_store
+        return None
+
+    def _load_oauth_fallback_secret_json(self, secret_ref: str) -> str | None:
+        fallback_store = self._resolve_oauth_fallback_store()
         if fallback_store is None:
             return None
         secret_json = self._get_secret_from_store(fallback_store, secret_ref)
+        return secret_json if isinstance(secret_json, str) and secret_json else None
+
+    def _get_cached_oauth_secret_payload(self, secret_ref: str, secret_hash: str) -> dict[str, object] | None:
+        cached = self._cached_oauth_secret_payload
+        if cached is None or cached[0] != secret_ref or cached[1] != secret_hash:
+            return None
+        return self._parse_oauth_secret_payload(cached[2])
+
+    def _remember_oauth_secret_payload(self, secret_ref: str, secret_hash: str, secret_json: str | None) -> None:
         if not isinstance(secret_json, str) or not secret_json:
-            return None
-        if not _secret_matches_hash(secret_json, secret_hash):
-            return None
+            return
+        self._cached_oauth_secret_payload = (secret_ref, secret_hash, secret_json)
+
+    def _clear_oauth_secret_payload_cache(self) -> None:
+        self._cached_oauth_secret_payload = None
+
+    @staticmethod
+    def _parse_oauth_secret_payload(secret_json: str) -> dict[str, object] | None:
         try:
             secret_payload = json.loads(secret_json)
         except json.JSONDecodeError:
             return None
         return secret_payload if isinstance(secret_payload, dict) else None
+
+    def _load_validated_oauth_fallback_secret_payload(
+        self,
+        secret_json: str | None,
+        secret_hash: str,
+    ) -> dict[str, object] | None:
+        if not isinstance(secret_json, str) or not secret_json:
+            return None
+        if not _secret_matches_hash(secret_json, secret_hash):
+            return None
+        return self._parse_oauth_secret_payload(secret_json)
 
     def _load_oauth_fallback_secret_payload(self, payload: dict[str, object]) -> dict[str, object] | None:
         secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
         if not isinstance(secret_ref, str) or not secret_ref:
             return None
-        secret_store = self._oauth_secret_store
-        fallback_store: EncryptedFileSecretStore | None
-        if isinstance(secret_store, FallbackSecretStore):
-            fallback_store = (
-                secret_store.fallback if isinstance(secret_store.fallback, EncryptedFileSecretStore) else None
-            )
-        elif isinstance(secret_store, EncryptedFileSecretStore):
-            fallback_store = secret_store
-        else:
-            fallback_store = None
-        if fallback_store is None:
+        secret_json = self._load_oauth_fallback_secret_json(secret_ref)
+        if secret_json is None:
             return None
-        secret_json = self._get_secret_from_store(fallback_store, secret_ref)
-        if not isinstance(secret_json, str) or not secret_json:
-            return None
-        try:
-            secret_payload = json.loads(secret_json)
-        except json.JSONDecodeError:
-            return None
-        return secret_payload if isinstance(secret_payload, dict) else None
+        return self._parse_oauth_secret_payload(secret_json)
 
     @staticmethod
     def _build_oauth_local_credentials_result(

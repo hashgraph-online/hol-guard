@@ -882,6 +882,7 @@ def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+    assert isinstance(store._oauth_secret_store.fallback, EncryptedFileSecretStore)
 
     store.set_oauth_local_credentials(
         issuer="https://hol.org",
@@ -896,15 +897,28 @@ def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before
         now="2026-06-01T00:00:00+00:00",
     )
 
+    fallback_reads = 0
+    original_fallback_get_secret = store._oauth_secret_store.fallback.get_secret
+
+    def count_fallback_reads(secret_id: str) -> str | None:
+        nonlocal fallback_reads
+        fallback_reads += 1
+        return original_fallback_get_secret(secret_id)
+
+    monkeypatch.setattr(store._oauth_secret_store.fallback, "get_secret", count_fallback_reads)
+
     credentials = store.get_oauth_local_credentials()
+    repeated_credentials = store.get_oauth_local_credentials()
 
     assert credentials is not None
+    assert repeated_credentials is not None
     assert credentials["refresh_token"] == "refresh-secret-value"
     assert store.get_cloud_sync_profile() == {
         "auth_mode": "oauth",
         "sync_url": "https://hol.org/api/guard/receipts/sync",
         "workspace_id": "workspace-123",
     }
+    assert fallback_reads == 1
     assert fake_keyring.get_password_calls == 0
 
 
@@ -989,10 +1003,22 @@ def test_get_oauth_local_credentials_recovers_from_timed_primary_lookup_when_fal
         lambda _secret_id, *, timeout_seconds: primary_secret,
     )
 
+    primary_reads = 0
+
+    def count_primary_reads(_secret_id: str, *, timeout_seconds: float) -> str | None:
+        nonlocal primary_reads
+        primary_reads += 1
+        return primary_secret
+
+    monkeypatch.setattr(store._oauth_secret_store.primary, "get_secret_with_timeout", count_primary_reads)
+
     credentials = store.get_oauth_local_credentials()
+    repeated_credentials = store.get_oauth_local_credentials()
 
     assert credentials is not None
+    assert repeated_credentials is not None
     assert credentials["refresh_token"] == "refresh-secret-value-rotated"
+    assert primary_reads == 1
     assert store.get_oauth_local_credential_health()["state"] == "healthy"
 
 
