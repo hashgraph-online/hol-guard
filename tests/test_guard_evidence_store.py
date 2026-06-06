@@ -9,6 +9,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.store_evidence import (
     EvidenceRecord,
+    _sanitize_csv_formula_cell,
     compact_evidence,
     count_evidence,
     evidence_index_statements,
@@ -78,9 +79,7 @@ class TestSchema:
             conn.execute(stmt)
         names = [
             r[0]
-            for r in conn.execute(
-                "select name from sqlite_master where type='index' and name like 'idx_evidence%'"
-            )
+            for r in conn.execute("select name from sqlite_master where type='index' and name like 'idx_evidence%'")
         ]
         assert len(names) == len(set(names))
 
@@ -274,6 +273,31 @@ class TestExportEvidence:
         assert "sk-live-secret-value" not in exported
         assert "/Users/alice" not in exported
         assert "csv-1" in exported
+
+    def test_export_csv_sanitizes_formula_prefixed_cells(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(
+            conn,
+            _rec(
+                evidence_id="csv-formula-1",
+                summary='=HYPERLINK("https://evil.example")',
+                category="@formula",
+                signal_id="\tsecret-tab",
+            ),
+        )
+
+        exported = export_evidence_csv(conn)
+
+        assert "'=HYPERLINK(" in exported
+        assert "'@formula" in exported
+        assert "'\tsecret-tab" in exported
+        assert ",=HYPERLINK(" not in exported
+        for dangerous_value in (
+            "+cmd",
+            "-cmd",
+            "\n=FORMULA()",
+        ):
+            assert f"'{dangerous_value}" == _sanitize_csv_formula_cell(dangerous_value)
 
 
 class TestCompactEvidence:
