@@ -30,6 +30,7 @@ class _FakeSystemKeyringModule:
     def __init__(self) -> None:
         self._secrets: dict[tuple[str, str], str] = {}
         self.fail_on_set = False
+        self.get_password_calls = 0
 
     @staticmethod
     def get_keyring():
@@ -44,6 +45,7 @@ class _FakeSystemKeyringModule:
         self._secrets[(service_name, secret_id)] = value
 
     def get_password(self, service_name: str, secret_id: str) -> str | None:
+        self.get_password_calls += 1
         return self._secrets.get((service_name, secret_id))
 
     def delete_password(self, service_name: str, secret_id: str) -> None:
@@ -876,7 +878,7 @@ def test_oauth_local_credentials_mirror_secret_into_encrypted_fallback_store(tmp
 
 
 def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before_keyring(tmp_path, monkeypatch):
-    _install_fake_system_keyring(monkeypatch)
+    fake_keyring = _install_fake_system_keyring(monkeypatch)
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
     assert isinstance(store._oauth_secret_store, FallbackSecretStore)
@@ -894,15 +896,16 @@ def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before
         now="2026-06-01T00:00:00+00:00",
     )
 
-    def fail_primary_lookup(secret_id: str) -> str | None:
-        raise AssertionError(f"primary keyring lookup should not run for {secret_id}")
-
-    monkeypatch.setattr(store._oauth_secret_store.primary, "get_secret", fail_primary_lookup)
-
     credentials = store.get_oauth_local_credentials()
 
     assert credentials is not None
     assert credentials["refresh_token"] == "refresh-secret-value"
+    assert store.get_cloud_sync_profile() == {
+        "auth_mode": "oauth",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "workspace_id": "workspace-123",
+    }
+    assert fake_keyring.get_password_calls == 0
 
 
 def test_get_oauth_local_credentials_fails_closed_when_fallback_hash_is_stale(tmp_path, monkeypatch):

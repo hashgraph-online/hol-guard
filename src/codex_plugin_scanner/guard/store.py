@@ -3584,6 +3584,9 @@ class GuardStore:
             return None
         if not isinstance(secret_hash, str) or not secret_hash:
             return None
+        fallback_secret_payload = self._load_validated_oauth_fallback_secret_payload(secret_ref, secret_hash)
+        if fallback_secret_payload is not None:
+            return fallback_secret_payload
         for candidate in self._get_secret_candidates(
             self._oauth_secret_store,
             secret_ref,
@@ -3599,10 +3602,39 @@ class GuardStore:
             if not isinstance(secret_payload, dict):
                 continue
             if promote:
-                self._promote_secret_to_primary(self._oauth_secret_store, secret_ref, candidate)
                 self._mirror_oauth_secret_to_fallback(secret_ref, candidate)
             return secret_payload
         return None
+
+    def _load_validated_oauth_fallback_secret_payload(
+        self,
+        secret_ref: str,
+        secret_hash: str,
+    ) -> dict[str, object] | None:
+        secret_store = self._oauth_secret_store
+        fallback_store: EncryptedFileSecretStore | None
+        if isinstance(secret_store, FallbackSecretStore):
+            fallback_store = (
+                secret_store.fallback
+                if isinstance(secret_store.fallback, EncryptedFileSecretStore)
+                else None
+            )
+        elif isinstance(secret_store, EncryptedFileSecretStore):
+            fallback_store = secret_store
+        else:
+            fallback_store = None
+        if fallback_store is None:
+            return None
+        secret_json = self._get_secret_from_store(fallback_store, secret_ref)
+        if not isinstance(secret_json, str) or not secret_json:
+            return None
+        if not _secret_matches_hash(secret_json, secret_hash):
+            return None
+        try:
+            secret_payload = json.loads(secret_json)
+        except json.JSONDecodeError:
+            return None
+        return secret_payload if isinstance(secret_payload, dict) else None
 
     def _load_oauth_fallback_secret_payload(self, payload: dict[str, object]) -> dict[str, object] | None:
         secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
