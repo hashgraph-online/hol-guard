@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
-import time
 from io import StringIO
 from pathlib import Path
 
@@ -237,13 +237,21 @@ def _hung_response_child_command() -> list[str]:
     ]
 
 
-class _BlockingInput:
-    def __init__(self, sleep_seconds: float = 0.2) -> None:
-        self.sleep_seconds = sleep_seconds
+class _BlockingPipeInput:
+    def __init__(self) -> None:
+        read_fd, write_fd = os.pipe()
+        self._reader = os.fdopen(read_fd, "r", encoding="utf-8")
+        self._writer_fd = write_fd
+
+    def fileno(self) -> int:
+        return self._reader.fileno()
 
     def readline(self) -> str:
-        time.sleep(self.sleep_seconds)
-        return ""
+        return self._reader.readline()
+
+    def close(self) -> None:
+        self._reader.close()
+        os.close(self._writer_fd)
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -1457,7 +1465,8 @@ def test_codex_guard_proxy_returns_timeout_error_when_child_server_hangs(tmp_pat
         ]
     )
 
-    assert result["responses"][0]["error"]["code"] == -32002
+    assert result["responses"][0]["error"]["code"] == -32800
+    assert result["responses"][0]["error"]["data"]["guard_timeout"] is True
     assert result["events"][0]["decision"] == "timeout"
     assert result["responses"][0]["error"]["data"]["source"] == "child_response"
 
@@ -1478,19 +1487,29 @@ def test_codex_guard_proxy_returns_timeout_error_to_child_for_nested_request_tim
     monkeypatch.setattr(proxy, "_nested_request_timeout_seconds", lambda: 0.05)
     child_stdin = StringIO()
     server_output = StringIO()
+    blocking_input = _BlockingPipeInput()
 
-    proxy._proxy_child_request(
-        payload={"jsonrpc": "2.0", "id": "child-sampling-timeout", "method": "sampling/createMessage", "params": {}},
-        child_stdin=child_stdin,
-        child_stdout=StringIO(),
-        client_input=_BlockingInput(),
-        server_output=server_output,
-    )
+    try:
+        proxy._proxy_child_request(
+            payload={
+                "jsonrpc": "2.0",
+                "id": "child-sampling-timeout",
+                "method": "sampling/createMessage",
+                "params": {},
+            },
+            child_stdin=child_stdin,
+            child_stdout=StringIO(),
+            client_input=blocking_input,
+            server_output=server_output,
+        )
+    finally:
+        blocking_input.close()
 
     child_reply = json.loads(child_stdin.getvalue().splitlines()[0])
     assert json.loads(server_output.getvalue().splitlines()[0])["id"] == "child-sampling-timeout"
     assert child_reply["id"] == "child-sampling-timeout"
-    assert child_reply["error"]["code"] == -32002
+    assert child_reply["error"]["code"] == -32800
+    assert child_reply["error"]["data"]["guard_timeout"] is True
     assert child_reply["error"]["data"]["source"] == "nested_client_response"
 
 
@@ -1509,12 +1528,16 @@ def test_codex_guard_proxy_cancels_inline_approval_after_timeout(tmp_path, monke
     )
     monkeypatch.setattr(proxy, "_inline_approval_timeout_seconds", lambda: 0.05)
 
-    result = proxy._request_inline_approval(
-        {"jsonrpc": "2.0", "id": "guard-elicitation-timeout", "method": "elicitation/create", "params": {}},
-        input_stream=_BlockingInput(),
-        output_stream=StringIO(),
-        child_stdin=StringIO(),
-        child_stdout=StringIO(),
-    )
+    blocking_input = _BlockingPipeInput()
+    try:
+        result = proxy._request_inline_approval(
+            {"jsonrpc": "2.0", "id": "guard-elicitation-timeout", "method": "elicitation/create", "params": {}},
+            input_stream=blocking_input,
+            output_stream=StringIO(),
+            child_stdin=StringIO(),
+            child_stdout=StringIO(),
+        )
+    finally:
+        blocking_input.close()
 
     assert result == {"action": "cancel", "reason": "timeout"}
