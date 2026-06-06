@@ -14,6 +14,8 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision, build_tool_call_artifact, build_tool_call_hash
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
+from codex_plugin_scanner.guard.proxy import stdio as stdio_module
+from codex_plugin_scanner.guard.proxy.stdio import ProxyIoTimeoutError, _readline_with_timeout
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_tool_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -252,6 +254,11 @@ class _BlockingPipeInput:
     def close(self) -> None:
         self._reader.close()
         os.close(self._writer_fd)
+
+
+class _NoFilenoBlockingInput:
+    def readline(self) -> str:
+        raise AssertionError("shared stream should fail closed before blocking readline()")
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -1541,3 +1548,32 @@ def test_codex_guard_proxy_cancels_inline_approval_after_timeout(tmp_path, monke
         blocking_input.close()
 
     assert result == {"action": "cancel", "reason": "timeout"}
+
+
+def test_readline_with_timeout_rejects_shared_stream_without_fileno() -> None:
+    with pytest.raises(ProxyIoTimeoutError):
+        _readline_with_timeout(
+            _NoFilenoBlockingInput(),
+            0.05,
+            source="inline_approval",
+            allow_background_wait=False,
+        )
+
+
+def test_readline_with_timeout_rejects_shared_stream_when_select_fails(monkeypatch) -> None:
+    blocking_input = _BlockingPipeInput()
+    try:
+        monkeypatch.setattr(
+            stdio_module.select,
+            "select",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("select unavailable")),
+        )
+        with pytest.raises(ProxyIoTimeoutError):
+            _readline_with_timeout(
+                blocking_input,
+                0.05,
+                source="nested_client_response",
+                allow_background_wait=False,
+            )
+    finally:
+        blocking_input.close()
