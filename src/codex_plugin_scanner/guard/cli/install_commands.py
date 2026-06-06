@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import glob as globlib
+import json
 from pathlib import Path
 
 from ..adapters import get_adapter, list_adapters
@@ -226,11 +227,21 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
         opencode_config_uses_guard_proxy,
     )
 
+    from ..adapters.opencode_artifacts import runtime_config_path
+
     managed = store.get_managed_install("opencode") if store is not None else None
-    config_path = OpenCodeHarnessAdapter()._target_config_path(context)
+    config_path = OpenCodeHarnessAdapter()._managed_install_config_path(context)
     shim_path = context.guard_home / "bin" / "guard-opencode"
     plugin_path = global_plugin_path(context)
     mcp_proxy_configured = opencode_config_uses_guard_proxy(config_path)
+    runtime_overlay_path = runtime_config_path(context)
+    if not mcp_proxy_configured and runtime_overlay_path.is_file():
+        try:
+            runtime_payload = json.loads(runtime_overlay_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            runtime_payload = {}
+        runtime_mcp = runtime_payload.get("mcp")
+        mcp_proxy_configured = isinstance(runtime_mcp, dict) and bool(runtime_mcp)
     warnings: list[str] = []
     if not (managed and managed.get("active")):
         warnings.append("Run `hol-guard install opencode` to activate Guard-managed OpenCode protection.")
@@ -238,8 +249,15 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
         warnings.append(
             "OpenCode pretool plugin is missing from ~/.config/opencode/plugins/. Re-run `hol-guard install opencode`."
         )
+    if not config_path.is_file():
+        warnings.append(
+            "OpenCode root config is missing at ~/.config/opencode/opencode.json. Re-run `hol-guard install opencode`."
+        )
     if opencode_config_has_mcp_servers(config_path) and not mcp_proxy_configured:
-        warnings.append("OpenCode MCP servers are not routed through hol-guard. Re-run `hol-guard install opencode`.")
+        warnings.append(
+            "OpenCode MCP servers are not routed through hol-guard companion servers or the runtime overlay. "
+            "Re-run `hol-guard install opencode`."
+        )
     if not shim_path.is_file():
         warnings.append(
             f"guard-opencode launcher shim is missing. Add {context.guard_home / 'bin'} to PATH or launch with "

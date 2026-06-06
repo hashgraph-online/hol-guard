@@ -151,7 +151,9 @@ def _pretool_hook_launcher_code(*, package_root: str) -> str:
     trusted_entries = _trusted_pythonpath_entries(package_root)
     return (
         "import json,os,sys;"
-        f"sys.path[:0]={json.dumps(trusted_entries)};"
+        f"trusted={json.dumps(trusted_entries)};"
+        "sys.path=[entry for entry in sys.path if entry and entry != os.getcwd()];"
+        "sys.path[:0]=trusted;"
         "from codex_plugin_scanner.cli import main;"
         f"raise SystemExit(main(json.loads(os.environ[{_HOOK_ARGV_ENV!r}])))"
     )
@@ -159,9 +161,10 @@ def _pretool_hook_launcher_code(*, package_root: str) -> str:
 
 def _pretool_hook_env(*, package_root: str) -> dict[str, str]:
     entries = _trusted_pythonpath_entries(package_root)
-    if not entries:
-        return {}
-    return {"PYTHONPATH": os.pathsep.join(entries)}
+    env = {"PYTHONSAFEPATH": "1", "PYTHONNOUSERSITE": "1"}
+    if entries:
+        env["PYTHONPATH"] = os.pathsep.join(entries)
+    return env
 
 
 def managed_plugin_path(context: HarnessContext) -> Path:
@@ -234,7 +237,9 @@ def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
     mcp = payload.get("mcp")
     if not isinstance(mcp, dict):
         return False
-    for server in mcp.values():
+    for name, server in mcp.items():
+        if isinstance(name, str) and name.startswith("hol-guard::"):
+            return True
         if not isinstance(server, dict):
             continue
         command = server.get("command")
