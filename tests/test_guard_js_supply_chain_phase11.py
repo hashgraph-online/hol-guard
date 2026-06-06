@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
+from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
@@ -282,6 +283,41 @@ def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for
 
     assert result.decision == "ask"
     assert "external tarball source" in result.risk_summary.lower()
+
+
+@pytest.mark.parametrize(
+    ("security_level", "expected_decision", "expected_code", "expected_message"),
+    [
+        ("balanced", "ask", "external_tarball_source", "requires review before install"),
+        ("strict", "block", "external_tarball_scan_unavailable", "strict mode blocked the install"),
+        ("paranoid", "block", "external_tarball_scan_unavailable", "strict mode blocked the install"),
+    ],
+)
+def test_external_tarball_scan_failure_respects_security_level(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    security_level: str,
+    expected_decision: str,
+    expected_code: str,
+    expected_message: str,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(home_dir / "config.toml", f'security_level = "{security_level}"\n')
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(supply_chain_package_eval_module, "_scan_external_tarball", lambda _url: None)
+
+    artifact = _artifact_from_command(
+        "npm install guard-query@https://example.com/guard.tgz?token=demo",
+        workspace=workspace_dir,
+    )
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == expected_decision
+    assert result.packages[0]["reasons"][0]["code"] == expected_code
+    assert expected_message in str(result.packages[0]["reasons"][0]["message"]).lower()
 
 
 @pytest.mark.parametrize(
