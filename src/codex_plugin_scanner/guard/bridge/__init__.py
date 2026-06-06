@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import subprocess
@@ -196,7 +197,14 @@ def _validate_webhook_url(url: str) -> str:
         raise ValueError("Guard Bridge webhook URL must include a host.")
     if parsed.username or parsed.password:
         raise ValueError("Guard Bridge webhook URL must not embed credentials.")
-    if parsed.hostname.lower() in {"127.0.0.1", "localhost", "::1"}:
+    hostname = parsed.hostname.lower()
+    if hostname in {"localhost", "0.0.0.0", "169.254.169.254"}:
+        raise ValueError("Guard Bridge webhook URL must not target loopback.")
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        return parsed.geturl()
+    if address.is_loopback or address.is_link_local:
         raise ValueError("Guard Bridge webhook URL must not target loopback.")
     return parsed.geturl()
 
@@ -220,6 +228,7 @@ class GuardBridge:
         """Fetch pending requests from Guard daemon."""
         auth_token = load_guard_daemon_auth_token(self.store.guard_home)
         if auth_token is None:
+            print("[Guard Bridge] No daemon auth token found - skipping poll.", file=sys.stderr)
             return []
         try:
             resp = requests.get(

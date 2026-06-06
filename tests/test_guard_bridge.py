@@ -73,7 +73,7 @@ def test_guard_bridge_fetch_pending_requests_sends_guard_token_header(tmp_path, 
     ]
 
 
-def test_guard_bridge_fetch_pending_requests_fails_closed_without_daemon_token(tmp_path, monkeypatch):
+def test_guard_bridge_fetch_pending_requests_fails_closed_without_daemon_token(tmp_path, monkeypatch, capsys):
     store = GuardStore(tmp_path / "guard-home")
     bridge = GuardBridge(
         config=BridgeConfig(guard_url="http://127.0.0.1:4455", dry_run=False),
@@ -92,11 +92,23 @@ def test_guard_bridge_fetch_pending_requests_fails_closed_without_daemon_token(t
 
     assert requests_list == []
     assert called is False
+    assert "No daemon auth token found" in capsys.readouterr().err
 
 
-def test_webhook_backend_rejects_non_https_urls():
-    with pytest.raises(ValueError, match="https"):
-        WebhookBackend("http://hooks.example.test/guard")
+@pytest.mark.parametrize(
+    ("scheme", "host", "path"),
+    [
+        ("http", "hooks.example.test", "/guard"),
+        ("https", "127.0.0.1", "/guard"),
+        ("https", "[0:0:0:0:0:0:0:1]", "/guard"),
+        ("https", "[::ffff:127.0.0.1]", "/guard"),
+        ("https", "169.254.169.254", "/guard"),
+    ],
+)
+def test_webhook_backend_rejects_unsafe_urls(scheme: str, host: str, path: str):
+    url = f"{scheme}:{'//'}{host}{path}"
+    with pytest.raises(ValueError):
+        WebhookBackend(url)
 
 
 def test_webhook_backend_redacts_artifact_details_by_default(monkeypatch):
