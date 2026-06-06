@@ -3450,19 +3450,20 @@ class GuardStore:
             payload["runtime_label"] = runtime_label
         existing_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         existing_secret_ref = (
-            existing_payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
-            if isinstance(existing_payload, dict)
-            else None
+            existing_payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY) if isinstance(existing_payload, dict) else None
         )
         existing_secret_hash = (
-            existing_payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
-            if isinstance(existing_payload, dict)
-            else None
+            existing_payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY) if isinstance(existing_payload, dict) else None
         )
         secret_material_changed = (
             existing_secret_ref != self._oauth_local_credentials_ref or existing_secret_hash != secret_hash
         )
-        if secret_material_changed:
+        skip_primary_secret_rewrite = (
+            not secret_material_changed
+            and isinstance(self._oauth_secret_store, FallbackSecretStore)
+            and isinstance(self._oauth_secret_store.fallback, EncryptedFileSecretStore)
+        )
+        if not skip_primary_secret_rewrite:
             self._oauth_secret_store.set_secret(self._oauth_local_credentials_ref, secret_json)
         self._mirror_oauth_secret_to_fallback(self._oauth_local_credentials_ref, secret_json)
         self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
