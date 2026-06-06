@@ -492,6 +492,16 @@ def _cursor_read_file_permission(permission: str) -> str:
 
 
 def _cursor_reason(guard_payload: dict[str, object]) -> str:
+    primary_url = guard_payload.get("primary_approval_url")
+    if isinstance(primary_url, str) and primary_url.strip():
+        for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
+            value = guard_payload.get(key)
+            if isinstance(value, str) and value.strip():
+                reason = value.strip()
+                if primary_url.strip() in reason:
+                    return reason
+                return f"{reason} Review: {primary_url.strip()}"
+        return f"HOL Guard needs approval for this Cursor action. Review it at {primary_url.strip()}."
     for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
         value = guard_payload.get(key)
         if isinstance(value, str) and value.strip():
