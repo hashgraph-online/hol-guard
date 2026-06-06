@@ -16,6 +16,7 @@ import sysconfig
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 from packaging.version import InvalidVersion, Version
 
@@ -43,20 +44,22 @@ def run_guard_update(
 ) -> tuple[dict[str, object], int]:
     current_version = _current_version()
     installer = _installer_kind()
-    command = _update_command(installer)
+    direct_url = _direct_url_payload()
+    local_source_install = _local_source_install_payload(direct_url)
+    vcs_install = _vcs_install_payload(direct_url)
     payload: dict[str, object] = {
         "current_version": current_version,
         "installer": installer,
-        "command": command,
-        "retry_command": _shell_command(command),
-        "binary_diagnostics": _binary_diagnostics(command, installer),
         "dry_run": dry_run,
     }
-    direct_url = _direct_url_payload()
     if direct_url is not None:
         payload["direct_url"] = direct_url
         is_editable = bool(direct_url.get("dir_info", {}).get("editable"))
         payload["editable_install"] = is_editable
+        if local_source_install is not None:
+            payload["source_install"] = local_source_install
+        if vcs_install is not None:
+            payload["vcs_install"] = vcs_install
         if is_editable:
             payload["status"] = "skipped"
             payload["changed"] = False
@@ -64,11 +67,37 @@ def run_guard_update(
                 "Automatic update is disabled for editable installs. Re-run your local install workflow instead."
             )
             return payload, 0
+        if local_source_install is not None and bool(local_source_install.get("path_exists")):
+            payload["status"] = "skipped"
+            payload["changed"] = False
+            payload["error"] = (
+                "Automatic update is disabled for local source installs. Re-run your local install workflow instead."
+            )
+            return payload, 0
+        if local_source_install is not None and not bool(local_source_install.get("path_exists")):
+            payload["recovery_source_install"] = True
+    version_check = _version_check_payload(current_version)
+    use_pypi = _should_upgrade_from_pypi(
+        current_version=current_version,
+        version_check=version_check,
+        vcs_install=vcs_install,
+        local_source_install=local_source_install,
+    )
+    command = _update_command(installer, use_pypi=use_pypi)
+    payload.update(
+        {
+            "command": command,
+            "retry_command": _shell_command(command),
+            "binary_diagnostics": _binary_diagnostics(command, installer),
+            "version_check": version_check,
+        }
+    )
+    if use_pypi:
+        payload["upgrade_source"] = "pypi"
     if dry_run:
-        payload["version_check"] = _version_check_payload(current_version)
         payload["status"] = "planned"
         payload["changed"] = False
-        payload["message"] = "Review the planned installer command before updating."
+        payload["message"] = _planned_update_message(version_check=version_check, use_pypi=use_pypi)
         return payload, 0
     try:
         result = subprocess.run(
@@ -93,12 +122,23 @@ def run_guard_update(
         payload["changed"] = False
         payload["message"] = "HOL Guard update failed."
         return payload, 1
+    initial_version_check = payload.get("version_check")
+    resulting_version = str(payload.get("resulting_version") or current_version)
+    post_version_check = _version_check_payload(resulting_version)
+    payload["post_version_check"] = post_version_check
+    payload["version_check"] = _merge_version_checks(
+        initial_version_check,
+        post_version_check,
+        resulting_version,
+    )
     payload["status"] = _success_status(payload)
     payload["changed"] = payload["status"] == "updated"
     payload["message"] = _success_message(
         status=str(payload["status"]),
         current_version=current_version,
-        resulting_version=str(payload.get("resulting_version") or ""),
+        resulting_version=resulting_version,
+        version_check=payload.get("version_check"),
+        retry_command=_stale_retry_command(payload),
     )
     notes = _success_notes(payload)
     if notes:
@@ -177,6 +217,8 @@ def _output_lines(value: str) -> list[str]:
 
 
 def _success_status(payload: dict[str, object]) -> str:
+    if _is_stale_install(payload):
+        return "stale"
     current_version = str(payload.get("current_version") or "").strip()
     resulting_version = str(payload.get("resulting_version") or "").strip()
     if (
@@ -195,9 +237,85 @@ def _success_status(payload: dict[str, object]) -> str:
     return "updated"
 
 
-def _success_message(*, status: str, current_version: str, resulting_version: str) -> str:
+def _is_stale_install(payload: dict[str, object]) -> bool:
+    if payload.get("vcs_install") is None and payload.get("upgrade_source") != "pypi":
+        return False
+    version_check = payload.get("version_check")
+    return isinstance(version_check, dict) and version_check.get("update_available") is True
+
+
+def _merge_version_checks(
+    initial_version_check: object,
+    post_version_check: object,
+    resulting_version: str,
+) -> dict[str, object]:
+    if isinstance(post_version_check, dict) and post_version_check.get("update_available") is not None:
+        return post_version_check
+    if isinstance(initial_version_check, dict):
+        merged = dict(initial_version_check)
+        latest_version = merged.get("latest_version")
+        if isinstance(latest_version, str) and latest_version.strip() and resulting_version not in {"", "unknown"}:
+            try:
+                if Version(resulting_version) >= Version(latest_version.strip()):
+                    merged["update_available"] = False
+                    merged["status"] = "current"
+                    merged["current_version"] = resulting_version
+            except InvalidVersion:
+                pass
+        return merged
+    if isinstance(post_version_check, dict):
+        return post_version_check
+    return {
+        "source": "pypi",
+        "status": "unavailable",
+        "current_version": None,
+        "latest_version": None,
+        "update_available": None,
+    }
+
+
+def _stale_retry_command(payload: dict[str, object]) -> str:
+    if payload.get("vcs_install") is not None or payload.get("upgrade_source") == "pypi":
+        installer = str(payload.get("installer") or "pip")
+        return _shell_command(_update_command(installer, use_pypi=True))
+    retry_command = payload.get("retry_command")
+    if isinstance(retry_command, str) and retry_command.strip():
+        return retry_command.strip()
+    command = payload.get("command")
+    if isinstance(command, list) and command:
+        return _shell_command(command)
+    return ""
+
+
+def _success_message(
+    *,
+    status: str,
+    current_version: str,
+    resulting_version: str,
+    version_check: object = None,
+    retry_command: str = "",
+) -> str:
+    if status == "stale":
+        latest_version = None
+        if isinstance(version_check, dict):
+            latest = version_check.get("latest_version")
+            if isinstance(latest, str) and latest.strip():
+                latest_version = latest.strip()
+        installed_version = resulting_version or current_version
+        if latest_version and installed_version not in {"", "unknown"}:
+            message = (
+                f"HOL Guard {installed_version} is behind PyPI {latest_version}. "
+                "The installed package source is not tracking PyPI releases."
+            )
+        else:
+            message = "HOL Guard is behind the latest PyPI release."
+        if retry_command:
+            return f"{message} Run: {retry_command}"
+        return message
     if status == "current":
         return "HOL Guard is already current."
+    if status == "updated" and current_version == resulting_version:
+        return "HOL Guard source was repaired successfully."
     if (
         current_version
         and resulting_version
@@ -207,6 +325,16 @@ def _success_message(*, status: str, current_version: str, resulting_version: st
     ):
         return f"Updated HOL Guard from {current_version} to {resulting_version}."
     return "HOL Guard update completed successfully."
+
+
+def _planned_update_message(*, version_check: dict[str, object], use_pypi: bool) -> str:
+    if use_pypi:
+        if version_check.get("update_available") is True:
+            latest_version = version_check.get("latest_version")
+            if isinstance(latest_version, str) and latest_version.strip():
+                return f"Review the planned PyPI install command to update to {latest_version.strip()}."
+        return "Review the planned PyPI install command to repair the install source."
+    return "Review the planned installer command before updating."
 
 
 def _success_notes(payload: dict[str, object]) -> list[str]:
@@ -294,12 +422,86 @@ def _installer_kind() -> str:
     return "pip"
 
 
-def _update_command(installer: str) -> list[str]:
+def _should_upgrade_from_pypi(
+    *,
+    current_version: str,
+    version_check: dict[str, object],
+    vcs_install: dict[str, object] | None,
+    local_source_install: dict[str, object] | None,
+) -> bool:
+    if local_source_install is not None and not bool(local_source_install.get("path_exists")):
+        latest_version = version_check.get("latest_version")
+        if isinstance(latest_version, str) and latest_version.strip():
+            newer_than_pypi = _is_newer_version(current_version, latest_version.strip())
+            if newer_than_pypi is True:
+                return False
+        return True
+    if version_check.get("update_available") is not True:
+        return False
+    return vcs_install is not None
+
+
+def _update_command(installer: str, *, use_pypi: bool = False) -> list[str]:
+    if use_pypi:
+        if installer == "uv":
+            return ["uv", "tool", "install", "--force", "hol-guard"]
+        if installer == "pipx":
+            return ["pipx", "install", "--force", "hol-guard"]
+        return [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "hol-guard"]
     if installer == "uv":
         return ["uv", "tool", "upgrade", "hol-guard"]
     if installer == "pipx":
         return ["pipx", "upgrade", "hol-guard"]
     return [sys.executable, "-m", "pip", "install", "--upgrade", "hol-guard"]
+
+
+def _vcs_install_payload(direct_url: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(direct_url, dict):
+        return None
+    vcs_info = direct_url.get("vcs_info")
+    if not isinstance(vcs_info, dict):
+        return None
+    vcs = vcs_info.get("vcs")
+    if not isinstance(vcs, str) or not vcs.strip():
+        return None
+    payload: dict[str, object] = {"kind": "vcs", "vcs": vcs.strip()}
+    raw_url = direct_url.get("url")
+    if isinstance(raw_url, str) and raw_url.strip():
+        payload["url"] = raw_url.strip()
+    requested_revision = vcs_info.get("requested_revision")
+    if isinstance(requested_revision, str) and requested_revision.strip():
+        payload["requested_revision"] = requested_revision.strip()
+    commit_id = vcs_info.get("commit_id")
+    if isinstance(commit_id, str) and commit_id.strip():
+        payload["commit_id"] = commit_id.strip()
+    return payload
+
+
+def _local_source_install_payload(direct_url: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(direct_url, dict):
+        return None
+    if isinstance(direct_url.get("vcs_info"), dict):
+        return None
+    if isinstance(direct_url.get("archive_info"), dict):
+        return None
+    raw_url = direct_url.get("url")
+    if not isinstance(raw_url, str) or not raw_url.strip():
+        return None
+    parsed = urlparse(raw_url)
+    if parsed.scheme != "file":
+        return None
+    raw_path = urllib.request.url2pathname(parsed.path)
+    if not raw_path:
+        return None
+    source_path = Path(raw_path).expanduser()
+    if not source_path.is_absolute():
+        source_path = Path.cwd() / source_path
+    return {
+        "kind": "local_path",
+        "url": raw_url,
+        "path": str(source_path.resolve(strict=False)),
+        "path_exists": source_path.exists(),
+    }
 
 
 def _direct_url_payload() -> dict[str, object] | None:

@@ -1262,6 +1262,11 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
     if isinstance(command, list) and command:
         body.add_row("Command", " ".join(str(part) for part in command))
     body.add_row("Dry run", _bool_label(bool(payload.get("dry_run"))))
+    version_check = payload.get("version_check")
+    if isinstance(version_check, dict):
+        latest_version = version_check.get("latest_version")
+        if isinstance(latest_version, str) and latest_version.strip():
+            body.add_row("Latest PyPI version", latest_version.strip())
     if payload.get("resulting_version"):
         body.add_row("Resulting version", str(payload.get("resulting_version")))
     if payload.get("editable_install") is not None:
@@ -1274,6 +1279,7 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
     border_style = {
         "planned": "blue",
         "current": "blue",
+        "stale": "yellow",
         "updated": "green",
         "skipped": "yellow",
         "failed": "red",

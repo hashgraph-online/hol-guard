@@ -3796,6 +3796,7 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.36")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.36")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.36")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
