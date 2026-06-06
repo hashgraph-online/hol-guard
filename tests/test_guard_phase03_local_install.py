@@ -216,7 +216,15 @@ def test_update_repairs_missing_pip_local_source_install(monkeypatch: pytest.Mon
     payload, exit_code = update_commands.run_guard_update(dry_run=False)
 
     assert exit_code == 0
-    assert captured_commands[0] == ["/opt/guard/bin/python", "-m", "pip", "install", "--upgrade", "hol-guard"]
+    assert captured_commands[0] == [
+        "/opt/guard/bin/python",
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "--force-reinstall",
+        "hol-guard",
+    ]
     assert payload["recovery_source_install"] is True
     assert payload["upgrade_source"] == "pypi"
 
@@ -372,6 +380,40 @@ def test_update_marks_git_install_stale_when_pypi_upgrade_leaves_old_version(mon
     assert payload["status"] == "stale"
     assert "behind PyPI 2.0.489" in str(payload["message"])
     assert "pipx install --force hol-guard" in str(payload["message"])
+
+
+def test_update_reports_current_after_successful_pypi_repair_when_post_check_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.489")
+    call_count = {"count": 0}
+
+    def fake_latest() -> str | None:
+        call_count["count"] += 1
+        return "2.0.489" if call_count["count"] == 1 else None
+
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", fake_latest)
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {
+            "url": "https://github.com/hashgraph-online/hol-guard.git",
+            "vcs_info": {"vcs": "git", "requested_revision": "main", "commit_id": "abc"},
+        },
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.489", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert payload["status"] == "updated"
+    assert payload["message"] == "Updated HOL Guard from 2.0.345 to 2.0.489."
 
 
 def test_install_aliases_resolve_to_native_contracts() -> None:

@@ -123,17 +123,22 @@ def run_guard_update(
         payload["message"] = "HOL Guard update failed."
         return payload, 1
     initial_version_check = payload.get("version_check")
-    post_version_check = _version_check_payload(str(payload.get("resulting_version") or current_version))
+    resulting_version = str(payload.get("resulting_version") or current_version)
+    post_version_check = _version_check_payload(resulting_version)
     payload["post_version_check"] = post_version_check
-    payload["version_check"] = _merge_version_checks(initial_version_check, post_version_check)
+    payload["version_check"] = _merge_version_checks(
+        initial_version_check,
+        post_version_check,
+        resulting_version,
+    )
     payload["status"] = _success_status(payload)
     payload["changed"] = payload["status"] == "updated"
     payload["message"] = _success_message(
         status=str(payload["status"]),
         current_version=current_version,
-        resulting_version=str(payload.get("resulting_version") or ""),
+        resulting_version=resulting_version,
         version_check=payload.get("version_check"),
-        retry_command=str(payload.get("retry_command") or ""),
+        retry_command=_stale_retry_command(payload),
     )
     notes = _success_notes(payload)
     if notes:
@@ -242,11 +247,22 @@ def _is_stale_install(payload: dict[str, object]) -> bool:
 def _merge_version_checks(
     initial_version_check: object,
     post_version_check: object,
+    resulting_version: str,
 ) -> dict[str, object]:
     if isinstance(post_version_check, dict) and post_version_check.get("update_available") is not None:
         return post_version_check
     if isinstance(initial_version_check, dict):
-        return initial_version_check
+        merged = dict(initial_version_check)
+        latest_version = merged.get("latest_version")
+        if isinstance(latest_version, str) and latest_version.strip() and resulting_version not in {"", "unknown"}:
+            try:
+                if Version(resulting_version) >= Version(latest_version.strip()):
+                    merged["update_available"] = False
+                    merged["status"] = "current"
+                    merged["current_version"] = resulting_version
+            except InvalidVersion:
+                pass
+        return merged
     if isinstance(post_version_check, dict):
         return post_version_check
     return {
@@ -256,6 +272,19 @@ def _merge_version_checks(
         "latest_version": None,
         "update_available": None,
     }
+
+
+def _stale_retry_command(payload: dict[str, object]) -> str:
+    if payload.get("vcs_install") is not None or payload.get("upgrade_source") == "pypi":
+        installer = str(payload.get("installer") or "pip")
+        return _shell_command(_update_command(installer, use_pypi=True))
+    retry_command = payload.get("retry_command")
+    if isinstance(retry_command, str) and retry_command.strip():
+        return retry_command.strip()
+    command = payload.get("command")
+    if isinstance(command, list) and command:
+        return _shell_command(command)
+    return ""
 
 
 def _success_message(
@@ -418,7 +447,7 @@ def _update_command(installer: str, *, use_pypi: bool = False) -> list[str]:
             return ["uv", "tool", "install", "--force", "hol-guard"]
         if installer == "pipx":
             return ["pipx", "install", "--force", "hol-guard"]
-        return [sys.executable, "-m", "pip", "install", "--upgrade", "hol-guard"]
+        return [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "hol-guard"]
     if installer == "uv":
         return ["uv", "tool", "upgrade", "hol-guard"]
     if installer == "pipx":
