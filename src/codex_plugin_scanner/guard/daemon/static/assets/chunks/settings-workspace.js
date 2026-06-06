@@ -1930,6 +1930,22 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     setRevokePassword(event.target.value);
     setRevokeError(null);
   }, []);
+  const applyLoadedSettingsPayload = reactExports.useCallback((normalizedPayload) => {
+    setState({ kind: "ready", payload: normalizedPayload });
+    setDraft(normalizedPayload.settings);
+    savedSettingsRef.current = normalizedPayload.settings;
+    const gate = normalizedPayload.settings.approval_gate;
+    if (gate !== void 0) {
+      setApprovalGateEnabled(gate.enabled);
+      setApprovalGateCooldown(gate.cooldown_seconds);
+      setApprovalGateStrictAllDecisions(gate.strict_all_decisions);
+      onApprovalGateChange?.(gate);
+    }
+  }, [onApprovalGateChange]);
+  const buildApprovalGateWriteProof = reactExports.useCallback(() => ({
+    ...approvalGateCurrentPassword.trim() ? { approval_password: approvalGateCurrentPassword } : {},
+    ...approvalGateTotpCode.trim() ? { approval_totp_code: approvalGateTotpCode } : {}
+  }), [approvalGateCurrentPassword, approvalGateTotpCode]);
   const handleRevokeCooldown = reactExports.useCallback(async () => {
     if (!revokePassword.trim()) {
       setRevokeError("Enter the approval password to revoke cooldown.");
@@ -2245,11 +2261,9 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const payload = await importSettings(parsed);
+      const payload = await importSettings(parsed, buildApprovalGateWriteProof());
       const normalizedPayload = normalizeSettingsPayload(payload);
-      setState({ kind: "ready", payload: normalizedPayload });
-      setDraft(normalizedPayload.settings);
-      savedSettingsRef.current = normalizedPayload.settings;
+      applyLoadedSettingsPayload(normalizedPayload);
       setActionMessage("Settings imported.");
       setActionMessageKind("success");
     } catch (error) {
@@ -2258,17 +2272,15 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     } finally {
       setImportingSettings(false);
     }
-  }, []);
+  }, [applyLoadedSettingsPayload, buildApprovalGateWriteProof]);
   const handleResetSettings = reactExports.useCallback(async () => {
     if (!window.confirm("Reset all local Guard settings to defaults? This cannot be undone.")) return;
     setResettingSettings(true);
     setActionMessage(null);
     try {
-      const payload = await resetSettings();
+      const payload = await resetSettings(buildApprovalGateWriteProof());
       const normalizedPayload = normalizeSettingsPayload(payload);
-      setState({ kind: "ready", payload: normalizedPayload });
-      setDraft(normalizedPayload.settings);
-      savedSettingsRef.current = normalizedPayload.settings;
+      applyLoadedSettingsPayload(normalizedPayload);
       setActionMessage("Settings reset to defaults.");
       setActionMessageKind("success");
     } catch (error) {
@@ -2277,7 +2289,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     } finally {
       setResettingSettings(false);
     }
-  }, []);
+  }, [applyLoadedSettingsPayload, buildApprovalGateWriteProof]);
   const handleSetupNotifications = reactExports.useCallback(async () => {
     setSettingUpNotifications(true);
     setActionMessage(null);
@@ -2502,14 +2514,17 @@ function SettingsWorkspace({ onApprovalGateChange }) {
               }
             )
           ] }),
-          activeTab === "notifications" && /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NotificationSetupCard,
-            {
-              result: notificationSetup,
-              settingUp: settingUpNotifications,
-              onSetup: handleSetupNotifications
-            }
-          ),
+          activeTab === "notifications" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NotificationSetupCard,
+              {
+                result: notificationSetup,
+                settingUp: settingUpNotifications,
+                onSetup: handleSetupNotifications
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsActionMessage, { message: actionMessage, kind: actionMessageKind })
+          ] }),
           activeTab === "advanced" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               SettingsFormSection,
@@ -2654,14 +2669,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   ] })
                 ] })
               ] }),
-              actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "div",
-                {
-                  className: `rounded-xl border px-4 py-3 text-sm font-medium ${actionMessageKind === "error" ? "border-brand-attention/20 bg-brand-attention/[0.04] text-brand-dark" : "border-brand-blue/15 bg-brand-blue/[0.04] text-brand-dark"}`,
-                  role: actionMessageKind === "error" ? "alert" : "status",
-                  children: actionMessage
-                }
-              ) : null
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsActionMessage, { message: actionMessage, kind: actionMessageKind })
             ] }) })
           ] })
         ]
@@ -2703,6 +2711,19 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       ] })
     ] }) })
   ] });
+}
+function SettingsActionMessage(props) {
+  if (props.message === null) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: `rounded-xl border px-4 py-3 text-sm font-medium ${props.kind === "error" ? "border-brand-attention/20 bg-brand-attention/[0.04] text-brand-dark" : "border-brand-blue/15 bg-brand-blue/[0.04] text-brand-dark"}`,
+      role: props.kind === "error" ? "alert" : "status",
+      children: props.message
+    }
+  );
 }
 function DiagnosticsPerfCard(props) {
   const threadCount = props.snapshot.thread_count;
