@@ -8085,7 +8085,9 @@ url = http://127.0.0.1:8787/guard-canary
         )
 
         assert browser_url is not None
-        assert "guard-token=secret-token" in browser_url
+        parsed = urllib.parse.urlparse(browser_url)
+        fragment = urllib.parse.parse_qs(parsed.fragment)
+        assert fragment["guard-token"][0].startswith("gld1.")
         assert "guard-token=" not in guard_commands_module._public_approval_center_url(browser_url)
 
     def test_guard_connect_pending_output_uses_product_copy_for_sign_in_gap(self, capsys):
