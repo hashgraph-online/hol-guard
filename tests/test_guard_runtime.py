@@ -15054,6 +15054,40 @@ def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers():
     assert blocked["events"][0]["decision"] == "block"
 
 
+def test_stdio_proxy_returns_timeout_error_when_child_server_hangs(monkeypatch):
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys, time",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    if message.get('id') is None:",
+                    "        continue",
+                    "    time.sleep(60)",
+                ]
+            ),
+        ],
+    )
+    monkeypatch.setattr(proxy, "_response_timeout_seconds", lambda: 0.05)
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        ]
+    )
+
+    assert result["responses"][0]["error"]["code"] == -32800
+    assert result["responses"][0]["error"]["data"]["guard_timeout"] is True
+    assert result["responses"][0]["error"]["data"]["source"] == "child_response"
+    assert result["events"][0]["decision"] == "timeout"
+    assert isinstance(result["return_code"], int)
+    assert result["return_code"] != 0
+
+
 def test_stdio_proxy_waits_for_matching_response_id():
     proxy = StdioGuardProxy(
         command=[
@@ -16964,7 +16998,8 @@ def test_sync_receipts_uploads_policy_bundle_acknowledgement_to_sync_route(tmp_p
             self.end_headers()
             self.wfile.write(encoded)
 
-        def log_message(self, format, *args):
+        def log_message(self, format_string, *args):
+            del format_string, args
             return
 
     server = HTTPServer(("127.0.0.1", 0), _AckSyncHandler)

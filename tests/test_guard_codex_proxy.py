@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from io import StringIO
 from pathlib import Path
@@ -13,6 +14,8 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision, build_tool_call_artifact, build_tool_call_hash
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
+from codex_plugin_scanner.guard.proxy import stdio as stdio_module
+from codex_plugin_scanner.guard.proxy.stdio import ProxyIoTimeoutError, _readline_with_timeout
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_tool_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -214,6 +217,48 @@ def _nested_request_child_command_with_risky_tool(marker_path: Path) -> list[str
             ]
         ),
     ]
+
+
+def _hung_response_child_command() -> list[str]:
+    return [
+        sys.executable,
+        "-u",
+        "-c",
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "import time",
+                "for line in sys.stdin:",
+                "    message = json.loads(line)",
+                "    if message.get('id') is None:",
+                "        continue",
+                "    time.sleep(60)",
+            ]
+        ),
+    ]
+
+
+class _BlockingPipeInput:
+    def __init__(self) -> None:
+        read_fd, write_fd = os.pipe()
+        self._reader = os.fdopen(read_fd, "r", encoding="utf-8")
+        self._writer_fd = write_fd
+
+    def fileno(self) -> int:
+        return self._reader.fileno()
+
+    def readline(self) -> str:
+        return self._reader.readline()
+
+    def close(self) -> None:
+        self._reader.close()
+        os.close(self._writer_fd)
+
+
+class _NoFilenoBlockingInput:
+    def readline(self) -> str:
+        raise AssertionError("shared stream should fail closed before blocking readline()")
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -1404,3 +1449,131 @@ def test_codex_guard_proxy_invalidates_catalog_on_server_list_changed_notificati
     assert response["id"] == 7
     assert proxy._tool_catalog == {}
     assert proxy._tool_catalog_pending is None
+
+
+def test_codex_guard_proxy_returns_timeout_error_when_child_server_hangs(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_hung_response_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_child_response_timeout_seconds", lambda: 0.05)
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+        ]
+    )
+
+    assert result["responses"][0]["error"]["code"] == -32800
+    assert result["responses"][0]["error"]["data"]["guard_timeout"] is True
+    assert result["events"][0]["decision"] == "timeout"
+    assert result["responses"][0]["error"]["data"]["source"] == "child_response"
+
+
+def test_codex_guard_proxy_returns_timeout_error_to_child_for_nested_request_timeout(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_nested_request_timeout_seconds", lambda: 0.05)
+    child_stdin = StringIO()
+    server_output = StringIO()
+    blocking_input = _BlockingPipeInput()
+
+    try:
+        proxy._proxy_child_request(
+            payload={
+                "jsonrpc": "2.0",
+                "id": "child-sampling-timeout",
+                "method": "sampling/createMessage",
+                "params": {},
+            },
+            child_stdin=child_stdin,
+            child_stdout=StringIO(),
+            client_input=blocking_input,
+            server_output=server_output,
+        )
+    finally:
+        blocking_input.close()
+
+    child_reply = json.loads(child_stdin.getvalue().splitlines()[0])
+    assert json.loads(server_output.getvalue().splitlines()[0])["id"] == "child-sampling-timeout"
+    assert child_reply["id"] == "child-sampling-timeout"
+    assert child_reply["error"]["code"] == -32800
+    assert child_reply["error"]["data"]["guard_timeout"] is True
+    assert child_reply["error"]["data"]["source"] == "nested_client_response"
+
+
+def test_codex_guard_proxy_cancels_inline_approval_after_timeout(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(tmp_path / "dangerous-call.json"),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_inline_approval_timeout_seconds", lambda: 0.05)
+
+    blocking_input = _BlockingPipeInput()
+    try:
+        result = proxy._request_inline_approval(
+            {"jsonrpc": "2.0", "id": "guard-elicitation-timeout", "method": "elicitation/create", "params": {}},
+            input_stream=blocking_input,
+            output_stream=StringIO(),
+            child_stdin=StringIO(),
+            child_stdout=StringIO(),
+        )
+    finally:
+        blocking_input.close()
+
+    assert result == {"action": "cancel", "reason": "timeout"}
+
+
+def test_readline_with_timeout_rejects_shared_stream_without_fileno() -> None:
+    with pytest.raises(ProxyIoTimeoutError):
+        _readline_with_timeout(
+            _NoFilenoBlockingInput(),
+            0.05,
+            source="inline_approval",
+            allow_background_wait=False,
+        )
+
+
+def test_readline_with_timeout_rejects_shared_stream_when_select_fails(monkeypatch) -> None:
+    blocking_input = _BlockingPipeInput()
+    try:
+        monkeypatch.setattr(
+            stdio_module.select,
+            "select",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("select unavailable")),
+        )
+        with pytest.raises(ProxyIoTimeoutError):
+            _readline_with_timeout(
+                blocking_input,
+                0.05,
+                source="nested_client_response",
+                allow_background_wait=False,
+            )
+    finally:
+        blocking_input.close()
