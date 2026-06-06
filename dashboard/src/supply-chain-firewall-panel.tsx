@@ -408,7 +408,7 @@ function FirewallControlsView({
         const shim = shimsByManager.get(m);
         const status = resolveShimStatus(shim);
         if (statusFilter === "protected") return status.tone === "green";
-        if (statusFilter === "actionable") return status.tone === "attention" || status.tone === "blue";
+        if (statusFilter === "actionable") return status.tone === "attention";
         if (statusFilter === "unprotected") return status.tone !== "green";
         return true;
       });
