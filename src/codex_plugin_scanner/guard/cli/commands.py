@@ -1044,6 +1044,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     bridge_parser.add_argument("--telegram-token", help="Telegram bot token for notifications")
     bridge_parser.add_argument("--telegram-chat-id", help="Telegram chat ID for notifications")
     bridge_parser.add_argument("--webhook-url", help="Webhook URL for notifications")
+    bridge_parser.add_argument(
+        "--webhook-include-artifact-details",
+        action="store_true",
+        help="Include artifact details in webhook notifications",
+    )
     bridge_parser.add_argument("--hermes-chat-id", help="Hermes chat ID for notifications")
     bridge_parser.add_argument("--dry-run", action="store_true", help="Log notifications without sending")
     _add_guard_common_args(bridge_parser)
@@ -2635,12 +2640,16 @@ def run_guard_command(
         telegram_token = getattr(args, "telegram_token", None)
         telegram_chat_id = getattr(args, "telegram_chat_id", None)
         webhook_url = getattr(args, "webhook_url", None)
+        webhook_include_artifact_details = getattr(args, "webhook_include_artifact_details", False)
         hermes_chat_id = getattr(args, "hermes_chat_id", None)
 
         if telegram_token and telegram_chat_id:
             backend = TelegramBackend(telegram_token, telegram_chat_id)
         elif webhook_url:
-            backend = WebhookBackend(webhook_url)
+            backend = WebhookBackend(
+                webhook_url,
+                include_artifact_details=webhook_include_artifact_details,
+            )
         elif hermes_chat_id:
             backend = HermesBackend(hermes_chat_id)
 
