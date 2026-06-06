@@ -151,7 +151,9 @@ def _pretool_hook_launcher_code(*, package_root: str) -> str:
     trusted_entries = _trusted_pythonpath_entries(package_root)
     return (
         "import json,os,sys;"
-        f"sys.path[:0]={json.dumps(trusted_entries)};"
+        f"trusted={json.dumps(trusted_entries)};"
+        "sys.path=[entry for entry in sys.path if entry and os.path.realpath(entry) != os.path.realpath(os.getcwd())];"
+        "sys.path[:0]=trusted;"
         "from codex_plugin_scanner.cli import main;"
         f"raise SystemExit(main(json.loads(os.environ[{_HOOK_ARGV_ENV!r}])))"
     )
@@ -159,9 +161,10 @@ def _pretool_hook_launcher_code(*, package_root: str) -> str:
 
 def _pretool_hook_env(*, package_root: str) -> dict[str, str]:
     entries = _trusted_pythonpath_entries(package_root)
-    if not entries:
-        return {}
-    return {"PYTHONPATH": os.pathsep.join(entries)}
+    env = {"PYTHONSAFEPATH": "1", "PYTHONNOUSERSITE": "1"}
+    if entries:
+        env["PYTHONPATH"] = os.pathsep.join(entries)
+    return env
 
 
 def managed_plugin_path(context: HarnessContext) -> Path:
@@ -223,6 +226,14 @@ def opencode_config_has_mcp_servers(config_path: Path) -> bool:
     return isinstance(mcp, dict) and bool(mcp)
 
 
+def _mcp_command_uses_guard_proxy(command: object) -> bool:
+    if isinstance(command, list):
+        return any("opencode-mcp-proxy" in str(part) for part in command)
+    if isinstance(command, str):
+        return "opencode-mcp-proxy" in command
+    return False
+
+
 def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
     from ...ecosystems.opencode import _load_json_or_jsonc
 
@@ -234,15 +245,24 @@ def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
     mcp = payload.get("mcp")
     if not isinstance(mcp, dict):
         return False
-    for server in mcp.values():
-        if not isinstance(server, dict):
+    native_servers: dict[str, dict] = {}
+    companions: dict[str, dict] = {}
+    for name, server in mcp.items():
+        if not isinstance(name, str) or not isinstance(server, dict):
             continue
-        command = server.get("command")
-        if isinstance(command, list) and any("opencode-mcp-proxy" in str(part) for part in command):
-            return True
-        if isinstance(command, str) and "opencode-mcp-proxy" in command:
-            return True
-    return False
+        if name.startswith("hol-guard::"):
+            companions[name] = server
+        else:
+            native_servers[name] = server
+    if not native_servers:
+        return any(_mcp_command_uses_guard_proxy(server.get("command")) for server in companions.values())
+    for name, server in native_servers.items():
+        if _mcp_command_uses_guard_proxy(server.get("command")):
+            continue
+        companion = companions.get(f"hol-guard::{name}")
+        if companion is None or not _mcp_command_uses_guard_proxy(companion.get("command")):
+            return False
+    return True
 
 
 __all__ = [
