@@ -96,6 +96,7 @@ def _dashboard_token(auth_token: str) -> str:
         {
             "version": "guard-local-daemon-session.v1",
             "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
+            "surface": "approval-center",
         },
         separators=(",", ":"),
     )

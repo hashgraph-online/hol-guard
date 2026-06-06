@@ -1566,7 +1566,8 @@ def test_daemon_rejects_legacy_pairing_request_endpoint(tmp_path: Path) -> None:
             method="POST",
         )
         with urllib.request.urlopen(initialize_request, timeout=5) as response:
-            initialize_payload = json.loads(response.read().decode("utf-8"))
+            response.read()
+        auth_token = daemon._server.auth_token
 
         results: dict[str, tuple[int, dict[str, object]]] = {}
         for path, method in (
@@ -1587,7 +1588,7 @@ def test_daemon_rejects_legacy_pairing_request_endpoint(tmp_path: Path) -> None:
                 else None,
                 headers={
                     "Content-Type": "application/json",
-                    "X-Guard-Token": initialize_payload["auth_token"],
+                    "X-Guard-Token": auth_token,
                 },
                 method=method,
             )
