@@ -224,6 +224,28 @@ def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path
     assert opencode_config_uses_guard_proxy(config) is True
 
 
+def test_opencode_config_uses_guard_proxy_requires_companion_for_each_native_server(tmp_path: Path) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(
+        json.dumps(
+            {
+                "mcp": {
+                    "hol-guard::old-server": {
+                        "type": "local",
+                        "command": ["python", "-m", "codex_plugin_scanner.cli", "guard", "opencode-mcp-proxy"],
+                    },
+                    "new-server": {
+                        "type": "local",
+                        "command": ["node", "new-server.js"],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert opencode_config_uses_guard_proxy(config) is False
+
+
 def test_opencode_verification_ready_without_mcp_servers(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.store import GuardStore
 

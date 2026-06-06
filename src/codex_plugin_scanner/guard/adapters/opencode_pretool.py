@@ -226,6 +226,14 @@ def opencode_config_has_mcp_servers(config_path: Path) -> bool:
     return isinstance(mcp, dict) and bool(mcp)
 
 
+def _mcp_command_uses_guard_proxy(command: object) -> bool:
+    if isinstance(command, list):
+        return any("opencode-mcp-proxy" in str(part) for part in command)
+    if isinstance(command, str):
+        return "opencode-mcp-proxy" in command
+    return False
+
+
 def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
     from ...ecosystems.opencode import _load_json_or_jsonc
 
@@ -237,21 +245,24 @@ def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
     mcp = payload.get("mcp")
     if not isinstance(mcp, dict):
         return False
+    native_servers: dict[str, dict] = {}
+    companions: dict[str, dict] = {}
     for name, server in mcp.items():
         if not isinstance(name, str) or not isinstance(server, dict):
             continue
-        command = server.get("command")
         if name.startswith("hol-guard::"):
-            if isinstance(command, list) and any("opencode-mcp-proxy" in str(part) for part in command):
-                return True
-            if isinstance(command, str) and "opencode-mcp-proxy" in command:
-                return True
+            companions[name] = server
+        else:
+            native_servers[name] = server
+    if not native_servers:
+        return any(_mcp_command_uses_guard_proxy(server.get("command")) for server in companions.values())
+    for name, server in native_servers.items():
+        if _mcp_command_uses_guard_proxy(server.get("command")):
             continue
-        if isinstance(command, list) and any("opencode-mcp-proxy" in str(part) for part in command):
-            return True
-        if isinstance(command, str) and "opencode-mcp-proxy" in command:
-            return True
-    return False
+        companion = companions.get(f"hol-guard::{name}")
+        if companion is None or not _mcp_command_uses_guard_proxy(companion.get("command")):
+            return False
+    return True
 
 
 __all__ = [
