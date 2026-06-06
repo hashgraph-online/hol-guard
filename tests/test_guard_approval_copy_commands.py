@@ -222,6 +222,48 @@ def test_primary_approval_request_returns_none_without_binding() -> None:
     assert primary_approval_request(queued) is None
 
 
+def test_primary_approval_request_returns_none_when_request_id_missing_from_queue() -> None:
+    queued = [
+        {
+            "request_id": "local-req",
+            "harness": "cursor",
+            "artifact_id": "cursor:project:shell-a",
+        }
+    ]
+
+    assert primary_approval_request(queued, request_id="missing-req") is None
+
+
+def test_attach_primary_approval_link_prefers_artifact_over_operation_ids() -> None:
+    payload: dict[str, object] = {
+        "artifact_id": "cursor:project:shell-b",
+        "approval_request_ids": ["first-op-req"],
+        "approval_requests": [
+            {
+                "request_id": "first-op-req",
+                "harness": "cursor",
+                "artifact_id": "cursor:project:shell-a",
+                "approval_url": "http://127.0.0.1:5474/requests/first-op-req",
+            },
+            {
+                "request_id": "bound-req",
+                "harness": "cursor",
+                "artifact_id": "cursor:project:shell-b",
+                "approval_url": "http://127.0.0.1:5474/requests/bound-req",
+            },
+        ],
+    }
+
+    attach_primary_approval_link(
+        payload,
+        harness="cursor",
+        approval_center_url="http://127.0.0.1:5474",
+    )
+
+    assert payload["primary_approval_request_id"] == "bound-req"
+    assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
+
+
 def test_attach_primary_approval_link_uses_operation_request_id() -> None:
     payload: dict[str, object] = {
         "artifact_id": "cursor:project:shell-b",

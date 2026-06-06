@@ -3077,16 +3077,12 @@ def run_guard_command(
                     ),
                     open_key=artifact_id,
                 )
-                operation = (
-                    blocked_operation["operation"]
-                    if isinstance(blocked_operation.get("operation"), dict)
-                    else {}
-                )
-                queued = (
-                    blocked_operation["approval_requests"]
-                    if isinstance(blocked_operation.get("approval_requests"), list)
-                    else []
-                )
+                operation = blocked_operation.get("operation")
+                if not isinstance(operation, dict):
+                    operation = {}
+                queued = blocked_operation.get("approval_requests")
+                if not isinstance(queued, list):
+                    queued = []
                 operation_id = _optional_string(operation.get("operation_id"))
                 if operation_id is not None:
                     response_payload["operation_id"] = operation_id
@@ -3627,16 +3623,12 @@ def run_guard_command(
                             ),
                             open_key=artifact_id,
                         )
-                        operation = (
-                            blocked_operation["operation"]
-                            if isinstance(blocked_operation.get("operation"), dict)
-                            else {}
-                        )
-                        queued = (
-                            blocked_operation["approval_requests"]
-                            if isinstance(blocked_operation.get("approval_requests"), list)
-                            else []
-                        )
+                        operation = blocked_operation.get("operation")
+                        if not isinstance(operation, dict):
+                            operation = {}
+                        queued = blocked_operation.get("approval_requests")
+                        if not isinstance(queued, list):
+                            queued = []
                         operation_id = _optional_string(operation.get("operation_id"))
                         if operation_id is not None:
                             response_payload["operation_id"] = operation_id

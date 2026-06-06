@@ -88,6 +88,7 @@ def primary_approval_request(
         for item in items:
             if _string_or_none(item.get("request_id")) == bound_request_id:
                 return item
+        return None
 
     bound_artifact_id = _string_or_none(artifact_id)
     if bound_artifact_id is not None:
@@ -464,6 +465,46 @@ def first_approval_url(
     )
 
 
+def _primary_request_id_candidates(
+    payload: Mapping[str, object],
+    *,
+    request_id: str | None = None,
+) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: object) -> None:
+        normalized = _string_or_none(value)
+        if normalized is not None and normalized not in seen:
+            seen.add(normalized)
+            candidates.append(normalized)
+
+    add(request_id)
+    add(payload.get("primary_approval_request_id"))
+    operation_ids = payload.get("approval_request_ids")
+    if isinstance(operation_ids, list):
+        for item in operation_ids:
+            add(item)
+    operation = payload.get("operation")
+    if isinstance(operation, Mapping):
+        nested_ids = operation.get("approval_request_ids")
+        if isinstance(nested_ids, list):
+            for item in nested_ids:
+                add(item)
+    return candidates
+
+
+def _queued_request_ids(queued: Sequence[object]) -> set[str]:
+    request_ids: set[str] = set()
+    for item in queued:
+        if not isinstance(item, Mapping):
+            continue
+        normalized = _string_or_none(item.get("request_id"))
+        if normalized is not None:
+            request_ids.add(normalized)
+    return request_ids
+
+
 def attach_primary_approval_link(
     payload: dict[str, object],
     *,
@@ -478,38 +519,34 @@ def attach_primary_approval_link(
     if not isinstance(queued, list):
         return
 
-    bound_request_id = _string_or_none(request_id)
-    if bound_request_id is None:
-        bound_request_id = _string_or_none(payload.get("primary_approval_request_id"))
-    if bound_request_id is None:
-        operation_ids = payload.get("approval_request_ids")
-        if isinstance(operation_ids, list):
-            for item in operation_ids:
-                candidate = _string_or_none(item)
-                if candidate is not None:
-                    bound_request_id = candidate
-                    break
-        if bound_request_id is None:
-            operation = payload.get("operation")
-            if isinstance(operation, Mapping):
-                nested_ids = operation.get("approval_request_ids")
-                if isinstance(nested_ids, list):
-                    for item in nested_ids:
-                        candidate = _string_or_none(item)
-                        if candidate is not None:
-                            bound_request_id = candidate
-                            break
-
     bound_artifact_id = _string_or_none(artifact_id)
     if bound_artifact_id is None:
         bound_artifact_id = _string_or_none(payload.get("artifact_id"))
 
-    primary = primary_approval_request(
-        queued,
-        harness=harness,
-        request_id=bound_request_id,
-        artifact_id=bound_artifact_id,
+    queued_ids = _queued_request_ids(queued)
+    bound_request_id = next(
+        (
+            candidate
+            for candidate in _primary_request_id_candidates(payload, request_id=request_id)
+            if candidate in queued_ids
+        ),
+        None,
     )
+
+    primary = None
+    if bound_artifact_id is not None:
+        primary = primary_approval_request(
+            queued,
+            harness=harness,
+            artifact_id=bound_artifact_id,
+        )
+    if primary is None:
+        primary = primary_approval_request(
+            queued,
+            harness=harness,
+            request_id=bound_request_id,
+            artifact_id=bound_artifact_id,
+        )
     if primary is None:
         return
     resolved_request_id = _string_or_none(primary.get("request_id"))
