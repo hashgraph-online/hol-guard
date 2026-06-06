@@ -508,7 +508,7 @@ def test_sync_credentials_write_to_keychain_primary_on_macos(tmp_path, monkeypat
         workspace_id="workspace-123",
     )
 
-    assert sync_keychain[( "hol-guard.sync", store._sync_token_ref)] == "access-secret-value"
+    assert sync_keychain[("hol-guard.sync", store._sync_token_ref)] == "access-secret-value"
     assert store.get_sync_credentials() == {
         "sync_url": "https://hol.org/api/guard/receipts/sync",
         "token": "access-secret-value",
