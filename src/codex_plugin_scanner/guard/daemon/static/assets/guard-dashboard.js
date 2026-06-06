@@ -17988,7 +17988,8 @@ function ScopedEvidenceTable({
   exportFilters,
   hideHarnessColumn = true,
   tableLabel = "Evidence actions",
-  onFilterCategory
+  onFilterCategory,
+  onFilterHarness
 }) {
   const [sort, setSort] = reactExports.useState("newest");
   const [page, setPage] = reactExports.useState(0);
@@ -18008,11 +18009,12 @@ function ScopedEvidenceTable({
       view: "apps",
       selectedId: ""
     }),
-    [exportFilters, sort]
+    [exportFilters.decision, exportFilters.harness, exportFilters.category, sort]
   );
   reactExports.useEffect(() => {
     setPage(0);
     setSelectedId("");
+    setSort("newest");
   }, [receipts]);
   const handleSortChange = reactExports.useCallback((next) => {
     setSort(next);
@@ -18048,7 +18050,7 @@ function ScopedEvidenceTable({
         receipts: sorted,
         selectedId,
         onSelectId: handleSelectId,
-        onFilterHarness: noopHarness,
+        onFilterHarness: onFilterHarness ?? noopHarness,
         onFilterCategory: onFilterCategory ?? noopCategory,
         sort,
         onSortChange: handleSortChange,

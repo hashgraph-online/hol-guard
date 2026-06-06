@@ -15,6 +15,7 @@ export type ScopedEvidenceTableProps = {
   hideHarnessColumn?: boolean;
   tableLabel?: string;
   onFilterCategory?: (category: string) => void;
+  onFilterHarness?: (harness: string) => void;
 };
 
 export function ScopedEvidenceTable({
@@ -23,6 +24,7 @@ export function ScopedEvidenceTable({
   hideHarnessColumn = true,
   tableLabel = "Evidence actions",
   onFilterCategory,
+  onFilterHarness,
 }: ScopedEvidenceTableProps) {
   const [sort, setSort] = useState<EvidenceSortKey>("newest");
   const [page, setPage] = useState(0);
@@ -44,12 +46,13 @@ export function ScopedEvidenceTable({
       view: "apps",
       selectedId: "",
     }),
-    [exportFilters, sort],
+    [exportFilters.decision, exportFilters.harness, exportFilters.category, sort],
   );
 
   useEffect(() => {
     setPage(0);
     setSelectedId("");
+    setSort("newest");
   }, [receipts]);
 
   const handleSortChange = useCallback((next: EvidenceSortKey) => {
@@ -74,6 +77,7 @@ export function ScopedEvidenceTable({
   }, []);
 
   const noopHarness = useCallback(() => {}, []);
+  // Parent owns filter state when onFilterCategory is omitted.
   const noopCategory = useCallback(() => {}, []);
 
   if (receipts.length === 0) {
@@ -97,7 +101,7 @@ export function ScopedEvidenceTable({
         receipts={sorted}
         selectedId={selectedId}
         onSelectId={handleSelectId}
-        onFilterHarness={noopHarness}
+        onFilterHarness={onFilterHarness ?? noopHarness}
         onFilterCategory={onFilterCategory ?? noopCategory}
         sort={sort}
         onSortChange={handleSortChange}
