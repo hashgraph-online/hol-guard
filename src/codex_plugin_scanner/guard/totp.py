@@ -84,8 +84,7 @@ class TotpSecretStore:
             tmp_path.replace(path)
             os.chmod(path, mode)
         finally:
-            if tmp_path.exists():
-                tmp_path.unlink()
+            tmp_path.unlink(missing_ok=True)
 
     @staticmethod
     def _atomic_write_text(path: Path, payload: str, mode: int) -> None:
@@ -97,8 +96,7 @@ class TotpSecretStore:
             tmp_path.replace(path)
             os.chmod(path, mode)
         finally:
-            if tmp_path.exists():
-                tmp_path.unlink()
+            tmp_path.unlink(missing_ok=True)
 
 
 def generate_totp_secret() -> str:
