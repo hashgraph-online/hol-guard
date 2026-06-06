@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
+from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
@@ -94,6 +95,7 @@ def _request(
 def _dashboard_token(auth_token: str) -> str:
     payload_json = json.dumps(
         {
+            "aud": LOCAL_DASHBOARD_SESSION_AUDIENCE,
             "version": "guard-local-daemon-session.v1",
             "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
             "surface": "approval-center",
@@ -109,6 +111,7 @@ def _dashboard_token(auth_token: str) -> str:
 def _dashboard_token_with_claims(auth_token: str, claims: dict[str, object]) -> str:
     payload_json = json.dumps(
         {
+            "aud": LOCAL_DASHBOARD_SESSION_AUDIENCE,
             "version": "guard-local-daemon-session.v1",
             "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc).isoformat(),
             **claims,
@@ -969,6 +972,75 @@ def test_supply_chain_dashboard_session_claims_scope_action_and_managers(tmp_pat
     assert allowed_payload["operation"] == "install"
     assert denied_status == 401
     assert denied_payload["error"] == "unauthorized"
+
+
+def test_action_scoped_dashboard_session_requires_exact_read_paths_and_matching_nonce(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        token = _dashboard_token_with_claims(
+            auth_token,
+            {
+                "action_path": "connect",
+                "allowed_read_paths": ["/v1/runtime"],
+                "nonce": "runtime-read-nonce",
+            },
+        )
+        allowed_status, allowed_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/runtime",
+                method="GET",
+                dashboard_session_token=token,
+                extra_headers={"X-Guard-Dashboard-Nonce": "runtime-read-nonce"},
+            ),
+        )
+        wrong_path_status, wrong_path_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/inventory",
+                method="GET",
+                dashboard_session_token=token,
+                extra_headers={"X-Guard-Dashboard-Nonce": "runtime-read-nonce"},
+            ),
+        )
+        wrong_nonce_status, wrong_nonce_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/runtime",
+                method="GET",
+                dashboard_session_token=token,
+                extra_headers={"X-Guard-Dashboard-Nonce": "wrong-nonce"},
+            ),
+        )
+        implicit_read_token = _dashboard_token_with_claims(
+            auth_token,
+            {
+                "action_path": "connect",
+            },
+        )
+        implicit_read_status, implicit_read_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/runtime",
+                method="GET",
+                dashboard_session_token=implicit_read_token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert allowed_status == 200
+    assert isinstance(allowed_payload, dict)
+    assert wrong_path_status == 401
+    assert wrong_path_payload["error"] == "unauthorized"
+    assert wrong_nonce_status == 401
+    assert wrong_nonce_payload["error"] == "unauthorized"
+    assert implicit_read_status == 401
+    assert implicit_read_payload["error"] == "unauthorized"
 
 
 def test_headless_capabilities_rejects_dashboard_session_from_guard_token_header(tmp_path: Path) -> None:
