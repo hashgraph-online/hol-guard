@@ -376,11 +376,14 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
     ) -> dict[str, object]:
         rules: dict[str, object] = {}
         for server in servers:
-            if OpenCodeHarnessAdapter._should_skip_workspace_override(
+            shadowed = OpenCodeHarnessAdapter._should_skip_workspace_override(
                 context=context,
                 server=server,
                 existing_workspace_server_names=existing_workspace_server_names,
-            ):
+            )
+            if shadowed:
+                if server.enabled and server.source_scope != "project":
+                    rules[f"{_guard_mcp_companion_name(server.name)}_*"] = "ask"
                 continue
             if not server.enabled:
                 continue
@@ -654,6 +657,19 @@ def _guard_mcp_companion_name(server_name: str) -> str:
     return f"{_GUARD_MCP_COMPANION_PREFIX}{server_name}"
 
 
+def _source_mcp_server_config(server: ManagedMcpServer) -> dict[str, object] | None:
+    from ...ecosystems.opencode import _load_json_or_jsonc
+
+    payload, parse_error, _ = _load_json_or_jsonc(Path(server.config_path))
+    if parse_error or not isinstance(payload, dict):
+        return None
+    mcp = payload.get("mcp")
+    if not isinstance(mcp, dict):
+        return None
+    entry = mcp.get(server.name)
+    return entry if isinstance(entry, dict) else None
+
+
 def _ensure_native_mcp_entries(
     persisted: dict[str, object],
     *,
@@ -672,11 +688,11 @@ def _ensure_native_mcp_entries(
             continue
         if server.name in persisted or not server.command:
             continue
-        entry: dict[str, object] = {
-            "type": "local",
-            "command": [server.command, *server.args],
-            "enabled": server.enabled,
-        }
+        source_entry = _source_mcp_server_config(server) or {}
+        entry: dict[str, object] = dict(source_entry)
+        entry["type"] = entry.get("type", "local")
+        entry["command"] = [server.command, *server.args]
+        entry["enabled"] = server.enabled
         if server.env:
             entry["environment"] = dict(server.env)
         persisted[server.name] = entry
