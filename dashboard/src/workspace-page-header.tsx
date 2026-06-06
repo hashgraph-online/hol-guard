@@ -26,7 +26,7 @@ export function WorkspacePageHeader<T extends string>({
         <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{title}</h1>
       </div>
       <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
-        <div className="-mx-1 w-full overflow-x-auto px-1 sm:mx-0 sm:w-auto sm:overflow-visible">
+        <div className="-mx-1 w-full overflow-x-auto px-1 sm:mx-0 sm:w-auto sm:overflow-visible [&>div]:!flex-nowrap">
           <TabBar tabs={tabs} active={activeTab} onChange={onTabChange} />
         </div>
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
