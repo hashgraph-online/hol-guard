@@ -50,19 +50,24 @@ class _FakeSystemKeyringModule:
         self._secrets.pop((service_name, secret_id), None)
 
 
-def _install_fake_system_keyring(monkeypatch) -> _FakeSystemKeyringModule:
+def _install_fake_system_keyring(
+    monkeypatch,
+    *,
+    usable_macos_keychain: bool = True,
+) -> _FakeSystemKeyringModule:
     module = _FakeSystemKeyringModule()
     monkeypatch.setattr(SystemKeyringSecretStore, "_load_keyring_module", staticmethod(lambda: module))
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "_macos_default_keychain_is_usable",
-        classmethod(lambda cls: True),
-    )
+    if usable_macos_keychain:
+        monkeypatch.setattr(
+            SystemKeyringSecretStore,
+            "_macos_default_keychain_is_usable",
+            classmethod(lambda cls: True),
+        )
     return module
 
 
 def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_missing(tmp_path, monkeypatch):
-    _install_fake_system_keyring(monkeypatch)
+    _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
     monkeypatch.setattr(
@@ -81,7 +86,7 @@ def test_oauth_secret_store_skips_system_keyring_when_macos_user_keychain_search
     tmp_path,
     monkeypatch,
 ):
-    _install_fake_system_keyring(monkeypatch)
+    _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
     SystemKeyringSecretStore._clear_macos_keychain_health_cache()
     usable_keychain = tmp_path / "Library" / "Keychains" / "login.keychain-db"
@@ -1012,7 +1017,6 @@ def test_oauth_local_credentials_preserve_previous_material_on_partial_secret_wr
         "machine_id": "machine-old",
         "workspace_id": "workspace-old",
     }
-
 
 
 def test_validated_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
