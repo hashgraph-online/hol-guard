@@ -90,13 +90,20 @@ class TestNoHardcodedSecrets:
     def test_detects_provider_specific_tokens_in_text_svg_and_lock_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
+            github_token = "github_" + "pat_" + "abcdefghijklmnopqrstuvwxyz0123456789_ABCD"
+            openai_token = "sk-" + "proj-" + "abcdefghijklmnopqrstuvwxyz0123456789ABCD"
+            slack_app_token = "xapp-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
+            slack_user_token = "xoxe-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
+            slack_config_token = "xoxr-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
             (root / "logo.svg").write_text(
-                "<svg><!-- github_pat_abcdefghijklmnopqrstuvwxyz0123456789_ABCD --></svg>",
+                f"<svg><!-- {github_token} --></svg>",
                 encoding="utf-8",
             )
             (root / "deps.lock").write_text(
-                'openai = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD"\n'
-                'slack = "xapp-1-abcdefghijklmnopqrstuvwxyz0123456789"\n',
+                f'openai = "{openai_token}"\n'
+                f'slack_app = "{slack_app_token}"\n'
+                f'slack_user = "{slack_user_token}"\n'
+                f'slack_config = "{slack_config_token}"\n',
                 encoding="utf-8",
             )
 

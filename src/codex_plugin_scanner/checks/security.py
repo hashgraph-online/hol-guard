@@ -32,8 +32,7 @@ SECRET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"xoxe-[A-Za-z0-9\-]{10,}"),  # Slack user tokens
     re.compile(r"xoxr-[A-Za-z0-9\-]{10,}"),  # Slack configuration tokens
     re.compile(r"xapp-[A-Za-z0-9\-]{10,}"),  # Slack app-level tokens
-    re.compile(r"sk-(?:proj-)?[A-Za-z0-9_-]{20,}"),  # OpenAI keys
-    re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),  # Anthropic keys
+    re.compile(r"sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}"),  # OpenAI / Anthropic keys
 ]
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
