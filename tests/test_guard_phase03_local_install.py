@@ -154,6 +154,7 @@ def test_update_skips_existing_local_source_install(monkeypatch: pytest.MonkeyPa
     assert payload["changed"] is False
     assert "disabled for local source installs" in str(payload["error"])
     assert payload["source_install"]["path_exists"] is True
+    assert "version_check" not in payload
 
 
 def test_update_repairs_missing_pipx_local_source_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

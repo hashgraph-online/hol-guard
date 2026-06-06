@@ -236,10 +236,7 @@ def _is_stale_install(payload: dict[str, object]) -> bool:
     if payload.get("vcs_install") is None and payload.get("upgrade_source") != "pypi":
         return False
     version_check = payload.get("version_check")
-    return (
-        isinstance(version_check, dict)
-        and version_check.get("update_available") is True
-    )
+    return isinstance(version_check, dict) and version_check.get("update_available") is True
 
 
 def _merge_version_checks(
