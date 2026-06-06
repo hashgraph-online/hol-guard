@@ -3448,7 +3448,22 @@ class GuardStore:
             payload["runtime_id"] = runtime_id
         if runtime_label:
             payload["runtime_label"] = runtime_label
-        self._oauth_secret_store.set_secret(self._oauth_local_credentials_ref, secret_json)
+        existing_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        existing_secret_ref = (
+            existing_payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
+            if isinstance(existing_payload, dict)
+            else None
+        )
+        existing_secret_hash = (
+            existing_payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
+            if isinstance(existing_payload, dict)
+            else None
+        )
+        secret_material_changed = (
+            existing_secret_ref != self._oauth_local_credentials_ref or existing_secret_hash != secret_hash
+        )
+        if secret_material_changed:
+            self._oauth_secret_store.set_secret(self._oauth_local_credentials_ref, secret_json)
         self._mirror_oauth_secret_to_fallback(self._oauth_local_credentials_ref, secret_json)
         self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
         self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)

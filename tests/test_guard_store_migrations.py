@@ -31,6 +31,7 @@ class _FakeSystemKeyringModule:
         self._secrets: dict[tuple[str, str], str] = {}
         self.fail_on_set = False
         self.get_password_calls = 0
+        self.set_password_calls = 0
 
     @staticmethod
     def get_keyring():
@@ -42,6 +43,7 @@ class _FakeSystemKeyringModule:
     def set_password(self, service_name: str, secret_id: str, value: str) -> None:
         if self.fail_on_set:
             raise RuntimeError("system keyring unavailable")
+        self.set_password_calls += 1
         self._secrets[(service_name, secret_id)] = value
 
     def get_password(self, service_name: str, secret_id: str) -> str | None:
@@ -875,6 +877,65 @@ def test_oauth_local_credentials_mirror_secret_into_encrypted_fallback_store(tmp
     assert credentials is not None
     assert credentials["refresh_token"] == "refresh-secret-value"
     assert headless_store.get_oauth_local_credential_health()["state"] == "healthy"
+
+
+def test_set_oauth_local_credentials_skips_keyring_rewrite_when_secret_material_is_unchanged(tmp_path, monkeypatch):
+    fake_keyring = _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        supply_chain_plan_id="starter",
+        now="2026-06-01T00:00:00+00:00",
+    )
+
+    assert fake_keyring.set_password_calls == 1
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        supply_chain_firewall=True,
+        supply_chain_plan_id="team",
+        now="2026-06-01T00:05:00+00:00",
+    )
+
+    assert fake_keyring.set_password_calls == 1
+    assert store.get_oauth_local_credentials() == {
+        "issuer": "https://hol.org",
+        "client_id": "guard-local-daemon",
+        "refresh_token": "refresh-secret-value",
+        "dpop_private_key_pem": "-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        "dpop_public_jwk": {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "x-value",
+            "y": "y-value",
+            "alg": "ES256",
+            "use": "sig",
+        },
+        "dpop_public_jwk_thumbprint": "thumbprint-123",
+        "grant_id": "grant-123",
+        "machine_id": "machine-123",
+        "workspace_id": "workspace-123",
+        "supply_chain_firewall": True,
+        "supply_chain_plan_id": "team",
+    }
 
 
 def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before_keyring(tmp_path, monkeypatch):
