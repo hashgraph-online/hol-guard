@@ -10,6 +10,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -119,12 +120,19 @@ class TelegramBackend(NotificationBackend):
 class WebhookBackend(NotificationBackend):
     """Send notifications via HTTP webhook."""
 
-    def __init__(self, url: str):
-        self.url = url
+    def __init__(self, url: str, *, include_artifact_details: bool = False):
+        self.url = _validate_webhook_url(url)
+        self.include_artifact_details = include_artifact_details
 
     def send_notification(self, request: PendingRequest, message: str) -> bool:
+        payload = {
+            "text": "HOL Guard approval pending. Review locally to see artifact details.",
+            "request_id": request.request_id,
+        }
+        if self.include_artifact_details:
+            payload["text"] = message
         try:
-            resp = requests.post(self.url, json={"text": message, "request_id": request.request_id}, timeout=10)
+            resp = requests.post(self.url, json=payload, timeout=10)
             return resp.status_code in (200, 201)
         except Exception:
             return False
@@ -180,6 +188,19 @@ def _format_notification(request: PendingRequest) -> str:
     return "\n".join(lines)
 
 
+def _validate_webhook_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Guard Bridge webhook URL must use https.")
+    if not parsed.hostname:
+        raise ValueError("Guard Bridge webhook URL must include a host.")
+    if parsed.username or parsed.password:
+        raise ValueError("Guard Bridge webhook URL must not embed credentials.")
+    if parsed.hostname.lower() in {"127.0.0.1", "localhost", "::1"}:
+        raise ValueError("Guard Bridge webhook URL must not target loopback.")
+    return parsed.geturl()
+
+
 class GuardBridge:
     """Bridge daemon that polls Guard daemon and sends notifications."""
 
@@ -197,8 +218,15 @@ class GuardBridge:
 
     def _fetch_pending_requests(self, guard_url: str) -> list[PendingRequest]:
         """Fetch pending requests from Guard daemon."""
+        auth_token = load_guard_daemon_auth_token(self.store.guard_home)
+        if auth_token is None:
+            return []
         try:
-            resp = requests.get(f"{guard_url}/v1/requests", timeout=10)
+            resp = requests.get(
+                f"{guard_url}/v1/requests",
+                headers={"X-Guard-Token": auth_token},
+                timeout=10,
+            )
             if resp.status_code != 200:
                 return []
             data = resp.json()
