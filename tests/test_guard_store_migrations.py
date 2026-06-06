@@ -66,6 +66,11 @@ def _install_fake_system_keyring(
     return module
 
 
+@pytest.fixture(autouse=True)
+def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
+
+
 def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_missing(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
@@ -395,15 +400,49 @@ def test_fallback_secret_store_logs_delete_failures(caplog):
     assert "guard-token" not in caplog.text
 
 
-def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(tmp_path, monkeypatch):
+def _install_fake_sync_keychain(monkeypatch) -> dict[tuple[str, str], str]:
+    secrets: dict[tuple[str, str], str] = {}
+
+    monkeypatch.setattr(
+        KeychainSecretStore,
+        "set_secret",
+        lambda self, secret_id, value: secrets.__setitem__((self.service_name, secret_id), value),
+    )
+    monkeypatch.setattr(
+        KeychainSecretStore,
+        "get_secret",
+        lambda self, secret_id: secrets.get((self.service_name, secret_id)),
+    )
+    monkeypatch.setattr(
+        KeychainSecretStore,
+        "delete_secret",
+        lambda self, secret_id: secrets.pop((self.service_name, secret_id), None),
+    )
+    return secrets
+
+
+def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available_outside_macos(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
 
     secret_store = _build_secret_store(guard_home)
 
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, EncryptedFileSecretStore)
     assert isinstance(secret_store.fallback, KeychainSecretStore)
+
+
+def test_secret_store_prefers_keychain_backend_when_keychain_is_available_on_macos(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+
+    secret_store = _build_secret_store(guard_home)
+
+    assert isinstance(secret_store, FallbackSecretStore)
+    assert isinstance(secret_store.primary, KeychainSecretStore)
+    assert isinstance(secret_store.fallback, EncryptedFileSecretStore)
 
 
 def test_oauth_secret_store_prefers_system_keyring_backend_when_available(tmp_path, monkeypatch):
@@ -455,6 +494,50 @@ def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_availa
     GuardStore(guard_home)
 
 
+def test_sync_credentials_write_to_keychain_primary_on_macos(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    sync_keychain = _install_fake_sync_keychain(monkeypatch)
+    store = GuardStore(guard_home)
+
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "access-secret-value",
+        "2026-06-01T00:00:00+00:00",
+        workspace_id="workspace-123",
+    )
+
+    assert sync_keychain[( "hol-guard.sync", store._sync_token_ref)] == "access-secret-value"
+    assert store.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "access-secret-value",
+    }
+
+
+def test_get_sync_credentials_promotes_legacy_file_secret_into_keychain_on_macos(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
+    legacy_store = GuardStore(guard_home)
+    legacy_store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "legacy-access-secret",
+        "2026-06-01T00:00:00+00:00",
+        workspace_id="workspace-123",
+    )
+
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    sync_keychain = _install_fake_sync_keychain(monkeypatch)
+    migrated_store = GuardStore(guard_home)
+
+    assert migrated_store.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "legacy-access-secret",
+    }
+    assert sync_keychain[("hol-guard.sync", migrated_store._sync_token_ref)] == "legacy-access-secret"
+
+
 def test_oauth_local_credentials_do_not_shell_out_to_keychain_when_system_keyring_is_available(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     _install_fake_system_keyring(monkeypatch)
@@ -475,6 +558,73 @@ def test_oauth_local_credentials_do_not_shell_out_to_keychain_when_system_keyrin
     )
 
     assert store.get_oauth_local_credentials() is not None
+
+
+def test_guard_store_secures_guard_home_and_database_permissions(tmp_path):
+    if os.name == "nt":
+        pytest.skip("POSIX-only permission assertions")
+
+    store = GuardStore(tmp_path / "guard-home")
+
+    assert store.guard_home.stat().st_mode & 0o777 == 0o700
+    assert store.path.stat().st_mode & 0o777 == 0o600
+
+
+def test_guard_store_repairs_existing_guard_home_and_database_permissions(tmp_path):
+    if os.name == "nt":
+        pytest.skip("POSIX-only permission assertions")
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    os.chmod(guard_home, 0o755)
+    database_path = guard_home / "guard.db"
+    sqlite3.connect(database_path).close()
+    os.chmod(database_path, 0o644)
+    for name in ("guard.db-wal", "guard.db-shm", "guard.db-journal"):
+        sidecar = guard_home / name
+        sidecar.write_text("", encoding="utf-8")
+        os.chmod(sidecar, 0o666)
+
+    store = GuardStore(guard_home)
+
+    assert store.guard_home.stat().st_mode & 0o777 == 0o700
+    assert store.path.stat().st_mode & 0o777 == 0o600
+    for name in ("guard.db-wal", "guard.db-shm", "guard.db-journal"):
+        sidecar = guard_home / name
+        if sidecar.exists():
+            assert sidecar.stat().st_mode & 0o777 == 0o600
+
+
+def test_sync_credential_health_reports_backend_and_workspace(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+
+    assert store.get_sync_credential_health() == {
+        "configured": False,
+        "state": "not_configured",
+        "backend": "encrypted-file",
+        "fallback_backend": None,
+    }
+
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+    monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
+    sync_keychain = _install_fake_sync_keychain(monkeypatch)
+    keychain_store = GuardStore(tmp_path / "guard-home-keychain")
+    keychain_store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "access-secret-value",
+        "2026-06-01T00:00:00+00:00",
+        workspace_id="workspace-123",
+    )
+
+    assert sync_keychain[("hol-guard.sync", keychain_store._sync_token_ref)] == "access-secret-value"
+    assert keychain_store.get_sync_credential_health() == {
+        "configured": True,
+        "state": "healthy",
+        "backend": "keychain",
+        "fallback_backend": "encrypted-file",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "workspace_id": "workspace-123",
+    }
 
 
 def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):

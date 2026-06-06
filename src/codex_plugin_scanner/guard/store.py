@@ -180,6 +180,8 @@ _SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"
 _SECRET_FINGERPRINT_SALT = b"hol-guard-secret-fingerprint:v1"
 _OAUTH_REFRESH_LOCK_TIMEOUT_SECONDS = 30.0
 _OAUTH_REFRESH_LOCK_POLL_SECONDS = 0.05
+_GUARD_STORE_PRIVATE_DIR_MODE = 0o700
+_GUARD_STORE_PRIVATE_FILE_MODE = 0o600
 
 
 def _oauth_sync_url_from_issuer(issuer: str) -> str:
@@ -708,10 +710,22 @@ def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
     return b"".join(chunks)[:length]
 
 
+def _set_private_mode(path: Path, mode: int) -> None:
+    if os.name == "nt":
+        return
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        return
+
+
 def _build_secret_store(guard_home: Path) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
     if KeychainSecretStore._is_available():
-        return FallbackSecretStore(fallback_store, KeychainSecretStore(service_name="hol-guard.sync"))
+        keychain_store = KeychainSecretStore(service_name="hol-guard.sync")
+        if sys.platform == "darwin":
+            return FallbackSecretStore(keychain_store, fallback_store)
+        return FallbackSecretStore(fallback_store, keychain_store)
     return fallback_store
 
 
@@ -758,6 +772,7 @@ class GuardStore:
     def __init__(self, guard_home: Path, *, guard_event_queue_limit: int = 1000) -> None:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
+        _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
         self._secret_store = _build_secret_store(self.guard_home)
         self._oauth_secret_store = _build_oauth_secret_store(self.guard_home)
         self._sync_token_ref = self._build_scoped_secret_ref(_SYNC_TOKEN_REF)
@@ -871,6 +886,17 @@ class GuardStore:
             return []
         return [token]
 
+    def _repair_store_permissions(self) -> None:
+        _set_private_mode(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
+        for candidate in (
+            self.path,
+            self.guard_home / "guard.db-journal",
+            self.guard_home / "guard.db-shm",
+            self.guard_home / "guard.db-wal",
+        ):
+            if candidate.exists():
+                _set_private_mode(candidate, _GUARD_STORE_PRIVATE_FILE_MODE)
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path)
@@ -881,6 +907,7 @@ class GuardStore:
             connection.commit()
         finally:
             connection.close()
+            self._repair_store_permissions()
             elapsed_ms = (time.monotonic() - start) * 1000
             if elapsed_ms >= _SLOW_QUERY_THRESHOLD_MS:
                 log = _store_logger.warning if _should_warn_on_slow_store_transactions() else _store_logger.debug
@@ -3479,6 +3506,41 @@ class GuardStore:
             value = payload.get(key)
             if isinstance(value, str) and value:
                 health[key] = value
+        return health
+
+    def get_sync_credential_health(self) -> dict[str, object]:
+        payload = self.get_sync_payload("credentials")
+        health: dict[str, object] = {
+            "configured": isinstance(payload, dict),
+            "state": "not_configured",
+            "backend": _secret_store_backend_name(self._secret_store),
+            "fallback_backend": _secret_store_fallback_backend_name(self._secret_store),
+        }
+        if not isinstance(payload, dict):
+            return health
+        sync_url = payload.get("sync_url")
+        token_reference = payload.get("token_ref")
+        if not isinstance(sync_url, str) or not sync_url:
+            health["state"] = "degraded"
+            return health
+        if not isinstance(token_reference, str) or not token_reference or token_reference != self._sync_token_ref:
+            health["state"] = "degraded"
+            return health
+        expected_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
+        expected_hash_value = expected_hash if isinstance(expected_hash, str) and expected_hash else None
+        secret_candidates = self._get_secret_candidates(
+            self._secret_store,
+            self._sync_token_ref,
+            expected_hash_value,
+        )
+        if not secret_candidates:
+            health["state"] = "degraded"
+            return health
+        health["state"] = "healthy"
+        health["sync_url"] = sync_url
+        workspace_id = payload.get("workspace_id")
+        if isinstance(workspace_id, str) and workspace_id:
+            health["workspace_id"] = workspace_id
         return health
 
     @staticmethod

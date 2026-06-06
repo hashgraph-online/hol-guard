@@ -6491,9 +6491,8 @@ url = http://127.0.0.1:8787/guard-canary
                 "acknowledgements": [],
             },
         }
-        _SyncRequestHandler.response_payload["policyBundle"]["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(
-            _SyncRequestHandler.response_payload["policyBundle"]
-        )
+        policy_bundle = _SyncRequestHandler.response_payload["policyBundle"]
+        policy_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(policy_bundle)
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -6787,6 +6786,14 @@ url = http://127.0.0.1:8787/guard-canary
         status_output = json.loads(capsys.readouterr().out)
 
         assert status_rc == 0
+        assert status_output["sync_storage_health"] == {
+            "configured": True,
+            "state": "healthy",
+            "backend": "encrypted-file",
+            "fallback_backend": None,
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "workspace_id": "workspace-123",
+        }
         assert status_output["oauth_storage_health"] == {
             "configured": True,
             "state": "healthy",
@@ -8480,9 +8487,8 @@ url = http://127.0.0.1:8787/guard-canary
                 "auditTrail": [],
             },
         }
-        _SyncRequestHandler.response_payload["policyBundle"]["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(
-            _SyncRequestHandler.response_payload["policyBundle"]
-        )
+        policy_bundle = _SyncRequestHandler.response_payload["policyBundle"]
+        policy_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(policy_bundle)
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

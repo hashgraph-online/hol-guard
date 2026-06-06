@@ -4,6 +4,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 
 if str(SRC_PATH) not in sys.path:
@@ -13,3 +15,10 @@ existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
 if str(SRC_PATH) not in pythonpath_entries:
     os.environ["PYTHONPATH"] = os.pathsep.join([str(SRC_PATH), *pythonpath_entries])
+
+
+@pytest.fixture(autouse=True)
+def _disable_real_macos_keychain(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.store import KeychainSecretStore
+
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: False))
