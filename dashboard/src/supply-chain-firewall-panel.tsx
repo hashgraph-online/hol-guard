@@ -9,7 +9,6 @@ import {
   HiMiniBeaker,
   HiMiniTrash,
   HiMiniCheckCircle,
-  HiMiniInformationCircle,
   HiMiniMagnifyingGlass,
 } from "react-icons/hi2";
 import { ApprovalProofModal } from "./approval-proof-modal";
@@ -137,9 +136,9 @@ function ManagerRow({
   const handleRemoveConfirm = useCallback(() => onRemoveConfirm(manager), [onRemoveConfirm, manager]);
 
   return (
-    <div className="border-b border-slate-100 last:border-b-0">
+    <div className="border-b border-slate-100 last:border-b-0" role="row">
       <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2" role="cell">
           {status.icon === "check" ? (
             <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
           ) : status.icon === "restart" ? (
@@ -156,7 +155,7 @@ function ManagerRow({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3" role="cell">
           <div className="shrink-0">
             <Tag tone={status.tone}>{status.label}</Tag>
           </div>
@@ -410,7 +409,7 @@ function FirewallControlsView({
         const status = resolveShimStatus(shim);
         if (statusFilter === "protected") return status.tone === "green";
         if (statusFilter === "actionable") return status.tone === "attention" || status.tone === "blue";
-        if (statusFilter === "unprotected") return status.tone === "attention";
+        if (statusFilter === "unprotected") return status.tone !== "green";
         return true;
       });
     }
