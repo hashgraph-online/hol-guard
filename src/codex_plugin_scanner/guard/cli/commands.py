@@ -49,9 +49,8 @@ from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
     approval_prompt_flow,
+    attach_primary_approval_link,
     first_approval_url,
-    primary_approval_request,
-    primary_approval_url,
     queue_blocked_approvals,
     wait_for_approval_requests,
 )
@@ -3078,11 +3077,19 @@ def run_guard_command(
                     ),
                     open_key=artifact_id,
                 )
-                queued = (
-                    blocked_operation["approval_requests"]
-                    if isinstance(blocked_operation.get("approval_requests"), list)
-                    else []
-                )
+                operation = blocked_operation.get("operation")
+                if not isinstance(operation, dict):
+                    operation = {}
+                queued = blocked_operation.get("approval_requests")
+                if not isinstance(queued, list):
+                    queued = []
+                operation_id = _optional_string(operation.get("operation_id"))
+                if operation_id is not None:
+                    response_payload["operation_id"] = operation_id
+                response_payload["operation"] = operation
+                approval_request_ids = operation.get("approval_request_ids")
+                if isinstance(approval_request_ids, list):
+                    response_payload["approval_request_ids"] = approval_request_ids
             response_payload["approval_requests"] = queued
             _attach_primary_approval_link(
                 response_payload,
@@ -3096,6 +3103,8 @@ def run_guard_command(
                 approval_center_url=approval_center_url,
                 queued=queued,
                 managed_install=managed_install,
+                request_id=_optional_string(response_payload.get("primary_approval_request_id")),
+                artifact_id=_optional_string(response_payload.get("artifact_id")),
             )
             _localize_pending_approval_copy(response_payload, harness=args.harness)
             _record_harness_usage_for_hook(
@@ -3614,17 +3623,19 @@ def run_guard_command(
                             ),
                             open_key=artifact_id,
                         )
-                        operation = (
-                            blocked_operation["operation"]
-                            if isinstance(blocked_operation.get("operation"), dict)
-                            else {}
-                        )
-                        queued = (
-                            blocked_operation["approval_requests"]
-                            if isinstance(blocked_operation.get("approval_requests"), list)
-                            else []
-                        )
-                        response_payload["operation_id"] = str(operation["operation_id"])
+                        operation = blocked_operation.get("operation")
+                        if not isinstance(operation, dict):
+                            operation = {}
+                        queued = blocked_operation.get("approval_requests")
+                        if not isinstance(queued, list):
+                            queued = []
+                        operation_id = _optional_string(operation.get("operation_id"))
+                        if operation_id is not None:
+                            response_payload["operation_id"] = operation_id
+                        response_payload["operation"] = operation
+                        approval_request_ids = operation.get("approval_request_ids")
+                        if isinstance(approval_request_ids, list):
+                            response_payload["approval_request_ids"] = approval_request_ids
                     response_payload["approval_requests"] = queued
                     _attach_primary_approval_link(
                         response_payload,
@@ -3638,6 +3649,8 @@ def run_guard_command(
                         approval_center_url=approval_center_url,
                         queued=queued,
                         managed_install=managed_install,
+                        request_id=_optional_string(response_payload.get("primary_approval_request_id")),
+                        artifact_id=_optional_string(response_payload.get("artifact_id")),
                     )
                     response_payload["approval_delivery"] = _approval_delivery_payload(
                         args.harness,
@@ -4175,34 +4188,34 @@ def _attach_primary_approval_link(
     harness: str,
     approval_center_url: str | None,
 ) -> None:
-    queued = response_payload.get("approval_requests")
-    if not isinstance(queued, list):
-        return
-    primary = primary_approval_request(queued, harness=harness)
-    if primary is None:
-        return
-    request_id = primary.get("request_id")
-    if isinstance(request_id, str) and request_id.strip():
-        response_payload["primary_approval_request_id"] = request_id.strip()
-    review_url = primary_approval_url(
-        queued,
+    attach_primary_approval_link(
+        response_payload,
         harness=harness,
         approval_center_url=approval_center_url,
     )
-    if review_url is not None:
-        response_payload["primary_approval_url"] = review_url
+
+
+def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harness: str) -> dict[str, object]:
+    return {
+        "harness": harness,
+        "approval_center_url": _optional_string(response_payload.get("approval_center_url")),
+        "request_id": _optional_string(response_payload.get("primary_approval_request_id")),
+        "artifact_id": _optional_string(response_payload.get("artifact_id")),
+    }
 
 
 def _open_codex_live_approval(response_payload: Mapping[str, object]) -> None:
     queued = response_payload.get("approval_requests")
+    lookup: dict[str, object] = {
+        "harness": _optional_string(response_payload.get("harness")),
+        "approval_center_url": _optional_string(response_payload.get("approval_center_url")),
+        "request_id": _optional_string(response_payload.get("primary_approval_request_id")),
+        "artifact_id": _optional_string(response_payload.get("artifact_id")),
+    }
     review_url = (
         _optional_string(response_payload.get("primary_approval_url"))
         or (
-            first_approval_url(
-                queued,
-                harness=_optional_string(response_payload.get("harness")),
-                approval_center_url=_optional_string(response_payload.get("approval_center_url")),
-            )
+            first_approval_url(queued, **lookup)
             if isinstance(queued, list)
             else None
         )
@@ -5165,8 +5178,7 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
         or (
             first_approval_url(
                 queued,
-                harness=harness,
-                approval_center_url=approval_center_url.strip(),
+                **_primary_approval_lookup_kwargs(response_payload, harness=harness),
             )
             if isinstance(queued, list)
             else None
@@ -5195,8 +5207,7 @@ def _localize_pending_approval_copy(response_payload: dict[str, object], *, harn
         or (
             first_approval_url(
                 queued,
-                harness=harness,
-                approval_center_url=_optional_string(response_payload.get("approval_center_url")),
+                **_primary_approval_lookup_kwargs(response_payload, harness=harness),
             )
             if isinstance(queued, list)
             else None
