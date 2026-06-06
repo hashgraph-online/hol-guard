@@ -143,6 +143,7 @@ _SYNC_TOKEN_HASH_KEY = "token_sha256"
 _OAUTH_LOCAL_CREDENTIALS_STATE_KEY = "oauth_local_credentials"
 _OAUTH_LOCAL_CREDENTIALS_HASH_KEY = "credentials_sha256"
 _OAUTH_LOCAL_CREDENTIALS_REF_KEY = "credentials_ref"
+_OAUTH_PRIMARY_SECRET_TIMEOUT_SECONDS = 2.0
 _GUARD_CLOUD_RESET_STATE_KEYS = (
     "credentials",
     "sync_summary",
@@ -461,6 +462,35 @@ class SystemKeyringSecretStore:
         value = keyring_module.get_password(self.service_name, secret_id)
         return value if isinstance(value, str) and value else None
 
+    def get_secret_with_timeout(self, secret_id: str, *, timeout_seconds: float) -> str | None:
+        if sys.platform != "darwin":
+            return self.get_secret(secret_id)
+        security_path = Path("/usr/bin/security")
+        if not security_path.exists():
+            return None
+        try:
+            result = subprocess.run(
+                [
+                    str(security_path),
+                    "find-generic-password",
+                    "-a",
+                    secret_id,
+                    "-s",
+                    self.service_name,
+                    "-w",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+        except Exception:
+            return None
+        if result.returncode != 0:
+            return None
+        value = result.stdout.rstrip("\r\n")
+        return value if value else None
+
     def delete_secret(self, secret_id: str) -> None:
         keyring_module = self._load_keyring_module()
         try:
@@ -767,20 +797,64 @@ class GuardStore:
             )
             return
 
+    def _assert_oauth_secret_persisted(self, secret_id: str, value: str) -> None:
+        secret_store = self._oauth_secret_store
+        if isinstance(secret_store, FallbackSecretStore) and isinstance(
+            secret_store.fallback,
+            EncryptedFileSecretStore,
+        ):
+            fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
+            if fallback_value == value:
+                return
+            raise RuntimeError(
+                "Guard could not persist local Guard Cloud authorization into the encrypted local store."
+            )
+        persisted_value = self._get_secret_from_store(secret_store, secret_id)
+        if persisted_value == value:
+            return
+        raise RuntimeError("Guard could not persist local Guard Cloud authorization securely.")
+
     def _get_secret_from_store(self, store: SecretStore, secret_id: str) -> str | None:
         try:
             return store.get_secret(secret_id)
         except Exception:
             return None
 
+    def _get_secret_from_primary_store(self, store: SecretStore, secret_id: str) -> str | None:
+        if isinstance(store, SystemKeyringSecretStore):
+            return store.get_secret_with_timeout(
+                secret_id,
+                timeout_seconds=_OAUTH_PRIMARY_SECRET_TIMEOUT_SECONDS,
+            )
+        return self._get_secret_from_store(store, secret_id)
+
     def _get_secret_candidates(
         self,
         secret_store: SecretStore,
         secret_id: str,
         expected_hash_value: str | None,
+        *,
+        prefer_fallback_first: bool = False,
     ) -> list[str]:
         if isinstance(secret_store, FallbackSecretStore):
-            primary_token = self._get_secret_from_store(secret_store.primary, secret_id)
+            if prefer_fallback_first and isinstance(secret_store.fallback, EncryptedFileSecretStore):
+                fallback_token = self._get_secret_from_store(secret_store.fallback, secret_id)
+                if fallback_token is not None and (
+                    expected_hash_value is None or _secret_matches_hash(fallback_token, expected_hash_value)
+                ):
+                    return [fallback_token]
+                primary_token = self._get_secret_from_primary_store(secret_store.primary, secret_id)
+                if primary_token is not None and (
+                    expected_hash_value is None or _secret_matches_hash(primary_token, expected_hash_value)
+                ):
+                    return [primary_token]
+                if fallback_token is not None and expected_hash_value is not None:
+                    return []
+            primary_token = (
+                self._get_secret_from_primary_store(secret_store.primary, secret_id)
+                if prefer_fallback_first
+                else self._get_secret_from_store(secret_store.primary, secret_id)
+            )
             if primary_token is not None:
                 if expected_hash_value is None or _secret_matches_hash(primary_token, expected_hash_value):
                     return [primary_token]
@@ -3344,6 +3418,7 @@ class GuardStore:
             payload["runtime_label"] = runtime_label
         self._oauth_secret_store.set_secret(self._oauth_local_credentials_ref, secret_json)
         self._mirror_oauth_secret_to_fallback(self._oauth_local_credentials_ref, secret_json)
+        self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
         self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
 
     def get_oauth_local_credentials(self) -> dict[str, object] | None:
@@ -3354,6 +3429,18 @@ class GuardStore:
         if metadata is None:
             return None
         secret_payload = self._load_oauth_secret_payload(payload)
+        if secret_payload is None:
+            return None
+        return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
+
+    def get_recoverable_oauth_local_credentials(self) -> dict[str, object] | None:
+        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        if not isinstance(payload, dict):
+            return None
+        metadata = self._oauth_local_credentials_metadata(payload)
+        if metadata is None:
+            return None
+        secret_payload = self._load_oauth_fallback_secret_payload(payload)
         if secret_payload is None:
             return None
         return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
@@ -3431,7 +3518,12 @@ class GuardStore:
             return None
         if not isinstance(secret_hash, str) or not secret_hash:
             return None
-        for candidate in self._get_secret_candidates(self._oauth_secret_store, secret_ref, secret_hash):
+        for candidate in self._get_secret_candidates(
+            self._oauth_secret_store,
+            secret_ref,
+            secret_hash,
+            prefer_fallback_first=True,
+        ):
             if not _secret_matches_hash(candidate, secret_hash):
                 continue
             try:
@@ -3445,6 +3537,31 @@ class GuardStore:
                 self._mirror_oauth_secret_to_fallback(secret_ref, candidate)
             return secret_payload
         return None
+
+    def _load_oauth_fallback_secret_payload(self, payload: dict[str, object]) -> dict[str, object] | None:
+        secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
+        if not isinstance(secret_ref, str) or not secret_ref:
+            return None
+        secret_store = self._oauth_secret_store
+        fallback_store: EncryptedFileSecretStore | None
+        if isinstance(secret_store, FallbackSecretStore):
+            fallback_store = (
+                secret_store.fallback if isinstance(secret_store.fallback, EncryptedFileSecretStore) else None
+            )
+        elif isinstance(secret_store, EncryptedFileSecretStore):
+            fallback_store = secret_store
+        else:
+            fallback_store = None
+        if fallback_store is None:
+            return None
+        secret_json = self._get_secret_from_store(fallback_store, secret_ref)
+        if not isinstance(secret_json, str) or not secret_json:
+            return None
+        try:
+            secret_payload = json.loads(secret_json)
+        except json.JSONDecodeError:
+            return None
+        return secret_payload if isinstance(secret_payload, dict) else None
 
     @staticmethod
     def _build_oauth_local_credentials_result(

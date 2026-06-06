@@ -14,6 +14,7 @@ import type {
 import {
   fetchPackageFirewallStatus,
   GuardHarnessActionError,
+  openPackageFirewallShell,
   runPackageFirewallAction,
   runPackageAudit,
   runPackageSync,
@@ -158,6 +159,8 @@ function FailureBanner({ failed }: FailureBannerProps) {
 }
 
 type FirewallControlsViewProps = {
+  activationAssistError: string | null;
+  openingShell: boolean;
   data: PackageFirewallStatusResponse;
   pendingOp: PendingOp | null;
   lastCompleted: CompletedOp | null;
@@ -173,9 +176,13 @@ type FirewallControlsViewProps = {
   onAudit: () => void;
   onSync: () => void;
   onDismissResult: () => void;
+  onOpenShell: () => void;
+  onRefreshStatus: () => void;
 };
 
 function FirewallControlsView({
+  activationAssistError,
+  openingShell,
   data,
   pendingOp,
   lastCompleted,
@@ -191,6 +198,8 @@ function FirewallControlsView({
   onAudit,
   onSync,
   onDismissResult,
+  onOpenShell,
+  onRefreshStatus,
 }: FirewallControlsViewProps) {
   const anyPending = pendingOp !== null;
   return (
@@ -207,7 +216,13 @@ function FirewallControlsView({
         )}
       </div>
 
-      <ActivationSummary protection={data.protection} />
+      <ActivationSummary
+        activationAssistError={activationAssistError}
+        openingShell={openingShell}
+        onOpenShell={onOpenShell}
+        onRefreshStatus={onRefreshStatus}
+        protection={data.protection}
+      />
 
       {lastFailed !== null && <FailureBanner failed={lastFailed} />}
 
@@ -277,7 +292,9 @@ export function PackageFirewallPanel(props: {
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
   const [lastFailed, setLastFailed] = useState<FailedOp | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [activationAssistError, setActivationAssistError] = useState<string | null>(null);
   const [startingConnect, setStartingConnect] = useState(false);
+  const [openingShell, setOpeningShell] = useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = useState<string | null>(null);
   const [pendingApprovalOp, setPendingApprovalOp] = useState<ApprovalOp | null>(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
@@ -332,6 +349,7 @@ export function PackageFirewallPanel(props: {
       setPendingOp({ op, manager });
       setLastFailed(null);
       setConnectError(null);
+      setActivationAssistError(null);
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
@@ -362,6 +380,7 @@ export function PackageFirewallPanel(props: {
       setPendingOp({ op, manager: null });
       setLastFailed(null);
       setConnectError(null);
+      setActivationAssistError(null);
       try {
         const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
         setLastCompleted({ op, manager: null, response });
@@ -408,6 +427,7 @@ export function PackageFirewallPanel(props: {
   const handleStartConnect = useCallback(async () => {
     setStartingConnect(true);
     setConnectError(null);
+    setActivationAssistError(null);
     try {
       await startPackageFirewallConnect();
       await refreshAfterOp();
@@ -420,6 +440,17 @@ export function PackageFirewallPanel(props: {
       setStartingConnect(false);
     }
   }, [onStateChanged, refreshAfterOp]);
+  const handleOpenShell = useCallback(async () => {
+    setOpeningShell(true);
+    setActivationAssistError(null);
+    try {
+      await openPackageFirewallShell();
+    } catch (error) {
+      setActivationAssistError(error instanceof Error ? error.message : "Unable to open a new shell.");
+    } finally {
+      setOpeningShell(false);
+    }
+  }, []);
   const handleApprovalCancel = useCallback(() => setPendingApprovalOp(null), []);
   const handleApprovalConfirm = useCallback(
     (credentials: { approval_password?: string; approval_totp_code?: string }) => {
@@ -480,6 +511,10 @@ export function PackageFirewallPanel(props: {
             onAudit={handleAudit}
             onSync={handleSync}
             onDismissResult={handleDismissResult}
+            onOpenShell={handleOpenShell}
+            onRefreshStatus={handleRetry}
+            openingShell={openingShell}
+            activationAssistError={activationAssistError}
           />
         </>
       )}

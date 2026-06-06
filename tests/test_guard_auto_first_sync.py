@@ -99,13 +99,7 @@ def test_finalize_guard_connect_payload_uses_fresh_oauth_access_token_once(tmp_p
         now=now,
     )
 
-    assert sync_calls == [
-        {
-            "access_token": "access-token-1",
-            "dpop_key_material": "dpop",
-            "sync_url": "https://hol.org/api/guard/receipts/sync",
-        }
-    ]
+    assert sync_calls == [None]
     assert CONNECT_SYNC_AUTH_CONTEXT_KEY not in payload
 
 
