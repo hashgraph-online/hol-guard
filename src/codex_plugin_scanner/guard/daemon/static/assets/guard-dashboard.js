@@ -13442,6 +13442,51 @@ async function updateSettings(settings) {
     body: JSON.stringify({ settings })
   });
 }
+async function exportSettings() {
+  if (isGuardDemoMode()) {
+    const current = await fetchSettings();
+    return {
+      schema_version: 1,
+      privacy_warning: "Exports include local Guard preferences but not secrets or receipt evidence.",
+      settings: current.settings
+    };
+  }
+  return readJson("/v1/settings/export");
+}
+async function importSettings(settingsExport, proof) {
+  if (isGuardDemoMode()) {
+    return { guard_home: "~/.hol-guard", config_path: "~/.hol-guard/config.toml", settings: settingsExport.settings };
+  }
+  return readJson("/v1/settings/import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      ...settingsExport,
+      ...proof?.approval_password ? { approval_password: proof.approval_password } : {},
+      ...proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}
+    })
+  });
+}
+async function resetSettings(proof) {
+  if (isGuardDemoMode()) {
+    return fetchSettings();
+  }
+  return readJson("/v1/settings/reset", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      confirm: "reset-local-settings",
+      ...proof?.approval_password ? { approval_password: proof.approval_password } : {},
+      ...proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}
+    })
+  });
+}
 async function fetchRequest(requestId) {
   if (isGuardDemoMode()) {
     return getDemoRequest(requestId);
@@ -23392,65 +23437,68 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  fetchApprovalPage as $,
+  resetSettings as $,
   ActionButton as A,
   Badge as B,
   getDefaultExportFromCjs as C,
-  fetchSettings as D,
+  HiMiniLockClosed as D,
   EmptyState as E,
-  fetchRuntimeSnapshot as F,
+  HiMiniBellAlert as F,
   GuardHero as G,
   HiMiniShieldCheck as H,
-  revokeApprovalGateCooldown as I,
-  enrollApprovalGateTotp as J,
-  verifyApprovalGateTotp as K,
-  disableApprovalGateTotp as L,
-  updateSettings as M,
-  clearPolicy as N,
-  clearReviewQueue as O,
+  HiMiniAdjustmentsHorizontal as I,
+  TabBar as J,
+  fetchSettings as K,
+  fetchRuntimeSnapshot as L,
+  revokeApprovalGateCooldown as M,
+  enrollApprovalGateTotp as N,
+  verifyApprovalGateTotp as O,
   ProofStrip as P,
-  clearEvidence as Q,
-  exportDiagnostics as R,
+  disableApprovalGateTotp as Q,
+  updateSettings as R,
   SectionLabel as S,
   Tag as T,
-  repairApprovalCenter as U,
-  setupDesktopNotifications as V,
-  HiMiniMagnifyingGlass as W,
-  HiMiniLockClosed as X,
-  HiMiniCog6Tooth as Y,
-  HiMiniBellAlert as Z,
-  approvalGateCooldownLabel as _,
+  clearPolicy as U,
+  clearReviewQueue as V,
+  clearEvidence as W,
+  exportDiagnostics as X,
+  repairApprovalCenter as Y,
+  exportSettings as Z,
+  importSettings as _,
   HiMiniInformationCircle as a,
-  fetchPolicy as a0,
-  HiMiniArrowLeft as a1,
-  HiMiniHome as a2,
-  HiMiniAdjustmentsHorizontal as a3,
-  detectCategory as a4,
-  CATEGORIES as a5,
-  policyIdentityKey as a6,
-  HiMiniChartBar as a7,
-  runHarnessAction as a8,
-  GuardHarnessActionError as a9,
-  HiMiniRocketLaunch as aa,
-  HiMiniArrowPath as ab,
-  HiMiniTrash as ac,
-  clearLabelForScope as ad,
-  formatHarnessCommand as ae,
-  HiMiniCommandLine as af,
-  TabBar as ag,
-  __vitePreload as ah,
-  HiMiniArrowTopRightOnSquare as ai,
-  fetchPackageFirewallStatus as aj,
-  runPackageFirewallAction as ak,
-  runPackageAudit as al,
-  runPackageSync as am,
-  startPackageFirewallConnect as an,
-  openPackageFirewallShell as ao,
-  HiMiniBugAnt as ap,
-  HiMiniBeaker as aq,
-  runAuditRemediation as ar,
-  HiMiniSignal as as,
-  HiMiniClock as at,
+  setupDesktopNotifications as a0,
+  HiMiniMagnifyingGlass as a1,
+  HiMiniCog6Tooth as a2,
+  approvalGateCooldownLabel as a3,
+  fetchApprovalPage as a4,
+  fetchPolicy as a5,
+  HiMiniArrowLeft as a6,
+  HiMiniHome as a7,
+  detectCategory as a8,
+  CATEGORIES as a9,
+  policyIdentityKey as aa,
+  HiMiniChartBar as ab,
+  runHarnessAction as ac,
+  GuardHarnessActionError as ad,
+  HiMiniRocketLaunch as ae,
+  HiMiniArrowPath as af,
+  HiMiniTrash as ag,
+  clearLabelForScope as ah,
+  formatHarnessCommand as ai,
+  HiMiniCommandLine as aj,
+  __vitePreload as ak,
+  HiMiniArrowTopRightOnSquare as al,
+  fetchPackageFirewallStatus as am,
+  runPackageFirewallAction as an,
+  runPackageAudit as ao,
+  runPackageSync as ap,
+  startPackageFirewallConnect as aq,
+  openPackageFirewallShell as ar,
+  HiMiniBugAnt as as,
+  HiMiniBeaker as at,
+  runAuditRemediation as au,
+  HiMiniSignal as av,
+  HiMiniClock as aw,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,
