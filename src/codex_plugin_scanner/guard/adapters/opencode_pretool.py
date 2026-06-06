@@ -14,6 +14,15 @@ _INTERCEPT_TOOLS = ("bash", "shell", "sh", "zsh", "terminal")
 _PLUGIN_TEMPLATE = """// Managed by HOL Guard. Re-run `hol-guard install opencode` after moving Guard home.
 const GUARD_HOME = __GUARD_HOME__;
 const GUARD_PYTHON = __GUARD_PYTHON__;
+const TRUSTED_PACKAGE_ROOT = __TRUSTED_PACKAGE_ROOT__;
+const GUARD_LAUNCHER =
+  "import os,sys;" +
+  "trusted_root=sys.argv.pop(1);" +
+  "cwd=os.getcwd();" +
+  "blocked=('','.',os.curdir,cwd,trusted_root);" +
+  "sys.path=[trusted_root,*[entry for entry in sys.path if entry not in blocked]];" +
+  "from codex_plugin_scanner.cli import main;" +
+  "raise SystemExit(main(sys.argv[1:]))";
 const INTERCEPT_TOOLS = new Set(__INTERCEPT_TOOLS__);
 
 async function runGuardHook(directory: string, payload: Record<string, unknown>) {
@@ -21,8 +30,9 @@ async function runGuardHook(directory: string, payload: Record<string, unknown>)
   const proc = Bun.spawn(
     [
       GUARD_PYTHON,
-      "-m",
-      "codex_plugin_scanner.cli",
+      "-c",
+      GUARD_LAUNCHER,
+      TRUSTED_PACKAGE_ROOT,
       "guard",
       "hook",
       "--guard-home",
@@ -130,6 +140,7 @@ def pretool_plugin_source(context: HarnessContext) -> str:
     return (
         _PLUGIN_TEMPLATE.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
         .replace("__GUARD_PYTHON__", json.dumps(str(Path(sys.executable).resolve())))
+        .replace("__TRUSTED_PACKAGE_ROOT__", json.dumps(str(Path(__file__).resolve().parents[3])))
         .replace("__INTERCEPT_TOOLS__", json.dumps(list(_INTERCEPT_TOOLS)))
     )
 

@@ -40,6 +40,10 @@ def test_pretool_plugin_source_embeds_guard_paths(tmp_path: Path) -> None:
     assert "stdoutPromise" in source
     assert "try {" in source
     assert 'source_scope: directory?.trim() ? "project" : "global"' in source
+    assert '"-c"' in source
+    assert '"-m"' not in source
+    assert "TRUSTED_PACKAGE_ROOT" in source
+    assert "sys.path=[trusted_root" in source
     assert "codex_plugin_scanner.cli" in source
     assert "guard" in source
 
