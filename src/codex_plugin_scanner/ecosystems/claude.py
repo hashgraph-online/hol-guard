@@ -74,9 +74,17 @@ class ClaudeAdapter:
             components["skills"] = tuple(
                 str(path.relative_to(root)) for path in iter_safe_recursive_files(root, skills_dir, "SKILL.md")
             )
-        if hooks_file.is_file() and resolves_within_root(root, hooks_file, require_exists=True):
+        if (
+            hooks_file.is_file()
+            and not hooks_file.is_symlink()
+            and resolves_within_root(root, hooks_file, require_exists=True)
+        ):
             components["hooks"] = (str(hooks_file.relative_to(root)),)
-        if mcp_file.is_file() and resolves_within_root(root, mcp_file, require_exists=True):
+        if (
+            mcp_file.is_file()
+            and not mcp_file.is_symlink()
+            and resolves_within_root(root, mcp_file, require_exists=True)
+        ):
             components["mcp_servers"] = (str(mcp_file.relative_to(root)),)
 
         strict_mode = manifest.get("strict")

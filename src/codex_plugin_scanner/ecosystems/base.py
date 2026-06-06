@@ -91,6 +91,7 @@ def iter_safe_recursive_dirs(root: Path, base_dir: Path, pattern: str) -> tuple[
                 continue
             if fnmatchcase(entry.name, pattern):
                 matches.append(entry)
+                continue
             pending.append(entry)
     return tuple(sorted(matches, key=lambda path: str(path)))
 
