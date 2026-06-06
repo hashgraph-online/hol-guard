@@ -16,6 +16,7 @@ assert(
   "approval tab should exist",
 );
 assert(isLocalSettingsTabKey("notifications"), "notifications should be a valid tab key");
+assert(isLocalSettingsTabKey("advanced"), "advanced tab should be a valid tab key");
 assert(!isLocalSettingsTabKey("billing"), "cloud-only tabs should not validate locally");
 
 console.log("settings-ia.test.ts: all tests passed");

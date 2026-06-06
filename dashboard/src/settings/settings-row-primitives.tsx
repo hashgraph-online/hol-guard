@@ -98,6 +98,7 @@ export function SettingsSelectRow({
   disabled = false,
 }: SettingsSelectRowProps) {
   const selectId = useId();
+  const descriptionId = useId();
 
   return (
     <div className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
@@ -106,7 +107,9 @@ export function SettingsSelectRow({
           {label}
         </label>
         {description ? (
-          <p className="guard-settings-caption mt-0.5 text-slate-500">{description}</p>
+          <p id={descriptionId} className="guard-settings-caption mt-0.5 text-slate-500">
+            {description}
+          </p>
         ) : null}
       </div>
       <select
@@ -114,6 +117,7 @@ export function SettingsSelectRow({
         value={value}
         onChange={onChange}
         disabled={disabled}
+        aria-describedby={description ? descriptionId : undefined}
         className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {options.map((option) => (

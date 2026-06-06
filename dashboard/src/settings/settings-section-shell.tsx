@@ -120,7 +120,7 @@ export function SettingsSectionShell({
           <div
             role="tabpanel"
             id={`settings-panel-${activeTab}`}
-            aria-labelledby={`settings-tab-${activeTab}`}
+            aria-label={activeItem ? `${activeItem.label} settings` : undefined}
             className="guard-tab-enter rounded-2xl border border-slate-100 bg-white p-4 sm:p-6"
           >
             {activeItem ? (

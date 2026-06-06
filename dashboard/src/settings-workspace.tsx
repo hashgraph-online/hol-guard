@@ -4,7 +4,6 @@ import {
   HiMiniLockClosed,
   HiMiniCog6Tooth,
   HiMiniCheckCircle,
-  HiMiniInformationCircle,
   HiMiniExclamationTriangle,
   HiMiniBellAlert,
   HiMiniMagnifyingGlass,
@@ -870,7 +869,9 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `guard-diagnostics-${Date.now()}.json`;
+      document.body.appendChild(anchor);
       anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
       setActionMessage("Diagnostics exported.");
       setActionMessageKind("success");
@@ -908,7 +909,9 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `guard-settings-${Date.now()}.json`;
+      document.body.appendChild(anchor);
       anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
       setActionMessage("Settings exported.");
       setActionMessageKind("success");

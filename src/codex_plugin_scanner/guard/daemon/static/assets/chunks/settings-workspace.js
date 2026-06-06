@@ -1388,7 +1388,7 @@ function SettingsSectionShell({
           {
             role: "tabpanel",
             id: `settings-panel-${activeTab}`,
-            "aria-labelledby": `settings-tab-${activeTab}`,
+            "aria-label": activeItem ? `${activeItem.label} settings` : void 0,
             className: "guard-tab-enter rounded-2xl border border-slate-100 bg-white p-4 sm:p-6",
             children: [
               activeItem ? /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mb-5 border-b border-slate-100 pb-4 lg:hidden", children: [
@@ -2182,7 +2182,9 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `guard-diagnostics-${Date.now()}.json`;
+      document.body.appendChild(anchor);
       anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
       setActionMessage("Diagnostics exported.");
       setActionMessageKind("success");
@@ -2218,7 +2220,9 @@ function SettingsWorkspace({ onApprovalGateChange }) {
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `guard-settings-${Date.now()}.json`;
+      document.body.appendChild(anchor);
       anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
       setActionMessage("Settings exported.");
       setActionMessageKind("success");
