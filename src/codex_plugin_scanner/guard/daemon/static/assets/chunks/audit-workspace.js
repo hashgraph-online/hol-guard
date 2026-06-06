@@ -115,7 +115,7 @@ function AuditResultRow({ result, onMarkResolved, onRunRemediation, running, act
     expanded && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 bg-slate-50/40 px-4 py-3 space-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: result.detail }),
       result.remediation && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: result.remediation }),
-      !result.resolved && onMarkResolved && result.remediationAction === null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleResolve, children: "Mark as resolved" })
+      !result.resolved && onMarkResolved && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleResolve, children: "Mark as resolved" })
     ] })
   ] });
 }

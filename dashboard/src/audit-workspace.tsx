@@ -201,7 +201,7 @@ function AuditResultRow({ result, onMarkResolved, onRunRemediation, running, act
           {result.remediation && (
             <p className="text-sm text-brand-dark/70">{result.remediation}</p>
           )}
-          {!result.resolved && onMarkResolved && result.remediationAction === null && (
+          {!result.resolved && onMarkResolved && (
             <ActionButton variant="outline" onClick={handleResolve}>
               Mark as resolved
             </ActionButton>
