@@ -320,6 +320,28 @@ def test_external_tarball_scan_failure_respects_security_level(
     assert expected_message in str(result.packages[0]["reasons"][0]["message"]).lower()
 
 
+def test_external_tarball_scan_failure_ignores_cloud_advisory_block_in_balanced_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
+    _write_text(home_dir / "config.toml", 'security_level = "balanced"\n[risks]\ncloud_advisory = "block"\n')
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(supply_chain_package_eval_module, "_scan_external_tarball", lambda _url: None)
+
+    artifact = _artifact_from_command(
+        "npm install guard-query@https://example.com/guard.tgz?token=demo",
+        workspace=workspace_dir,
+    )
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
+
+    assert result.decision == "ask"
+    assert result.packages[0]["reasons"][0]["code"] == "external_tarball_source"
+
+
 @pytest.mark.parametrize(
     ("command", "lockfile_name", "lockfile_text"),
     [
