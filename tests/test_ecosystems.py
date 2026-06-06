@@ -116,6 +116,34 @@ def test_claude_parse_skips_symlinked_component_files_outside_root(tmp_path: Pat
     assert package.components["commands"] == ("commands/safe.md",)
 
 
+def test_opencode_detect_does_not_treat_nested_workspace_dirs_as_extra_packages(tmp_path: Path) -> None:
+    (tmp_path / ".opencode").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".opencode" / "tools" / ".opencode").mkdir(parents=True, exist_ok=True)
+
+    packages = detect_packages(tmp_path, ecosystem=Ecosystem.OPENCODE)
+
+    assert len(packages) == 1
+    assert packages[0].root_path == tmp_path
+
+
+def test_claude_parse_skips_symlinked_hooks_and_mcp_files(tmp_path: Path) -> None:
+    manifest_path = tmp_path / ".claude-plugin" / "plugin.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text("{}", encoding="utf-8")
+    real_hooks = tmp_path / "real-hooks.json"
+    real_mcp = tmp_path / "real-mcp.json"
+    real_hooks.write_text('{"hook":"safe"}', encoding="utf-8")
+    real_mcp.write_text('{"mcpServers":{}}', encoding="utf-8")
+    _symlink_or_skip(tmp_path / "hooks" / "hooks.json", real_hooks)
+    _symlink_or_skip(tmp_path / ".mcp.json", real_mcp)
+
+    candidate = ClaudeAdapter().detect(tmp_path)[0]
+    package = ClaudeAdapter().parse(candidate)
+
+    assert "hooks" not in package.components
+    assert "mcp_servers" not in package.components
+
+
 def test_scan_claude_with_explicit_ecosystem() -> None:
     result = scan_plugin(
         FIXTURES / "claude-plugin-good",
