@@ -11,8 +11,9 @@ from typing import Any
 
 LOCAL_DASHBOARD_SESSION_VERSION = "guard-local-daemon-session.v1"
 LOCAL_DASHBOARD_SESSION_PREFIX = "gld1"
+LOCAL_DASHBOARD_SESSION_AUDIENCE = "guard-local-daemon"
 DEFAULT_LOCAL_DASHBOARD_SESSION_TTL_SECONDS = 12 * 60 * 60
-_PROTECTED_LOCAL_DASHBOARD_SESSION_CLAIMS = frozenset({"version", "surface", "expires_at"})
+_PROTECTED_LOCAL_DASHBOARD_SESSION_CLAIMS = frozenset({"aud", "version", "surface", "expires_at"})
 
 
 def build_local_dashboard_session_token(
@@ -24,6 +25,7 @@ def build_local_dashboard_session_token(
 ) -> str:
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=max(1, expires_in_seconds))
     payload_data: dict[str, Any] = {
+        "aud": LOCAL_DASHBOARD_SESSION_AUDIENCE,
         "version": LOCAL_DASHBOARD_SESSION_VERSION,
         "surface": surface,
         "expires_at": expires_at.isoformat(),
