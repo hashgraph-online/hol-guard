@@ -3534,7 +3534,10 @@ class GuardStore:
             self._sync_token_ref,
             expected_hash_value,
         )
-        if not secret_candidates:
+        if not any(
+            expected_hash_value is None or _secret_matches_hash(candidate, expected_hash_value)
+            for candidate in secret_candidates
+        ):
             health["state"] = "degraded"
             return health
         health["state"] = "healthy"
