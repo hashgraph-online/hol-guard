@@ -166,6 +166,28 @@ def test_opencode_config_uses_guard_proxy_parses_jsonc_comments(tmp_path: Path) 
     assert opencode_config_uses_guard_proxy(config) is True
 
 
+def test_opencode_config_uses_guard_proxy_rejects_invalid_companion_command(tmp_path: Path) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(
+        json.dumps(
+            {
+                "mcp": {
+                    "hol-guard::chrome-devtools": {
+                        "type": "local",
+                        "command": ["node", "not-a-proxy.js"],
+                    },
+                    "chrome-devtools": {
+                        "type": "local",
+                        "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert opencode_config_uses_guard_proxy(config) is False
+
+
 def test_opencode_config_uses_guard_proxy_detects_companion_server_name(tmp_path: Path) -> None:
     config = tmp_path / "opencode.json"
     config.write_text(

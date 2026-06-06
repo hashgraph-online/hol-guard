@@ -219,29 +219,65 @@ def uninstall_confirmation_token(harness: str) -> str:
     return f"disconnect-{harness}"
 
 
+def _native_mcp_server_names(config_path: Path) -> set[str]:
+    from ...ecosystems.opencode import _load_json_or_jsonc
+
+    payload, parse_error, _ = _load_json_or_jsonc(config_path)
+    if parse_error or not isinstance(payload, dict):
+        return set()
+    mcp = payload.get("mcp")
+    if not isinstance(mcp, dict):
+        return set()
+    return {
+        name
+        for name in mcp
+        if isinstance(name, str) and not name.startswith("hol-guard::")
+    }
+
+
 def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
     from ..adapters.opencode import OpenCodeHarnessAdapter
+    from ..adapters.opencode_artifacts import runtime_config_path
     from ..adapters.opencode_pretool import (
         global_plugin_path,
         opencode_config_has_mcp_servers,
         opencode_config_uses_guard_proxy,
     )
 
-    from ..adapters.opencode_artifacts import runtime_config_path
-
+    adapter = OpenCodeHarnessAdapter()
     managed = store.get_managed_install("opencode") if store is not None else None
-    config_path = OpenCodeHarnessAdapter()._managed_install_config_path(context)
+    config_path = adapter._managed_install_config_path(context)
     shim_path = context.guard_home / "bin" / "guard-opencode"
     plugin_path = global_plugin_path(context)
-    mcp_proxy_configured = opencode_config_uses_guard_proxy(config_path)
-    runtime_overlay_path = runtime_config_path(context)
-    if not mcp_proxy_configured and runtime_overlay_path.is_file():
-        try:
-            runtime_payload = json.loads(runtime_overlay_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            runtime_payload = {}
-        runtime_mcp = runtime_payload.get("mcp")
-        mcp_proxy_configured = isinstance(runtime_mcp, dict) and bool(runtime_mcp)
+    loaded_config_paths = [
+        Path(path)
+        for path in adapter.detect(context).config_paths
+        if Path(path).is_file()
+    ] or ([config_path] if config_path.is_file() else [])
+    has_loaded_mcp = any(opencode_config_has_mcp_servers(path) for path in loaded_config_paths)
+    if not has_loaded_mcp:
+        mcp_proxy_configured = False
+    else:
+        mcp_proxy_configured = all(
+            (not opencode_config_has_mcp_servers(path)) or opencode_config_uses_guard_proxy(path)
+            for path in loaded_config_paths
+        )
+        runtime_overlay_path = runtime_config_path(context)
+        if not mcp_proxy_configured and runtime_overlay_path.is_file():
+            try:
+                runtime_payload = json.loads(runtime_overlay_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                runtime_payload = {}
+            runtime_mcp = runtime_payload.get("mcp")
+            if isinstance(runtime_mcp, dict) and runtime_mcp:
+                managed_server_names = {
+                    name
+                    for path in loaded_config_paths
+                    if opencode_config_has_mcp_servers(path)
+                    for name in _native_mcp_server_names(path)
+                }
+                mcp_proxy_configured = managed_server_names.issubset(set(runtime_mcp))
+    has_unproxied_mcp = has_loaded_mcp and not mcp_proxy_configured
     warnings: list[str] = []
     if not (managed and managed.get("active")):
         warnings.append("Run `hol-guard install opencode` to activate Guard-managed OpenCode protection.")
@@ -253,7 +289,7 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
         warnings.append(
             "OpenCode root config is missing at ~/.config/opencode/opencode.json. Re-run `hol-guard install opencode`."
         )
-    if opencode_config_has_mcp_servers(config_path) and not mcp_proxy_configured:
+    if has_unproxied_mcp:
         warnings.append(
             "OpenCode MCP servers are not routed through hol-guard companion servers or the runtime overlay. "
             "Re-run `hol-guard install opencode`."

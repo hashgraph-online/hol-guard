@@ -348,7 +348,7 @@ class TestOpenCodeInstall:
         runtime_chrome = runtime_config["mcp"]["chrome-devtools"]
         assert "opencode-mcp-proxy" in json.dumps(runtime_chrome)
 
-    def test_install_promotes_workspace_mcp_servers_to_global_config(self, tmp_path: Path) -> None:
+    def test_install_does_not_promote_project_mcp_to_global_config(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
         assert ctx.workspace_dir is not None
         workspace_config = ctx.workspace_dir / "opencode.json"
@@ -359,8 +359,17 @@ class TestOpenCodeInstall:
         global_config = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
         OpenCodeHarnessAdapter().install(ctx)
         managed_config = json.loads(global_config.read_text(encoding="utf-8"))
-        assert managed_config["mcp"]["project-mcp"]["command"] == ["node", "project-mcp.js"]
-        assert "hol-guard::project-mcp" in managed_config["mcp"]
+        assert "project-mcp" not in managed_config.get("mcp", {})
+        assert "hol-guard::project-mcp" not in managed_config.get("mcp", {})
+
+    def test_install_preserves_explicit_bash_ask_permission(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path)
+        target = OpenCodeHarnessAdapter._managed_install_config_path(ctx)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps({"permission": {"bash": "ask"}}), encoding="utf-8")
+        OpenCodeHarnessAdapter().install(ctx)
+        managed_config = json.loads(target.read_text(encoding="utf-8"))
+        assert managed_config["permission"]["bash"]["*"] == "ask"
 
     def test_install_writes_global_root_config_even_with_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
@@ -376,9 +385,6 @@ class TestOpenCodeInstall:
         assert Path(str(result["managed_config_path"])) == global_config
         managed_config = json.loads(global_config.read_text(encoding="utf-8"))
         assert managed_config["$schema"] == "https://opencode.ai/config.json"
-        assert "./plugins/hol-guard-pretool.ts" in json.dumps(
-            managed_config.get("plugin", managed_config.get("plugins"))
-        )
         assert managed_config["permission"]["bash"]["rm -rf *"] == "deny"
         assert "hol-guard::chrome-devtools" in managed_config["mcp"]
         assert workspace_config.read_text(encoding="utf-8") == '{"mcp": {}}'
@@ -519,8 +525,9 @@ class TestOpenCodePermissionRules:
         managed = managed_stdio_servers(detection)
         rules = OpenCodeHarnessAdapter._proxy_permission_rules(ctx, managed, set())
         target_rule_keys = [k for k in rules if "target-srv" in k]
-        assert len(target_rule_keys) == 1
-        assert rules[target_rule_keys[0]] == "ask"
+        assert len(target_rule_keys) == 2
+        assert rules["target-srv_*"] == "ask"
+        assert rules["hol-guard::target-srv_*"] == "ask"
 
 
 class TestOpenCodeLaunchEnvironment:

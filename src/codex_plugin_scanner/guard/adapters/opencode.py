@@ -35,7 +35,6 @@ from .opencode_artifacts import (
 from .opencode_pretool import install_pretool_plugin, remove_pretool_plugin
 
 _OPENCODE_SCHEMA = "https://opencode.ai/config.json"
-_GUARD_PRETOOL_PLUGIN_REF = "./plugins/hol-guard-pretool.ts"
 _GUARD_MCP_COMPANION_PREFIX = "hol-guard::"
 _DEFAULT_BASH_PERMISSION: dict[str, object] = {
     "*": "allow",
@@ -237,7 +236,8 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "Guard installed an OpenCode pretool plugin that reviews bash and shell commands through "
             "hol-guard hook before execution.",
             "Guard updated the global OpenCode root config at ~/.config/opencode/opencode.json with "
-            "pretool plugin registration, baseline bash permission rules, and hol-guard:: MCP companion servers.",
+            "baseline bash permission rules and hol-guard:: MCP companion servers, and installed the "
+            "pretool plugin under ~/.config/opencode/plugins/.",
             "Guard added an OpenCode runtime overlay that keeps managed MCP tools on native ask and routes "
             "managed local MCP servers through Guard runtime interception when you launch through Guard.",
             "Use hol-guard:: MCP servers in OpenCode for Guard-proxied tools, or launch through guard-opencode "
@@ -385,7 +385,13 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             if not server.enabled:
                 continue
             rules[f"{server.name}_*"] = "ask"
+            if server.source_scope != "project":
+                rules[f"{_guard_mcp_companion_name(server.name)}_*"] = "ask"
         return rules
+
+    @staticmethod
+    def _skip_global_managed_server(server: ManagedMcpServer) -> bool:
+        return server.source_scope == "project"
 
     @staticmethod
     def _should_skip_workspace_override(
@@ -615,30 +621,29 @@ __all__ = ["OpenCodeHarnessAdapter"]
 
 def _apply_install_baseline(payload: dict[str, object]) -> None:
     payload.setdefault("$schema", _OPENCODE_SCHEMA)
-    _register_guard_pretool_plugin(payload)
-
-
-def _register_guard_pretool_plugin(payload: dict[str, object]) -> None:
-    for key in ("plugin", "plugins"):
-        existing = payload.get(key)
-        if isinstance(existing, list):
-            if not any("hol-guard-pretool" in str(item) for item in existing):
-                existing.append(_GUARD_PRETOOL_PLUGIN_REF)
-            payload[key] = existing
-            return
-    payload["plugin"] = [_GUARD_PRETOOL_PLUGIN_REF]
 
 
 def _merge_default_bash_permission(permission: dict[str, object]) -> dict[str, object]:
     bash = permission.get("bash")
+    if isinstance(bash, str):
+        merged_bash = dict(_DEFAULT_BASH_PERMISSION)
+        merged_bash["*"] = bash
+        permission["bash"] = merged_bash
+        return permission
     if isinstance(bash, dict):
         merged_bash = dict(_DEFAULT_BASH_PERMISSION)
         for key, value in bash.items():
             if isinstance(key, str):
                 merged_bash[key] = value
         permission["bash"] = merged_bash
-    else:
-        permission["bash"] = dict(_DEFAULT_BASH_PERMISSION)
+        return permission
+    wildcard = permission.get("*")
+    if isinstance(wildcard, str):
+        merged_bash = dict(_DEFAULT_BASH_PERMISSION)
+        merged_bash["*"] = wildcard
+        permission["bash"] = merged_bash
+        return permission
+    permission["bash"] = dict(_DEFAULT_BASH_PERMISSION)
     return permission
 
 
@@ -654,6 +659,8 @@ def _ensure_native_mcp_entries(
     context: HarnessContext,
 ) -> None:
     for server in servers:
+        if OpenCodeHarnessAdapter._skip_global_managed_server(server):
+            continue
         if OpenCodeHarnessAdapter._should_skip_workspace_override(
             context=context,
             server=server,
@@ -662,11 +669,14 @@ def _ensure_native_mcp_entries(
             continue
         if server.name in persisted or not server.command:
             continue
-        persisted[server.name] = {
+        entry: dict[str, object] = {
             "type": "local",
             "command": [server.command, *server.args],
             "enabled": server.enabled,
         }
+        if server.env:
+            entry["environment"] = dict(server.env)
+        persisted[server.name] = entry
 
 
 def _persisted_mcp_with_guard_companions(
@@ -683,7 +693,9 @@ def _persisted_mcp_with_guard_companions(
         existing_workspace_server_names=existing_workspace_server_names,
         context=context,
     )
-    managed_names = {server.name for server in servers}
+    managed_names = {
+        server.name for server in servers if not OpenCodeHarnessAdapter._skip_global_managed_server(server)
+    }
     stale_companions = [
         name
         for name in persisted
@@ -694,6 +706,8 @@ def _persisted_mcp_with_guard_companions(
     for name in stale_companions:
         persisted.pop(name, None)
     for server in servers:
+        if OpenCodeHarnessAdapter._skip_global_managed_server(server):
+            continue
         if OpenCodeHarnessAdapter._should_skip_workspace_override(
             context=context,
             server=server,
@@ -710,7 +724,7 @@ def _persisted_mcp_with_guard_companions(
                     guard_home=str(context.guard_home),
                     server=server,
                     home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-                    workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+                    workspace=None,
                 ),
             ],
             "enabled": server.enabled,

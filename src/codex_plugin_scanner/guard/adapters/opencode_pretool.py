@@ -152,7 +152,7 @@ def _pretool_hook_launcher_code(*, package_root: str) -> str:
     return (
         "import json,os,sys;"
         f"trusted={json.dumps(trusted_entries)};"
-        "sys.path=[entry for entry in sys.path if entry and entry != os.getcwd()];"
+        "sys.path=[entry for entry in sys.path if entry and os.path.realpath(entry) != os.path.realpath(os.getcwd())];"
         "sys.path[:0]=trusted;"
         "from codex_plugin_scanner.cli import main;"
         f"raise SystemExit(main(json.loads(os.environ[{_HOOK_ARGV_ENV!r}])))"
@@ -238,11 +238,15 @@ def opencode_config_uses_guard_proxy(config_path: Path) -> bool:
     if not isinstance(mcp, dict):
         return False
     for name, server in mcp.items():
-        if isinstance(name, str) and name.startswith("hol-guard::"):
-            return True
-        if not isinstance(server, dict):
+        if not isinstance(name, str) or not isinstance(server, dict):
             continue
         command = server.get("command")
+        if name.startswith("hol-guard::"):
+            if isinstance(command, list) and any("opencode-mcp-proxy" in str(part) for part in command):
+                return True
+            if isinstance(command, str) and "opencode-mcp-proxy" in command:
+                return True
+            continue
         if isinstance(command, list) and any("opencode-mcp-proxy" in str(part) for part in command):
             return True
         if isinstance(command, str) and "opencode-mcp-proxy" in command:
