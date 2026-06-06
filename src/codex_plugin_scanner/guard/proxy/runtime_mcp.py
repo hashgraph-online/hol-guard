@@ -32,6 +32,7 @@ from ..runtime.signals import RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..store import GuardStore
 from .stdio import (
+    ProxyIoTimeoutError,
     _blocked_tool_response,
     _is_timeout_response,
     _quarantine_process,
@@ -745,7 +746,7 @@ class RuntimeMcpGuardProxy:
             timeout_seconds = self._child_response_timeout_seconds()
             try:
                 line = _readline_with_timeout(child_stdout, timeout_seconds, source="child_response")
-            except TimeoutError:
+            except ProxyIoTimeoutError:
                 active_process = self._active_process
                 if active_process is not None:
                     _quarantine_process(active_process)
@@ -835,8 +836,13 @@ class RuntimeMcpGuardProxy:
                 return
             timeout_seconds = self._nested_request_timeout_seconds()
             try:
-                line = _readline_with_timeout(client_input, timeout_seconds, source="nested_client_response")
-            except TimeoutError:
+                line = _readline_with_timeout(
+                    client_input,
+                    timeout_seconds,
+                    source="nested_client_response",
+                    allow_background_wait=False,
+                )
+            except ProxyIoTimeoutError:
                 self._forward_notification(
                     _timeout_response(
                         request_id,
@@ -895,8 +901,13 @@ class RuntimeMcpGuardProxy:
                 return _approval_payload(buffered_response)
             timeout_seconds = self._inline_approval_timeout_seconds()
             try:
-                line = _readline_with_timeout(input_stream, timeout_seconds, source="inline_approval")
-            except TimeoutError:
+                line = _readline_with_timeout(
+                    input_stream,
+                    timeout_seconds,
+                    source="inline_approval",
+                    allow_background_wait=False,
+                )
+            except ProxyIoTimeoutError:
                 return {"action": "cancel", "reason": "timeout"}
             if not line:
                 return {"action": "cancel"}

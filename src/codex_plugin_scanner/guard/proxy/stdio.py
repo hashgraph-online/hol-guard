@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import queue
+import select
 import subprocess
 import threading
 from contextlib import suppress
@@ -22,6 +24,7 @@ from ..store import GuardStore
 
 _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0
 _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
+_GUARD_PROXY_TIMEOUT_ERROR_CODE = -32800
 
 
 class ProxyIoTimeoutError(TimeoutError):
@@ -93,9 +96,10 @@ def _timeout_response(
         "jsonrpc": "2.0",
         "id": message_id,
         "error": {
-            "code": -32002,
+            "code": _GUARD_PROXY_TIMEOUT_ERROR_CODE,
             "message": message,
             "data": {
+                "guard_timeout": True,
                 "source": source,
                 "timeout_seconds": timeout_seconds,
             },
@@ -107,10 +111,41 @@ def _is_timeout_response(payload: object) -> bool:
     if not isinstance(payload, dict):
         return False
     error = payload.get("error")
-    return isinstance(error, dict) and error.get("code") == -32002
+    if not isinstance(error, dict):
+        return False
+    data = error.get("data")
+    return error.get("code") == _GUARD_PROXY_TIMEOUT_ERROR_CODE and isinstance(data, dict) and data.get(
+        "guard_timeout"
+    ) is True
 
 
-def _readline_with_timeout(stream: Any, timeout_seconds: float, *, source: str) -> str:
+def _stream_fileno(stream: Any) -> int | None:
+    try:
+        fileno = stream.fileno()
+    except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+        return None
+    return fileno if isinstance(fileno, int) and fileno >= 0 else None
+
+
+def _readline_with_timeout(
+    stream: Any,
+    timeout_seconds: float,
+    *,
+    source: str,
+    allow_background_wait: bool = True,
+) -> str:
+    fileno = None if allow_background_wait else _stream_fileno(stream)
+    if fileno is not None:
+        try:
+            ready, _, _ = select.select([fileno], [], [], timeout_seconds)
+        except (OSError, ValueError):
+            ready = None
+        else:
+            if not ready:
+                raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds)
+            return stream.readline()
+    if not allow_background_wait:
+        return stream.readline()
     result_queue: queue.Queue[tuple[bool, object]] = queue.Queue(maxsize=1)
 
     def _reader() -> None:

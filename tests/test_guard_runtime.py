@@ -15080,7 +15080,8 @@ def test_stdio_proxy_returns_timeout_error_when_child_server_hangs(monkeypatch):
         ]
     )
 
-    assert result["responses"][0]["error"]["code"] == -32002
+    assert result["responses"][0]["error"]["code"] == -32800
+    assert result["responses"][0]["error"]["data"]["guard_timeout"] is True
     assert result["responses"][0]["error"]["data"]["source"] == "child_response"
     assert result["events"][0]["decision"] == "timeout"
     assert isinstance(result["return_code"], int)
