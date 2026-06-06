@@ -2693,6 +2693,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": str(error)}, status=400)
             return
+        response["auth_token"] = self.server.auth_token  # type: ignore[attr-defined]
         self._write_json(response)
 
     def _handle_client_attach(self, payload: dict[str, object]) -> None:
