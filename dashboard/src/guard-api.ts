@@ -992,7 +992,15 @@ export async function exportSettings(): Promise<GuardSettingsExport> {
   return readJson<GuardSettingsExport>("/v1/settings/export");
 }
 
-export async function importSettings(settingsExport: GuardSettingsExport): Promise<GuardSettingsPayload> {
+export type ApprovalGateWriteProof = {
+  approval_password?: string;
+  approval_totp_code?: string;
+};
+
+export async function importSettings(
+  settingsExport: GuardSettingsExport,
+  proof?: ApprovalGateWriteProof,
+): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     return { guard_home: "~/.hol-guard", config_path: "~/.hol-guard/config.toml", settings: settingsExport.settings };
   }
@@ -1002,11 +1010,15 @@ export async function importSettings(settingsExport: GuardSettingsExport): Promi
       "Content-Type": "application/json",
       ...guardAuthHeaders()
     },
-    body: JSON.stringify(settingsExport)
+    body: JSON.stringify({
+      ...settingsExport,
+      ...(proof?.approval_password ? { approval_password: proof.approval_password } : {}),
+      ...(proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}),
+    })
   });
 }
 
-export async function resetSettings(): Promise<GuardSettingsPayload> {
+export async function resetSettings(proof?: ApprovalGateWriteProof): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
@@ -1016,7 +1028,11 @@ export async function resetSettings(): Promise<GuardSettingsPayload> {
       "Content-Type": "application/json",
       ...guardAuthHeaders()
     },
-    body: JSON.stringify({ confirm: "reset-local-settings" })
+    body: JSON.stringify({
+      confirm: "reset-local-settings",
+      ...(proof?.approval_password ? { approval_password: proof.approval_password } : {}),
+      ...(proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}),
+    })
   });
 }
 
