@@ -9,6 +9,7 @@ import pytest
 from codex_plugin_scanner.checks.gemini import check_context_and_mcp
 from codex_plugin_scanner.checks.opencode import check_opencode_config, check_opencode_plugins
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.ecosystems.claude import ClaudeAdapter
 from codex_plugin_scanner.ecosystems.detect import detect_packages
 from codex_plugin_scanner.ecosystems.opencode import OpenCodeAdapter
 from codex_plugin_scanner.ecosystems.types import Ecosystem, NormalizedPackage
@@ -16,6 +17,14 @@ from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _symlink_or_skip(link_path: Path, target: Path) -> None:
+    link_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        link_path.symlink_to(target, target_is_directory=target.is_dir())
+    except (NotImplementedError, OSError):
+        pytest.skip("symlinks are not supported in this environment")
 
 
 def test_detect_claude_package() -> None:
@@ -34,6 +43,77 @@ def test_detect_opencode_package() -> None:
     packages = detect_packages(FIXTURES / "opencode-good")
     ecosystems = {package.ecosystem for package in packages}
     assert Ecosystem.OPENCODE in ecosystems
+
+
+def test_detect_packages_skips_symlinked_manifest_files_outside_root(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside-ecosystem-manifests"
+    shutil.rmtree(outside, ignore_errors=True)
+    outside.mkdir(parents=True, exist_ok=True)
+    (outside / "plugin.json").write_text("{}", encoding="utf-8")
+    (outside / "marketplace.json").write_text("{}", encoding="utf-8")
+    (outside / "gemini-extension.json").write_text("{}", encoding="utf-8")
+    (outside / "opencode.json").write_text("{}", encoding="utf-8")
+
+    _symlink_or_skip(tmp_path / "codex-plugin" / ".codex-plugin" / "plugin.json", outside / "plugin.json")
+    _symlink_or_skip(tmp_path / "claude-plugin" / ".claude-plugin" / "plugin.json", outside / "plugin.json")
+    _symlink_or_skip(tmp_path / "claude-market" / ".claude-plugin" / "marketplace.json", outside / "marketplace.json")
+    _symlink_or_skip(tmp_path / "gemini-ext" / "gemini-extension.json", outside / "gemini-extension.json")
+    _symlink_or_skip(tmp_path / "opencode-workspace" / "opencode.json", outside / "opencode.json")
+
+    assert detect_packages(tmp_path) == []
+
+
+def test_detect_packages_skips_nested_symlinked_directories_outside_root(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside-ecosystem-dir"
+    shutil.rmtree(outside, ignore_errors=True)
+    (outside / "nested" / ".codex-plugin").mkdir(parents=True, exist_ok=True)
+    (outside / "nested" / ".codex-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
+
+    _symlink_or_skip(tmp_path / "linked" / "outside", outside)
+
+    assert detect_packages(tmp_path) == []
+
+
+def test_detect_packages_ignores_unreadable_entries_without_crashing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    good_manifest = tmp_path / "good-plugin" / ".codex-plugin" / "plugin.json"
+    good_manifest.parent.mkdir(parents=True, exist_ok=True)
+    good_manifest.write_text("{}", encoding="utf-8")
+    blocked_dir = tmp_path / "blocked"
+    blocked_dir.mkdir()
+
+    original_iterdir = Path.iterdir
+
+    def _guarded_iterdir(self: Path):
+        if self == blocked_dir:
+            raise OSError("denied")
+        yield from original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", _guarded_iterdir)
+
+    packages = detect_packages(tmp_path)
+
+    assert len(packages) == 1
+    assert packages[0].ecosystem == Ecosystem.CODEX
+
+
+def test_claude_parse_skips_symlinked_component_files_outside_root(tmp_path: Path) -> None:
+    manifest_path = tmp_path / ".claude-plugin" / "plugin.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text("{}", encoding="utf-8")
+    commands_dir = tmp_path / "commands"
+    commands_dir.mkdir()
+    (commands_dir / "safe.md").write_text("safe", encoding="utf-8")
+    outside = tmp_path.parent / "outside-command.md"
+    outside.write_text("secret", encoding="utf-8")
+    _symlink_or_skip(commands_dir / "escape.md", outside)
+
+    candidate = ClaudeAdapter().detect(tmp_path)[0]
+    package = ClaudeAdapter().parse(candidate)
+
+    assert package.components["commands"] == ("commands/safe.md",)
 
 
 def test_scan_claude_with_explicit_ecosystem() -> None:
