@@ -195,6 +195,20 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
 _STATIC_DIR = Path(__file__).with_name("static")
 _INDEX_PATH = _STATIC_DIR / "index.html"
 _ENTRY_PATH = _STATIC_DIR / "assets" / "guard-dashboard.js"
+_DASHBOARD_CSP = "; ".join(
+    (
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data:",
+        "font-src 'self' data:",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+    )
+)
 _ROOT_STATIC_FILES = {
     "/favicon.svg",
     "/favicon.ico",
@@ -3834,6 +3848,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
@@ -3846,6 +3862,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store, max-age=0")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
+            self.send_header("Content-Security-Policy", _DASHBOARD_CSP)
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(encoded)
             return

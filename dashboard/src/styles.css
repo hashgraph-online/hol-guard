@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -69,8 +68,8 @@
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
   --color-ring-offset-background: hsl(var(--background-hsl));
-  --font-sans: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 body {
@@ -85,6 +84,42 @@ body {
 
 #guard-dashboard-root {
   min-height: 100vh;
+}
+
+.guard-loading-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(180deg, #fcfdff 0%, #f7f8fb 100%);
+  color: #3f4174;
+}
+
+.guard-loading-shell__inner {
+  text-align: center;
+}
+
+.guard-loading-shell__eyebrow {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5599fe;
+}
+
+.guard-loading-shell__title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-family: var(--font-mono);
+}
+
+.guard-loading-shell__copy {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: rgba(63, 65, 116, 0.5);
 }
 
 @keyframes guard-enter {
