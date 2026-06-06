@@ -626,6 +626,14 @@ def test_sync_credential_health_reports_backend_and_workspace(tmp_path, monkeypa
         "workspace_id": "workspace-123",
     }
 
+    sync_keychain[("hol-guard.sync", keychain_store._sync_token_ref)] = "tampered-secret"
+    assert keychain_store.get_sync_credential_health() == {
+        "configured": True,
+        "state": "degraded",
+        "backend": "keychain",
+        "fallback_backend": "encrypted-file",
+    }
+
 
 def test_oauth_local_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
