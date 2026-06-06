@@ -1,12 +1,10 @@
 import { useMemo, useState, useCallback } from "react";
-import type { ChangeEvent } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniExclamationTriangle,
   HiMiniCheckCircle,
   HiMiniXCircle,
   HiMiniArrowPath,
-  HiMiniInformationCircle,
   HiMiniChevronDown,
   HiMiniChevronUp,
 } from "react-icons/hi2";
@@ -19,11 +17,6 @@ import type {
   PackageManagerProtection,
 } from "./guard-types";
 import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
-
-export type SupplyChainFilterState = {
-  statusFilter: "all" | "protected" | "unprotected";
-  managerFilter: string;
-};
 
 type ManagerCoverageStatus = "protected" | "restart_required" | "path_repair" | "unprotected";
 
@@ -183,42 +176,8 @@ export function SupplyChainWorkspace({
   onGoHome,
   onRuntimeRefresh,
 }: SupplyChainWorkspaceProps) {
-  const [filter, setFilter] = useState<SupplyChainFilterState>({
-    statusFilter: "all",
-    managerFilter: "",
-  });
-
-  const handleManagerFilterChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    setFilter((f) => ({ ...f, managerFilter: e.target.value }));
-  }, []);
-
-  const handleStatusFilterChange = useCallback((status: SupplyChainFilterState["statusFilter"]) => {
-    setFilter((f) => ({ ...f, statusFilter: status }));
-  }, []);
-
   const stats = useMemo(() => buildSupplyChainStats(snapshot), [snapshot]);
   const protection = snapshot.supply_chain?.package_manager_protection;
-
-  const allManagers = useMemo(() => {
-    if (!protection) return [];
-    const all = new Set([...protection.protected_managers, ...protection.unprotected_managers]);
-    return Array.from(all).sort();
-  }, [protection]);
-
-  const filteredManagers = useMemo(() => {
-    return allManagers.filter((mgr) => {
-      const matchesText =
-        filter.managerFilter === "" ||
-        mgr.toLowerCase().includes(filter.managerFilter.toLowerCase());
-      const isProtected = resolveManagerCoverageStatus(protection, mgr) === "protected";
-      const matchesStatus =
-        filter.statusFilter === "all" ||
-        (filter.statusFilter === "protected" && isProtected) ||
-        (filter.statusFilter === "unprotected" && !isProtected);
-      return matchesText && matchesStatus;
-    });
-  }, [allManagers, filter, protection]);
-
   const managedInstalls = useMemo(
     () => snapshot.managed_installs ?? [],
     [snapshot.managed_installs],
@@ -267,104 +226,6 @@ export function SupplyChainWorkspace({
       </div>
 
       <PackageFirewallPanel approvalGate={approvalGate} onStateChanged={onRuntimeRefresh} />
-
-      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <SectionLabel>Coverage by manager</SectionLabel>
-          <p className="mt-1 text-sm text-slate-500">
-            Live protection state and next activation step for each supported package manager.
-          </p>
-        </div>
-
-        <div className="border-b border-slate-100 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-              <HiMiniInformationCircle className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-              <input
-                type="search"
-                placeholder="Filter by manager..."
-                value={filter.managerFilter}
-                onChange={handleManagerFilterChange}
-                aria-label="Filter package managers"
-                className="bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-40"
-              />
-            </div>
-            {(["all", "protected", "unprotected"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => handleStatusFilterChange(s)}
-                aria-pressed={filter.statusFilter === s}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
-                  filter.statusFilter === s
-                    ? "bg-brand-blue text-white"
-                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {s.charAt(0).toUpperCase() + s.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {filteredManagers.length === 0 ? (
-          <EmptyState
-            title="No package managers found"
-            body="No package managers match the current filter, or Guard has not detected any on this machine."
-            tone="teach"
-          />
-        ) : (
-          <div role="table" aria-label="Package manager firewall status">
-            <div className="grid grid-cols-[1fr_auto] gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2" role="row">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
-                Manager
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400" role="columnheader">
-                Status
-              </span>
-            </div>
-            <div role="rowgroup">
-              {filteredManagers.map((mgr) => {
-                const status = resolveManagerCoverageStatus(protection, mgr);
-                return (
-                  <div
-                    key={mgr}
-                    role="row"
-                    className="grid grid-cols-[1fr_auto] gap-2 border-b border-slate-100 px-4 py-2.5 last:border-b-0"
-                  >
-                    <span className="text-sm font-mono text-brand-dark" role="cell">
-                      {mgr}
-                    </span>
-                    <span role="cell">
-                      {status === "protected" ? (
-                        <Tag tone="green">
-                          <HiMiniCheckCircle className="h-3.5 w-3.5 mr-1 inline" aria-hidden="true" />
-                          Protected
-                        </Tag>
-                      ) : status === "restart_required" ? (
-                        <Tag tone="blue">
-                          <HiMiniArrowPath className="h-3.5 w-3.5 mr-1 inline" aria-hidden="true" />
-                          Restart required
-                        </Tag>
-                      ) : status === "path_repair" ? (
-                        <Tag tone="attention">
-                          <HiMiniExclamationTriangle className="h-3.5 w-3.5 mr-1 inline" aria-hidden="true" />
-                          Needs PATH repair
-                        </Tag>
-                      ) : (
-                        <Tag tone="attention">
-                          <HiMiniExclamationTriangle className="h-3.5 w-3.5 mr-1 inline" aria-hidden="true" />
-                          Unprotected
-                        </Tag>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
