@@ -254,6 +254,7 @@ def test_update_does_not_skip_local_wheel_install(monkeypatch: pytest.MonkeyPatc
     wheel = tmp_path / "hol-guard.whl"
     wheel.write_bytes(b"fake-wheel")
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.345")
     monkeypatch.setattr(
         update_commands,
         "_direct_url_payload",
