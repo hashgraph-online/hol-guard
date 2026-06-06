@@ -1095,7 +1095,7 @@ def test_guard_prompt_artifact_workspace_scope_approval_targets_workspace(monkey
     )
 
     assert approval_request["workspace"] == str(workspace_dir)
-    assert approval_request["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
+    assert approval_request["approval_url"].startswith("http://127.0.0.1:4455/requests/")
     assert approval_request["review_command"].startswith("hol-guard approvals approve ")
     assert "http://127.0.0.1:4455" in output["review_hint"]
 
@@ -1175,7 +1175,7 @@ def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, caps
     assert rc == 1
     assert output["artifact_type"] == "prompt_request"
     assert prompt_request["artifact_type"] == "prompt_request"
-    assert prompt_request["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
+    assert prompt_request["approval_url"].startswith("http://127.0.0.1:4455/requests/")
 
 
 def test_guard_run_allows_debug_prompt_with_quoted_publish_error(monkeypatch, tmp_path, capsys):

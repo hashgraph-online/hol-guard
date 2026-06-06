@@ -50,6 +50,8 @@ from ..approvals import (
     approval_delivery_payload,
     approval_prompt_flow,
     first_approval_url,
+    primary_approval_request,
+    primary_approval_url,
     queue_blocked_approvals,
     wait_for_approval_requests,
 )
@@ -3082,6 +3084,11 @@ def run_guard_command(
                     else []
                 )
             response_payload["approval_requests"] = queued
+            _attach_primary_approval_link(
+                response_payload,
+                harness=_optional_string(args.harness) or args.harness,
+                approval_center_url=approval_center_url,
+            )
             response_payload["approval_center_url"] = approval_center_url
             response_payload["review_hint"] = approval_center_hint(
                 context=context,
@@ -3619,6 +3626,11 @@ def run_guard_command(
                         )
                         response_payload["operation_id"] = str(operation["operation_id"])
                     response_payload["approval_requests"] = queued
+                    _attach_primary_approval_link(
+                        response_payload,
+                        harness=_optional_string(args.harness) or args.harness,
+                        approval_center_url=approval_center_url,
+                    )
                     response_payload["approval_center_url"] = approval_center_url
                     response_payload["review_hint"] = approval_center_hint(
                         context=context,
@@ -4157,9 +4169,44 @@ def _codex_pretooluse_live_wait_candidate(payload: Mapping[str, object] | None) 
     )
 
 
+def _attach_primary_approval_link(
+    response_payload: dict[str, object],
+    *,
+    harness: str,
+    approval_center_url: str | None,
+) -> None:
+    queued = response_payload.get("approval_requests")
+    if not isinstance(queued, list):
+        return
+    primary = primary_approval_request(queued, harness=harness)
+    if primary is None:
+        return
+    request_id = primary.get("request_id")
+    if isinstance(request_id, str) and request_id.strip():
+        response_payload["primary_approval_request_id"] = request_id.strip()
+    review_url = primary_approval_url(
+        queued,
+        harness=harness,
+        approval_center_url=approval_center_url,
+    )
+    if review_url is not None:
+        response_payload["primary_approval_url"] = review_url
+
+
 def _open_codex_live_approval(response_payload: Mapping[str, object]) -> None:
     queued = response_payload.get("approval_requests")
-    review_url = first_approval_url(queued) if isinstance(queued, list) else None
+    review_url = (
+        _optional_string(response_payload.get("primary_approval_url"))
+        or (
+            first_approval_url(
+                queued,
+                harness=_optional_string(response_payload.get("harness")),
+                approval_center_url=_optional_string(response_payload.get("approval_center_url")),
+            )
+            if isinstance(queued, list)
+            else None
+        )
+    )
     if not review_url:
         approval_center_url = response_payload.get("approval_center_url")
         review_url = approval_center_url.strip() if isinstance(approval_center_url, str) else None
@@ -5113,8 +5160,19 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
     if not isinstance(approval_center_url, str) or not approval_center_url.strip():
         return None
     queued = response_payload.get("approval_requests")
-    review_url = first_approval_url(queued) if isinstance(queued, list) else None
-    review_url = review_url or approval_center_url.strip()
+    review_url = (
+        _optional_string(response_payload.get("primary_approval_url"))
+        or (
+            first_approval_url(
+                queued,
+                harness=harness,
+                approval_center_url=approval_center_url.strip(),
+            )
+            if isinstance(queued, list)
+            else None
+        )
+        or approval_center_url.strip()
+    )
     harness_label = {
         "claude-code": "Claude Code",
         "codex": "Codex",
@@ -5132,7 +5190,18 @@ def _localize_pending_approval_copy(response_payload: dict[str, object], *, harn
     if review_context is None:
         return
     queued = response_payload.get("approval_requests")
-    review_url = first_approval_url(queued) if isinstance(queued, list) else None
+    review_url = (
+        _optional_string(response_payload.get("primary_approval_url"))
+        or (
+            first_approval_url(
+                queued,
+                harness=harness,
+                approval_center_url=_optional_string(response_payload.get("approval_center_url")),
+            )
+            if isinstance(queued, list)
+            else None
+        )
+    )
     approval_center_url = response_payload.get("approval_center_url")
     if review_url is None and isinstance(approval_center_url, str) and approval_center_url.strip():
         review_url = approval_center_url.strip()

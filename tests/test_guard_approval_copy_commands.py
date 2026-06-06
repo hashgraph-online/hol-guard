@@ -9,7 +9,13 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.approvals import approval_center_hint, first_approval_url
+from codex_plugin_scanner.guard.approvals import (
+    approval_center_hint,
+    build_approval_request_url,
+    first_approval_url,
+    primary_approval_request,
+    primary_approval_url,
+)
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -47,7 +53,7 @@ def _make_request(
         source_scope="project",
         config_path="/tmp/config.toml",
         review_command=f"hol-guard approvals approve {request_id}",
-        approval_url=approval_url or f"http://127.0.0.1:5474/approvals/{request_id}",
+        approval_url=approval_url or f"http://127.0.0.1:5474/requests/{request_id}",
     )
 
 
@@ -102,10 +108,48 @@ def test_first_approval_url_ignores_malformed_queue_items() -> None:
     queued = [
         "not-a-request",
         {"approval_url": "  "},
-        {"approval_url": "http://127.0.0.1:5474/approvals/req-ok"},
+        {"approval_url": "http://127.0.0.1:5474/requests/req-ok", "harness": "cursor"},
     ]
 
-    assert first_approval_url(queued) == "http://127.0.0.1:5474/approvals/req-ok"
+    assert (
+        first_approval_url(
+            queued,
+            harness="cursor",
+            approval_center_url="http://127.0.0.1:5474",
+        )
+        == "http://127.0.0.1:5474/requests/req-ok"
+    )
+
+
+def test_primary_approval_request_prefers_matching_harness() -> None:
+    queued = [
+        {
+            "request_id": "codex-req",
+            "harness": "codex",
+            "approval_url": "http://127.0.0.1:5474/requests/codex-req",
+        },
+        {
+            "request_id": "cursor-req",
+            "harness": "cursor",
+            "approval_url": "http://127.0.0.1:5474/requests/cursor-req",
+        },
+    ]
+
+    selected = primary_approval_request(queued, harness="cursor")
+
+    assert selected is not None
+    assert selected["request_id"] == "cursor-req"
+    assert (
+        primary_approval_url(queued, harness="cursor", approval_center_url="http://127.0.0.1:5474")
+        == "http://127.0.0.1:5474/requests/cursor-req"
+    )
+
+
+def test_build_approval_request_url_uses_requests_route() -> None:
+    assert (
+        build_approval_request_url("http://127.0.0.1:5474", "abc123")
+        == "http://127.0.0.1:5474/requests/abc123"
+    )
 
 
 class TestApprovalsOpenCommand:
@@ -156,7 +200,7 @@ class TestApprovalsAutoOpenCommand:
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert opened_urls == ["http://127.0.0.1:5474/approvals/req-auto-open"]
+        assert opened_urls == ["http://127.0.0.1:5474/requests/req-auto-open"]
         assert output["auto_open"]["opened"] is True
         assert output["auto_open"]["request_id"] == "req-auto-open"
 
@@ -166,7 +210,7 @@ class TestApprovalsAutoOpenCommand:
         store.add_approval_request(
             _make_request(
                 request_id="req-stale-open",
-                approval_url="http://127.0.0.1:4000/approvals/req-stale-open",
+                approval_url="http://127.0.0.1:4000/requests/req-stale-open",
             ),
             "2026-01-01T00:00:00Z",
         )
@@ -186,7 +230,7 @@ class TestApprovalsAutoOpenCommand:
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert opened_urls == ["http://127.0.0.1:5474/approvals/req-stale-open"]
+        assert opened_urls == ["http://127.0.0.1:5474/requests/req-stale-open"]
         assert output["auto_open"]["opened"] is True
 
     def test_approvals_summary_honors_native_only_auto_open_opt_out(self, tmp_path: Path, monkeypatch, capsys) -> None:

@@ -47,6 +47,64 @@ class ApprovalRequestAlreadyResolvedError(ValueError):
     """Raised when an approval request was already resolved."""
 
 
+def build_approval_request_url(approval_center_url: str, request_id: str) -> str:
+    """Build the canonical local dashboard deep link for one approval request."""
+
+    return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
+
+
+def _normalize_harness_slug(harness: str | None) -> str | None:
+    if not isinstance(harness, str):
+        return None
+    normalized = harness.strip().lower()
+    if normalized in {"claude", "claude-code"}:
+        return "claude-code"
+    return normalized or None
+
+
+def primary_approval_request(
+    queued: Sequence[object],
+    *,
+    harness: str | None = None,
+) -> dict[str, object] | None:
+    """Return the approval request dict that best matches the current harness action."""
+
+    normalized_harness = _normalize_harness_slug(harness)
+    matched: dict[str, object] | None = None
+    fallback: dict[str, object] | None = None
+    for item in reversed(tuple(queued)):
+        if not isinstance(item, Mapping):
+            continue
+        request = dict(item)
+        if fallback is None:
+            fallback = request
+        item_harness = _normalize_harness_slug(str(request.get("harness") or ""))
+        if normalized_harness is not None and item_harness == normalized_harness:
+            matched = request
+            break
+    return matched or fallback
+
+
+def primary_approval_url(
+    queued: Sequence[object],
+    *,
+    harness: str | None = None,
+    approval_center_url: str | None = None,
+) -> str | None:
+    request = primary_approval_request(queued, harness=harness)
+    if request is None:
+        return None
+    approval_url = request.get("approval_url")
+    if isinstance(approval_url, str) and approval_url.strip():
+        return approval_url.strip().replace("/approvals/", "/requests/")
+    request_id = request.get("request_id")
+    if isinstance(request_id, str) and request_id.strip() and isinstance(approval_center_url, str):
+        center = approval_center_url.strip()
+        if center:
+            return build_approval_request_url(center, request_id.strip())
+    return None
+
+
 def queue_blocked_approvals(
     *,
     detection: HarnessDetection,
@@ -99,7 +157,7 @@ def queue_blocked_approvals(
             launch_target=launch_target,
             transport=artifact.transport if artifact is not None else None,
             review_command=f"{GUARD_COMMAND} approvals approve {request_id}",
-            approval_url=f"{approval_center_url.rstrip('/')}/approvals/{request_id}",
+            approval_url=build_approval_request_url(approval_center_url, request_id),
             workspace=_workspace_scope_target(item, artifact),
             publisher=artifact.publisher if artifact is not None else None,
             risk_summary=risk_summary,
@@ -120,7 +178,7 @@ def queue_blocked_approvals(
                 request,
                 request_id=persisted_request_id,
                 review_command=f"{GUARD_COMMAND} approvals approve {persisted_request_id}",
-                approval_url=f"{approval_center_url.rstrip('/')}/approvals/{persisted_request_id}",
+                approval_url=build_approval_request_url(approval_center_url, persisted_request_id),
             )
         _notify_pending_approval(store=store, request=request)
         queued.append(request.to_dict())
@@ -338,8 +396,14 @@ def approval_center_hint(
     flow = approval_prompt_flow(harness, managed_install=managed_install)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
-    approval_url = first_approval_url(queued)
-    review_url = approval_url or approval_center_url
+    review_url = (
+        primary_approval_url(
+            queued,
+            harness=harness,
+            approval_center_url=approval_center_url,
+        )
+        or approval_center_url
+    )
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
         f"{flow['summary']} "
@@ -349,14 +413,17 @@ def approval_center_hint(
     )
 
 
-def first_approval_url(queued: Sequence[object]) -> str | None:
-    for item in queued:
-        if not isinstance(item, Mapping):
-            continue
-        approval_url = item.get("approval_url")
-        if isinstance(approval_url, str) and approval_url.strip():
-            return approval_url.strip()
-    return None
+def first_approval_url(
+    queued: Sequence[object],
+    *,
+    harness: str | None = None,
+    approval_center_url: str | None = None,
+) -> str | None:
+    return primary_approval_url(
+        queued,
+        harness=harness,
+        approval_center_url=approval_center_url,
+    )
 
 
 def build_runtime_snapshot(
