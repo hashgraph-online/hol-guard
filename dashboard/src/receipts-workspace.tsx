@@ -201,28 +201,31 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
 
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
 
-  const headerActions = (
-    <>
-      <button
-        type="button"
-        onClick={handleOpenExport}
-        aria-label="Export evidence"
-        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark shadow-sm transition-colors hover:bg-slate-50"
-      >
-        <HiMiniDocumentText className="h-4 w-4 text-slate-400" aria-hidden="true" />
-        Export
-      </button>
-      {onClearEvidence && receiptItems.length > 0 && (
+  const headerActions = useMemo(
+    () => (
+      <>
         <button
           type="button"
-          onClick={handleOpenClear}
-          aria-label="Clear all evidence"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-brand-attention"
+          onClick={handleOpenExport}
+          aria-label="Export evidence"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark shadow-sm transition-colors hover:bg-slate-50"
         >
-          Clear
+          <HiMiniDocumentText className="h-4 w-4 text-slate-400" aria-hidden="true" />
+          Export
         </button>
-      )}
-    </>
+        {onClearEvidence && receiptItems.length > 0 && (
+          <button
+            type="button"
+            onClick={handleOpenClear}
+            aria-label="Clear all evidence"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-brand-attention"
+          >
+            Clear
+          </button>
+        )}
+      </>
+    ),
+    [handleOpenExport, handleOpenClear, onClearEvidence, receiptItems.length],
   );
 
   return (

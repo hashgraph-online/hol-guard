@@ -23,7 +23,7 @@ export function EvidenceHero({ totalCount, lastActivityAt }: EvidenceHeroProps) 
       role="region"
       aria-label="Evidence summary"
     >
-      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative">
         <div className="flex min-w-0 items-start gap-3">
           <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-green/10">
             <HiMiniDocumentText className="h-4 w-4 text-brand-green" aria-hidden="true" />
