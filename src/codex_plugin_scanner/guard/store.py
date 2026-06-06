@@ -3463,6 +3463,7 @@ class GuardStore:
         skip_primary_secret_rewrite = (
             not secret_material_changed
             and isinstance(self._oauth_secret_store, FallbackSecretStore)
+            and isinstance(self._oauth_secret_store.primary, SystemKeyringSecretStore)
             and isinstance(self._oauth_secret_store.fallback, EncryptedFileSecretStore)
         )
         if not skip_primary_secret_rewrite:
