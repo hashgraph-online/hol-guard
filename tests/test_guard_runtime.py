@@ -620,8 +620,8 @@ clearer UX and an implementation plan with technical references.
         assert output["decision"] == "block"
         assert output["continue"] is False
         assert output["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-        assert "http://127.0.0.1:4455/approvals/" in output["reason"]
-        assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
+        assert "http://127.0.0.1:4455/requests/" in output["reason"]
+        assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/requests/")
         assert approval_requests[0]["approval_url"] in output["reason"]
         assert approval_requests[0]["launch_target"] == "Codex prompt for `.authrc`: read .authrc"
         assert approval_requests[0]["action_envelope_json"]["action_type"] == "prompt"
@@ -4344,7 +4344,7 @@ clearer UX and an implementation plan with technical references.
             "policy_action": "block",
             "permission_decision_reason": "This command sends local secret to network host.",
             "approval_center_url": "http://127.0.0.1:4455",
-            "approval_requests": [{"approval_url": "http://127.0.0.1:4455/approvals/request-1"}],
+            "approval_requests": [{"approval_url": "http://127.0.0.1:4455/requests/request-1"}],
             "changed_capabilities": ["command"],
             "provenance_summary": "project artifact defined at .codex/config.toml",
             "source_scope": "project",
@@ -4369,7 +4369,7 @@ clearer UX and an implementation plan with technical references.
         reason = output["hookSpecificOutput"]["permissionDecisionReason"]
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "Open HOL Guard to approve or keep this blocked" in reason
-        assert "http://127.0.0.1:4455/approvals/request-1" in reason
+        assert "http://127.0.0.1:4455/requests/request-1" in reason
         assert "Approve it in HOL Guard, then retry." not in reason
 
     def test_guard_hook_fallback_artifact_id_uses_scope(self, tmp_path, capsys, monkeypatch):
@@ -7526,7 +7526,7 @@ def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
     assert output["interrupt"] is True
     assert "HOL Guard blocked" in output["message"]
     assert "danger_lab:dangerous_delete" in output["message"]
-    assert "http://127.0.0.1:4455/approvals/" in output["message"]
+    assert "http://127.0.0.1:4455/requests/" in output["message"]
     events = GuardStore(home_dir).list_guard_events_v1(uploaded=False)
     usage_events = [event for event in events if event["event_type"] == "harness.mcp.used"]
     assert len(usage_events) == 1
@@ -9412,7 +9412,7 @@ def test_runtime_artifact_native_reason_prefers_decision_v2_harness_message() ->
 def test_native_approval_center_context_uses_harness_specific_retry_copy() -> None:
     payload = {
         "approval_center_url": "http://127.0.0.1:4455",
-        "approval_requests": [{"approval_url": "http://127.0.0.1:4455/approvals/request-1"}],
+        "approval_requests": [{"approval_url": "http://127.0.0.1:4455/requests/request-1"}],
     }
 
     codex_context = guard_commands_module._native_approval_center_context(payload, harness="codex")
@@ -10146,7 +10146,7 @@ def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
     )
 
     assert rc == 1
-    assert review_url.startswith("http://127.0.0.1:4455/approvals/")
+    assert review_url.startswith("http://127.0.0.1:4455/requests/")
     assert review_url in output["review_hint"]
     assert output["decision_v2_json"]["retry_instruction"] == retry_instruction
     assert review_url in output["decision_v2_json"]["harness_message"]
@@ -10229,7 +10229,7 @@ def test_guard_hook_localizes_package_review_copy_with_daemon_client_approval_ur
     )
 
     assert rc == 1
-    assert review_url == "http://127.0.0.1:4455/approvals/request-1"
+    assert review_url == "http://127.0.0.1:4455/requests/request-1"
     assert review_url in output["review_hint"]
     assert output["decision_v2_json"]["retry_instruction"] == retry_instruction
     assert review_url in output["decision_v2_json"]["harness_message"]
@@ -12438,7 +12438,7 @@ def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path,
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "HOL Guard" in reason
     assert "Open HOL Guard to approve or keep this blocked" in reason
-    assert "http://127.0.0.1:4455/approvals/" in reason
+    assert "http://127.0.0.1:4455/requests/" in reason
     assert "Approve it in HOL Guard, then retry." not in reason
 
 
@@ -12599,7 +12599,7 @@ def _install_fake_guard_surface_daemon(
                 source_scope=str(item.get("source_scope") or "project"),
                 config_path=str(item.get("config_path") or "~/.codex/config.toml"),
                 review_command=f"hol-guard approvals approve {request_id}",
-                approval_url=f"{approval_center_url}/approvals/{request_id}",
+                approval_url=f"{approval_center_url}/requests/{request_id}",
                 launch_target=str(item.get("launch_target") or "Codex request"),
                 artifact_type=str(item.get("artifact_type") or "artifact"),
             )
@@ -13036,7 +13036,7 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     assert "HOL Guard paused your Codex prompt" in payload["systemMessage"]
     assert "Open HOL Guard" in payload["systemMessage"]
     assert "approve" in payload["systemMessage"].lower()
-    assert "http://127.0.0.1:4455/approvals/" in payload["reason"]
+    assert "http://127.0.0.1:4455/requests/" in payload["reason"]
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
     assert len(pending) == 1
     assert pending[0]["artifact_type"] == "prompt_request"
@@ -14157,7 +14157,7 @@ def test_guard_hook_codex_user_prompt_submit_guard_bypass_hard_blocks_without_ap
     assert rc == 0
     assert payload["decision"] == "block"
     assert "HOL Guard" in payload["reason"]
-    assert "http://127.0.0.1:4455/approvals/" not in payload["reason"]
+    assert "http://127.0.0.1:4455/requests/" not in payload["reason"]
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -14388,7 +14388,7 @@ PY
     assert "HOL Guard" in reason
     assert "credential exfiltration" in reason
     assert "Open HOL Guard to approve or keep this blocked" in reason
-    assert "http://127.0.0.1:4455/approvals/" in reason
+    assert "http://127.0.0.1:4455/requests/" in reason
 
 
 def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
@@ -14435,7 +14435,7 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     assert payload["continue"] is False
     assert "HOL Guard" in payload["stopReason"]
     assert "credential-looking output" in payload["stopReason"]
-    assert "http://127.0.0.1:4455/approvals/" in payload["stopReason"]
+    assert "http://127.0.0.1:4455/requests/" in payload["stopReason"]
 
 
 def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
@@ -14514,7 +14514,7 @@ def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_pat
         source_scope="project",
         config_path="~/.codex/config.toml",
         review_command="hol-guard approvals approve request-1",
-        approval_url="http://127.0.0.1:4455/approvals/request-1",
+        approval_url="http://127.0.0.1:4455/requests/request-1",
         launch_target="bash ./guard-canary.sh",
     )
     store.add_approval_request(request, "2026-04-30T00:00:00+00:00")
@@ -14566,7 +14566,7 @@ def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path):
         source_scope="project",
         config_path="~/.codex/config.toml",
         review_command="hol-guard approvals approve request-1",
-        approval_url="http://127.0.0.1:4455/approvals/request-1",
+        approval_url="http://127.0.0.1:4455/requests/request-1",
         launch_target="bash ./guard-canary.sh",
     )
     store.add_approval_request(request, "2026-04-30T00:00:00+00:00")
@@ -14725,7 +14725,7 @@ def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
     assert payload["decision"] == "block"
     assert "HOL Guard" in payload["reason"]
     assert "credential-looking local file" in payload["reason"]
-    assert "http://127.0.0.1:4455/approvals/" in payload["reason"]
+    assert "http://127.0.0.1:4455/requests/" in payload["reason"]
 
 
 def test_guard_hook_codex_user_prompt_submit_allows_generic_dotfile_with_canary_text(

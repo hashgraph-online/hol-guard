@@ -82,7 +82,7 @@ def _request(request_id: str) -> GuardApprovalRequest:
         source_scope="project",
         config_path="/repo/.codex/config.toml",
         review_command=f"hol-guard approvals approve {request_id}",
-        approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
+        approval_url=f"http://127.0.0.1:5474/requests/{request_id}",
     )
 
 
@@ -1404,7 +1404,7 @@ def test_approval_gate_native_permission_failure_queues_guard_fallback(tmp_path:
     assert len(queued) == 1
     assert len(pending) == 1
     assert pending[0]["policy_action"] == "require-reapproval"
-    assert pending[0]["approval_url"].startswith("http://127.0.0.1:5474/approvals/")
+    assert pending[0]["approval_url"].startswith("http://127.0.0.1:5474/requests/")
     assert "approval_gate_required" in pending[0]["risk_signals"]
     assert store.list_policy_decisions("claude-code") == []
 

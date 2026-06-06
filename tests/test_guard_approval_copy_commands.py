@@ -53,7 +53,7 @@ def _make_request(
         source_scope="project",
         config_path="/tmp/config.toml",
         review_command=f"hol-guard approvals approve {request_id}",
-        approval_url=approval_url or f"http://127.0.0.1:5474/approvals/{request_id}",
+        approval_url=approval_url or f"http://127.0.0.1:5474/requests/{request_id}",
     )
 
 
@@ -200,7 +200,7 @@ class TestApprovalsAutoOpenCommand:
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert opened_urls == ["http://127.0.0.1:5474/approvals/req-auto-open"]
+        assert opened_urls == ["http://127.0.0.1:5474/requests/req-auto-open"]
         assert output["auto_open"]["opened"] is True
         assert output["auto_open"]["request_id"] == "req-auto-open"
 
@@ -210,7 +210,7 @@ class TestApprovalsAutoOpenCommand:
         store.add_approval_request(
             _make_request(
                 request_id="req-stale-open",
-                approval_url="http://127.0.0.1:4000/approvals/req-stale-open",
+                approval_url="http://127.0.0.1:4000/requests/req-stale-open",
             ),
             "2026-01-01T00:00:00Z",
         )
@@ -230,7 +230,7 @@ class TestApprovalsAutoOpenCommand:
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert opened_urls == ["http://127.0.0.1:5474/approvals/req-stale-open"]
+        assert opened_urls == ["http://127.0.0.1:5474/requests/req-stale-open"]
         assert output["auto_open"]["opened"] is True
 
     def test_approvals_summary_honors_native_only_auto_open_opt_out(self, tmp_path: Path, monkeypatch, capsys) -> None:
