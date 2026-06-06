@@ -114,9 +114,11 @@ def _is_timeout_response(payload: object) -> bool:
     if not isinstance(error, dict):
         return False
     data = error.get("data")
-    return error.get("code") == _GUARD_PROXY_TIMEOUT_ERROR_CODE and isinstance(data, dict) and data.get(
-        "guard_timeout"
-    ) is True
+    return (
+        error.get("code") == _GUARD_PROXY_TIMEOUT_ERROR_CODE
+        and isinstance(data, dict)
+        and data.get("guard_timeout") is True
+    )
 
 
 def _stream_fileno(stream: Any) -> int | None:
