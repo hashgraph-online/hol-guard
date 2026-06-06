@@ -1016,6 +1016,20 @@ def test_action_scoped_dashboard_session_requires_exact_read_paths_and_matching_
                 extra_headers={"X-Guard-Dashboard-Nonce": "wrong-nonce"},
             ),
         )
+        implicit_read_token = _dashboard_token_with_claims(
+            auth_token,
+            {
+                "action_path": "connect",
+            },
+        )
+        implicit_read_status, implicit_read_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/runtime",
+                method="GET",
+                dashboard_session_token=implicit_read_token,
+            ),
+        )
     finally:
         daemon.stop()
 
@@ -1025,6 +1039,8 @@ def test_action_scoped_dashboard_session_requires_exact_read_paths_and_matching_
     assert wrong_path_payload["error"] == "unauthorized"
     assert wrong_nonce_status == 401
     assert wrong_nonce_payload["error"] == "unauthorized"
+    assert implicit_read_status == 401
+    assert implicit_read_payload["error"] == "unauthorized"
 
 
 def test_headless_capabilities_rejects_dashboard_session_from_guard_token_header(tmp_path: Path) -> None:
