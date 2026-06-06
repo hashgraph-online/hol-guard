@@ -31,7 +31,7 @@ _EXPORT_COLUMNS: tuple[str, ...] = (
     "action_identity",
     "created_at",
 )
-_CSV_FORMULA_TRIGGER_PATTERN = re.compile(r"^[=+\-@\t\r]")
+_CSV_FORMULA_TRIGGER_PATTERN = re.compile(r"^[=+\-@\t\r\n]")
 
 
 def _now_iso() -> str:
