@@ -87,6 +87,33 @@ class TestNoHardcodedSecrets:
             r = check_no_hardcoded_secrets(Path(tmpdir))
             assert r.passed and r.points == 7
 
+    def test_detects_provider_specific_tokens_in_text_svg_and_lock_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            github_token = "github_" + "pat_" + "abcdefghijklmnopqrstuvwxyz0123456789_ABCD"
+            openai_token = "sk-" + "proj-" + "abcdefghijklmnopqrstuvwxyz0123456789ABCD"
+            slack_app_token = "xapp-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
+            slack_user_token = "xoxe-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
+            slack_config_token = "xoxr-" + "1-" + "abcdefghijklmnopqrstuvwxyz0123456789"
+            (root / "logo.svg").write_text(
+                f"<svg><!-- {github_token} --></svg>",
+                encoding="utf-8",
+            )
+            (root / "deps.lock").write_text(
+                f'openai = "{openai_token}"\n'
+                f'slack_app = "{slack_app_token}"\n'
+                f'slack_user = "{slack_user_token}"\n'
+                f'slack_config = "{slack_config_token}"\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_hardcoded_secrets(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert "logo.svg" in result.message
+            assert "deps.lock" in result.message
+
 
 class TestNoDangerousMcp:
     def test_passes_when_no_mcp(self):
@@ -167,9 +194,21 @@ class TestScanAllFiles:
 
     def test_skips_binary_files(self):
         files = _scan_all_files(FIXTURES / "good-plugin")
-        binary_exts = {".png", ".jpg", ".wasm", ".lock"}
+        binary_exts = {".png", ".jpg", ".wasm"}
         for f in files:
             assert f.suffix.lower() not in binary_exts
+
+    def test_keeps_text_svg_and_lock_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "logo.svg").write_text("<svg>safe</svg>", encoding="utf-8")
+            (root / "deps.lock").write_text("package = 1\n", encoding="utf-8")
+
+            files = _scan_all_files(root)
+            names = {path.name for path in files}
+
+            assert "logo.svg" in names
+            assert "deps.lock" in names
 
     def test_returns_list_of_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir:
