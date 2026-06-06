@@ -131,6 +131,146 @@ def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pyte
     assert payload["binary_diagnostics"]["expected_script_dir"] is None
 
 
+def test_update_skips_existing_local_source_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    source_dir = tmp_path / "src-install"
+    source_dir.mkdir()
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {"dir_info": {}, "url": source_dir.as_uri()},
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/Users/test/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert payload["status"] == "skipped"
+    assert payload["changed"] is False
+    assert "disabled for local source installs" in str(payload["error"])
+    assert payload["source_install"]["path_exists"] is True
+
+
+def test_update_repairs_missing_pipx_local_source_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    missing_dir = tmp_path / "missing-src-install"
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.489")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.489")
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {"dir_info": {}, "url": missing_dir.as_uri()},
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/Users/test/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+
+    captured_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured_commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert captured_commands[0] == ["pipx", "install", "--force", "hol-guard"]
+    assert payload["recovery_source_install"] is True
+    assert payload["source_install"]["path_exists"] is False
+    assert payload["status"] == "updated"
+    assert payload["message"] == "Updated HOL Guard from 2.0.345 to 2.0.489."
+
+
+def test_update_switches_git_install_to_pypi_when_release_is_newer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.489")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.489")
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {
+            "url": "https://github.com/hashgraph-online/hol-guard.git",
+            "vcs_info": {
+                "commit_id": "ea81cb21edf6fbf2c83658299a81043e9fe37c57",
+                "requested_revision": "main",
+                "vcs": "git",
+            },
+        },
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/Users/test/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+
+    captured_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured_commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.489", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert captured_commands[0] == ["pipx", "install", "--force", "hol-guard"]
+    assert payload["upgrade_source"] == "pypi"
+    assert payload["status"] == "updated"
+    assert payload["message"] == "Updated HOL Guard from 2.0.345 to 2.0.489."
+
+
+def test_update_marks_git_install_stale_when_pypi_upgrade_leaves_old_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.489")
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {
+            "url": "https://github.com/hashgraph-online/hol-guard.git",
+            "vcs_info": {
+                "commit_id": "ea81cb21edf6fbf2c83658299a81043e9fe37c57",
+                "requested_revision": "main",
+                "vcs": "git",
+            },
+        },
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    captured_commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured_commands.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            "hol-guard is already at latest version 2.0.345",
+            "upgrading hol-guard from spec 'git+https://github.com/hashgraph-online/hol-guard.git@main'...",
+        )
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert captured_commands[0] == ["pipx", "install", "--force", "hol-guard"]
+    assert payload["status"] == "stale"
+    assert "behind PyPI 2.0.489" in str(payload["message"])
+    assert "pipx install --force hol-guard" in str(payload["message"])
+
+
 def test_install_aliases_resolve_to_native_contracts() -> None:
     aliases = {
         "claude": "claude-code",
