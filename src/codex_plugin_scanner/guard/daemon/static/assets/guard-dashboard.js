@@ -14037,6 +14037,24 @@ async function runPackageFirewallAction(action, manager, credentials) {
   }
   return normalizePackageFirewallAction(payloadBody);
 }
+async function openPackageFirewallShell() {
+  const response = await fetchGuardApi("/v1/supply-chain/package-shims/open-shell", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({})
+  });
+  if (response.ok) {
+    return;
+  }
+  const payloadBody = await response.json().catch(() => null);
+  if (isRecord(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
+    throw new Error(payloadBody.message);
+  }
+  throw new Error("Unable to open a new shell.");
+}
 async function runAuditRemediation(input) {
   if (isGuardDemoMode()) {
     return {
@@ -23232,10 +23250,11 @@ export {
   runPackageAudit as am,
   runPackageSync as an,
   startPackageFirewallConnect as ao,
-  HiMiniBugAnt as ap,
-  runAuditRemediation as aq,
-  HiMiniSignal as ar,
-  HiMiniClock as as,
+  openPackageFirewallShell as ap,
+  HiMiniBugAnt as aq,
+  runAuditRemediation as ar,
+  HiMiniSignal as as,
+  HiMiniClock as at,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,
