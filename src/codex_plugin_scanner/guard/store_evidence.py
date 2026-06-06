@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -30,6 +31,7 @@ _EXPORT_COLUMNS: tuple[str, ...] = (
     "action_identity",
     "created_at",
 )
+_CSV_FORMULA_TRIGGER_PATTERN = re.compile(r"^[=+\-@\t\r]")
 
 
 def _now_iso() -> str:
@@ -298,8 +300,16 @@ def export_evidence_csv(
     for item in payload["items"]:
         if not isinstance(item, dict):
             continue
-        writer.writerow([item.get(column, "") for column in _EXPORT_COLUMNS])
+        writer.writerow([_sanitize_csv_formula_cell(item.get(column, "")) for column in _EXPORT_COLUMNS])
     return output.getvalue()
+
+
+def _sanitize_csv_formula_cell(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    if _CSV_FORMULA_TRIGGER_PATTERN.match(value):
+        return f"'{value}"
+    return value
 
 
 def clear_evidence(conn: sqlite3.Connection) -> int:

