@@ -1,10 +1,4 @@
-@import "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&display=swap";
-
-
-@layer components;
-
 /*! tailwindcss v4.2.2 | MIT License | https://tailwindcss.com */
-
 @layer properties {
   @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
     *, :before, :after, ::backdrop {
@@ -80,7 +74,8 @@
 
 @layer theme {
   :root, :host {
-    --font-sans: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --color-red-50: oklch(97.1% .013 17.38);
     --color-red-100: oklch(93.6% .032 17.717);
     --color-red-200: oklch(88.5% .062 18.334);
@@ -184,8 +179,8 @@
     --blur-3xl: 64px;
     --default-transition-duration: .15s;
     --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);
-    --default-font-family: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --default-mono-font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --default-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --default-mono-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 }
 
@@ -435,6 +430,8 @@
     display: none !important;
   }
 }
+
+@layer components;
 
 @layer utilities {
   .pointer-events-none {
@@ -1620,6 +1617,16 @@
     }
   }
 
+  .border-amber-200\/70 {
+    border-color: #fee685b3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-amber-200\/70 {
+      border-color: color-mix(in oklab, var(--color-amber-200) 70%, transparent);
+    }
+  }
+
   .border-blue-200\/40 {
     border-color: #bedbff66;
   }
@@ -1844,6 +1851,16 @@
     }
   }
 
+  .border-emerald-200\/70 {
+    border-color: #a4f4cfb3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-emerald-200\/70 {
+      border-color: color-mix(in oklab, var(--color-emerald-200) 70%, transparent);
+    }
+  }
+
   .border-emerald-300 {
     border-color: var(--color-emerald-300);
   }
@@ -2015,6 +2032,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-amber-50\/60 {
       background-color: color-mix(in oklab, var(--color-amber-50) 60%, transparent);
+    }
+  }
+
+  .bg-amber-50\/70 {
+    background-color: #fffbebb3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-amber-50\/70 {
+      background-color: color-mix(in oklab, var(--color-amber-50) 70%, transparent);
     }
   }
 
@@ -2467,6 +2494,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-emerald-50\/60 {
       background-color: color-mix(in oklab, var(--color-emerald-50) 60%, transparent);
+    }
+  }
+
+  .bg-emerald-50\/70 {
+    background-color: #ecfdf5b3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-emerald-50\/70 {
+      background-color: color-mix(in oklab, var(--color-emerald-50) 70%, transparent);
     }
   }
 
@@ -3246,7 +3283,7 @@
   }
 
   .font-mono {
-    font-family: Roboto Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
   .text-2xl {
@@ -4968,6 +5005,42 @@ body {
 
 #guard-dashboard-root {
   min-height: 100vh;
+}
+
+.guard-loading-shell {
+  color: #3f4174;
+  background: linear-gradient(#fcfdff 0%, #f7f8fb 100%);
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+}
+
+.guard-loading-shell__inner {
+  text-align: center;
+}
+
+.guard-loading-shell__eyebrow {
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #5599fe;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.guard-loading-shell__title {
+  letter-spacing: -.03em;
+  font-size: 28px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
+.guard-loading-shell__copy {
+  color: #3f417480;
+  margin: 8px 0 0;
+  font-size: 13px;
 }
 
 @keyframes guard-enter {

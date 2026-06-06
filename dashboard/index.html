@@ -17,21 +17,15 @@
     <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
     <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
     <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
     <div id="guard-dashboard-root">
-      <div style="min-height: 100vh; display: grid; place-items: center; font-family: Roboto, system-ui, sans-serif; background: linear-gradient(180deg, #fcfdff 0%, #f7f8fb 100%); color: #3f4174;">
-        <div style="text-align: center; padding: 24px;">
-          <p style="margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #5599fe;">Hashgraph Online</p>
-          <h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.03em; font-family: 'Roboto Mono', monospace;">HOL Guard</h1>
-          <p style="margin: 8px 0 0; font-size: 13px; color: rgba(63, 65, 116, 0.5);">Loading Local approval center…</p>
+      <div class="guard-loading-shell">
+        <div class="guard-loading-shell__inner">
+          <p class="guard-loading-shell__eyebrow">Hashgraph Online</p>
+          <h1 class="guard-loading-shell__title">HOL Guard</h1>
+          <p class="guard-loading-shell__copy">Loading Local approval center…</p>
         </div>
       </div>
     </div>

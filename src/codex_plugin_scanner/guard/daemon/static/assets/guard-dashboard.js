@@ -12768,44 +12768,6 @@ function readGuardToken() {
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
 }
-function saveGuardToken(guardToken) {
-  guardTokenOverride = guardToken;
-  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
-}
-function parseAuthToken(payload) {
-  if (!isRecord(payload)) {
-    return null;
-  }
-  const authToken = payload["auth_token"];
-  return typeof authToken === "string" && authToken.trim() ? authToken : null;
-}
-async function refreshGuardToken() {
-  const response = await fetch(guardApiInput("/v1/initialize"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_name: "guard-dashboard",
-      client_title: "HOL Guard dashboard",
-      surface: "dashboard",
-      capabilities: ["approval-resolution"],
-      supported_protocol_versions: [1]
-    })
-  });
-  if (!response.ok) {
-    return null;
-  }
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    return null;
-  }
-  const authToken = parseAuthToken(payload);
-  if (authToken !== null) {
-    saveGuardToken(authToken);
-  }
-  return authToken;
-}
 function readGuardDaemonOrigin() {
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
   if (rawDaemonUrl) {
@@ -12847,7 +12809,7 @@ function withGuardAuthForToken(init, guardToken) {
     return init;
   }
   const headers = new Headers(init?.headers);
-  headers.set("X-Guard-Token", guardToken);
+  headers.set("X-Guard-Dashboard-Session", guardToken);
   return {
     ...init,
     headers
@@ -12855,22 +12817,14 @@ function withGuardAuthForToken(init, guardToken) {
 }
 async function fetchWithGuardAuth(input, init) {
   const requestInput = guardApiInput(input);
-  let response = await fetch(requestInput, withGuardAuth(init));
-  if (response.status !== 401) {
-    return response;
-  }
-  const refreshedToken = await refreshGuardToken();
-  if (refreshedToken === null) {
-    return response;
-  }
-  return fetch(requestInput, withGuardAuthForToken(init, refreshedToken));
+  return fetch(requestInput, withGuardAuth(init));
 }
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
-  return guardToken ? { "X-Guard-Token": guardToken } : {};
+  return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
 }
 function guardAuthHeadersForToken(guardToken) {
-  return guardToken ? { "X-Guard-Token": guardToken } : {};
+  return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
 }
 function guardAwareHref(href) {
   const guardToken = readGuardToken();

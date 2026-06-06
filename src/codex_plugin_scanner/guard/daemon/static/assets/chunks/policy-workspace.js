@@ -36,6 +36,26 @@ function resolveSecurityModeCopy(level) {
     tone: "slate"
   };
 }
+function resolveCloudPolicyBundleCopy(snapshot) {
+  const bundleVersion = snapshot.cloud_policy_bundle_version?.trim();
+  if (!bundleVersion) {
+    return null;
+  }
+  const rollout = snapshot.cloud_policy_rollout_state?.trim() || "unknown";
+  const syncError = snapshot.cloud_policy_sync_error?.trim();
+  if (syncError) {
+    return {
+      label: `Cloud bundle ${bundleVersion}`,
+      detail: `Guard Cloud Controls owns rollout and authoring. Latest sync issue: ${syncError}.`,
+      tone: "attention"
+    };
+  }
+  return {
+    label: `Cloud bundle ${bundleVersion}`,
+    detail: `Guard Cloud Controls owns authoring and rollout. This local workspace reflects rollout state ${rollout}.`,
+    tone: "green"
+  };
+}
 function PolicyRow({ policy, onClear }) {
   const handleClear = reactExports.useCallback(() => onClear?.(policy), [onClear, policy]);
   const actionTone = policy.action === "allow" ? "success" : policy.action === "block" ? "destructive" : policy.action === "warn" ? "warning" : "default";
@@ -97,18 +117,32 @@ function PolicyWorkspace({
     [filteredPolicies]
   );
   reactExports.useMemo(() => groupPoliciesByHarness(policies), [policies]);
+  const cloudBundleCopy = reactExports.useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Guard rules, exceptions, and remembered decisions." }) }),
-      onOpenSettings && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onOpenSettings, children: "Open Settings" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Local remembered decisions and synced Guard Cloud bundle posture." }) }),
+      onOpenSettings && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onOpenSettings, children: "Open Guard Cloud Controls" })
     ] }),
+    cloudBundleCopy && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `rounded-2xl p-4 shadow-sm ${cloudBundleCopy.tone === "attention" ? "border border-amber-200/70 bg-amber-50/70" : cloudBundleCopy.tone === "slate" ? "border border-slate-200/70 bg-slate-50/70" : "border border-emerald-200/70 bg-emerald-50/70"}`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex flex-wrap items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudBundleCopy.tone, children: cloudBundleCopy.label })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: cloudBundleCopy.detail })
+        ]
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-5 shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 mb-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Active mode" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: modeCopy.tone, children: modeCopy.label })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: modeCopy.description }),
-      onOpenSettings && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onOpenSettings, children: "Change mode in Settings" }) })
+      onOpenSettings && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onOpenSettings, children: "Review rollout in Guard Cloud Controls" }) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2 border-b border-slate-100 pb-3", children: [
       ["rules", "exceptions", "strict"].map((v) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -257,5 +291,6 @@ function StrictModeView({
 export {
   PolicyWorkspace,
   groupPoliciesByHarness,
+  resolveCloudPolicyBundleCopy,
   resolveSecurityModeCopy
 };
