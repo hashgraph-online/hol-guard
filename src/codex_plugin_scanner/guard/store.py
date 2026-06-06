@@ -715,7 +715,8 @@ def _set_private_mode(path: Path, mode: int) -> None:
         return
     try:
         os.chmod(path, mode)
-    except OSError:
+    except OSError as exc:
+        _store_logger.debug("Could not set private mode %o on %s: %s", mode, path, exc)
         return
 
 
@@ -907,8 +908,8 @@ class GuardStore:
             connection.commit()
         finally:
             connection.close()
-            self._repair_store_permissions()
             elapsed_ms = (time.monotonic() - start) * 1000
+            self._repair_store_permissions()
             if elapsed_ms >= _SLOW_QUERY_THRESHOLD_MS:
                 log = _store_logger.warning if _should_warn_on_slow_store_transactions() else _store_logger.debug
                 log(
