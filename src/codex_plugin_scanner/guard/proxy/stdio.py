@@ -140,14 +140,15 @@ def _readline_with_timeout(
     if fileno is not None:
         try:
             ready, _, _ = select.select([fileno], [], [], timeout_seconds)
-        except (OSError, ValueError):
-            ready = None
-        else:
-            if not ready:
-                raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds)
-            return stream.readline()
-    if not allow_background_wait:
+        except (OSError, ValueError) as exc:
+            raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds) from exc
+        if not ready:
+            raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds)
         return stream.readline()
+    if not allow_background_wait:
+        if isinstance(stream, io.StringIO):
+            return stream.readline()
+        raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds)
     result_queue: queue.Queue[tuple[bool, object]] = queue.Queue(maxsize=1)
 
     def _reader() -> None:
