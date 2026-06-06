@@ -47,21 +47,10 @@ def run_guard_update(
     direct_url = _direct_url_payload()
     local_source_install = _local_source_install_payload(direct_url)
     vcs_install = _vcs_install_payload(direct_url)
-    version_check = _version_check_payload(current_version)
-    use_pypi = _should_upgrade_from_pypi(
-        version_check=version_check,
-        vcs_install=vcs_install,
-        local_source_install=local_source_install,
-    )
-    command = _update_command(installer, use_pypi=use_pypi)
     payload: dict[str, object] = {
         "current_version": current_version,
         "installer": installer,
-        "command": command,
-        "retry_command": _shell_command(command),
-        "binary_diagnostics": _binary_diagnostics(command, installer),
         "dry_run": dry_run,
-        "version_check": version_check,
     }
     if direct_url is not None:
         payload["direct_url"] = direct_url
@@ -71,8 +60,6 @@ def run_guard_update(
             payload["source_install"] = local_source_install
         if vcs_install is not None:
             payload["vcs_install"] = vcs_install
-        if use_pypi:
-            payload["upgrade_source"] = "pypi"
         if is_editable:
             payload["status"] = "skipped"
             payload["changed"] = False
@@ -89,6 +76,24 @@ def run_guard_update(
             return payload, 0
         if local_source_install is not None and not bool(local_source_install.get("path_exists")):
             payload["recovery_source_install"] = True
+    version_check = _version_check_payload(current_version)
+    use_pypi = _should_upgrade_from_pypi(
+        current_version=current_version,
+        version_check=version_check,
+        vcs_install=vcs_install,
+        local_source_install=local_source_install,
+    )
+    command = _update_command(installer, use_pypi=use_pypi)
+    payload.update(
+        {
+            "command": command,
+            "retry_command": _shell_command(command),
+            "binary_diagnostics": _binary_diagnostics(command, installer),
+            "version_check": version_check,
+        }
+    )
+    if use_pypi:
+        payload["upgrade_source"] = "pypi"
     if dry_run:
         payload["status"] = "planned"
         payload["changed"] = False
@@ -117,7 +122,10 @@ def run_guard_update(
         payload["changed"] = False
         payload["message"] = "HOL Guard update failed."
         return payload, 1
-    payload["version_check"] = _version_check_payload(str(payload.get("resulting_version") or current_version))
+    initial_version_check = payload.get("version_check")
+    post_version_check = _version_check_payload(str(payload.get("resulting_version") or current_version))
+    payload["post_version_check"] = post_version_check
+    payload["version_check"] = _merge_version_checks(initial_version_check, post_version_check)
     payload["status"] = _success_status(payload)
     payload["changed"] = payload["status"] == "updated"
     payload["message"] = _success_message(
@@ -204,6 +212,8 @@ def _output_lines(value: str) -> list[str]:
 
 
 def _success_status(payload: dict[str, object]) -> str:
+    if _is_stale_install(payload):
+        return "stale"
     current_version = str(payload.get("current_version") or "").strip()
     resulting_version = str(payload.get("resulting_version") or "").strip()
     if (
@@ -214,19 +224,41 @@ def _success_status(payload: dict[str, object]) -> str:
         and current_version != resulting_version
     ):
         return "updated"
-    version_check = payload.get("version_check")
-    if (
-        isinstance(version_check, dict)
-        and version_check.get("update_available") is True
-        and (payload.get("vcs_install") is not None or payload.get("upgrade_source") == "pypi")
-    ):
-        return "stale"
     output_text = str(payload.get("stdout") or "").lower()
     if any(hint in output_text for hint in _ALREADY_CURRENT_HINTS):
         return "current"
     if "requirement already satisfied: hol-guard" in output_text or "hol-guard is already installed" in output_text:
         return "current"
     return "updated"
+
+
+def _is_stale_install(payload: dict[str, object]) -> bool:
+    if payload.get("vcs_install") is None and payload.get("upgrade_source") != "pypi":
+        return False
+    version_check = payload.get("version_check")
+    return (
+        isinstance(version_check, dict)
+        and version_check.get("update_available") is True
+    )
+
+
+def _merge_version_checks(
+    initial_version_check: object,
+    post_version_check: object,
+) -> dict[str, object]:
+    if isinstance(post_version_check, dict) and post_version_check.get("update_available") is not None:
+        return post_version_check
+    if isinstance(initial_version_check, dict):
+        return initial_version_check
+    if isinstance(post_version_check, dict):
+        return post_version_check
+    return {
+        "source": "pypi",
+        "status": "unavailable",
+        "current_version": None,
+        "latest_version": None,
+        "update_available": None,
+    }
 
 
 def _success_message(
@@ -274,9 +306,7 @@ def _planned_update_message(*, version_check: dict[str, object], use_pypi: bool)
         if version_check.get("update_available") is True:
             latest_version = version_check.get("latest_version")
             if isinstance(latest_version, str) and latest_version.strip():
-                return (
-                    f"Review the planned PyPI install command to update to {latest_version.strip()}."
-                )
+                return f"Review the planned PyPI install command to update to {latest_version.strip()}."
         return "Review the planned PyPI install command to repair the install source."
     return "Review the planned installer command before updating."
 
@@ -368,11 +398,17 @@ def _installer_kind() -> str:
 
 def _should_upgrade_from_pypi(
     *,
+    current_version: str,
     version_check: dict[str, object],
     vcs_install: dict[str, object] | None,
     local_source_install: dict[str, object] | None,
 ) -> bool:
     if local_source_install is not None and not bool(local_source_install.get("path_exists")):
+        latest_version = version_check.get("latest_version")
+        if isinstance(latest_version, str) and latest_version.strip():
+            newer_than_pypi = _is_newer_version(current_version, latest_version.strip())
+            if newer_than_pypi is True:
+                return False
         return True
     if version_check.get("update_available") is not True:
         return False
@@ -419,6 +455,8 @@ def _local_source_install_payload(direct_url: dict[str, object] | None) -> dict[
     if not isinstance(direct_url, dict):
         return None
     if isinstance(direct_url.get("vcs_info"), dict):
+        return None
+    if isinstance(direct_url.get("archive_info"), dict):
         return None
     raw_url = direct_url.get("url")
     if not isinstance(raw_url, str) or not raw_url.strip():

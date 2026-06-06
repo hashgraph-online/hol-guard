@@ -220,6 +220,79 @@ def test_update_repairs_missing_pip_local_source_install(monkeypatch: pytest.Mon
     assert payload["upgrade_source"] == "pypi"
 
 
+def test_update_skips_pypi_recovery_when_missing_local_source_is_newer_than_pypi(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    missing_dir = tmp_path / "missing-dev-install"
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.1.0.dev0")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.489")
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {"dir_info": {}, "url": missing_dir.as_uri()},
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["command"] == ["pipx", "upgrade", "hol-guard"]
+    assert payload.get("upgrade_source") is None
+
+
+def test_update_does_not_skip_local_wheel_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    wheel = tmp_path / "hol-guard.whl"
+    wheel.write_bytes(b"fake-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {
+            "url": wheel.as_uri(),
+            "archive_info": {"hash": "sha256:abc", "hashes": {"sha256": "abc"}},
+        },
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["status"] == "planned"
+    assert payload.get("source_install") is None
+
+
+def test_update_marks_partial_pypi_repair_as_stale(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.400")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.489")
+    monkeypatch.setattr(
+        update_commands,
+        "_direct_url_payload",
+        lambda: {
+            "url": "https://github.com/hashgraph-online/hol-guard.git",
+            "vcs_info": {
+                "commit_id": "ea81cb21edf6fbf2c83658299a81043e9fe37c57",
+                "requested_revision": "main",
+                "vcs": "git",
+            },
+        },
+    )
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.400", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert payload["status"] == "stale"
+    assert payload["resulting_version"] == "2.0.400"
+    assert "behind PyPI 2.0.489" in str(payload["message"])
+
+
 def test_update_switches_git_install_to_pypi_when_release_is_newer(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
     monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.489")
