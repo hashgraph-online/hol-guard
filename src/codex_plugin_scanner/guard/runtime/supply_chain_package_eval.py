@@ -318,7 +318,12 @@ def evaluate_package_request_artifact(
     if cloud_result is not None:
         upgraded = cloud_result
         if cloud_result.enforcement == "upgrade_required":
-            heuristic = _heuristic_result(artifact=artifact, targets=targets, workspace_dir=workspace_dir)
+            heuristic = _heuristic_result(
+                artifact=artifact,
+                store=store,
+                targets=targets,
+                workspace_dir=workspace_dir,
+            )
             if heuristic is not None and _decision_rank(heuristic.decision) > _decision_rank(cloud_result.decision):
                 upgraded = _finalize_evaluation(
                     _EvaluationDraft(
@@ -358,7 +363,12 @@ def evaluate_package_request_artifact(
                 now_value,
             )
         return fallback
-    heuristic = _heuristic_result(artifact=artifact, targets=targets, workspace_dir=workspace_dir)
+    heuristic = _heuristic_result(
+        artifact=artifact,
+        store=store,
+        targets=targets,
+        workspace_dir=workspace_dir,
+    )
     if heuristic is None:
         fallback_packages = _fallback_monitor_packages(targets=targets, artifact=artifact, workspace_dir=workspace_dir)
         has_bun_binary_fallback = any(
@@ -884,6 +894,13 @@ def _cloud_fail_closed_evaluation(
     )
 
 
+def _external_tarball_scan_failure_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
+    config = load_guard_config(store.guard_home, workspace=workspace_dir)
+    if config.security_level in {"strict", "paranoid"}:
+        return "block"
+    return "ask"
+
+
 def _cloud_fail_closed_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
     config = load_guard_config(store.guard_home, workspace=workspace_dir)
     cloud_action = resolve_risk_action(config, "cloud_advisory", harness=None)
@@ -1036,6 +1053,7 @@ def _primary_bundle_advisory_id(
 def _heuristic_result(
     *,
     artifact: GuardArtifact,
+    store: GuardStore,
     targets: tuple[dict[str, object], ...],
     workspace_dir: Path | None,
 ) -> _EvaluationDraft | None:
@@ -1089,7 +1107,11 @@ def _heuristic_result(
                 severity="high",
             )
         if package_result is None and source_url is not None and _is_external_https_tarball_source(source_url):
-            package_result = _external_tarball_dependency_result(target)
+            package_result = _external_tarball_dependency_result(
+                target,
+                store=store,
+                workspace_dir=workspace_dir,
+            )
         if package_result is None:
             if lockfile_parse_warning is not None:
                 packages.append(lockfile_parse_warning)
@@ -2143,7 +2165,12 @@ def _is_external_https_tarball_source(source_url: str) -> bool:
     )
 
 
-def _external_tarball_dependency_result(target: dict[str, object]) -> dict[str, object]:
+def _external_tarball_dependency_result(
+    target: dict[str, object],
+    *,
+    store: GuardStore,
+    workspace_dir: Path | None,
+) -> dict[str, object]:
     source_url = _optional_string(target.get("source_url"))
     if source_url is None:
         return _heuristic_package_result(
@@ -2155,12 +2182,21 @@ def _external_tarball_dependency_result(target: dict[str, object]) -> dict[str, 
         )
     scan = _scan_external_tarball(source_url)
     if scan is None:
+        fail_closed_decision = _external_tarball_scan_failure_decision(store=store, workspace_dir=workspace_dir)
+        if fail_closed_decision != "block":
+            return _heuristic_package_result(
+                target=target,
+                decision="ask",
+                code="external_tarball_source",
+                message="External tarball source requires review before install.",
+                severity="medium",
+            )
         return _heuristic_package_result(
             target=target,
-            decision="ask",
-            code="external_tarball_source",
-            message="External tarball source requires review before install.",
-            severity="medium",
+            decision="block",
+            code="external_tarball_scan_unavailable",
+            message="Guard could not scan the external tarball source, so strict mode blocked the install.",
+            severity="high",
         )
     return _heuristic_package_result(
         target=target,
