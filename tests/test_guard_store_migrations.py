@@ -888,7 +888,7 @@ def test_set_oauth_local_credentials_skips_keyring_rewrite_when_secret_material_
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="private-key-material-v1",
+        dpop_private_key_pem="fixture-material-v1",
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -904,7 +904,7 @@ def test_set_oauth_local_credentials_skips_keyring_rewrite_when_secret_material_
         issuer="https://hol.org",
         client_id="guard-local-daemon",
         refresh_token="refresh-secret-value",
-        dpop_private_key_pem="private-key-material-v1",
+        dpop_private_key_pem="fixture-material-v1",
         dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
         dpop_public_jwk_thumbprint="thumbprint-123",
         grant_id="grant-123",
@@ -920,7 +920,7 @@ def test_set_oauth_local_credentials_skips_keyring_rewrite_when_secret_material_
         "issuer": "https://hol.org",
         "client_id": "guard-local-daemon",
         "refresh_token": "refresh-secret-value",
-        "dpop_private_key_pem": "private-key-material-v1",
+        "dpop_private_key_pem": "fixture-material-v1",
         "dpop_public_jwk": {
             "kty": "EC",
             "crv": "P-256",
@@ -936,6 +936,27 @@ def test_set_oauth_local_credentials_skips_keyring_rewrite_when_secret_material_
         "supply_chain_firewall": True,
         "supply_chain_plan_id": "team",
     }
+
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value-rotated",
+        dpop_private_key_pem="fixture-material-v1",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        supply_chain_firewall=True,
+        supply_chain_plan_id="team",
+        now="2026-06-01T00:10:00+00:00",
+    )
+
+    assert fake_keyring.set_password_calls == 2
+    rotated_credentials = store.get_oauth_local_credentials()
+
+    assert rotated_credentials is not None
+    assert rotated_credentials["refresh_token"] == "refresh-secret-value-rotated"
 
 
 def test_get_oauth_local_credentials_prefers_validated_encrypted_fallback_before_keyring(tmp_path, monkeypatch):

@@ -3458,6 +3458,8 @@ class GuardStore:
         secret_material_changed = (
             existing_secret_ref != self._oauth_local_credentials_ref or existing_secret_hash != secret_hash
         )
+        # Metadata-only updates can skip the primary rewrite because the encrypted
+        # fallback remains current and continues to backstop headless recovery.
         skip_primary_secret_rewrite = (
             not secret_material_changed
             and isinstance(self._oauth_secret_store, FallbackSecretStore)
