@@ -85,7 +85,7 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..local_dashboard_session import build_local_dashboard_session_token
+from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
     build_local_supply_chain_posture,
     resolve_package_firewall_entitlement_with_refresh,
@@ -3078,6 +3078,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not secrets.compare_digest(signature, expected):
             return False
         claims = _decode_dashboard_session_payload(encoded_payload)
+        if self._optional_string(claims.get("aud")) != LOCAL_DASHBOARD_SESSION_AUDIENCE:
+            return False
         expires_at = claims.get("expires_at")
         if not isinstance(expires_at, str):
             return False
@@ -3102,8 +3104,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         action_path = self._optional_string(claims.get("action_path"))
         if action_path is None:
             return False
-        if path in {"/v1/capabilities", "/v1/harnesses", "/v1/inventory", "/v1/runtime"}:
-            return True
+        if self.command == "GET" and self._dashboard_session_scoped_read_path_is_allowed(claims, path):
+            return self._dashboard_session_scoped_nonce_matches_request(claims=claims, payload=payload)
         if (
             len(path_parts) == 3
             and path_parts[:2] == ["v1", "apps"]
@@ -3133,6 +3135,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 supply_chain_action=supply_chain_action,
             )
         return False
+
+    def _dashboard_session_scoped_read_path_is_allowed(self, claims: dict[str, object], path: str) -> bool:
+        allowed_read_paths = claims.get("allowed_read_paths")
+        if not isinstance(allowed_read_paths, list):
+            return False
+        return path in {item for item in allowed_read_paths if isinstance(item, str)}
+
+    def _dashboard_session_scoped_nonce_matches_request(
+        self,
+        *,
+        claims: dict[str, object],
+        payload: dict[str, object] | None,
+    ) -> bool:
+        claim_nonce = self._optional_string(claims.get("nonce"))
+        if claim_nonce is None:
+            return True
+        request_nonce = self._optional_string(self.headers.get("X-Guard-Dashboard-Nonce"))
+        if request_nonce is None and payload is not None:
+            request_nonce = self._optional_string(payload.get("dashboard_session_nonce"))
+        return request_nonce == claim_nonce
 
     def _local_surface_session_request_is_allowed(self, path: str, path_parts: list[str]) -> bool:
         if path in {
