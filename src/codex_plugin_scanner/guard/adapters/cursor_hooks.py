@@ -493,26 +493,30 @@ def _cursor_read_file_permission(permission: str) -> str:
 
 def _cursor_reason(guard_payload: dict[str, object]) -> str:
     primary_url = guard_payload.get("primary_approval_url")
-    if isinstance(primary_url, str) and primary_url.strip():
-        for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
-            value = guard_payload.get(key)
-            if isinstance(value, str) and value.strip():
-                reason = value.strip()
-                if primary_url.strip() in reason:
-                    return reason
-                return f"{reason} Review: {primary_url.strip()}"
-        return f"HOL Guard needs approval for this Cursor action. Review it at {primary_url.strip()}."
+    reason: str | None = None
     for key in ("review_hint", "risk_summary", "why_now", "risk_headline"):
         value = guard_payload.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
-    decision = guard_payload.get("decision_v2_json")
-    if isinstance(decision, Mapping):
-        for key in ("harness_message", "retry_instruction", "user_body", "user_title"):
-            value = decision.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-    return "HOL Guard blocked this Cursor action."
+            reason = value.strip()
+            break
+    if reason is None:
+        decision = guard_payload.get("decision_v2_json")
+        if isinstance(decision, Mapping):
+            for key in ("harness_message", "retry_instruction", "user_body", "user_title"):
+                value = decision.get(key)
+                if isinstance(value, str) and value.strip():
+                    reason = value.strip()
+                    break
+    if reason is None:
+        if isinstance(primary_url, str) and primary_url.strip():
+            return f"HOL Guard needs approval for this Cursor action. Review it at {primary_url.strip()}."
+        return "HOL Guard blocked this Cursor action."
+    if isinstance(primary_url, str) and primary_url.strip():
+        url_str = primary_url.strip()
+        if url_str in reason:
+            return reason
+        return f"{reason} Review: {url_str}"
+    return reason
 
 
 def _emit_cursor_response(

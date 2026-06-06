@@ -3086,7 +3086,7 @@ def run_guard_command(
             response_payload["approval_requests"] = queued
             _attach_primary_approval_link(
                 response_payload,
-                harness=args.harness,
+                harness=_optional_string(args.harness) or args.harness,
                 approval_center_url=approval_center_url,
             )
             response_payload["approval_center_url"] = approval_center_url
@@ -3628,7 +3628,7 @@ def run_guard_command(
                     response_payload["approval_requests"] = queued
                     _attach_primary_approval_link(
                         response_payload,
-                        harness=args.harness,
+                        harness=_optional_string(args.harness) or args.harness,
                         approval_center_url=approval_center_url,
                     )
                     response_payload["approval_center_url"] = approval_center_url

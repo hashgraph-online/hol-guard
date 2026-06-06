@@ -619,14 +619,31 @@ export function buildApprovalSharePath(item: GuardApprovalRequest): string | nul
 }
 
 export function resolveApprovalShareUrl(item: GuardApprovalRequest): string | null {
-  const path = buildApprovalSharePath(item);
-  if (path === null) {
-    return null;
+  const requestId = item.request_id?.trim();
+  const stored = item.approval_url?.trim();
+  let absolute: string | null = null;
+  if (stored) {
+    absolute = stored.replace("/approvals/", "/requests/");
+    if (requestId) {
+      absolute = absolute.replace(/\/(?:approvals|requests)\/[^/?#]+/, `/requests/${requestId}`);
+    }
+  } else if (requestId && typeof window !== "undefined") {
+    absolute = `${window.location.origin}/requests/${requestId}`;
+  }
+  if (absolute === null) {
+    const path = buildApprovalSharePath(item);
+    if (path === null) {
+      return null;
+    }
+    if (typeof window === "undefined") {
+      return path;
+    }
+    absolute = `${window.location.origin}${path}`;
   }
   if (typeof window === "undefined") {
-    return path;
+    return absolute;
   }
-  return guardAwareHref(path);
+  return guardAwareHref(absolute);
 }
 
 export function resolveTerminalLabel(item: GuardApprovalRequest): string {

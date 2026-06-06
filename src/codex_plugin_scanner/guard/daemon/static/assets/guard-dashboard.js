@@ -14860,14 +14860,31 @@ function buildApprovalSharePath(item) {
   }
 }
 function resolveApprovalShareUrl(item) {
-  const path = buildApprovalSharePath(item);
-  if (path === null) {
-    return null;
+  const requestId = item.request_id?.trim();
+  const stored = item.approval_url?.trim();
+  let absolute = null;
+  if (stored) {
+    absolute = stored.replace("/approvals/", "/requests/");
+    if (requestId) {
+      absolute = absolute.replace(/\/(?:approvals|requests)\/[^/?#]+/, `/requests/${requestId}`);
+    }
+  } else if (requestId && typeof window !== "undefined") {
+    absolute = `${window.location.origin}/requests/${requestId}`;
+  }
+  if (absolute === null) {
+    const path = buildApprovalSharePath(item);
+    if (path === null) {
+      return null;
+    }
+    if (typeof window === "undefined") {
+      return path;
+    }
+    absolute = `${window.location.origin}${path}`;
   }
   if (typeof window === "undefined") {
-    return path;
+    return absolute;
   }
-  return guardAwareHref(path);
+  return guardAwareHref(absolute);
 }
 function resolveTerminalLabel(item) {
   const actionType = item.action_envelope_json?.action_type;
@@ -21497,6 +21514,7 @@ function QueueCardRow(props) {
 function QueueApprovalShareButton(props) {
   const [shareState, setShareState] = reactExports.useState("idle");
   const approvalUrl = resolveApprovalShareUrl(props.item);
+  const timeoutRef = reactExports.useRef(null);
   const handleCopy = reactExports.useCallback(
     async (event) => {
       event.stopPropagation();
@@ -21504,17 +21522,27 @@ function QueueApprovalShareButton(props) {
       if (approvalUrl === null) {
         return;
       }
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
       try {
         await navigator.clipboard.writeText(approvalUrl);
         setShareState("copied");
-        window.setTimeout(() => setShareState("idle"), 1800);
+        timeoutRef.current = window.setTimeout(() => setShareState("idle"), 1800);
       } catch {
         setShareState("failed");
-        window.setTimeout(() => setShareState("idle"), 2400);
+        timeoutRef.current = window.setTimeout(() => setShareState("idle"), 2400);
       }
     },
     [approvalUrl]
   );
+  reactExports.useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
   if (approvalUrl === null) {
     return null;
   }
@@ -21538,36 +21566,55 @@ function QueueCard(props) {
   const fileReadPath = resolveFileReadPath(props.item);
   const isBlocked = props.item.policy_action === "block";
   const statusDotClass = queueCardStatusDotClass(props.active, isBlocked);
+  const handleKeyDown = reactExports.useCallback(
+    (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        props.onClick();
+      }
+    },
+    [props.onClick]
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "button",
+    "div",
     {
-      type: "button",
-      onClick: props.onClick,
-      "aria-pressed": props.active,
-      className: `group/item w-full cursor-pointer border-l-4 px-4 py-3.5 text-left transition-all duration-150 hover:bg-brand-blue/[0.035] ${props.active ? "border-brand-blue bg-brand-blue/[0.06]" : "border-transparent bg-white/70"}`,
+      className: `group/item w-full border-l-4 px-4 py-3.5 transition-all duration-150 hover:bg-brand-blue/[0.035] ${props.active ? "border-brand-blue bg-brand-blue/[0.06]" : "border-transparent bg-white/70"}`,
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "span",
-            {
-              className: `mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${statusDotClass}`
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-semibold text-brand-dark", children: actionDisplayTitle(props.item) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 truncate text-xs text-muted-foreground", children: [
-              harnessDisplayName(props.item.harness),
-              " · ",
-              summary
-            ] }),
-            fileReadPath !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 truncate font-mono text-[11px] text-brand-dark/50", children: fileReadPath })
-          ] })
-        ] }),
-        props.duplicateCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shrink-0 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground", children: [
-          "+",
-          props.duplicateCount
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(QueueApprovalShareButton, { item: props.item })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            role: "button",
+            tabIndex: 0,
+            onClick: props.onClick,
+            onKeyDown: handleKeyDown,
+            "aria-pressed": props.active,
+            className: "flex min-w-0 flex-1 cursor-pointer items-start gap-3 text-left",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${statusDotClass}`
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-semibold text-brand-dark", children: actionDisplayTitle(props.item) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 truncate text-xs text-muted-foreground", children: [
+                  harnessDisplayName(props.item.harness),
+                  " · ",
+                  summary
+                ] }),
+                fileReadPath !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 truncate font-mono text-[11px] text-brand-dark/50", children: fileReadPath })
+              ] })
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-start gap-2", children: [
+          props.duplicateCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground", children: [
+            "+",
+            props.duplicateCount
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(QueueApprovalShareButton, { item: props.item })
+        ] })
       ] })
     }
   );

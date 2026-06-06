@@ -343,7 +343,7 @@ assert(
     ...BASE_REQUEST,
     request_id: "cursor-share-req",
     approval_url: "http://127.0.0.1:4781/approvals/legacy-req"
-  }) === "/requests/cursor-share-req",
+  }) === "http://127.0.0.1:4781/requests/cursor-share-req",
   "T498: resolveApprovalShareUrl prefers request_id and canonical /requests/ route"
 );
 

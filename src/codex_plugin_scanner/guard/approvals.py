@@ -96,7 +96,7 @@ def primary_approval_url(
         return None
     approval_url = request.get("approval_url")
     if isinstance(approval_url, str) and approval_url.strip():
-        return approval_url.strip()
+        return approval_url.strip().replace("/approvals/", "/requests/")
     request_id = request.get("request_id")
     if isinstance(request_id, str) and request_id.strip() and isinstance(approval_center_url, str):
         center = approval_center_url.strip()
@@ -396,11 +396,14 @@ def approval_center_hint(
     flow = approval_prompt_flow(harness, managed_install=managed_install)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
-    review_url = primary_approval_url(
-        queued,
-        harness=harness,
-        approval_center_url=approval_center_url,
-    ) or approval_center_url
+    review_url = (
+        primary_approval_url(
+            queued,
+            harness=harness,
+            approval_center_url=approval_center_url,
+        )
+        or approval_center_url
+    )
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
         f"{flow['summary']} "
