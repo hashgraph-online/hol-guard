@@ -101,6 +101,24 @@ def test_pretool_hook_launcher_ignores_workspace_package_hijack(
     assert completed.returncode != 99
 
 
+def test_pretool_hook_env_blocks_workspace_import_shadowing(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    guard_python = resolve_guard_hook_python(ctx)
+    package_root = package_root_from_python(guard_python)
+    env = _pretool_hook_env(package_root=package_root)
+    assert env["PYTHONSAFEPATH"] == "1"
+    assert env["PYTHONNOUSERSITE"] == "1"
+    assert package_root in env["PYTHONPATH"]
+
+
+def test_pretool_plugin_source_does_not_spawn_python_m_module(tmp_path: Path) -> None:
+    source = pretool_plugin_source(_ctx(tmp_path))
+    spawn_block = source.split("Bun.spawn(", 1)[1].split("});", 1)[0]
+    assert "codex_plugin_scanner.cli" not in spawn_block
+    assert '"-c"' in spawn_block or "'-c'" in spawn_block or "-c" in spawn_block
+    assert "GUARD_HOOK_LAUNCHER" in spawn_block
+
+
 def test_install_pretool_plugin_writes_managed_and_global_copies(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     manifest = install_pretool_plugin(ctx)
@@ -148,6 +166,46 @@ def test_opencode_config_uses_guard_proxy_parses_jsonc_comments(tmp_path: Path) 
     assert opencode_config_uses_guard_proxy(config) is True
 
 
+def test_opencode_config_uses_guard_proxy_rejects_invalid_companion_command(tmp_path: Path) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(
+        json.dumps(
+            {
+                "mcp": {
+                    "hol-guard::chrome-devtools": {
+                        "type": "local",
+                        "command": ["node", "not-a-proxy.js"],
+                    },
+                    "chrome-devtools": {
+                        "type": "local",
+                        "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert opencode_config_uses_guard_proxy(config) is False
+
+
+def test_opencode_config_uses_guard_proxy_detects_companion_server_name(tmp_path: Path) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(
+        json.dumps(
+            {
+                "mcp": {
+                    "hol-guard::chrome-devtools": {
+                        "type": "local",
+                        "command": ["python", "-m", "codex_plugin_scanner.cli", "guard", "opencode-mcp-proxy"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert opencode_config_uses_guard_proxy(config) is True
+
+
 def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path) -> None:
     config = tmp_path / "opencode.json"
     config.write_text(
@@ -164,6 +222,28 @@ def test_opencode_config_uses_guard_proxy_detects_managed_command(tmp_path: Path
         encoding="utf-8",
     )
     assert opencode_config_uses_guard_proxy(config) is True
+
+
+def test_opencode_config_uses_guard_proxy_requires_companion_for_each_native_server(tmp_path: Path) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(
+        json.dumps(
+            {
+                "mcp": {
+                    "hol-guard::old-server": {
+                        "type": "local",
+                        "command": ["python", "-m", "codex_plugin_scanner.cli", "guard", "opencode-mcp-proxy"],
+                    },
+                    "new-server": {
+                        "type": "local",
+                        "command": ["node", "new-server.js"],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert opencode_config_uses_guard_proxy(config) is False
 
 
 def test_opencode_verification_ready_without_mcp_servers(tmp_path: Path) -> None:
@@ -183,6 +263,41 @@ def test_opencode_verification_ready_without_mcp_servers(tmp_path: Path) -> None
     assert verification["pretool_plugin_installed"] is True
     assert verification["mcp_proxy_configured"] is False
     assert opencode_config_has_mcp_servers(config) is False
+    assert verification["ready"] is True
+    assert not verification["warnings"]
+
+
+def test_opencode_verification_ready_with_guard_companion_servers(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    ctx = _ctx(tmp_path)
+    config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(
+        json.dumps(
+            {
+                "mcp": {
+                    "chrome-devtools": {
+                        "type": "local",
+                        "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+                    },
+                    "hol-guard::chrome-devtools": {
+                        "type": "local",
+                        "command": ["python", "-m", "codex_plugin_scanner.cli", "guard", "opencode-mcp-proxy"],
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    install_pretool_plugin(ctx)
+    (ctx.guard_home / "bin").mkdir(parents=True, exist_ok=True)
+    (ctx.guard_home / "bin" / "guard-opencode").write_text("#!/bin/sh\n", encoding="utf-8")
+    store = GuardStore(ctx.guard_home)
+    store.set_managed_install("opencode", True, None, {}, "2026-06-04T00:00:00+00:00")
+    payload = install_commands_module.build_harness_verification("opencode", ctx, store=store)
+    verification = payload["verification"]
+    assert verification["mcp_proxy_configured"] is True
     assert verification["ready"] is True
     assert not verification["warnings"]
 

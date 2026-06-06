@@ -3008,19 +3008,18 @@ args = ["workspace-skill.js", "--changed"]
         assert runtime_payload["mcp"]["danger_lab"]["command"][3] == "guard"
         assert runtime_payload["mcp"]["danger_lab"]["command"][4] == "opencode-mcp-proxy"
         assert runtime_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
-        assert manifest["managed_config_path"] == str(workspace_dir / "opencode.json")
+        global_config_path = home_dir / ".config" / "opencode" / "opencode.json"
+        assert manifest["managed_config_path"] == str(global_config_path)
         assert Path(str(manifest["backup_path"])).is_file()
-        assert managed_payload["permission"]["danger_lab_*"] == "ask"
-        assert managed_payload["mcp"]["danger_lab"]["type"] == "local"
-        assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
-        assert managed_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
-        assert "opencode-mcp-proxy" not in json.dumps(managed_payload["mcp"]["danger_lab"])
+        assert "danger_lab" not in managed_payload.get("mcp", {})
+        assert managed_payload["permission"]["bash"]["rm -rf *"] == "deny"
+        assert json.loads((workspace_dir / "opencode.json").read_text(encoding="utf-8"))["name"] == "workspace-opencode"
 
     def test_guard_reinstall_does_not_double_wrap_opencode_mcp_proxies(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _write_json(
-            workspace_dir / "opencode.json",
+            home_dir / ".config" / "opencode" / "opencode.json",
             {
                 "mcp": {
                     "danger_lab": {
@@ -3067,14 +3066,15 @@ args = ["workspace-skill.js", "--changed"]
         assert first_rc == 0
         assert second_rc == 0
         assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
+        assert "opencode-mcp-proxy" in json.dumps(managed_payload["mcp"]["hol-guard::danger_lab"])
         assert proxy_command.count("opencode-mcp-proxy") == 1
         assert proxy_command[proxy_command.index("--command") + 1] == "python3"
         assert "--arg=danger-server.py" in proxy_command
 
-    def test_guard_install_prefers_existing_opencode_jsonc_target(self, tmp_path, capsys):
+    def test_guard_install_uses_global_jsonc_when_present(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        jsonc_path = workspace_dir / "opencode.jsonc"
+        jsonc_path = home_dir / ".config" / "opencode" / "opencode.jsonc"
         jsonc_text = (
             "{\n"
             "  // keep jsonc target\n"
@@ -3106,9 +3106,10 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert managed_config_path == jsonc_path
         assert managed_payload["provider"] == {"openai": {}}
-        assert managed_payload["permission"]["danger_lab_*"] == "ask"
+        assert managed_payload["mcp"]["danger_lab"]["command"] == ["python3", "danger-server.py"]
+        assert "hol-guard::danger_lab" in managed_payload["mcp"]
 
-    def test_guard_install_prefers_opencode_environment_config_target(self, monkeypatch, tmp_path, capsys):
+    def test_guard_install_ignores_opencode_config_for_managed_target(self, monkeypatch, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         custom_config_path = workspace_dir / "custom" / "guard-opencode.jsonc"
@@ -3132,14 +3133,17 @@ args = ["workspace-skill.js", "--changed"]
         managed_payload = json.loads(managed_config_path.read_text(encoding="utf-8"))
 
         assert rc == 0
-        assert managed_config_path == custom_config_path
-        assert managed_payload["provider"] == {"openrouter": {}}
+        assert managed_config_path == home_dir / ".config" / "opencode" / "opencode.json"
+        assert json.loads(custom_config_path.read_text(encoding="utf-8"))["provider"] == {"openrouter": {}}
 
-    def test_guard_install_prefers_workspace_target_over_existing_global_opencode_config(self, tmp_path, capsys):
+    def test_guard_install_targets_global_even_with_workspace_config(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
+        workspace_config_path = workspace_dir / "opencode.json"
+        workspace_text = '{\n  "provider": {"anthropic": {}}\n}\n'
         global_config_path = home_dir / ".config" / "opencode" / "opencode.json"
         global_text = '{\n  "provider": {"openai": {}}\n}\n'
+        _write_text(workspace_config_path, workspace_text)
         _write_text(global_config_path, global_text)
 
         rc = main(
@@ -3158,9 +3162,10 @@ args = ["workspace-skill.js", "--changed"]
         managed_config_path = Path(str(output["managed_install"]["manifest"]["managed_config_path"]))
 
         assert rc == 0
-        assert managed_config_path == workspace_dir / "opencode.json"
+        assert managed_config_path == global_config_path
         assert managed_config_path.exists() is True
-        assert global_config_path.read_text(encoding="utf-8") == global_text
+        assert json.loads(global_config_path.read_text(encoding="utf-8"))["provider"] == {"openai": {}}
+        assert workspace_config_path.read_text(encoding="utf-8") == workspace_text
 
     def test_guard_uninstall_restores_opencode_project_config(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3177,6 +3182,7 @@ args = ["workspace-skill.js", "--changed"]
         }
         _write_json(workspace_dir / "opencode.json", original_payload)
         original_text = (workspace_dir / "opencode.json").read_text(encoding="utf-8")
+        global_config_path = home_dir / ".config" / "opencode" / "opencode.json"
 
         install_rc = main(
             [
@@ -3211,6 +3217,7 @@ args = ["workspace-skill.js", "--changed"]
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert (workspace_dir / "opencode.json").read_text(encoding="utf-8") == original_text
+        assert global_config_path.exists() is False
         assert backup_path.exists() is False
 
     def test_guard_install_keeps_pythonpath_in_opencode_runtime_overlay(self, tmp_path, capsys, monkeypatch):
@@ -3330,8 +3337,10 @@ args = ["workspace-skill.js", "--changed"]
 
         assert install_rc == 0
         assert uninstall_rc == 0
-        assert uninstall_output["managed_install"]["manifest"]["managed_config_path"] == str(custom_config_path)
+        global_config_path = home_dir / ".config" / "opencode" / "opencode.json"
+        assert uninstall_output["managed_install"]["manifest"]["managed_config_path"] == str(global_config_path)
         assert custom_config_path.read_text(encoding="utf-8") == original_text
+        assert global_config_path.exists() is False
         assert backup_path.exists() is False
         assert state_path.exists() is False
 
@@ -3339,8 +3348,11 @@ args = ["workspace-skill.js", "--changed"]
         home_dir = tmp_path / "home"
         workspace_a = tmp_path / "workspace-a"
         workspace_b = tmp_path / "workspace-b"
+        global_config_path = home_dir / ".config" / "opencode" / "opencode.json"
+        original_global = '{\n  "provider": {"openai": {}}\n}\n'
         original_a = '{\n  "provider": {"openai": {}}\n}\n'
         original_b = '{\n  "provider": {"openrouter": {}}\n}\n'
+        _write_text(global_config_path, original_global)
         _write_text(workspace_a / "opencode.json", original_a)
         _write_text(workspace_b / "opencode.json", original_b)
 
@@ -3374,7 +3386,7 @@ args = ["workspace-skill.js", "--changed"]
         install_b_output = json.loads(capsys.readouterr().out)
         state_b_path = Path(str(install_b_output["managed_install"]["manifest"]["state_path"]))
 
-        uninstall_a_rc = main(
+        uninstall_b_rc = main(
             [
                 "guard",
                 "uninstall",
@@ -3382,28 +3394,30 @@ args = ["workspace-skill.js", "--changed"]
                 "--home",
                 str(home_dir),
                 "--workspace",
-                str(workspace_a),
+                str(workspace_b),
                 "--json",
             ]
         )
-        uninstall_a_output = json.loads(capsys.readouterr().out)
+        uninstall_b_output = json.loads(capsys.readouterr().out)
 
         assert install_a_rc == 0
         assert install_b_rc == 0
-        assert uninstall_a_rc == 0
-        assert uninstall_a_output["managed_install"]["manifest"]["managed_config_path"] == str(
-            workspace_a / "opencode.json"
-        )
+        assert uninstall_b_rc == 0
+        assert uninstall_b_output["managed_install"]["manifest"]["managed_config_path"] == str(global_config_path)
         assert (workspace_a / "opencode.json").read_text(encoding="utf-8") == original_a
-        assert (workspace_b / "opencode.json").read_text(encoding="utf-8") != original_b
-        assert state_a_path.exists() is False
-        assert state_b_path.exists() is True
+        assert (workspace_b / "opencode.json").read_text(encoding="utf-8") == original_b
+        assert global_config_path.read_text(encoding="utf-8") == original_global
+        assert state_a_path == state_b_path
+        assert state_b_path.exists() is False
 
     def test_guard_uninstall_uses_single_global_state_without_opencode_config(self, monkeypatch, tmp_path, capsys):
         home_dir = tmp_path / "home"
         custom_config_path = home_dir / "custom" / "opencode.jsonc"
+        global_config_path = home_dir / ".config" / "opencode" / "opencode.json"
         original_text = '{\n  "provider": {"openrouter": {}}\n}\n'
-        _write_text(custom_config_path, original_text)
+        custom_text = '{\n  "provider": {"anthropic": {}}\n}\n'
+        _write_text(global_config_path, original_text)
+        _write_text(custom_config_path, custom_text)
         monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config_path))
 
         install_rc = main(
@@ -3434,8 +3448,9 @@ args = ["workspace-skill.js", "--changed"]
 
         assert install_rc == 0
         assert uninstall_rc == 0
-        assert uninstall_output["managed_install"]["manifest"]["managed_config_path"] == str(custom_config_path)
-        assert custom_config_path.read_text(encoding="utf-8") == original_text
+        assert uninstall_output["managed_install"]["manifest"]["managed_config_path"] == str(global_config_path)
+        assert global_config_path.read_text(encoding="utf-8") == original_text
+        assert custom_config_path.read_text(encoding="utf-8") == custom_text
         assert state_path.exists() is False
 
     def test_guard_uninstall_keeps_config_when_backup_metadata_is_unreadable(self, tmp_path, capsys):
@@ -3626,8 +3641,8 @@ args = ["workspace-skill.js", "--changed"]
         assert uninstall_rc == 0
         assert config_a_path.read_text(encoding="utf-8") == config_a_before_uninstall
         assert config_b_path.read_text(encoding="utf-8") == config_b_before_uninstall
-        assert state_a_path.exists() is True
-        assert state_b_path.exists() is True
+        assert state_a_path == state_b_path
+        assert state_a_path.exists() is False
 
     def test_guard_install_keeps_disabled_opencode_servers_disabled(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
