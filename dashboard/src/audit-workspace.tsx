@@ -141,66 +141,65 @@ function AuditResultRow({ result, onMarkResolved, onRunRemediation, running, act
   const [expanded, setExpanded] = useState(false);
   const toggle = useCallback(() => setExpanded((p) => !p), []);
   const handleResolve = useCallback(() => onMarkResolved?.(result.id), [onMarkResolved, result.id]);
-  const handleRunRemediation = useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
+  const showInlineAction = !result.resolved && (result.remediationAction !== null || onMarkResolved);
 
   return (
     <div className={`border-b border-slate-100 last:border-b-0 ${result.resolved ? "opacity-60" : ""}`}>
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={expanded}
-        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50/60 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-blue/30"
-      >
-        <span className="mt-0.5 shrink-0" aria-hidden="true">
-          {result.resolved ? (
-            <HiMiniCheckCircle className="h-4 w-4 text-brand-green" />
-          ) : result.severity === "critical" || result.severity === "high" ? (
-            <HiMiniXCircle className="h-4 w-4 text-red-500" />
-          ) : (
-            <HiMiniExclamationTriangle className="h-4 w-4 text-brand-attention" />
-          )}
-        </span>
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-brand-dark">{result.title}</span>
-            <Badge tone={severityBadgeTone(result.severity)}>
-              {result.severity}
-            </Badge>
-            {result.resolved && <Badge tone="success">Resolved</Badge>}
+      <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 hover:bg-slate-50/60">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-blue/30"
+        >
+          <span className="mt-0.5 shrink-0" aria-hidden="true">
+            {result.resolved ? (
+              <HiMiniCheckCircle className="h-4 w-4 text-brand-green" />
+            ) : result.severity === "critical" || result.severity === "high" ? (
+              <HiMiniXCircle className="h-4 w-4 text-red-500" />
+            ) : (
+              <HiMiniExclamationTriangle className="h-4 w-4 text-brand-attention" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-brand-dark">{result.title}</span>
+              <Badge tone={severityBadgeTone(result.severity)}>
+                {result.severity}
+              </Badge>
+              {result.resolved && <Badge tone="success">Resolved</Badge>}
+            </div>
+            <p className="text-xs text-slate-500">
+              {harnessDisplayName(result.harness)}
+              {result.workspace ? ` / ${result.workspace}` : ""}
+              <span className="mx-1.5 text-slate-300">·</span>
+              {formatRelativeTime(result.timestamp)}
+            </p>
           </div>
-          <p className="text-xs text-slate-500">
-            {harnessDisplayName(result.harness)}
-            {result.workspace ? ` / ${result.workspace}` : ""}
-            <span className="mx-1.5 text-slate-300">·</span>
-            {formatRelativeTime(result.timestamp)}
-          </p>
-        </div>
-        <HiMiniChevronRight
-          className={`mt-0.5 h-4 w-4 shrink-0 text-slate-300 transition-transform ${expanded ? "rotate-90" : ""}`}
-          aria-hidden="true"
-        />
-      </button>
+          <HiMiniChevronRight
+            className={`mt-0.5 h-4 w-4 shrink-0 text-slate-300 transition-transform ${expanded ? "rotate-90" : ""}`}
+            aria-hidden="true"
+          />
+        </button>
+        {showInlineAction && (
+          <div className="shrink-0 pl-7 sm:pl-0 sm:pt-0.5">
+            <AuditRowActions
+              result={result}
+              onMarkResolved={onMarkResolved}
+              onRunRemediation={onRunRemediation}
+              running={running}
+            />
+          </div>
+        )}
+      </div>
+      {actionMessage !== null && (
+        <p className="px-4 pb-2 text-xs text-slate-500">{actionMessage}</p>
+      )}
       {expanded && (
         <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3 space-y-3">
           <p className="text-sm text-brand-dark/80">{result.detail}</p>
           {result.remediation && (
-            <div className="rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2.5">
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-blue mb-1">
-                Remediation
-              </p>
-              <p className="text-sm text-brand-dark/80">{result.remediation}</p>
-              {result.remediationAction && (
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <ActionButton onClick={handleRunRemediation} disabled={running}>
-                    <HiMiniWrenchScrewdriver className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                    {running ? "Running..." : result.remediationAction.label}
-                  </ActionButton>
-                </div>
-              )}
-              {actionMessage !== null && (
-                <p className="mt-2 text-xs text-slate-500">{actionMessage}</p>
-              )}
-            </div>
+            <p className="text-sm text-brand-dark/70">{result.remediation}</p>
           )}
           {!result.resolved && onMarkResolved && (
             <ActionButton variant="outline" onClick={handleResolve}>
@@ -211,6 +210,40 @@ function AuditResultRow({ result, onMarkResolved, onRunRemediation, running, act
       )}
     </div>
   );
+}
+
+function AuditRowActions(props: {
+  result: AuditResult;
+  onMarkResolved?: (id: string) => void;
+  onRunRemediation: (result: AuditResult) => void;
+  running: boolean;
+}) {
+  const { result, onMarkResolved, onRunRemediation, running } = props;
+  const handleMarkResolved = useCallback(() => onMarkResolved?.(result.id), [onMarkResolved, result.id]);
+  const handleRunRemediation = useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
+
+  if (result.remediationAction !== null) {
+    return (
+      <div className="w-full sm:w-auto">
+        <ActionButton onClick={handleRunRemediation} disabled={running}>
+          <HiMiniWrenchScrewdriver className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          {running ? "Running..." : result.remediationAction.label}
+        </ActionButton>
+      </div>
+    );
+  }
+
+  if (onMarkResolved) {
+    return (
+      <div className="w-full sm:w-auto">
+        <ActionButton variant="outline" onClick={handleMarkResolved}>
+          Resolve
+        </ActionButton>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 type AuditWorkspaceProps = {
@@ -361,7 +394,7 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">
-            Workspace audit results, open issues, and remediation queue.
+            Workspace audit results and open issues. Fix high-priority items inline.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -457,17 +490,6 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
         )}
       </div>
 
-      {openCount > 0 && (
-        <RemediationQueue
-          results={baseResults
-            .map((r) => ({ ...r, resolved: r.resolved || resolvedIds.has(r.id) }))
-            .filter((r) => !r.resolved && (r.severity === "critical" || r.severity === "high"))}
-          onMarkResolved={handleMarkResolved}
-          onRunRemediation={handleRunRemediation}
-          runningRemediationId={runningRemediationId}
-          remediationMessages={remediationMessages}
-        />
-      )}
       {pendingRemediation !== null && (
         <RemediationApprovalModal
           result={pendingRemediation}
@@ -477,86 +499,6 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate }: AuditWorksp
         />
       )}
     </div>
-  );
-}
-
-type RemediationQueueProps = {
-  results: AuditResult[];
-  onMarkResolved: (id: string) => void;
-  onRunRemediation: (result: AuditResult) => void;
-  runningRemediationId: string | null;
-  remediationMessages: Record<string, string>;
-};
-
-function RemediationQueue({
-  results,
-  onMarkResolved,
-  onRunRemediation,
-  runningRemediationId,
-  remediationMessages,
-}: RemediationQueueProps) {
-  if (results.length === 0) return null;
-  return (
-    <div className="rounded-2xl border border-red-100 bg-red-50/40 shadow-sm">
-      <div className="border-b border-red-100 px-4 py-3">
-        <SectionLabel>Remediation queue</SectionLabel>
-        <p className="mt-1 text-sm text-slate-500">
-          Critical and high severity issues that need attention.
-        </p>
-      </div>
-      <div className="divide-y divide-red-100">
-        {results.map((r) => (
-          <div key={r.id} className="px-4 py-3 space-y-2">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-0.5 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-brand-dark">{r.title}</span>
-                  <Badge tone={r.severity === "critical" ? "destructive" : "attention"}>
-                    {r.severity}
-                  </Badge>
-                </div>
-                {r.remediation && (
-                  <p className="text-sm text-slate-600">{r.remediation}</p>
-                )}
-              </div>
-              <RemediationQueueActions
-                result={r}
-                onMarkResolved={onMarkResolved}
-                onRunRemediation={onRunRemediation}
-                running={runningRemediationId === r.id}
-              />
-            </div>
-            {remediationMessages[r.id] && (
-              <p className="text-xs text-slate-500">{remediationMessages[r.id]}</p>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function RemediationQueueActions(props: {
-  result: AuditResult;
-  onMarkResolved: (id: string) => void;
-  onRunRemediation: (result: AuditResult) => void;
-  running: boolean;
-}) {
-  const { result, onMarkResolved, onRunRemediation, running } = props;
-  const handleMarkResolved = useCallback(() => onMarkResolved(result.id), [onMarkResolved, result.id]);
-  const handleRunRemediation = useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
-  if (result.remediationAction !== null) {
-    return (
-      <ActionButton onClick={handleRunRemediation} disabled={running}>
-        <HiMiniWrenchScrewdriver className="mr-1.5 h-4 w-4" aria-hidden="true" />
-        {running ? "Running..." : result.remediationAction.label}
-      </ActionButton>
-    );
-  }
-  return (
-    <ActionButton variant="outline" onClick={handleMarkResolved}>
-      Resolve
-    </ActionButton>
   );
 }
 

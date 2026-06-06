@@ -66,54 +66,73 @@ function AuditResultRow({ result, onMarkResolved, onRunRemediation, running, act
   const [expanded, setExpanded] = reactExports.useState(false);
   const toggle = reactExports.useCallback(() => setExpanded((p) => !p), []);
   const handleResolve = reactExports.useCallback(() => onMarkResolved?.(result.id), [onMarkResolved, result.id]);
-  const handleRunRemediation = reactExports.useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
+  const showInlineAction = !result.resolved && (result.remediationAction !== null || onMarkResolved);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `border-b border-slate-100 last:border-b-0 ${result.resolved ? "opacity-60" : ""}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        onClick: toggle,
-        "aria-expanded": expanded,
-        className: "flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50/60 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-blue/30",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 shrink-0", "aria-hidden": "true", children: result.resolved ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-brand-green" }) : result.severity === "critical" || result.severity === "high" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4 text-red-500" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-brand-attention" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-0.5", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: result.title }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: severityBadgeTone(result.severity), children: result.severity }),
-              result.resolved && /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Resolved" })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 hover:bg-slate-50/60", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: toggle,
+          "aria-expanded": expanded,
+          className: "flex min-w-0 flex-1 items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-blue/30",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 shrink-0", "aria-hidden": "true", children: result.resolved ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-brand-green" }) : result.severity === "critical" || result.severity === "high" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4 text-red-500" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 text-brand-attention" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-0.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark", children: result.title }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: severityBadgeTone(result.severity), children: result.severity }),
+                result.resolved && /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Resolved" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+                harnessDisplayName(result.harness),
+                result.workspace ? ` / ${result.workspace}` : "",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1.5 text-slate-300", children: "·" }),
+                formatRelativeTime(result.timestamp)
+              ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-              harnessDisplayName(result.harness),
-              result.workspace ? ` / ${result.workspace}` : "",
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1.5 text-slate-300", children: "·" }),
-              formatRelativeTime(result.timestamp)
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            HiMiniChevronRight,
-            {
-              className: `mt-0.5 h-4 w-4 shrink-0 text-slate-300 transition-transform ${expanded ? "rotate-90" : ""}`,
-              "aria-hidden": "true"
-            }
-          )
-        ]
-      }
-    ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              HiMiniChevronRight,
+              {
+                className: `mt-0.5 h-4 w-4 shrink-0 text-slate-300 transition-transform ${expanded ? "rotate-90" : ""}`,
+                "aria-hidden": "true"
+              }
+            )
+          ]
+        }
+      ),
+      showInlineAction && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0 pl-7 sm:pl-0 sm:pt-0.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AuditRowActions,
+        {
+          result,
+          onMarkResolved,
+          onRunRemediation,
+          running
+        }
+      ) })
+    ] }),
+    actionMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "px-4 pb-2 text-xs text-slate-500", children: actionMessage }),
     expanded && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 bg-slate-50/40 px-4 py-3 space-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: result.detail }),
-      result.remediation && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.15em] text-brand-blue mb-1", children: "Remediation" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: result.remediation }),
-        result.remediationAction && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleRunRemediation, disabled: running, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-          running ? "Running..." : result.remediationAction.label
-        ] }) }),
-        actionMessage !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: actionMessage })
-      ] }),
+      result.remediation && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: result.remediation }),
       !result.resolved && onMarkResolved && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleResolve, children: "Mark as resolved" })
     ] })
   ] });
+}
+function AuditRowActions(props) {
+  const { result, onMarkResolved, onRunRemediation, running } = props;
+  const handleMarkResolved = reactExports.useCallback(() => onMarkResolved?.(result.id), [onMarkResolved, result.id]);
+  const handleRunRemediation = reactExports.useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
+  if (result.remediationAction !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleRunRemediation, disabled: running, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+      running ? "Running..." : result.remediationAction.label
+    ] }) });
+  }
+  if (onMarkResolved) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleMarkResolved, children: "Resolve" }) });
+  }
+  return null;
 }
 function AuditWorkspace({ snapshot, receipts, approvalGate }) {
   const [filter, setFilter] = reactExports.useState({
@@ -220,7 +239,7 @@ function AuditWorkspace({ snapshot, receipts, approvalGate }) {
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Workspace audit results, open issues, and remediation queue." }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Workspace audit results and open issues. Fix high-priority items inline." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
         criticalCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "destructive", children: [
           criticalCount,
@@ -296,16 +315,6 @@ function AuditWorkspace({ snapshot, receipts, approvalGate }) {
         }
       ) }, result.id)) })
     ] }),
-    openCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      RemediationQueue,
-      {
-        results: baseResults.map((r) => ({ ...r, resolved: r.resolved || resolvedIds.has(r.id) })).filter((r) => !r.resolved && (r.severity === "critical" || r.severity === "high")),
-        onMarkResolved: handleMarkResolved,
-        onRunRemediation: handleRunRemediation,
-        runningRemediationId,
-        remediationMessages
-      }
-    ),
     pendingRemediation !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       RemediationApprovalModal,
       {
@@ -316,54 +325,6 @@ function AuditWorkspace({ snapshot, receipts, approvalGate }) {
       }
     )
   ] });
-}
-function RemediationQueue({
-  results,
-  onMarkResolved,
-  onRunRemediation,
-  runningRemediationId,
-  remediationMessages
-}) {
-  if (results.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-red-100 bg-red-50/40 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-red-100 px-4 py-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Remediation queue" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Critical and high severity issues that need attention." })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-red-100", children: results.map((r) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-3 space-y-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-0.5 min-w-0", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: r.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: r.severity === "critical" ? "destructive" : "attention", children: r.severity })
-          ] }),
-          r.remediation && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: r.remediation })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          RemediationQueueActions,
-          {
-            result: r,
-            onMarkResolved,
-            onRunRemediation,
-            running: runningRemediationId === r.id
-          }
-        )
-      ] }),
-      remediationMessages[r.id] && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: remediationMessages[r.id] })
-    ] }, r.id)) })
-  ] });
-}
-function RemediationQueueActions(props) {
-  const { result, onMarkResolved, onRunRemediation, running } = props;
-  const handleMarkResolved = reactExports.useCallback(() => onMarkResolved(result.id), [onMarkResolved, result.id]);
-  const handleRunRemediation = reactExports.useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
-  if (result.remediationAction !== null) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleRunRemediation, disabled: running, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-      running ? "Running..." : result.remediationAction.label
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleMarkResolved, children: "Resolve" });
 }
 function RemediationApprovalModal(props) {
   const { approvalGate, onCancel, onConfirm, result } = props;
