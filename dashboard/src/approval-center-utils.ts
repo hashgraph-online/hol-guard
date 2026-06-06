@@ -6,6 +6,7 @@ import type {
   GuardReceipt,
   RiskSignalV2
 } from "./guard-types";
+import { guardAwareHref } from "./guard-api";
 
 export const EMPTY_QUEUE_TITLE = "No blocked actions";
 export const STALE_REQUEST_COPY = "This request was already decided.";
@@ -597,6 +598,52 @@ export function resolveFileReadPath(item: GuardApprovalRequest): string | null {
   const paths = item.action_envelope_json?.target_paths ?? [];
   if (paths.length > 0) return paths[0];
   return item.launch_target ?? null;
+}
+
+export function buildApprovalSharePath(item: GuardApprovalRequest): string | null {
+  const requestId = item.request_id?.trim();
+  if (requestId) {
+    return `/requests/${requestId}`;
+  }
+  const stored = item.approval_url?.trim();
+  if (!stored) {
+    return null;
+  }
+  try {
+    const parsed = new URL(stored, "http://guard.local");
+    parsed.pathname = parsed.pathname.replace("/approvals/", "/requests/");
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return stored.replace("/approvals/", "/requests/");
+  }
+}
+
+export function resolveApprovalShareUrl(item: GuardApprovalRequest): string | null {
+  const requestId = item.request_id?.trim();
+  const stored = item.approval_url?.trim();
+  let absolute: string | null = null;
+  if (stored) {
+    absolute = stored.replace("/approvals/", "/requests/");
+    if (requestId) {
+      absolute = absolute.replace(/\/(?:approvals|requests)\/[^/?#]+/, `/requests/${requestId}`);
+    }
+  } else if (requestId && typeof window !== "undefined") {
+    absolute = `${window.location.origin}/requests/${requestId}`;
+  }
+  if (absolute === null) {
+    const path = buildApprovalSharePath(item);
+    if (path === null) {
+      return null;
+    }
+    if (typeof window === "undefined") {
+      return path;
+    }
+    absolute = `${window.location.origin}${path}`;
+  }
+  if (typeof window === "undefined") {
+    return absolute;
+  }
+  return guardAwareHref(absolute);
 }
 
 export function resolveTerminalLabel(item: GuardApprovalRequest): string {

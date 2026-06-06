@@ -194,11 +194,12 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         select request_id
         from approval_requests
         where queue_group_id = ?
+          and harness = ?
           and status = 'pending'
         order by last_seen_at desc, request_id desc
         limit 1
         """,
-        (queue_group_id,),
+        (queue_group_id, request.harness),
     ).fetchone()
     if existing is None:
         existing = connection.execute(
@@ -240,7 +241,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         connection.execute(
             """
             update approval_requests
-            set artifact_name = ?, artifact_type = ?, artifact_hash = ?, publisher = ?, policy_action = ?,
+            set harness = ?, artifact_name = ?, artifact_type = ?, artifact_hash = ?, publisher = ?, policy_action = ?,
                 recommended_scope = ?, changed_fields_json = ?, source_scope = ?, config_path = ?, workspace = ?,
                 launch_target = ?, normalized_identity_key = ?, action_identity = ?, queue_group_id = ?,
                 dedupe_count = coalesce(dedupe_count, 1) + 1, last_seen_at = ?,
@@ -251,6 +252,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             where request_id = ?
             """,
             (
+                request.harness,
                 request.artifact_name,
                 request.artifact_type,
                 request.artifact_hash,
@@ -359,7 +361,8 @@ def _rewrite_review_command(command: str, request_id: str) -> str:
 
 
 def _rewrite_approval_url(url: str, request_id: str) -> str:
-    prefix, _, _ = url.rpartition("/")
+    normalized = url.replace("/approvals/", "/requests/")
+    prefix, _, _ = normalized.rpartition("/")
     if prefix:
         return f"{prefix}/{request_id}"
     return request_id

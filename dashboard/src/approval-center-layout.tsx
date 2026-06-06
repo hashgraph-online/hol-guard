@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, MouseEvent, KeyboardEvent } from "react";
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from "react";
 import {
   HiMiniChevronDown,
@@ -54,6 +54,7 @@ import {
   displayArtifactName,
   resolveTerminalLabel,
   resolveFileReadPath,
+  resolveApprovalShareUrl,
   scopeLabel,
   STALE_REQUEST_COPY,
   QUEUE_CONNECTION_ERROR_HEADLINE,
@@ -841,24 +842,89 @@ function QueueCardRow(props: {
   );
 }
 
+function QueueApprovalShareButton(props: { item: GuardApprovalRequest }) {
+  const [shareState, setShareState] = useState<"idle" | "copied" | "failed">("idle");
+  const approvalUrl = resolveApprovalShareUrl(props.item);
+  const timeoutRef = useRef<number | null>(null);
+  const handleCopy = useCallback(
+    async (event: MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
+      if (approvalUrl === null) {
+        return;
+      }
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
+      try {
+        await navigator.clipboard.writeText(approvalUrl);
+        setShareState("copied");
+        timeoutRef.current = window.setTimeout(() => setShareState("idle"), 1800);
+      } catch {
+        setShareState("failed");
+        timeoutRef.current = window.setTimeout(() => setShareState("idle"), 2400);
+      }
+    },
+    [approvalUrl]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  if (approvalUrl === null) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-blue/80 transition-colors hover:bg-brand-blue/[0.06] hover:text-brand-blue"
+      aria-label="Copy approval link"
+      title={copyApprovalUrlLabel(shareState)}
+    >
+      <HiMiniClipboard className="h-3.5 w-3.5" aria-hidden="true" />
+      <span className="hidden sm:inline">{copyApprovalUrlLabel(shareState)}</span>
+    </button>
+  );
+}
+
 function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; active: boolean; onClick: () => void }) {
   const summary = buildQueueSummary(props.item);
   const fileReadPath = resolveFileReadPath(props.item);
   const isBlocked = props.item.policy_action === "block";
   const statusDotClass = queueCardStatusDotClass(props.active, isBlocked);
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        props.onClick();
+      }
+    },
+    [props.onClick]
+  );
   return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      aria-pressed={props.active}
-      className={`group/item w-full cursor-pointer border-l-4 px-4 py-3.5 text-left transition-all duration-150 hover:bg-brand-blue/[0.035] ${
+    <div
+      className={`group/item w-full border-l-4 px-4 py-3.5 transition-all duration-150 hover:bg-brand-blue/[0.035] ${
         props.active
           ? "border-brand-blue bg-brand-blue/[0.06]"
           : "border-transparent bg-white/70"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={props.onClick}
+          onKeyDown={handleKeyDown}
+          aria-pressed={props.active}
+          className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 text-left"
+        >
            <span
              className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
                statusDotClass
@@ -876,13 +942,16 @@ function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; 
             )}
           </div>
         </div>
-        {props.duplicateCount > 0 && (
-          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
-            +{props.duplicateCount}
-          </span>
-        )}
+        <div className="flex shrink-0 items-start gap-2">
+          {props.duplicateCount > 0 && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
+              +{props.duplicateCount}
+            </span>
+          )}
+          <QueueApprovalShareButton item={props.item} />
+        </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -1874,7 +1943,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
     isMcpTool && envelope !== null
       ? resolveMcpInputSummary(envelope.raw_payload_redacted)
       : null;
-  const approvalUrl = props.item.approval_url ? guardAwareHref(props.item.approval_url) : null;
+  const approvalUrl = resolveApprovalShareUrl(props.item);
   const toggleCommand = useCallback(() => {
     setShowCommand((visible) => !visible);
   }, []);

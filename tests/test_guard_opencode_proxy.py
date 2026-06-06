@@ -132,5 +132,5 @@ def test_runtime_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypa
     approval_requests = error["data"]["approvalRequests"]
 
     assert error["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
-    assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
+    assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/requests/")
     assert approval_requests[0]["approval_url"] in error["message"]

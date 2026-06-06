@@ -391,7 +391,7 @@ def test_guard_hook_ask_package_live_wait_surfaces_approval_url(
     assert rc == 0
     assert captured.out == ""
     assert opened_urls
-    assert "/approvals/" in opened_urls[0]
+    assert "/requests/" in opened_urls[0]
     assert opened_urls[0] in captured.err
 
 

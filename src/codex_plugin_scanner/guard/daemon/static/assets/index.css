@@ -1,4 +1,4 @@
-/*! tailwindcss v4.2.2 | MIT License | https://tailwindcss.com */
+/*! tailwindcss v4.3.0 | MIT License | https://tailwindcss.com */
 @layer properties {
   @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
     *, :before, :after, ::backdrop {
@@ -480,14 +480,6 @@
 
   .inset-y-0 {
     inset-block: calc(var(--spacing) * 0);
-  }
-
-  .start {
-    inset-inline-start: var(--spacing);
-  }
-
-  .end {
-    inset-inline-end: var(--spacing);
   }
 
   .-top-6 {
@@ -1255,6 +1247,10 @@
 
   .cursor-pointer {
     cursor: pointer;
+  }
+
+  .\[scrollbar-gutter\:stable\] {
+    scrollbar-gutter: stable;
   }
 
   .list-none {
@@ -3521,8 +3517,14 @@
     }
   }
 
-  .text-brand-blue {
+  .text-brand-blue, .text-brand-blue\/80 {
     color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-blue\/80 {
+      color: color-mix(in oklab, var(--brand-blue) 80%, transparent);
+    }
   }
 
   .text-brand-dark, .text-brand-dark\/50 {
@@ -4021,10 +4023,6 @@
   .select-none {
     -webkit-user-select: none;
     user-select: none;
-  }
-
-  .\[scrollbar-gutter\:stable\] {
-    scrollbar-gutter: stable;
   }
 
   .ring-inset {

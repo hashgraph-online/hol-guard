@@ -10,6 +10,7 @@ import {
   buildRecommendation,
   scopeLabel,
   buildCodexResumeUx,
+  resolveApprovalShareUrl,
 } from "./approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest, GuardCodexResumeResult } from "./guard-types";
 
@@ -336,5 +337,14 @@ assert(uxFailedDefault.body !== null, "C13: failed has non-null body even withou
 const uxSkipped = buildCodexResumeUx(makeResume("skipped"));
 assert(uxSkipped.showRetry === false, "C13: skipped status has showRetry false");
 assert(uxSkipped.body !== null && uxSkipped.body.toLowerCase().includes("codex"), "C13: skipped body mentions Codex");
+
+assert(
+  resolveApprovalShareUrl({
+    ...BASE_REQUEST,
+    request_id: "cursor-share-req",
+    approval_url: "http://127.0.0.1:4781/approvals/legacy-req"
+  }) === "http://127.0.0.1:4781/requests/cursor-share-req",
+  "T498: resolveApprovalShareUrl prefers request_id and canonical /requests/ route"
+);
 
 console.log("approval-center-layout.test.ts: all tests passed");
