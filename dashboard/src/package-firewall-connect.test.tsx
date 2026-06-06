@@ -146,6 +146,11 @@ assert(
   !freeViewMarkup.includes("SECURITY"),
   "PF2: staged local recovery view should not render the large nested security card",
 );
+const routingCopy = "Guard changes routing only after this machine receives signed cloud access.";
+assert(
+  freeViewMarkup.split(routingCopy).length - 1 === 1,
+  "PF2: compact staged recovery view should not duplicate the shared routing hint",
+);
 
 const upgradeRequiredStatus: PackageFirewallStatusResponse = {
   ...connectRequiredStatus,

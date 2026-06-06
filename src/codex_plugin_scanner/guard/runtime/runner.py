@@ -2470,11 +2470,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         if isinstance(refreshed.get("package_firewall_entitlement"), dict)
         else None
     )
-    if (
-        rotated_refresh_token != refresh_token
-        or package_firewall_entitlement is not None
-        or persist_recovered_secret
-    ):
+    if rotated_refresh_token != refresh_token or package_firewall_entitlement is not None or persist_recovered_secret:
         _persist_rotated_oauth_refresh_token(
             store=store,
             credentials=oauth_credentials,

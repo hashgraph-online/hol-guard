@@ -60,6 +60,14 @@ function resolveConnectSteps(connectFlow) {
     }
   ];
 }
+function isMacClient() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  const navigatorWithUserAgentData = navigator;
+  const platformHint = navigatorWithUserAgentData.userAgentData?.platform ?? navigator.userAgent ?? navigator.platform;
+  return platformHint.toLowerCase().includes("mac");
+}
 function ConnectFlowCard({
   compact = false,
   connectError,
@@ -78,7 +86,6 @@ function ConnectFlowCard({
   const statusTone = running ? "blue" : mode === "repair" ? "attention" : "blue";
   const statusLabel = running ? "Waiting for approval" : mode === "repair" ? "Repair required" : "Connection required";
   const showManualLink = connectFlow.authorize_url !== null || running || failed;
-  const hintCopy = localRecoveryHint ?? "Guard changes routing only after this machine receives signed cloud access.";
   if (compact) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
@@ -100,7 +107,7 @@ function ConnectFlowCard({
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5", children: step.body })
       ] }, step.title)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-x-4 gap-y-1 text-xs leading-relaxed text-slate-500", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: hintCopy }),
+        localRecoveryHint !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: localRecoveryHint }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Guard changes routing only after this machine receives signed cloud access." })
       ] }),
       connectError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-brand-attention", children: connectError }),
@@ -221,7 +228,7 @@ function ActivationSummary({
   const Icon = protection.path_status === "in_path" ? HiMiniCheckCircle : protection.path_status === "restart_required" ? HiMiniArrowPath : HiMiniExclamationTriangle;
   const toneClass = protection.path_status === "in_path" ? "border-brand-green/20 bg-brand-green/[0.04]" : protection.path_status === "restart_required" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-brand-attention/20 bg-brand-attention/[0.04]";
   const iconClass = protection.path_status === "in_path" ? "text-brand-green" : protection.path_status === "restart_required" ? "text-brand-blue" : "text-brand-attention";
-  const canOpenShell = protection.path_status === "restart_required" && protection.shell_profile_configured && typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("mac");
+  const canOpenShell = protection.path_status === "restart_required" && protection.shell_profile_configured && isMacClient();
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-xl border px-4 py-3 ${toneClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
