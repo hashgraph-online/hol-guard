@@ -84,6 +84,7 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
     build_local_supply_chain_posture,
     resolve_package_firewall_entitlement_with_refresh,
@@ -2603,7 +2604,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": str(error)}, status=400)
             return
-        response["auth_token"] = self.server.auth_token  # type: ignore[attr-defined]
         self._write_json(response)
 
     def _handle_client_attach(self, payload: dict[str, object]) -> None:
@@ -2975,7 +2975,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         path_parts = [part for part in path.split("/") if part]
         return self._tokens_match(token) or (
-            self._is_hosted_dashboard_api_path(path, path_parts)
+            self._path_supports_dashboard_session(path, path_parts)
             and self._dashboard_session_token_is_valid(payload=payload)
         )
 
@@ -3019,11 +3019,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         payload: dict[str, object] | None,
     ) -> bool:
-        action_path = self._optional_string(claims.get("action_path"))
-        if action_path is None:
-            return True
+        surface = self._optional_string(claims.get("surface"))
         path = urlparse(self.path).path
         path_parts = [part for part in path.split("/") if part]
+        if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
+            return self._path_supports_dashboard_session(path, path_parts)
+        action_path = self._optional_string(claims.get("action_path"))
+        if action_path is None:
+            return False
         if path in {"/v1/capabilities", "/v1/harnesses", "/v1/inventory", "/v1/runtime"}:
             return True
         if (
@@ -3055,6 +3058,81 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 supply_chain_action=supply_chain_action,
             )
         return False
+
+    def _local_surface_session_request_is_allowed(self, path: str, path_parts: list[str]) -> bool:
+        if path in {
+            "/v1/capabilities",
+            "/v1/sessions",
+            "/v1/runtime",
+            "/v1/harnesses",
+            "/v1/inventory",
+            "/v1/settings",
+            "/v1/settings/export",
+            "/v1/events",
+            "/v1/events/stream",
+            "/v1/requests",
+            "/v1/receipts",
+            "/v1/receipts/latest",
+            "/v1/policy",
+            "/v1/evidence",
+            "/v1/evidence/export",
+            "/v1/clients/attach",
+            "/v1/clients/heartbeat",
+            "/v1/sessions/start",
+            "/v1/operations/start",
+            "/v1/operations/block",
+            "/v1/requests/clear",
+            "/v1/settings/import",
+            "/v1/settings/reset",
+            "/v1/policy/clear",
+            "/v1/approval-gate/cooldown/revoke",
+            "/v1/approval-gate/totp/enroll",
+            "/v1/approval-gate/totp/verify",
+            "/v1/approval-gate/totp/disable",
+            "/v1/daemon/repair",
+            "/v1/notifications/setup",
+        }:
+            return True
+        if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
+            return True
+        if self.command == "GET":
+            if len(path_parts) == 3 and path_parts[:2] in (
+                ["v1", "requests"],
+                ["v1", "receipts"],
+                ["v1", "operations"],
+            ):
+                return True
+            if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
+                return True
+        if self.command == "POST":
+            if (
+                len(path_parts) == 4
+                and path_parts[:2] == ["v1", "requests"]
+                and path_parts[3]
+                in {
+                    "approve",
+                    "block",
+                    "resume",
+                }
+            ):
+                return True
+            if (
+                len(path_parts) == 4
+                and path_parts[:2] == ["v1", "operations"]
+                and path_parts[3]
+                in {
+                    "items",
+                    "status",
+                }
+            ):
+                return True
+        return False
+
+    def _path_supports_dashboard_session(self, path: str, path_parts: list[str]) -> bool:
+        return self._is_hosted_dashboard_api_path(path, path_parts) or self._local_surface_session_request_is_allowed(
+            path,
+            path_parts,
+        )
 
     def _supply_chain_dashboard_claims_authorize(
         self,
@@ -3887,7 +3965,12 @@ def _approval_center_browser_url(approval_center_url: str, auth_token: str) -> s
     fragment_pairs = [
         (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
     ]
-    fragment_pairs.append(("guard-token", auth_token))
+    fragment_pairs.append(
+        (
+            "guard-token",
+            build_local_dashboard_session_token(auth_token=auth_token, surface="approval-center"),
+        )
+    )
     return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
 
 

@@ -660,7 +660,10 @@ assert(approvalUrl.searchParams.get("harness") === "copilot", "L078: fetchApprov
 assert(approvalUrl.searchParams.get("search") === "plugin secret", "L078: fetchApprovalPage forwards search filter");
 assert(approvalUrl.searchParams.get("cursor") === "cursor-one", "L078: fetchApprovalPage forwards cursor");
 assert(approvalUrl.searchParams.get("limit") === "25", "L078: fetchApprovalPage forwards limit");
-assert(headerValue(fetchApprovalCalls[0].init, "X-Guard-Token") === "token-queue", "L078: fetchApprovalPage sends Guard token");
+assert(
+  headerValue(fetchApprovalCalls[0].init, "X-Guard-Dashboard-Session") === "token-queue",
+  "L078: fetchApprovalPage sends dashboard session token"
+);
 assert(approvalPage.items[0].action_envelope_json?.action_id === "act-abc123", "L078: fetchApprovalPage normalizes action envelope");
 assert(approvalPage.items[0].decision_v2_json?.user_title === "Wants to read a credential file", "L078: fetchApprovalPage normalizes decision v2");
 assert(approvalPage.next_cursor === "cursor-two", "L078: fetchApprovalPage returns next cursor");
@@ -757,7 +760,10 @@ const clearQueueResult = await clearReviewQueue({
 });
 const clearQueueBody = JSON.parse(String(clearQueueCalls[0].init?.body)) as Record<string, unknown>;
 assert(clearQueueCalls[0].url === "http://127.0.0.1:4781/v1/requests/clear", "L079b: clearReviewQueue posts to clear route");
-assert(headerValue(clearQueueCalls[0].init, "X-Guard-Token") === "token-clear-queue", "L079b: clearReviewQueue sends Guard token");
+assert(
+  headerValue(clearQueueCalls[0].init, "X-Guard-Dashboard-Session") === "token-clear-queue",
+  "L079b: clearReviewQueue sends dashboard session token"
+);
 assert(clearQueueBody["status"] === "pending", "L079b: clearReviewQueue clears pending reviews");
 const clearQueueGate = clearQueueBody["approval_gate"] as Record<string, unknown>;
 assert(clearQueueGate["password"] === "local-password", "L079b: clearReviewQueue sends approval password");
@@ -785,7 +791,10 @@ assert(
   remediationCalls[0].url === "http://127.0.0.1:4781/v1/audit/remediations/package_shim_path",
   "L079c: runAuditRemediation posts to daemon remediation route"
 );
-assert(headerValue(remediationCalls[0].init, "X-Guard-Token") === "token-remediate", "L079c: runAuditRemediation sends Guard token");
+assert(
+  headerValue(remediationCalls[0].init, "X-Guard-Dashboard-Session") === "token-remediate",
+  "L079c: runAuditRemediation sends dashboard session token"
+);
 assert(remediationBody["manager"] === "pnpm", "L079c: runAuditRemediation sends manager");
 assert(remediationBody["approval_password"] === "local-password", "L079c: runAuditRemediation sends approval password");
 assert(remediationBody["approval_totp_code"] === "123456", "L079c: runAuditRemediation sends approval TOTP code");
@@ -797,42 +806,29 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   const url = input instanceof Request ? input.url : String(input);
   remediationBootstrapCalls.push({ url, init });
   const path = new URL(url, "http://127.0.0.1:4174").pathname;
-  if (path === "/v1/initialize") {
-    return new Response(JSON.stringify({ auth_token: "fresh-remediate-token" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
   if (path === "/v1/audit/remediations/package_shim_path") {
-    const token = headerValue(init, "X-Guard-Token");
-    if (token !== "fresh-remediate-token") {
-      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
-    }
-    return new Response(JSON.stringify({
-      entitlement: { allowed: true },
-      operation: "package_shim_path",
-      receipt: null,
-      result: { manager: "pnpm" },
-      status: "completed"
-    }), {
-      status: 200,
+    return new Response(JSON.stringify({ error: "unauthorized", message: "Guard session missing." }), {
+      status: 401,
       headers: { "Content-Type": "application/json" }
     });
   }
   return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
 };
 
-const remediationBootstrap = await runAuditRemediation({
-  action: "package_shim_path",
-  manager: "pnpm",
-});
-assert(remediationBootstrapCalls.length === 3, "L079d: remediation bootstraps token after 401 and retries");
-assert(new URL(remediationBootstrapCalls[1].url).pathname === "/v1/initialize", "L079d: remediation calls initialize after unauthorized");
+let remediationBootstrapError: unknown = null;
+try {
+  await runAuditRemediation({
+    action: "package_shim_path",
+    manager: "pnpm",
+  });
+} catch (error) {
+  remediationBootstrapError = error;
+}
+assert(remediationBootstrapCalls.length === 1, "L079d: remediation does not call initialize to mint a new local session");
 assert(
-  headerValue(remediationBootstrapCalls[2].init, "X-Guard-Token") === "fresh-remediate-token",
-  "L079d: remediation retries with refreshed Guard token"
+  remediationBootstrapError instanceof GuardHarnessActionError && remediationBootstrapError.status === 401,
+  "L079d: remediation surfaces missing dashboard session as 401"
 );
-assert(remediationBootstrap.operation === "package_shim_path", "L079d: remediation succeeds after token bootstrap");
 
 installGuardWindow("?guard-token=token-firewall&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const firewallCalls = installFetchStub({
@@ -853,7 +849,10 @@ assert(
   firewallCalls[0].url === "http://127.0.0.1:4781/v1/supply-chain/package-shims/install",
   "L079da: runPackageFirewallAction posts to the install route"
 );
-assert(headerValue(firewallCalls[0].init, "X-Guard-Token") === "token-firewall", "L079da: runPackageFirewallAction sends Guard token");
+assert(
+  headerValue(firewallCalls[0].init, "X-Guard-Dashboard-Session") === "token-firewall",
+  "L079da: runPackageFirewallAction sends dashboard session token"
+);
 assert(Array.isArray(firewallBody["managers"]) && (firewallBody["managers"] as unknown[])[0] === "pnpm", "L079da: runPackageFirewallAction sends selected manager");
 assert(firewallBody["approval_password"] === "local-password", "L079da: runPackageFirewallAction sends approval password");
 assert(firewallBody["approval_totp_code"] === "123456", "L079da: runPackageFirewallAction sends approval TOTP code");
@@ -892,48 +891,30 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   const url = input instanceof Request ? input.url : String(input);
   connectCalls.push({ url, init });
   const path = new URL(url, "http://127.0.0.1:4174").pathname;
-  if (path === "/v1/initialize") {
-    return new Response(JSON.stringify({ auth_token: "fresh-connect-token" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
   if (path === "/v1/supply-chain/package-shims/connect") {
-    const token = headerValue(init, "X-Guard-Token");
-    if (token !== "fresh-connect-token") {
-      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
-    }
-    return new Response(JSON.stringify({
-      state: "running",
-      title: "Finish Guard Cloud sign-in in your browser",
-      detail: "HOL Guard opened the secure sign-in flow in your browser.",
-      action_label: "Connect HOL Guard Cloud",
-      connect_url: "https://hol.org/guard/connect",
-      authorize_url: "https://hol.org/mock-authorize",
-      browser_opened: true,
-      request_id: "guard-connect-1",
-      poll_after_ms: 1500
-    }), {
-      status: 202,
+    return new Response(JSON.stringify({ error: "unauthorized", message: "Guard session missing." }), {
+      status: 401,
       headers: { "Content-Type": "application/json" }
     });
   }
   return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
 };
 
-const connectFlow = await startPackageFirewallConnect();
-assert(connectCalls.length === 3, "L079dc: connect flow bootstraps token after 401 and retries");
+let connectFlowError: unknown = null;
+try {
+  await startPackageFirewallConnect();
+} catch (error) {
+  connectFlowError = error;
+}
+assert(connectCalls.length === 1, "L079dc: connect flow does not mint local session from unauthenticated initialize");
 assert(
   new URL(connectCalls[0].url).pathname === "/v1/supply-chain/package-shims/connect",
   "L079dc: connect flow posts to daemon connect route"
 );
-assert(new URL(connectCalls[1].url).pathname === "/v1/initialize", "L079dc: connect flow refreshes token after unauthorized");
 assert(
-  headerValue(connectCalls[2].init, "X-Guard-Token") === "fresh-connect-token",
-  "L079dc: connect flow retries with refreshed Guard token"
+  connectFlowError instanceof Error && connectFlowError.message.includes("Guard session missing"),
+  "L079dc: connect flow surfaces missing dashboard session"
 );
-assert(connectFlow?.state === "running", "L079dc: connect flow normalizes running daemon response");
-assert(connectFlow?.authorize_url === "https://hol.org/mock-authorize", "L079dc: connect flow preserves authorize URL");
 
 installGuardWindow("?guard-token=token-remediate-error&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
@@ -994,7 +975,10 @@ const resolution = await resolveRequestWithQueueResult({
 const resolveBody = JSON.parse(String(fetchResolveCalls[0].init?.body)) as Record<string, unknown>;
 
 assert(fetchResolveCalls[0].url === "http://127.0.0.1:4781/v1/requests/req-active/approve", "L077: resolveRequestWithQueueResult posts to approve route");
-assert(headerValue(fetchResolveCalls[0].init, "X-Guard-Token") === "token-resolve", "L077: resolveRequestWithQueueResult sends Guard token");
+assert(
+  headerValue(fetchResolveCalls[0].init, "X-Guard-Dashboard-Session") === "token-resolve",
+  "L077: resolveRequestWithQueueResult sends dashboard session token"
+);
 assert(resolveBody["scope"] === "artifact", "L077: resolveRequestWithQueueResult sends scope");
 assert(resolveBody["workspace"] === "/workspace", "L077: resolveRequestWithQueueResult sends workspace");
 assert(resolveBody["reason"] === "reviewed", "L077: resolveRequestWithQueueResult sends reason");
@@ -1034,80 +1018,34 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   const url = input instanceof Request ? input.url : String(input);
   recoveryCalls.push({ url, init });
   const path = new URL(url, "http://127.0.0.1:4174").pathname;
-  if (path === "/v1/initialize") {
-    return new Response(JSON.stringify({ auth_token: "fresh-resolve-token" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
   if (path === "/v1/requests/req-stale-token/approve") {
-    const token = headerValue(init, "X-Guard-Token");
-    if (token !== "fresh-resolve-token") {
-      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
-    }
-    return new Response(JSON.stringify({
-      resolved: true,
-      item: null,
-      resolved_request: null,
-      remaining_pending_count: 0,
-      next_selectable_request_id: null,
-      remaining_pending_summaries: [],
-      resolved_duplicate_ids: [],
-      resolution_summary: "Decision saved.",
-      retry_hint: null,
-      copy: null
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
-  if (path === "/v1/requests/req-next-after-refresh/approve") {
-    const token = headerValue(init, "X-Guard-Token");
-    return new Response(JSON.stringify({
-      resolved: token === "fresh-resolve-token",
-      item: null,
-      resolved_request: null,
-      remaining_pending_count: 0,
-      next_selectable_request_id: null,
-      remaining_pending_summaries: [],
-      resolved_duplicate_ids: [],
-      resolution_summary: "Decision saved.",
-      retry_hint: null,
-      copy: null
-    }), {
-      status: token === "fresh-resolve-token" ? 200 : 401,
+    return new Response(JSON.stringify({ error: "unauthorized", message: "Guard session expired." }), {
+      status: 401,
       headers: { "Content-Type": "application/json" }
     });
   }
   return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
 };
 
-const recoveredResolution = await resolveRequestWithQueueResult({
-  requestId: "req-stale-token",
-  action: "allow",
-  scope: "global",
-  reason: "reviewed"
-});
-assert(recoveredResolution.resolved === true, "L077b: resolve retries after refreshing stale local token");
-assert(recoveryCalls.length === 3, "L077b: resolve retry makes approve, initialize, approve calls");
+let recoveredResolutionError: unknown = null;
+try {
+  await resolveRequestWithQueueResult({
+    requestId: "req-stale-token",
+    action: "allow",
+    scope: "global",
+    reason: "reviewed"
+  });
+} catch (error) {
+  recoveredResolutionError = error;
+}
+assert(recoveryCalls.length === 1, "L077b: stale dashboard session does not call initialize for root-token mint");
 assert(
-  headerValue(recoveryCalls[0].init, "X-Guard-Token") === "stale-resolve-token",
-  "L077b: first resolve attempt uses token from current URL"
+  headerValue(recoveryCalls[0].init, "X-Guard-Dashboard-Session") === "stale-resolve-token",
+  "L077b: first resolve attempt uses dashboard session from current URL"
 );
-assert(new URL(recoveryCalls[1].url).pathname === "/v1/initialize", "L077b: stale token recovery calls initialize");
 assert(
-  headerValue(recoveryCalls[2].init, "X-Guard-Token") === "fresh-resolve-token",
-  "L077b: retry uses refreshed Guard token"
-);
-await resolveRequestWithQueueResult({
-  requestId: "req-next-after-refresh",
-  action: "allow",
-  scope: "global",
-  reason: "reviewed"
-});
-assert(
-  headerValue(recoveryCalls[3].init, "X-Guard-Token") === "fresh-resolve-token",
-  "L077b: later requests keep using refreshed Guard token instead of stale URL token"
+  recoveredResolutionError instanceof Error && recoveredResolutionError.message.includes("Guard session expired"),
+  "L077b: stale dashboard session surfaces expiration error"
 );
 
 installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
@@ -1115,13 +1053,6 @@ const malformedRefreshCalls: RecordedFetch[] = [];
 globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = input instanceof Request ? input.url : String(input);
   malformedRefreshCalls.push({ url, init });
-  const path = new URL(url, "http://127.0.0.1:4174").pathname;
-  if (path === "/v1/initialize") {
-    return new Response("<html>not json</html>", {
-      status: 200,
-      headers: { "Content-Type": "text/html" }
-    });
-  }
   return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
 };
 
@@ -1135,9 +1066,12 @@ try {
   throw new Error("expected malformed token refresh to preserve the 401 failure");
 } catch (error) {
   assert(error instanceof Error, "L077c: malformed refresh returns an Error");
+  if (!(error instanceof Error)) {
+    throw error;
+  }
   assert(error.message.includes("401"), "L077c: malformed refresh preserves original 401 status");
 }
-assert(malformedRefreshCalls.length === 2, "L077c: malformed refresh does not retry without a parsed token");
+assert(malformedRefreshCalls.length === 1, "L077c: malformed refresh does not retry or bootstrap without a token");
 
 installGuardWindow("?guard-token=token-codex-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const fetchCodexResolveCalls = installFetchStub({
@@ -1271,43 +1205,19 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   const url = input instanceof Request ? input.url : String(input);
   retryResumeCalls.push({ url, init });
   const path = new URL(url, "http://127.0.0.1:4174").pathname;
-  if (path === "/v1/initialize") {
-    return new Response(JSON.stringify({ auth_token: "fresh-retry-resume-token" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
   if (path === "/v1/requests/req-retry-resume/resume") {
-    const token = new Headers(init?.headers).get("X-Guard-Token");
-    if (token !== "fresh-retry-resume-token") {
-      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
-    }
-    return new Response(JSON.stringify({
-      status: "sent",
-      supported: true,
-      attempt_count: 2,
-      request_id: "req-retry-resume",
-      operation_id: null,
-      harness: "codex",
-      resolution_action: "allow",
-      strategy: "reply",
-      thread_id: "thread-retry",
-      reason: null,
-      message: null,
-      last_error: null,
-      created_at: null,
-      updated_at: null,
-      last_attempt_at: null,
-      sent_at: "2025-01-01T00:01:00Z"
-    }), { status: 200, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
   }
   return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
 };
 
-const retryResult = await retryResume("req-retry-resume");
-assert(retryResumeCalls.length === 3, "L080: retryResume calls initialize then retries with fresh token");
-assert(retryResult.status === "sent", "L080: retryResume returns normalized codex_resume on success");
-assert(retryResult.thread_id === "thread-retry", "L080: retryResume normalizes thread_id");
-assert(retryResult.attempt_count === 2, "L080: retryResume normalizes attempt_count");
+let retryResumeError: unknown = null;
+try {
+  await retryResume("req-retry-resume");
+} catch (error) {
+  retryResumeError = error;
+}
+assert(retryResumeCalls.length === 1, "L080: retryResume does not call initialize to mint replacement session");
+assert(retryResumeError instanceof Error && retryResumeError.message.includes("401"), "L080: retryResume surfaces unauthorized response");
 
 console.log("guard-api.test.ts: all tests passed");
