@@ -62,27 +62,50 @@ def _normalize_harness_slug(harness: str | None) -> str | None:
     return normalized or None
 
 
+def _queued_request_dicts(queued: Sequence[object]) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for item in queued:
+        if isinstance(item, Mapping):
+            items.append(dict(item))
+    return items
+
+
 def primary_approval_request(
     queued: Sequence[object],
     *,
     harness: str | None = None,
+    request_id: str | None = None,
+    artifact_id: str | None = None,
 ) -> dict[str, object] | None:
-    """Return the approval request dict that best matches the current harness action."""
+    """Return the approval request created for this blocked action."""
+
+    items = _queued_request_dicts(queued)
+    if not items:
+        return None
+
+    bound_request_id = _string_or_none(request_id)
+    if bound_request_id is not None:
+        for item in items:
+            if _string_or_none(item.get("request_id")) == bound_request_id:
+                return item
+
+    bound_artifact_id = _string_or_none(artifact_id)
+    if bound_artifact_id is not None:
+        for item in reversed(items):
+            if _string_or_none(item.get("artifact_id")) == bound_artifact_id:
+                return item
+
+    if len(items) == 1:
+        return items[0]
 
     normalized_harness = _normalize_harness_slug(harness)
-    matched: dict[str, object] | None = None
-    fallback: dict[str, object] | None = None
-    for item in reversed(tuple(queued)):
-        if not isinstance(item, Mapping):
-            continue
-        request = dict(item)
-        if fallback is None:
-            fallback = request
-        item_harness = _normalize_harness_slug(str(request.get("harness") or ""))
-        if normalized_harness is not None and item_harness == normalized_harness:
-            matched = request
-            break
-    return matched or fallback
+    if normalized_harness is not None:
+        for item in reversed(items):
+            item_harness = _normalize_harness_slug(str(item.get("harness") or ""))
+            if item_harness == normalized_harness:
+                return item
+
+    return None
 
 
 def primary_approval_url(
@@ -90,8 +113,15 @@ def primary_approval_url(
     *,
     harness: str | None = None,
     approval_center_url: str | None = None,
+    request_id: str | None = None,
+    artifact_id: str | None = None,
 ) -> str | None:
-    request = primary_approval_request(queued, harness=harness)
+    request = primary_approval_request(
+        queued,
+        harness=harness,
+        request_id=request_id,
+        artifact_id=artifact_id,
+    )
     if request is None:
         return None
     approval_url = request.get("approval_url")
@@ -391,6 +421,8 @@ def approval_center_hint(
     approval_center_url: str,
     queued: list[dict[str, object]],
     managed_install: dict[str, object] | None = None,
+    request_id: str | None = None,
+    artifact_id: str | None = None,
 ) -> str:
     del context
     flow = approval_prompt_flow(harness, managed_install=managed_install)
@@ -401,6 +433,8 @@ def approval_center_hint(
             queued,
             harness=harness,
             approval_center_url=approval_center_url,
+            request_id=request_id,
+            artifact_id=artifact_id,
         )
         or approval_center_url
     )
@@ -418,12 +452,78 @@ def first_approval_url(
     *,
     harness: str | None = None,
     approval_center_url: str | None = None,
+    request_id: str | None = None,
+    artifact_id: str | None = None,
 ) -> str | None:
     return primary_approval_url(
         queued,
         harness=harness,
         approval_center_url=approval_center_url,
+        request_id=request_id,
+        artifact_id=artifact_id,
     )
+
+
+def attach_primary_approval_link(
+    payload: dict[str, object],
+    *,
+    harness: str | None = None,
+    approval_center_url: str | None = None,
+    request_id: str | None = None,
+    artifact_id: str | None = None,
+) -> None:
+    """Bind primary approval fields to the request created by this block."""
+
+    queued = payload.get("approval_requests")
+    if not isinstance(queued, list):
+        return
+
+    bound_request_id = _string_or_none(request_id)
+    if bound_request_id is None:
+        bound_request_id = _string_or_none(payload.get("primary_approval_request_id"))
+    if bound_request_id is None:
+        operation_ids = payload.get("approval_request_ids")
+        if isinstance(operation_ids, list):
+            for item in operation_ids:
+                candidate = _string_or_none(item)
+                if candidate is not None:
+                    bound_request_id = candidate
+                    break
+        if bound_request_id is None:
+            operation = payload.get("operation")
+            if isinstance(operation, Mapping):
+                nested_ids = operation.get("approval_request_ids")
+                if isinstance(nested_ids, list):
+                    for item in nested_ids:
+                        candidate = _string_or_none(item)
+                        if candidate is not None:
+                            bound_request_id = candidate
+                            break
+
+    bound_artifact_id = _string_or_none(artifact_id)
+    if bound_artifact_id is None:
+        bound_artifact_id = _string_or_none(payload.get("artifact_id"))
+
+    primary = primary_approval_request(
+        queued,
+        harness=harness,
+        request_id=bound_request_id,
+        artifact_id=bound_artifact_id,
+    )
+    if primary is None:
+        return
+    resolved_request_id = _string_or_none(primary.get("request_id"))
+    if resolved_request_id is not None:
+        payload["primary_approval_request_id"] = resolved_request_id
+    review_url = primary_approval_url(
+        queued,
+        harness=harness,
+        approval_center_url=approval_center_url,
+        request_id=resolved_request_id,
+        artifact_id=bound_artifact_id,
+    )
+    if review_url is not None:
+        payload["primary_approval_url"] = review_url
 
 
 def build_runtime_snapshot(

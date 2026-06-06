@@ -11,6 +11,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import (
     approval_center_hint,
+    attach_primary_approval_link,
     build_approval_request_url,
     first_approval_url,
     primary_approval_request,
@@ -145,11 +146,114 @@ def test_primary_approval_request_prefers_matching_harness() -> None:
     )
 
 
-def test_build_approval_request_url_uses_requests_route() -> None:
-    assert (
-        build_approval_request_url("http://127.0.0.1:5474", "abc123")
-        == "http://127.0.0.1:5474/requests/abc123"
+def test_primary_approval_request_prefers_request_id() -> None:
+    queued = [
+        {
+            "request_id": "older-req",
+            "harness": "cursor",
+            "artifact_id": "cursor:project:shell-a",
+        },
+        {
+            "request_id": "newer-req",
+            "harness": "cursor",
+            "artifact_id": "cursor:project:shell-b",
+        },
+    ]
+
+    selected = primary_approval_request(queued, harness="cursor", request_id="older-req")
+
+    assert selected is not None
+    assert selected["request_id"] == "older-req"
+
+
+def test_primary_approval_request_prefers_artifact_id_over_harness_latest() -> None:
+    queued = [
+        {
+            "request_id": "req-a",
+            "harness": "cursor",
+            "artifact_id": "cursor:project:shell-a",
+            "approval_url": "http://127.0.0.1:5474/requests/req-a",
+        },
+        {
+            "request_id": "req-b",
+            "harness": "cursor",
+            "artifact_id": "cursor:project:shell-b",
+            "approval_url": "http://127.0.0.1:5474/requests/req-b",
+        },
+    ]
+
+    selected = primary_approval_request(
+        queued,
+        harness="cursor",
+        artifact_id="cursor:project:shell-a",
     )
+
+    assert selected is not None
+    assert selected["request_id"] == "req-a"
+
+
+def test_primary_approval_request_single_item_without_harness() -> None:
+    queued = [
+        {
+            "request_id": "solo-req",
+            "harness": "cursor",
+            "approval_url": "http://127.0.0.1:5474/requests/solo-req",
+        }
+    ]
+
+    selected = primary_approval_request(queued)
+
+    assert selected is not None
+    assert selected["request_id"] == "solo-req"
+
+
+def test_primary_approval_request_returns_none_without_binding() -> None:
+    queued = [
+        {
+            "request_id": "codex-req",
+            "harness": "codex",
+        },
+        {
+            "request_id": "cursor-req",
+            "harness": "cursor",
+        },
+    ]
+
+    assert primary_approval_request(queued) is None
+
+
+def test_attach_primary_approval_link_uses_operation_request_id() -> None:
+    payload: dict[str, object] = {
+        "artifact_id": "cursor:project:shell-b",
+        "approval_request_ids": ["bound-req"],
+        "approval_requests": [
+            {
+                "request_id": "other-req",
+                "harness": "cursor",
+                "artifact_id": "cursor:project:shell-a",
+                "approval_url": "http://127.0.0.1:5474/requests/other-req",
+            },
+            {
+                "request_id": "bound-req",
+                "harness": "cursor",
+                "artifact_id": "cursor:project:shell-b",
+                "approval_url": "http://127.0.0.1:5474/requests/bound-req",
+            },
+        ],
+    }
+
+    attach_primary_approval_link(
+        payload,
+        harness="cursor",
+        approval_center_url="http://127.0.0.1:5474",
+    )
+
+    assert payload["primary_approval_request_id"] == "bound-req"
+    assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
+
+
+def test_build_approval_request_url_uses_requests_route() -> None:
+    assert build_approval_request_url("http://127.0.0.1:5474", "abc123") == "http://127.0.0.1:5474/requests/abc123"
 
 
 class TestApprovalsOpenCommand:
