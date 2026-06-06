@@ -90,6 +90,7 @@ def _build_guard_product_payload(
         "guard_home": _redacted_path(context.guard_home, context.home_dir),
         "workspace": _redacted_path(context.workspace_dir, context.home_dir),
         "sync_configured": store.get_cloud_sync_profile() is not None,
+        "sync_storage_health": store.get_sync_credential_health(),
         "oauth_storage_health": store.get_oauth_local_credential_health(),
         "receipt_count": receipt_count,
         "pending_approvals": store.count_approval_requests(),
