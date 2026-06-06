@@ -1583,7 +1583,8 @@ class TestGuardSurfaceServer:
         assert initialize_payload["protocol"]["current_version"] == "1.1"
         assert initialize_payload["protocol"]["minimum_version"] == "1.0"
         assert initialize_payload["protocol"]["supported_versions"] == ["1.1", "1.0"]
-        assert "auth_token" not in initialize_payload
+        assert isinstance(initialize_payload["auth_token"], str)
+        assert initialize_payload["auth_token"]
         assert unsupported_error is not None
         assert unsupported_error.code == 400
 
@@ -1785,6 +1786,8 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert initialize_payload["protocol_version"] == "1.1"
+        assert isinstance(initialize_payload["auth_token"], str)
+        assert initialize_payload["auth_token"]
         assert "approval/list" in initialize_payload["server_capabilities"]["methods"]
         assert attach_payload["attached"] is True
         assert store.list_guard_client_attachments(surface="approval-center")
