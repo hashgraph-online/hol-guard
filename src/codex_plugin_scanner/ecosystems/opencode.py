@@ -5,19 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .base import iter_safe_recursive_dirs, iter_safe_recursive_files
 from .types import Ecosystem, NormalizedPackage, PackageCandidate
-
-IGNORED_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "__pycache__"}
-
-
-def _iter_files(root: Path, pattern: str) -> list[Path]:
-    files: list[Path] = []
-    for path in root.rglob(pattern):
-        if any(part in IGNORED_DIRS for part in path.parts):
-            continue
-        if path.is_file():
-            files.append(path)
-    return files
 
 
 def _strip_jsonc(text: str) -> str:
@@ -110,7 +99,7 @@ class OpenCodeAdapter:
         candidates: list[PackageCandidate] = []
         seen_roots: set[Path] = set()
         for config_name in ("opencode.json", "opencode.jsonc"):
-            for manifest_path in _iter_files(root, config_name):
+            for manifest_path in iter_safe_recursive_files(root, root, config_name):
                 package_root = manifest_path.parent
                 if package_root in seen_roots:
                     continue
@@ -125,9 +114,7 @@ class OpenCodeAdapter:
                     )
                 )
 
-        for opencode_dir in (path for path in root.rglob(".opencode") if path.is_dir()):
-            if any(part in IGNORED_DIRS for part in opencode_dir.parts):
-                continue
+        for opencode_dir in iter_safe_recursive_dirs(root, root, ".opencode"):
             package_root = opencode_dir.parent
             if package_root in seen_roots:
                 continue
@@ -153,14 +140,14 @@ class OpenCodeAdapter:
         plugins_dir = root / ".opencode" / "plugins"
         if commands_dir.is_dir():
             components["commands"] = tuple(
-                sorted(str(path.relative_to(root)) for path in commands_dir.rglob("*.md") if path.is_file())
+                str(path.relative_to(root)) for path in iter_safe_recursive_files(root, commands_dir, "*.md")
             )
         if plugins_dir.is_dir():
             components["plugin_modules"] = tuple(
                 sorted(
                     str(path.relative_to(root))
-                    for path in plugins_dir.rglob("*")
-                    if path.is_file() and path.suffix in {".js", ".ts", ".mjs", ".cjs"}
+                    for path in iter_safe_recursive_files(root, plugins_dir, "*")
+                    if path.suffix in {".js", ".ts", ".mjs", ".cjs"}
                 )
             )
         mcp_config = manifest.get("mcp")

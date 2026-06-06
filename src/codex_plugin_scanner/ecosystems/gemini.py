@@ -5,19 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .base import iter_safe_recursive_files
 from .types import Ecosystem, NormalizedPackage, PackageCandidate
-
-IGNORED_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "__pycache__"}
-
-
-def _iter_files(root: Path, pattern: str) -> list[Path]:
-    files: list[Path] = []
-    for path in root.rglob(pattern):
-        if any(part in IGNORED_DIRS for part in path.parts):
-            continue
-        if path.is_file():
-            files.append(path)
-    return files
 
 
 def _load_json(path: Path) -> dict[str, object]:
@@ -37,7 +26,7 @@ class GeminiAdapter:
 
     def detect(self, root: Path) -> list[PackageCandidate]:
         candidates: list[PackageCandidate] = []
-        for manifest_path in _iter_files(root, "gemini-extension.json"):
+        for manifest_path in iter_safe_recursive_files(root, root, "gemini-extension.json"):
             candidates.append(
                 PackageCandidate(
                     ecosystem=Ecosystem.GEMINI,
@@ -56,7 +45,7 @@ class GeminiAdapter:
         components: dict[str, tuple[str, ...]] = {}
         if commands_dir.is_dir():
             components["commands"] = tuple(
-                sorted(str(path.relative_to(root)) for path in commands_dir.rglob("*.toml") if path.is_file())
+                str(path.relative_to(root)) for path in iter_safe_recursive_files(root, commands_dir, "*.toml")
             )
         mcp_servers = manifest.get("mcpServers")
         if isinstance(mcp_servers, dict):
