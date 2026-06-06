@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ab as HiMiniArrowPath, H as HiMiniShieldCheck, ai as HiMiniArrowTopRightOnSquare, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, h as HiMiniXCircle, r as reactExports, v as HiMiniWrenchScrewdriver, aj as HiMiniBeaker, ac as HiMiniTrash, ak as fetchPackageFirewallStatus, al as runPackageFirewallAction, a9 as GuardHarnessActionError, am as runPackageAudit, an as runPackageSync, ao as startPackageFirewallConnect, ap as openPackageFirewallShell, S as SectionLabel, E as EmptyState, aq as HiMiniBugAnt, a as HiMiniInformationCircle, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ab as HiMiniArrowPath, H as HiMiniShieldCheck, ai as HiMiniArrowTopRightOnSquare, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, h as HiMiniXCircle, r as reactExports, aj as fetchPackageFirewallStatus, ak as runPackageFirewallAction, a9 as GuardHarnessActionError, al as runPackageAudit, am as runPackageSync, an as startPackageFirewallConnect, ao as openPackageFirewallShell, S as SectionLabel, W as HiMiniMagnifyingGlass, E as EmptyState, ap as HiMiniBugAnt, v as HiMiniWrenchScrewdriver, aq as HiMiniBeaker, ac as HiMiniTrash, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 function UpgradeCta({ entitlement }) {
@@ -314,118 +314,29 @@ function ActionResultPanel({ completed, onDismiss }) {
     }
   );
 }
-function ShimStatusDot({ active }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "span",
-    {
-      className: `inline-block h-2 w-2 shrink-0 rounded-full ${active ? "bg-brand-green" : "bg-slate-300"}`,
-      "aria-hidden": "true"
-    }
-  );
-}
-function RemoveConfirmRow({ manager, onConfirm, onCancel, anyPending }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "flex flex-wrap items-center gap-2 rounded-lg border border-brand-attention/30 bg-brand-attention/[0.04] px-3 py-2",
-      role: "alert",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs font-medium text-brand-dark", children: [
-          "Remove shim for ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono", children: manager }),
-          "?"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ml-auto flex items-center gap-1.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onCancel, disabled: anyPending, children: "Cancel" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ActionButton,
-            {
-              variant: "danger",
-              onClick: onConfirm,
-              disabled: anyPending,
-              "aria-busy": anyPending,
-              children: anyPending ? "Removing…" : "Confirm Remove"
-            }
-          )
-        ] })
-      ]
-    }
-  );
-}
-function ActionBtn({ label, icon, variant, onClick, disabled }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant, onClick, disabled, children: [
-    icon,
-    label
-  ] });
+function resolveShimStatus(shim) {
+  if (!shim || !shim.installed) {
+    return { label: "Unprotected", tone: "attention", icon: "warning" };
+  }
+  if (shim.activation_state === "protected") {
+    return { label: "Protected", tone: "green", icon: "check" };
+  }
+  if (shim.activation_state === "restart_required") {
+    return { label: "Restart required", tone: "blue", icon: "restart" };
+  }
+  if (shim.activation_state === "repair_required") {
+    return { label: "Needs PATH repair", tone: "attention", icon: "warning" };
+  }
+  return { label: "Unprotected", tone: "attention", icon: "warning" };
 }
 function actionIsAvailable(state) {
   return state === "available";
 }
-function ActionButtonRow({
-  shim,
-  actions,
-  anyPending,
-  onInstall,
-  onRepair,
-  onTest,
-  onRemoveRequest
-}) {
-  const installState = actions.install ?? "disabled";
-  const repairState = actions.repair ?? "disabled";
-  const testState = actions.test ?? "disabled";
-  const removeState = actions.remove ?? "disabled";
-  const installAvailable = actionIsAvailable(installState);
-  const repairAvailable = actionIsAvailable(repairState);
-  const testAvailable = actionIsAvailable(testState);
-  const removeAvailable = actionIsAvailable(removeState);
-  const showInstall = !shim.installed && installAvailable;
-  const showRepair = shim.installed && shim.activation_state === "repair_required" && repairAvailable;
-  const showTest = shim.installed && shim.activation_state === "protected" && testAvailable;
-  const showRemove = shim.installed && removeAvailable;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", children: [
-    showInstall && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ActionBtn,
-      {
-        label: "Protect",
-        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-        variant: "primary",
-        onClick: onInstall,
-        disabled: anyPending
-      }
-    ),
-    showRepair && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ActionBtn,
-      {
-        label: "Fix PATH",
-        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-        variant: "primary",
-        onClick: onRepair,
-        disabled: anyPending
-      }
-    ),
-    showTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ActionBtn,
-      {
-        label: "Test",
-        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-        variant: "outline",
-        onClick: onTest,
-        disabled: anyPending
-      }
-    ),
-    showRemove && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ActionBtn,
-      {
-        label: "Remove",
-        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-        variant: "danger",
-        onClick: onRemoveRequest,
-        disabled: anyPending
-      }
-    )
-  ] });
+function actionLabel(op) {
+  return op.charAt(0).toUpperCase() + op.slice(1);
 }
-function ManagerActionCard({
+function ManagerRow({
+  manager,
   shim,
   actions,
   anyPending,
@@ -438,22 +349,29 @@ function ManagerActionCard({
   onRemoveConfirm,
   onRemoveCancel
 }) {
-  const handleInstall = reactExports.useCallback(() => onInstall(shim.manager), [onInstall, shim.manager]);
-  const handleRepair = reactExports.useCallback(() => onRepair(shim.manager), [onRepair, shim.manager]);
-  const handleTest = reactExports.useCallback(() => onTest(shim.manager), [onTest, shim.manager]);
-  const handleRemoveRequest = reactExports.useCallback(
-    () => onRemoveRequest(shim.manager),
-    [onRemoveRequest, shim.manager]
-  );
-  const handleRemoveConfirm = reactExports.useCallback(
-    () => onRemoveConfirm(shim.manager),
-    [onRemoveConfirm, shim.manager]
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ShimStatusDot, { active: shim.active }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate font-mono text-sm font-semibold text-brand-dark", children: shim.manager }),
+  const status = resolveShimStatus(shim);
+  const installState = actions.install ?? "disabled";
+  const repairState = actions.repair ?? "disabled";
+  const testState = actions.test ?? "disabled";
+  const removeState = actions.remove ?? "disabled";
+  const installAvailable = actionIsAvailable(installState);
+  const repairAvailable = actionIsAvailable(repairState);
+  const testAvailable = actionIsAvailable(testState);
+  const removeAvailable = actionIsAvailable(removeState);
+  const showInstall = (!shim || !shim.installed) && installAvailable;
+  const showRepair = shim?.installed && shim.activation_state === "repair_required" && repairAvailable;
+  const showTest = shim?.installed && shim.activation_state === "protected" && testAvailable;
+  const showRemove = shim?.installed && removeAvailable;
+  const handleInstall = reactExports.useCallback(() => onInstall(manager), [onInstall, manager]);
+  const handleRepair = reactExports.useCallback(() => onRepair(manager), [onRepair, manager]);
+  const handleTest = reactExports.useCallback(() => onTest(manager), [onTest, manager]);
+  const handleRemoveRequest = reactExports.useCallback(() => onRemoveRequest(manager), [onRemoveRequest, manager]);
+  const handleRemoveConfirm = reactExports.useCallback(() => onRemoveConfirm(manager), [onRemoveConfirm, manager]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 last:border-b-0", role: "row", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", role: "cell", children: [
+        status.icon === "check" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }) : status.icon === "restart" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate font-mono text-sm font-semibold text-brand-dark", children: manager }),
         isMine && /* @__PURE__ */ jsxRuntimeExports.jsx(
           HiMiniArrowPath,
           {
@@ -462,40 +380,42 @@ function ManagerActionCard({
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: shim.activation_state === "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "green", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mr-0.5 inline h-3 w-3", "aria-hidden": "true" }),
-        "Protected"
-      ] }) : shim.activation_state === "restart_required" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "blue", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-0.5 inline h-3 w-3", "aria-hidden": "true" }),
-        "Restart required"
-      ] }) : shim.activation_state === "repair_required" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mr-0.5 inline h-3 w-3", "aria-hidden": "true" }),
-        "Needs PATH repair"
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "Uninstalled" }) })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 sm:gap-3", role: "cell", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: status.tone, children: status.label }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: isConfirmingRemove ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onRemoveCancel, disabled: anyPending, children: "Cancel" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ActionButton,
+            {
+              variant: "danger",
+              onClick: handleRemoveConfirm,
+              disabled: anyPending,
+              children: "Confirm"
+            }
+          )
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
+          showInstall && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: handleInstall, disabled: anyPending, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
+            "Protect"
+          ] }),
+          showRepair && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: handleRepair, disabled: anyPending, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
+            "Fix PATH"
+          ] }),
+          showTest && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: handleTest, disabled: anyPending, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
+            "Test"
+          ] }),
+          showRemove && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "danger", onClick: handleRemoveRequest, disabled: anyPending, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
+            "Remove"
+          ] })
+        ] }) })
+      ] })
     ] }),
-    isConfirmingRemove ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      RemoveConfirmRow,
-      {
-        manager: shim.manager,
-        onConfirm: handleRemoveConfirm,
-        onCancel: onRemoveCancel,
-        anyPending
-      }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ActionButtonRow,
-      {
-        shim,
-        actions,
-        anyPending,
-        onInstall: handleInstall,
-        onRepair: handleRepair,
-        onTest: handleTest,
-        onRemoveRequest: handleRemoveRequest
-      }
-    ),
-    shim.activation_state === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim." }),
-    shim.activation_state === "repair_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart." }),
-    shim.shim_path !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-[10px] text-slate-400", children: shim.shim_path })
+    shim?.activation_state === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim." }) }),
+    shim?.activation_state === "repair_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart." }) }),
+    shim?.shim_path !== null && shim?.shim_path !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-[10px] text-slate-400", children: shim.shim_path }) })
   ] });
 }
 function LoadingRow({ width }) {
@@ -605,6 +525,10 @@ function FirewallControlsView({
   lastFailed,
   confirmRemoveManager,
   showGlobalActions,
+  statusFilter,
+  managerFilter,
+  onStatusFilterChange,
+  onManagerFilterChange,
   onInstall,
   onRepair,
   onTest,
@@ -618,6 +542,25 @@ function FirewallControlsView({
   onRefreshStatus
 }) {
   const anyPending = pendingOp !== null;
+  const filteredManagers = reactExports.useMemo(() => {
+    const shimsByManager = new Map(data.package_shims.map((s) => [s.manager, s]));
+    let managers = data.supported_managers;
+    if (managerFilter) {
+      const q = managerFilter.toLowerCase();
+      managers = managers.filter((m) => m.toLowerCase().includes(q));
+    }
+    if (statusFilter !== "all") {
+      managers = managers.filter((m) => {
+        const shim = shimsByManager.get(m);
+        const status = resolveShimStatus(shim);
+        if (statusFilter === "protected") return status.tone === "green";
+        if (statusFilter === "actionable") return status.tone === "attention";
+        if (statusFilter === "unprotected") return status.tone !== "green";
+        return true;
+      });
+    }
+    return managers;
+  }, [data, managerFilter, statusFilter]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Per-manager controls" }),
@@ -643,30 +586,98 @@ function FirewallControlsView({
     ),
     lastFailed !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(FailureBanner, { failed: lastFailed }),
     lastCompleted !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionResultPanel, { completed: lastCompleted, onDismiss: onDismissResult }),
-    data.package_shims.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-3.5 w-3.5 text-slate-400", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "search",
+            placeholder: "Filter by manager…",
+            value: managerFilter,
+            onChange: onManagerFilterChange,
+            "aria-label": "Filter package managers",
+            className: "bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-40"
+          }
+        )
+      ] }),
+      ["all", "protected", "actionable", "unprotected"].map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => onStatusFilterChange(s),
+          "aria-pressed": statusFilter === s,
+          className: `rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${statusFilter === s ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
+          children: s === "all" ? "All" : s === "protected" ? "Protected" : s === "actionable" ? "Needs action" : "Unprotected"
+        },
+        s
+      ))
+    ] }),
+    filteredManagers.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
-        title: "No package managers detected",
-        body: "Guard has not detected any package managers on this machine.",
+        title: "No package managers found",
+        body: "No package managers match the current filter, or Guard has not detected any on this machine.",
         tone: "teach"
       }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-3 sm:grid-cols-2", children: data.package_shims.map((shim) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ManagerActionCard,
-      {
-        shim,
-        actions: data.actions,
-        anyPending,
-        isMine: pendingOp?.manager === shim.manager,
-        isConfirmingRemove: confirmRemoveManager === shim.manager,
-        onInstall,
-        onRepair,
-        onTest,
-        onRemoveRequest,
-        onRemoveConfirm,
-        onRemoveCancel
-      },
-      shim.manager
-    )) })
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "table", "aria-label": "Package manager firewall status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "hidden sm:flex sm:items-center sm:justify-between border-b border-slate-100 bg-slate-50 px-4 py-2",
+          role: "row",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "span",
+              {
+                className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400",
+                role: "columnheader",
+                children: "Manager"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400",
+                  role: "columnheader",
+                  children: "Status"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400",
+                  role: "columnheader",
+                  children: "Actions"
+                }
+              )
+            ] })
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "rowgroup", children: filteredManagers.map((manager) => {
+        const shim = data.package_shims.find((s) => s.manager === manager);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ManagerRow,
+          {
+            manager,
+            shim,
+            actions: data.actions,
+            anyPending,
+            isMine: pendingOp?.manager === manager,
+            isConfirmingRemove: confirmRemoveManager === manager,
+            onInstall,
+            onRepair,
+            onTest,
+            onRemoveRequest,
+            onRemoveConfirm,
+            onRemoveCancel
+          },
+          manager
+        );
+      }) })
+    ] })
   ] });
 }
 function RefreshButton({ disabled, spinning, onRefresh }) {
@@ -699,6 +710,8 @@ function PackageFirewallPanel(props) {
   const [openingShell, setOpeningShell] = reactExports.useState(false);
   const [confirmRemoveManager, setConfirmRemoveManager] = reactExports.useState(null);
   const [pendingApprovalOp, setPendingApprovalOp] = reactExports.useState(null);
+  const [statusFilter, setStatusFilter] = reactExports.useState("all");
+  const [managerFilter, setManagerFilter] = reactExports.useState("");
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
   const load = reactExports.useCallback(async () => {
     setPanelLoad({ phase: "loading" });
@@ -845,6 +858,12 @@ function PackageFirewallPanel(props) {
     },
     [handleAction, pendingApprovalOp]
   );
+  const handleStatusFilterChange = reactExports.useCallback((filter) => {
+    setStatusFilter(filter);
+  }, []);
+  const handleManagerFilterChange = reactExports.useCallback((e) => {
+    setManagerFilter(e.target.value);
+  }, []);
   const anyPending = pendingOp !== null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3", children: [
@@ -875,6 +894,10 @@ function PackageFirewallPanel(props) {
           lastFailed,
           confirmRemoveManager,
           showGlobalActions: panelLoad.data.entitlement.allowed,
+          statusFilter,
+          managerFilter,
+          onStatusFilterChange: handleStatusFilterChange,
+          onManagerFilterChange: handleManagerFilterChange,
           onInstall: handleInstall,
           onRepair: handleRepair,
           onTest: handleTest,
@@ -903,9 +926,6 @@ function PackageFirewallPanel(props) {
       }
     )
   ] });
-}
-function actionLabel(op) {
-  return op.charAt(0).toUpperCase() + op.slice(1);
 }
 function resolveManagerCoverageStatus(protection, manager) {
   if (!protection) return "unprotected";
@@ -999,31 +1019,8 @@ function SupplyChainWorkspace({
   onGoHome,
   onRuntimeRefresh
 }) {
-  const [filter, setFilter] = reactExports.useState({
-    statusFilter: "all",
-    managerFilter: ""
-  });
-  const handleManagerFilterChange = reactExports.useCallback((e) => {
-    setFilter((f) => ({ ...f, managerFilter: e.target.value }));
-  }, []);
-  const handleStatusFilterChange = reactExports.useCallback((status) => {
-    setFilter((f) => ({ ...f, statusFilter: status }));
-  }, []);
   const stats = reactExports.useMemo(() => buildSupplyChainStats(snapshot), [snapshot]);
   const protection = snapshot.supply_chain?.package_manager_protection;
-  const allManagers = reactExports.useMemo(() => {
-    if (!protection) return [];
-    const all = /* @__PURE__ */ new Set([...protection.protected_managers, ...protection.unprotected_managers]);
-    return Array.from(all).sort();
-  }, [protection]);
-  const filteredManagers = reactExports.useMemo(() => {
-    return allManagers.filter((mgr) => {
-      const matchesText = filter.managerFilter === "" || mgr.toLowerCase().includes(filter.managerFilter.toLowerCase());
-      const isProtected = resolveManagerCoverageStatus(protection, mgr) === "protected";
-      const matchesStatus = filter.statusFilter === "all" || filter.statusFilter === "protected" && isProtected || filter.statusFilter === "unprotected" && !isProtected;
-      return matchesText && matchesStatus;
-    });
-  }, [allManagers, filter, protection]);
   const managedInstalls = reactExports.useMemo(
     () => snapshot.managed_installs ?? [],
     [snapshot.managed_installs]
@@ -1047,79 +1044,6 @@ function SupplyChainWorkspace({
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Unprotected managers", value: stats.unprotectedManagers, tone: stats.unprotectedManagers > 0 ? "attention" : "slate" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(PackageFirewallPanel, { approvalGate, onStateChanged: onRuntimeRefresh }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Coverage by manager" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Live protection state and next activation step for each supported package manager." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "h-3.5 w-3.5 text-slate-400", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "search",
-              placeholder: "Filter by manager...",
-              value: filter.managerFilter,
-              onChange: handleManagerFilterChange,
-              "aria-label": "Filter package managers",
-              className: "bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-40"
-            }
-          )
-        ] }),
-        ["all", "protected", "unprotected"].map((s) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: () => handleStatusFilterChange(s),
-            "aria-pressed": filter.statusFilter === s,
-            className: `rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${filter.statusFilter === s ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
-            children: s.charAt(0).toUpperCase() + s.slice(1)
-          },
-          s
-        ))
-      ] }) }),
-      filteredManagers.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        EmptyState,
-        {
-          title: "No package managers found",
-          body: "No package managers match the current filter, or Guard has not detected any on this machine.",
-          tone: "teach"
-        }
-      ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "table", "aria-label": "Package manager firewall status", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[1fr_auto] gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2", role: "row", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Manager" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Status" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "rowgroup", children: filteredManagers.map((mgr) => {
-          const status = resolveManagerCoverageStatus(protection, mgr);
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "div",
-            {
-              role: "row",
-              className: "grid grid-cols-[1fr_auto] gap-2 border-b border-slate-100 px-4 py-2.5 last:border-b-0",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-mono text-brand-dark", role: "cell", children: mgr }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { role: "cell", children: status === "protected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "green", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 mr-1 inline", "aria-hidden": "true" }),
-                  "Protected"
-                ] }) : status === "restart_required" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "blue", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3.5 w-3.5 mr-1 inline", "aria-hidden": "true" }),
-                  "Restart required"
-                ] }) : status === "path_repair" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-3.5 w-3.5 mr-1 inline", "aria-hidden": "true" }),
-                  "Needs PATH repair"
-                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-3.5 w-3.5 mr-1 inline", "aria-hidden": "true" }),
-                  "Unprotected"
-                ] }) })
-              ]
-            },
-            mgr
-          );
-        }) })
-      ] })
-    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "App shim coverage" }),
