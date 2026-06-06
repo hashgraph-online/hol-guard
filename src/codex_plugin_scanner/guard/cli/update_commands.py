@@ -16,7 +16,7 @@ import sysconfig
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 
 from packaging.version import InvalidVersion, Version
 
@@ -53,11 +53,7 @@ def run_guard_update(
         vcs_install=vcs_install,
         local_source_install=local_source_install,
     )
-    command = _update_command(
-        installer,
-        use_pypi=use_pypi,
-        local_source_install=local_source_install,
-    )
+    command = _update_command(installer, use_pypi=use_pypi)
     payload: dict[str, object] = {
         "current_version": current_version,
         "installer": installer,
@@ -219,9 +215,12 @@ def _success_status(payload: dict[str, object]) -> str:
     ):
         return "updated"
     version_check = payload.get("version_check")
-    if isinstance(version_check, dict) and version_check.get("update_available") is True:
-        if payload.get("vcs_install") is not None or payload.get("upgrade_source") == "pypi":
-            return "stale"
+    if (
+        isinstance(version_check, dict)
+        and version_check.get("update_available") is True
+        and (payload.get("vcs_install") is not None or payload.get("upgrade_source") == "pypi")
+    ):
+        return "stale"
     output_text = str(payload.get("stdout") or "").lower()
     if any(hint in output_text for hint in _ALREADY_CURRENT_HINTS):
         return "current"
@@ -271,12 +270,14 @@ def _success_message(
 
 
 def _planned_update_message(*, version_check: dict[str, object], use_pypi: bool) -> str:
-    if use_pypi and version_check.get("update_available") is True:
-        latest_version = version_check.get("latest_version")
-        if isinstance(latest_version, str) and latest_version.strip():
-            return (
-                f"Review the planned PyPI install command to update to {latest_version.strip()}."
-            )
+    if use_pypi:
+        if version_check.get("update_available") is True:
+            latest_version = version_check.get("latest_version")
+            if isinstance(latest_version, str) and latest_version.strip():
+                return (
+                    f"Review the planned PyPI install command to update to {latest_version.strip()}."
+                )
+        return "Review the planned PyPI install command to repair the install source."
     return "Review the planned installer command before updating."
 
 
@@ -371,33 +372,20 @@ def _should_upgrade_from_pypi(
     vcs_install: dict[str, object] | None,
     local_source_install: dict[str, object] | None,
 ) -> bool:
-    if version_check.get("update_available") is not True:
-        return False
-    if vcs_install is not None:
-        return True
     if local_source_install is not None and not bool(local_source_install.get("path_exists")):
         return True
-    return False
+    if version_check.get("update_available") is not True:
+        return False
+    return vcs_install is not None
 
 
-def _update_command(
-    installer: str,
-    *,
-    use_pypi: bool = False,
-    local_source_install: dict[str, object] | None = None,
-) -> list[str]:
+def _update_command(installer: str, *, use_pypi: bool = False) -> list[str]:
     if use_pypi:
         if installer == "uv":
             return ["uv", "tool", "install", "--force", "hol-guard"]
         if installer == "pipx":
             return ["pipx", "install", "--force", "hol-guard"]
         return [sys.executable, "-m", "pip", "install", "--upgrade", "hol-guard"]
-    if (
-        installer == "pipx"
-        and local_source_install is not None
-        and not bool(local_source_install.get("path_exists"))
-    ):
-        return ["pipx", "install", "--force", "hol-guard"]
     if installer == "uv":
         return ["uv", "tool", "upgrade", "hol-guard"]
     if installer == "pipx":
@@ -438,7 +426,7 @@ def _local_source_install_payload(direct_url: dict[str, object] | None) -> dict[
     parsed = urlparse(raw_url)
     if parsed.scheme != "file":
         return None
-    raw_path = urllib.request.url2pathname(unquote(parsed.path))
+    raw_path = urllib.request.url2pathname(parsed.path)
     if not raw_path:
         return None
     source_path = Path(raw_path).expanduser()
