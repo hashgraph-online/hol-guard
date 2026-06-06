@@ -1781,6 +1781,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   }, [draft]);
   const handleTabChange = reactExports.useCallback((tab) => {
     setActiveTab(tab);
+    setActionMessage(null);
   }, []);
   const handleSearchChange = reactExports.useCallback((event) => {
     setSearchQuery(event.target.value);

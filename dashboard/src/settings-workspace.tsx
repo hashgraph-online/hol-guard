@@ -434,6 +434,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
   const handleTabChange = useCallback((tab: LocalSettingsTabKey) => {
     setActiveTab(tab);
+    setActionMessage(null);
   }, []);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
