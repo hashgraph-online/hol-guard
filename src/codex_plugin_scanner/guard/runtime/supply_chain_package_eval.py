@@ -24,7 +24,7 @@ except ModuleNotFoundError:
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from ..config import load_guard_config, resolve_risk_action
+from ..config import load_guard_config
 from ..models import GuardArtifact
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
@@ -603,7 +603,7 @@ def _evaluate_with_cloud(
     def resolve_fail_closed_decision() -> str:
         nonlocal fail_closed_decision
         if fail_closed_decision is None:
-            fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
+            fail_closed_decision = _external_tarball_scan_failure_decision(store=store, workspace_dir=workspace_dir)
         result: str = fail_closed_decision
         return result
 
@@ -894,12 +894,9 @@ def _cloud_fail_closed_evaluation(
     )
 
 
-def _cloud_fail_closed_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
+def _external_tarball_scan_failure_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:
     config = load_guard_config(store.guard_home, workspace=workspace_dir)
-    cloud_action = resolve_risk_action(config, "cloud_advisory", harness=None)
     if config.security_level in {"strict", "paranoid"}:
-        return "block"
-    if cloud_action == "block":
         return "block"
     return "ask"
 
@@ -2175,7 +2172,7 @@ def _external_tarball_dependency_result(
         )
     scan = _scan_external_tarball(source_url)
     if scan is None:
-        fail_closed_decision = _cloud_fail_closed_decision(store=store, workspace_dir=workspace_dir)
+        fail_closed_decision = _external_tarball_scan_failure_decision(store=store, workspace_dir=workspace_dir)
         if fail_closed_decision != "block":
             return _heuristic_package_result(
                 target=target,
