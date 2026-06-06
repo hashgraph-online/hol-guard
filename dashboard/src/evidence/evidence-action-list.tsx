@@ -27,6 +27,8 @@ interface EvidenceActionListProps {
   page: number;
   pageSize: number;
   onLoadMore: () => void;
+  hideHarnessColumn?: boolean;
+  tableLabel?: string;
 }
 
 const SORT_TOGGLE_MAP: Record<EvidenceSortKey, EvidenceSortKey> = {
@@ -87,6 +89,8 @@ export function EvidenceActionList({
   page,
   pageSize,
   onLoadMore,
+  hideHarnessColumn = false,
+  tableLabel = "Evidence actions",
 }: EvidenceActionListProps) {
   const visible = receipts.slice(0, (page + 1) * pageSize);
   const showLoadMore = hasMore(page, pageSize, receipts.length);
@@ -121,7 +125,7 @@ export function EvidenceActionList({
 
       <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" aria-label="Evidence actions">
+          <table className="w-full text-sm" aria-label={tableLabel}>
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/80">
                 <th scope="col" className="w-8 px-3 py-2.5" />
@@ -132,13 +136,15 @@ export function EvidenceActionList({
                   onClick={() => handleSort("artifact")}
                   className="min-w-[180px]"
                 />
-                <SortHeader
-                  label="App"
-                  active={sort === "app"}
-                  ascending={sort === "app"}
-                  onClick={() => handleSort("app")}
-                  className="hidden sm:table-cell"
-                />
+                {!hideHarnessColumn && (
+                  <SortHeader
+                    label="App"
+                    active={sort === "app"}
+                    ascending={sort === "app"}
+                    onClick={() => handleSort("app")}
+                    className="hidden sm:table-cell"
+                  />
+                )}
                 <SortHeader
                   label="Category"
                   active={sort === "category"}
@@ -170,6 +176,7 @@ export function EvidenceActionList({
                   onSelect={onSelectId}
                   onFilterHarness={onFilterHarness}
                   onFilterCategory={onFilterCategory}
+                  hideHarnessColumn={hideHarnessColumn}
                 />
               ))}
             </tbody>
@@ -198,6 +205,7 @@ interface ActionRowProps {
   onSelect: (id: string) => void;
   onFilterHarness: (harness: string) => void;
   onFilterCategory: (category: string) => void;
+  hideHarnessColumn?: boolean;
 }
 
 function ActionRow({
@@ -206,6 +214,7 @@ function ActionRow({
   onSelect,
   onFilterHarness,
   onFilterCategory,
+  hideHarnessColumn = false,
 }: ActionRowProps) {
   const category = detectCategory(receipt);
   const catInfo = getCategoryInfo(category);
@@ -269,16 +278,18 @@ function ActionRow({
           </span>
         </div>
       </td>
-      <td className="px-3 py-2.5 hidden sm:table-cell">
-        <button
-          type="button"
-          onClick={handleHarnessClick}
-          aria-label={`Filter by app ${harnessDisplayName(receipt.harness)}`}
-          className="text-xs font-medium text-brand-blue hover:underline"
-        >
-          {harnessDisplayName(receipt.harness)}
-        </button>
-      </td>
+      {!hideHarnessColumn && (
+        <td className="px-3 py-2.5 hidden sm:table-cell">
+          <button
+            type="button"
+            onClick={handleHarnessClick}
+            aria-label={`Filter by app ${harnessDisplayName(receipt.harness)}`}
+            className="text-xs font-medium text-brand-blue hover:underline"
+          >
+            {harnessDisplayName(receipt.harness)}
+          </button>
+        </td>
+      )}
       <td className="px-3 py-2.5 hidden md:table-cell">
         <button
           type="button"
