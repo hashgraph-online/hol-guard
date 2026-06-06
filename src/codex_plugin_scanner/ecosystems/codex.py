@@ -5,19 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .base import iter_safe_recursive_files
 from .types import Ecosystem, NormalizedPackage, PackageCandidate
-
-IGNORED_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "__pycache__"}
-
-
-def _iter_files(root: Path, pattern: str) -> list[Path]:
-    files: list[Path] = []
-    for path in root.rglob(pattern):
-        if any(part in IGNORED_DIRS for part in path.parts):
-            continue
-        if path.is_file():
-            files.append(path)
-    return files
 
 
 def _load_json(path: Path) -> dict[str, object]:
@@ -37,7 +26,7 @@ class CodexAdapter:
 
     def detect(self, root: Path) -> list[PackageCandidate]:
         candidates: list[PackageCandidate] = []
-        for manifest_path in _iter_files(root, "plugin.json"):
+        for manifest_path in iter_safe_recursive_files(root, root, "plugin.json"):
             if manifest_path.parent.name != ".codex-plugin":
                 continue
             package_root = manifest_path.parent.parent
@@ -50,7 +39,7 @@ class CodexAdapter:
                     detection_reason="found .codex-plugin/plugin.json",
                 )
             )
-        for marketplace_path in _iter_files(root, "marketplace.json"):
+        for marketplace_path in iter_safe_recursive_files(root, root, "marketplace.json"):
             package_root = None
             if marketplace_path.parent.name == "plugins" and marketplace_path.parent.parent.name == ".agents":
                 package_root = marketplace_path.parent.parent.parent

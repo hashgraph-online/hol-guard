@@ -5,19 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..path_support import resolves_within_root
+from .base import iter_safe_recursive_files
 from .types import Ecosystem, NormalizedPackage, PackageCandidate
-
-IGNORED_DIRS = {"node_modules", ".git", ".venv", "venv", "dist", "__pycache__"}
-
-
-def _iter_files(root: Path, pattern: str) -> list[Path]:
-    files: list[Path] = []
-    for path in root.rglob(pattern):
-        if any(part in IGNORED_DIRS for part in path.parts):
-            continue
-        if path.is_file():
-            files.append(path)
-    return files
 
 
 def _load_json(path: Path) -> dict[str, object]:
@@ -37,7 +27,7 @@ class ClaudeAdapter:
 
     def detect(self, root: Path) -> list[PackageCandidate]:
         candidates: list[PackageCandidate] = []
-        for manifest_path in _iter_files(root, "plugin.json"):
+        for manifest_path in iter_safe_recursive_files(root, root, "plugin.json"):
             if manifest_path.parent.name != ".claude-plugin":
                 continue
             candidates.append(
@@ -49,7 +39,7 @@ class ClaudeAdapter:
                     detection_reason="found .claude-plugin/plugin.json",
                 )
             )
-        for manifest_path in _iter_files(root, "marketplace.json"):
+        for manifest_path in iter_safe_recursive_files(root, root, "marketplace.json"):
             if manifest_path.parent.name != ".claude-plugin":
                 continue
             candidates.append(
@@ -74,19 +64,27 @@ class ClaudeAdapter:
         mcp_file = root / ".mcp.json"
         if commands_dir.is_dir():
             components["commands"] = tuple(
-                sorted(str(path.relative_to(root)) for path in commands_dir.rglob("*.md") if path.is_file())
+                str(path.relative_to(root)) for path in iter_safe_recursive_files(root, commands_dir, "*.md")
             )
         if agents_dir.is_dir():
             components["agents"] = tuple(
-                sorted(str(path.relative_to(root)) for path in agents_dir.rglob("*.md") if path.is_file())
+                str(path.relative_to(root)) for path in iter_safe_recursive_files(root, agents_dir, "*.md")
             )
         if skills_dir.is_dir():
             components["skills"] = tuple(
-                sorted(str(path.relative_to(root)) for path in skills_dir.rglob("SKILL.md") if path.is_file())
+                str(path.relative_to(root)) for path in iter_safe_recursive_files(root, skills_dir, "SKILL.md")
             )
-        if hooks_file.is_file():
+        if (
+            hooks_file.is_file()
+            and not hooks_file.is_symlink()
+            and resolves_within_root(root, hooks_file, require_exists=True)
+        ):
             components["hooks"] = (str(hooks_file.relative_to(root)),)
-        if mcp_file.is_file():
+        if (
+            mcp_file.is_file()
+            and not mcp_file.is_symlink()
+            and resolves_within_root(root, mcp_file, require_exists=True)
+        ):
             components["mcp_servers"] = (str(mcp_file.relative_to(root)),)
 
         strict_mode = manifest.get("strict")
