@@ -12703,6 +12703,7 @@ function getDemoDiff(artifactId, harness) {
 }
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
+const GUARD_SURFACE_PROTOCOL_VERSIONS = ["1.1", "1.0"];
 let guardTokenOverride = null;
 let guardTokenLocationKey = null;
 async function readJson(input, init) {
@@ -12768,6 +12769,10 @@ function readGuardToken() {
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
 }
+function saveGuardToken(guardToken) {
+  guardTokenOverride = guardToken;
+  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+}
 function readGuardDaemonOrigin() {
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
   if (rawDaemonUrl) {
@@ -12817,7 +12822,17 @@ function withGuardAuthForToken(init, guardToken) {
 }
 async function fetchWithGuardAuth(input, init) {
   const requestInput = guardApiInput(input);
-  return fetch(requestInput, withGuardAuth(init));
+  const guardToken = readGuardToken();
+  const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));
+  if (response.status !== 401 || !guardToken || input instanceof Request) {
+    return response;
+  }
+  const refreshedGuardToken = await refreshGuardDashboardSession(guardToken);
+  if (!refreshedGuardToken || refreshedGuardToken === guardToken) {
+    return response;
+  }
+  saveGuardToken(refreshedGuardToken);
+  return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
@@ -12825,6 +12840,35 @@ function guardAuthHeaders() {
 }
 function guardAuthHeadersForToken(guardToken) {
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
+}
+function parseDashboardSessionToken(payload) {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const dashboardSessionToken = payload["dashboard_session_token"];
+  return typeof dashboardSessionToken === "string" && dashboardSessionToken.trim() ? dashboardSessionToken : null;
+}
+async function refreshGuardDashboardSession(guardToken) {
+  try {
+    const response = await fetch(guardApiInput("/v1/initialize"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({
+        client_name: "guard-dashboard-web",
+        surface: "dashboard",
+        supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS]
+      })
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return parseDashboardSessionToken(await response.json());
+  } catch {
+    return null;
+  }
 }
 function guardAwareHref(href) {
   const guardToken = readGuardToken();

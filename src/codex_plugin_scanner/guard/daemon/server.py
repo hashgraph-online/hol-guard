@@ -152,6 +152,7 @@ _SUPPLY_CHAIN_PACKAGE_ACTIONS = {
 }
 _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS = 1_500
 _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
+_LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 
 
 class _HookPathValidationError(ValueError):
@@ -2693,6 +2694,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": str(error)}, status=400)
             return
+        refreshed_session_token = self._refresh_dashboard_session_token(surface=surface)
+        if refreshed_session_token is not None:
+            response["dashboard_session_token"] = refreshed_session_token
         self._write_json(response)
 
     def _handle_client_attach(self, payload: dict[str, object]) -> None:
@@ -3080,29 +3084,71 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return any(self._dashboard_session_token_matches(candidate, payload=payload) for candidate in candidates)
 
     def _dashboard_session_token_matches(self, token: str, *, payload: dict[str, object] | None = None) -> bool:
-        if not token.startswith("gld1."):
-            return False
-        parts = token.split(".")
-        if len(parts) != 3:
-            return False
-        prefix, encoded_payload, signature = parts
-        if prefix != "gld1" or not encoded_payload or not signature:
-            return False
-        expected = _dashboard_session_signature(encoded_payload, self.server.auth_token)  # type: ignore[attr-defined]
-        if not secrets.compare_digest(signature, expected):
-            return False
-        claims = _decode_dashboard_session_payload(encoded_payload)
-        if self._optional_string(claims.get("aud")) != LOCAL_DASHBOARD_SESSION_AUDIENCE:
-            return False
-        expires_at = claims.get("expires_at")
-        if not isinstance(expires_at, str):
-            return False
-        try:
-            if _parse_iso_timestamp(expires_at) <= time.time():
-                return False
-        except ValueError:
+        claims = self._dashboard_session_token_claims(token)
+        if claims is None:
             return False
         return self._dashboard_session_claims_authorize_request(claims, payload=payload)
+
+    def _dashboard_session_token_claims(
+        self,
+        token: str,
+        *,
+        allow_expired_within_seconds: float = 0.0,
+    ) -> dict[str, object] | None:
+        if not token.startswith("gld1."):
+            return None
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        prefix, encoded_payload, signature = parts
+        if prefix != "gld1" or not encoded_payload or not signature:
+            return None
+        expected = _dashboard_session_signature(encoded_payload, self.server.auth_token)  # type: ignore[attr-defined]
+        if not secrets.compare_digest(signature, expected):
+            return None
+        claims = _decode_dashboard_session_payload(encoded_payload)
+        if self._optional_string(claims.get("aud")) != LOCAL_DASHBOARD_SESSION_AUDIENCE:
+            return None
+        expires_at = claims.get("expires_at")
+        if not isinstance(expires_at, str):
+            return None
+        try:
+            expires_at_timestamp = _parse_iso_timestamp(expires_at)
+        except ValueError:
+            return None
+        if expires_at_timestamp + max(0.0, allow_expired_within_seconds) <= time.time():
+            return None
+        return claims
+
+    def _refresh_dashboard_session_token(self, *, surface: str) -> str | None:
+        if self._refreshable_dashboard_session_claims() is None:
+            return None
+        refreshed_surface = surface if surface in {"approval-center", "dashboard", "cloud-dashboard"} else "dashboard"
+        return build_local_dashboard_session_token(
+            auth_token=self.server.auth_token,  # type: ignore[attr-defined]
+            surface=refreshed_surface,
+        )
+
+    def _refreshable_dashboard_session_claims(self) -> dict[str, object] | None:
+        session_token = self.headers.get("X-Guard-Dashboard-Session")
+        authorization = self.headers.get("Authorization")
+        bearer_token = None
+        if isinstance(authorization, str) and authorization.lower().startswith("bearer "):
+            bearer_token = authorization[7:].strip()
+        candidates = [
+            candidate for candidate in (session_token, bearer_token) if isinstance(candidate, str) and candidate.strip()
+        ]
+        for candidate in candidates:
+            claims = self._dashboard_session_token_claims(
+                candidate,
+                allow_expired_within_seconds=_LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS,
+            )
+            if claims is None:
+                continue
+            surface = self._optional_string(claims.get("surface"))
+            if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
+                return claims
+        return None
 
     def _dashboard_session_claims_authorize_request(
         self,
