@@ -26,9 +26,14 @@ SECRET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"gho_[A-Za-z0-9]{36}"),  # GitHub OAuth
     re.compile(r"ghu_[A-Za-z0-9]{36}"),  # GitHub user token
     re.compile(r"ghs_[A-Za-z0-9]{36}"),  # GitHub app token
+    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),  # GitHub fine-grained PAT
     re.compile(r"glpat-[A-Za-z0-9\-]{20}"),  # GitLab PAT
     re.compile(r"xox[bpas]-[A-Za-z0-9\-]{10,}"),  # Slack tokens
-    re.compile(r"sk-[A-Za-z0-9]{48}"),  # OpenAI key
+    re.compile(r"xoxe-[A-Za-z0-9\-]{10,}"),  # Slack user tokens
+    re.compile(r"xoxr-[A-Za-z0-9\-]{10,}"),  # Slack configuration tokens
+    re.compile(r"xapp-[A-Za-z0-9\-]{10,}"),  # Slack app-level tokens
+    re.compile(r"sk-(?:proj-)?[A-Za-z0-9_-]{20,}"),  # OpenAI keys
+    re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),  # Anthropic keys
 ]
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
@@ -39,7 +44,6 @@ BINARY_EXTS = {
     ".jpeg",
     ".gif",
     ".ico",
-    ".svg",
     ".webp",
     ".woff",
     ".woff2",
@@ -51,7 +55,6 @@ BINARY_EXTS = {
     ".gz",
     ".7z",
     ".rar",
-    ".lock",
     ".wasm",
     ".pyc",
     ".so",
