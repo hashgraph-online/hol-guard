@@ -16760,7 +16760,9 @@ function EvidenceActionList({
   onSortChange,
   page,
   pageSize,
-  onLoadMore
+  onLoadMore,
+  hideHarnessColumn = false,
+  tableLabel = "Evidence actions"
 }) {
   const visible = receipts.slice(0, (page + 1) * pageSize);
   const showLoadMore = hasMore(page, pageSize, receipts.length);
@@ -16786,7 +16788,7 @@ function EvidenceActionList({
       " action",
       receipts.length !== 1 ? "s" : ""
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full text-sm", "aria-label": "Evidence actions", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full text-sm", "aria-label": tableLabel, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 bg-slate-50/80", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "w-8 px-3 py-2.5" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -16799,7 +16801,7 @@ function EvidenceActionList({
             className: "min-w-[180px]"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
+        !hideHarnessColumn && /* @__PURE__ */ jsxRuntimeExports.jsx(
           SortHeader,
           {
             label: "App",
@@ -16846,7 +16848,8 @@ function EvidenceActionList({
           isSelected: selectedId === receipt.receipt_id,
           onSelect: onSelectId,
           onFilterHarness,
-          onFilterCategory
+          onFilterCategory,
+          hideHarnessColumn
         },
         receipt.receipt_id
       )) })
@@ -16867,7 +16870,8 @@ function ActionRow({
   isSelected,
   onSelect,
   onFilterHarness,
-  onFilterCategory
+  onFilterCategory,
+  hideHarnessColumn = false
 }) {
   const category = detectCategory(receipt);
   const catInfo = getCategoryInfo(category);
@@ -16915,7 +16919,7 @@ function ActionRow({
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[260px]", children: actionTitle }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[260px]", children: actionSubtitle ?? actionType })
         ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden sm:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        !hideHarnessColumn && /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden sm:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
             type: "button",
@@ -17978,6 +17982,96 @@ function Sparkline({ items, days = 7 }) {
     )) })
   ] });
 }
+const PAGE_SIZE$1 = 50;
+function ScopedEvidenceTable({
+  receipts,
+  exportFilters,
+  hideHarnessColumn = true,
+  tableLabel = "Evidence actions",
+  onFilterCategory,
+  onFilterHarness
+}) {
+  const [sort, setSort] = reactExports.useState("newest");
+  const [page, setPage] = reactExports.useState(0);
+  const [selectedId, setSelectedId] = reactExports.useState("");
+  const [exportOpen, setExportOpen] = reactExports.useState(false);
+  const sorted = reactExports.useMemo(() => sortEvidence(receipts, sort), [receipts, sort]);
+  const exportFilterState = reactExports.useMemo(
+    () => ({
+      search: "",
+      time: "all",
+      decision: exportFilters.decision,
+      harness: exportFilters.harness,
+      category: exportFilters.category,
+      sourceScope: "",
+      day: "",
+      sort,
+      view: "apps",
+      selectedId: ""
+    }),
+    [exportFilters.decision, exportFilters.harness, exportFilters.category, sort]
+  );
+  reactExports.useEffect(() => {
+    setPage(0);
+    setSelectedId("");
+    setSort("newest");
+  }, [receipts]);
+  const handleSortChange = reactExports.useCallback((next) => {
+    setSort(next);
+    setPage(0);
+  }, []);
+  const handleLoadMore = reactExports.useCallback(() => {
+    setPage((prev) => prev + 1);
+  }, []);
+  const handleSelectId = reactExports.useCallback((id) => {
+    setSelectedId((prev) => prev === id ? "" : id);
+  }, []);
+  const handleOpenExport = reactExports.useCallback(() => {
+    setExportOpen(true);
+  }, []);
+  const handleCloseExport = reactExports.useCallback(() => {
+    setExportOpen(false);
+  }, []);
+  const noopHarness = reactExports.useCallback(() => {
+  }, []);
+  const noopCategory = reactExports.useCallback(() => {
+  }, []);
+  if (receipts.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "py-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No actions match the selected filters." }) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: handleOpenExport, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+      "Export filtered"
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceActionList,
+      {
+        receipts: sorted,
+        selectedId,
+        onSelectId: handleSelectId,
+        onFilterHarness: onFilterHarness ?? noopHarness,
+        onFilterCategory: onFilterCategory ?? noopCategory,
+        sort,
+        onSortChange: handleSortChange,
+        page,
+        pageSize: PAGE_SIZE$1,
+        onLoadMore: handleLoadMore,
+        hideHarnessColumn,
+        tableLabel
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceExportDrawer,
+      {
+        receipts: sorted,
+        filters: exportFilterState,
+        isOpen: exportOpen,
+        onClose: handleCloseExport
+      }
+    )
+  ] });
+}
 function hashString(str) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -18082,6 +18176,9 @@ function AppTabRaw({ receipts }) {
     }
     return items;
   }, [apps, selectedApp, decisionFilter, categoryFilter]);
+  const handleCategoryFilter = reactExports.useCallback((category) => {
+    setCategoryFilter(category);
+  }, []);
   const categories = reactExports.useMemo(() => {
     if (!selectedApp) return [];
     const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
@@ -18197,32 +18294,19 @@ function AppTabRaw({ receipts }) {
           }
         )
       ] }),
-      selectedItems.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "py-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No actions match the selected filters." }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full text-sm", "aria-label": `${harnessDisplayName(selectedApp)} actions`, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 bg-slate-50/80", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "w-8 px-3 py-2.5" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500", children: "What happened" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden md:table-cell", children: "Category" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500", children: "Decision" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden lg:table-cell", children: "Time" })
-        ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: selectedItems.map((receipt) => {
-          const category = detectCategory(receipt);
-          const catInfo = getCategoryInfo(category);
-          const actionTitle = resolveActionTitle(receipt);
-          const actionType = resolveActionType(receipt);
-          const actionSubtitle = resolveActionSubtitle(receipt);
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col min-w-0", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate block max-w-[260px]", children: actionTitle }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 truncate block max-w-[260px]", children: actionSubtitle ?? actionType })
-            ] }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden md:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: catInfo.label }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2.5 hidden lg:table-cell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400 whitespace-nowrap", children: formatRelativeTime(receipt.timestamp) }) })
-          ] }, receipt.receipt_id);
-        }) })
-      ] }) }) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ScopedEvidenceTable,
+        {
+          receipts: selectedItems,
+          exportFilters: {
+            harness: selectedApp,
+            decision: decisionFilter,
+            category: categoryFilter
+          },
+          tableLabel: `${harnessDisplayName(selectedApp)} actions`,
+          onFilterCategory: handleCategoryFilter
+        }
+      )
     ] });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [

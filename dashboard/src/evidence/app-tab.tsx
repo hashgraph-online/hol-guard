@@ -4,18 +4,13 @@ import {
   HiMiniChevronLeft,
   HiMiniArrowTopRightOnSquare,
   HiMiniFunnel,
-  HiMiniShieldCheck,
-  HiMiniNoSymbol,
-  HiMiniQuestionMarkCircle,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { harnessDisplayName, isDisplayableHarness, formatRelativeTime } from "../approval-center-utils";
-import { plainEnglishDescription, resolveActionTitle, resolveActionType, resolveActionSubtitle } from "./plain-english";
 import { detectCategory, getCategoryInfo } from "./categories";
 import { guardAwareHref } from "../guard-api";
 import { Sparkline } from "./sparkline";
-import { DecisionBadge } from "./decision-badge";
-import { Badge } from "../approval-center-primitives";
+import { ScopedEvidenceTable } from "./scoped-evidence-table";
 
 interface AppTabProps {
   receipts: GuardReceipt[];
@@ -136,6 +131,10 @@ function AppTabRaw({ receipts }: AppTabProps) {
     return items;
   }, [apps, selectedApp, decisionFilter, categoryFilter]);
 
+  const handleCategoryFilter = useCallback((category: string) => {
+    setCategoryFilter(category);
+  }, []);
+
   const categories = useMemo(() => {
     if (!selectedApp) return [];
     const allItems = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
@@ -235,58 +234,16 @@ function AppTabRaw({ receipts }: AppTabProps) {
           )}
         </div>
 
-        {selectedItems.length === 0 ? (
-          <div className="py-8 text-center">
-            <p className="text-sm text-slate-500">No actions match the selected filters.</p>
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" aria-label={`${harnessDisplayName(selectedApp)} actions`}>
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/80">
-                    <th scope="col" className="w-8 px-3 py-2.5" />
-                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">What happened</th>
-                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden md:table-cell">Category</th>
-                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">Decision</th>
-                    <th scope="col" className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 hidden lg:table-cell">Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedItems.map((receipt) => {
-                    const category = detectCategory(receipt);
-                    const catInfo = getCategoryInfo(category);
-                    const actionTitle = resolveActionTitle(receipt);
-                    const actionType = resolveActionType(receipt);
-                    const actionSubtitle = resolveActionSubtitle(receipt);
-                    return (
-                      <tr key={receipt.receipt_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-                        <td className="px-3 py-2.5">
-                          <span className={`${catInfo.color}`} aria-hidden="true">{catInfo.icon}</span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-medium text-brand-dark truncate block max-w-[260px]">{actionTitle}</span>
-                            <span className="text-[11px] text-slate-400 truncate block max-w-[260px]">{actionSubtitle ?? actionType}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 hidden md:table-cell">
-                          <span className="text-xs text-slate-500">{catInfo.label}</span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <DecisionBadge decision={receipt.policy_decision} />
-                        </td>
-                        <td className="px-3 py-2.5 hidden lg:table-cell">
-                          <span className="text-xs text-slate-400 whitespace-nowrap">{formatRelativeTime(receipt.timestamp)}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        <ScopedEvidenceTable
+          receipts={selectedItems}
+          exportFilters={{
+            harness: selectedApp,
+            decision: decisionFilter,
+            category: categoryFilter,
+          }}
+          tableLabel={`${harnessDisplayName(selectedApp)} actions`}
+          onFilterCategory={handleCategoryFilter}
+        />
       </div>
     );
   }
