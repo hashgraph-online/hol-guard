@@ -7,8 +7,6 @@ import {
   HiMiniInformationCircle,
   HiMiniExclamationTriangle,
   HiMiniBellAlert,
-  HiMiniChevronDown,
-  HiMiniChevronUp,
   HiMiniMagnifyingGlass,
   HiMiniXMark,
 } from "react-icons/hi2";
@@ -27,8 +25,11 @@ import {
   disableApprovalGateTotp,
   enrollApprovalGateTotp,
   exportDiagnostics,
+  exportSettings,
   fetchRuntimeSnapshot,
   fetchSettings,
+  importSettings,
+  resetSettings,
   type GuardApprovalGateTotpEnrollment,
   updateSettings,
   clearPolicy,
@@ -53,8 +54,12 @@ import type {
   GuardNotificationSetupResult,
   GuardRuntimeSnapshot,
   GuardSettings,
+  GuardSettingsExport,
   GuardSettingsPayload,
 } from "./guard-types";
+import { SettingsSectionShell } from "./settings/settings-section-shell";
+import { SettingsFormSection, SettingsToggleRow } from "./settings/settings-row-primitives";
+import type { LocalSettingsTabKey } from "./settings/settings-ia";
 
 export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 
@@ -355,9 +360,12 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [actionMessageKind, setActionMessageKind] = useState<"success" | "error">("success");
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [activeTab, setActiveTab] = useState<LocalSettingsTabKey>("protection");
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ "protection": true, "risk": false, "diagnostics": false });
+  const [importingSettings, setImportingSettings] = useState(false);
+  const [resettingSettings, setResettingSettings] = useState(false);
+  const [exportingSettings, setExportingSettings] = useState(false);
+  const settingsImportInputRef = useRef<HTMLInputElement>(null);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSettingsRef = useRef<GuardSettings | null>(null);
   const [approvalGateEnabled, setApprovalGateEnabled] = useState(false);
@@ -425,16 +433,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [draft]);
 
-  const toggleSection = useCallback((key: string) => {
-    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
-
-  const handleToggleProtection = useCallback(() => toggleSection("protection"), [toggleSection]);
-  const handleToggleRisk = useCallback(() => toggleSection("risk"), [toggleSection]);
-  const handleToggleDiagnostics = useCallback(() => toggleSection("diagnostics"), [toggleSection]);
-
-  const handleAdvancedToggle = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setShowAdvanced(event.target.checked);
+  const handleTabChange = useCallback((tab: LocalSettingsTabKey) => {
+    setActiveTab(tab);
   }, []);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -514,6 +514,21 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     },
     []
   );
+
+  const handleTelemetryToggle = useCallback((checked: boolean) => {
+    setDraft((value) => value === null ? value : { ...value, telemetry: checked });
+    setSaveError(null);
+  }, []);
+
+  const handleSyncToggle = useCallback((checked: boolean) => {
+    setDraft((value) => value === null ? value : { ...value, sync: checked });
+    setSaveError(null);
+  }, []);
+
+  const handleBillingToggle = useCallback((checked: boolean) => {
+    setDraft((value) => value === null ? value : { ...value, billing: checked });
+    setSaveError(null);
+  }, []);
 
   const handleApprovalGateToggle = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const checked = event.target.checked;
@@ -883,6 +898,76 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     }
   }, []);
 
+  const handleExportSettings = useCallback(async () => {
+    setExportingSettings(true);
+    setActionMessage(null);
+    try {
+      const exported = await exportSettings();
+      const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `guard-settings-${Date.now()}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setActionMessage("Settings exported.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to export settings.");
+      setActionMessageKind("error");
+    } finally {
+      setExportingSettings(false);
+    }
+  }, []);
+
+  const handleImportSettingsClick = useCallback(() => {
+    settingsImportInputRef.current?.click();
+  }, []);
+
+  const handleImportSettingsFile = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImportingSettings(true);
+    setActionMessage(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as GuardSettingsExport;
+      const payload = await importSettings(parsed);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      setActionMessage("Settings imported.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to import settings.");
+      setActionMessageKind("error");
+    } finally {
+      setImportingSettings(false);
+    }
+  }, []);
+
+  const handleResetSettings = useCallback(async () => {
+    if (!window.confirm("Reset all local Guard settings to defaults? This cannot be undone.")) return;
+    setResettingSettings(true);
+    setActionMessage(null);
+    try {
+      const payload = await resetSettings();
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
+      setActionMessage("Settings reset to defaults.");
+      setActionMessageKind("success");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to reset settings.");
+      setActionMessageKind("error");
+    } finally {
+      setResettingSettings(false);
+    }
+  }, []);
+
   const handleSetupNotifications = useCallback(async () => {
     setSettingUpNotifications(true);
     setActionMessage(null);
@@ -975,77 +1060,128 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         </div>
       )}
 
-      {!hasSearch && consequenceSummary && (
-        <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4">
-          <div className="flex items-start gap-3">
-            <HiMiniShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand-blue" />
-            <div>
-              <SectionLabel>What to expect</SectionLabel>
-              <p className="mt-1 text-sm text-slate-500">{consequenceSummary}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-2" role="region" aria-label="Settings sections">
-        <AccordionSection
-          title="Protection level"
-          subtitle={`${securityLevelLabel(draft.security_level)} · ${draft.mode}`}
-          expanded={expandedSections["protection"]}
-          onToggle={handleToggleProtection}
-          sectionId="protection"
-        >
-          <fieldset className="space-y-6">
-            <legend className="sr-only">Security level</legend>
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              {securityLevels.map((level) => (
-                <SecurityLevelCard
-                  key={level.value}
-                  level={level}
-                  isSelected={draft.security_level === level.value}
-                  onSelect={handleSecurityLevelChange}
-                />
-              ))}
-            </div>
-
-            <div>
-              <SectionLabel>Protection mode</SectionLabel>
-              <fieldset className="mt-2 grid gap-2 sm:grid-cols-3">
-                <legend className="sr-only">Protection mode</legend>
-                {(["prompt", "enforce", "observe"] as const).map((mode) => (
-                  <label
-                    key={mode}
-                    className={`cursor-pointer rounded-lg border p-3 transition-all ${draft.mode === mode ? "border-brand-blue/25 bg-brand-blue/[0.04]" : "border-transparent bg-slate-50/80 hover:bg-white"}`}
-                  >
-                    <input type="radio" name="mode" value={mode} checked={draft.mode === mode} onChange={handleModeChange} className="sr-only" />
-                    <span className="text-sm font-semibold capitalize text-brand-dark">{mode}</span>
-                  </label>
-                ))}
-              </fieldset>
-              <p className="mt-2 text-sm text-slate-500">{modeHelp}</p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="approval-wait" className="block text-sm font-semibold text-brand-dark">Approval wait timeout</label>
-                <p className="text-xs text-slate-500">Seconds to wait before returning to the app</p>
-                <input id="approval-wait" type="number" min={0} max={600} value={draft.approval_wait_timeout_seconds} onChange={handleTimeoutChange} className="mt-2 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20" />
-              </div>
-              <fieldset className="space-y-2">
-                <legend className="sr-only">Feature toggles</legend>
-                <SettingToggle id="settings-telemetry" label="Telemetry" checked={draft.telemetry} onChange={handleBooleanChange("telemetry")} />
-                <SettingToggle id="settings-cloud-sync" label="Cloud sync" checked={draft.sync} onChange={handleBooleanChange("sync")} />
+      <SettingsSectionShell
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        intro={
+          !hasSearch && activeTab === "protection" && consequenceSummary ? (
+            <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4">
+              <div className="flex items-start gap-3">
+                <HiMiniShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand-blue" aria-hidden="true" />
                 <div>
-                  <SettingToggle id="settings-billing" label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
-                  {perfSnapshot !== null && perfSnapshot.cloud_state === "local_only" && draft.billing && (
-                    <p className="mt-1 ml-11 text-xs text-slate-500">
-                      Billing features require a cloud connection. Connect this machine to access paid features and blocked-install analytics.
-                    </p>
-                  )}
+                  <SectionLabel>What to expect</SectionLabel>
+                  <p className="mt-1 text-sm text-slate-500">{consequenceSummary}</p>
+                </div>
+              </div>
+            </div>
+          ) : null
+        }
+      >
+        {activeTab === "protection" && (
+          <div className="space-y-6">
+            <SettingsFormSection
+              title="Protection level"
+              description={`${securityLevelLabel(draft.security_level)} · ${draft.mode} mode`}
+            >
+              <fieldset className="space-y-6 border-0 p-0">
+                <legend className="sr-only">Security level</legend>
+                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                  {securityLevels.map((level) => (
+                    <SecurityLevelCard
+                      key={level.value}
+                      level={level}
+                      isSelected={draft.security_level === level.value}
+                      onSelect={handleSecurityLevelChange}
+                    />
+                  ))}
                 </div>
               </fieldset>
-            </div>
+            </SettingsFormSection>
 
+            <SettingsFormSection title="Protection mode" description={modeHelp}>
+              <fieldset className="border-0 p-0">
+                <legend className="sr-only">Protection mode</legend>
+                <div className="grid gap-2 py-3 sm:grid-cols-3">
+                  {(["prompt", "enforce", "observe"] as const).map((mode) => (
+                    <label
+                      key={mode}
+                      className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 py-2 transition-colors ${
+                        draft.mode === mode
+                          ? "border-brand-blue/25 bg-brand-blue/[0.04]"
+                          : "border-transparent bg-slate-50/80 hover:bg-white"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="mode"
+                        value={mode}
+                        checked={draft.mode === mode}
+                        onChange={handleModeChange}
+                        className="sr-only"
+                      />
+                      <span className="text-sm font-semibold capitalize text-brand-dark">{mode}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </SettingsFormSection>
+
+            <SettingsFormSection title="Timing and features">
+              <div className="space-y-4 py-3">
+                <div>
+                  <label htmlFor="approval-wait" className="guard-settings-body font-medium text-brand-dark">
+                    Approval wait timeout
+                  </label>
+                  <p className="guard-settings-caption text-slate-500">
+                    Seconds to wait before returning to the app
+                  </p>
+                  <input
+                    id="approval-wait"
+                    type="number"
+                    min={0}
+                    max={600}
+                    value={draft.approval_wait_timeout_seconds}
+                    onChange={handleTimeoutChange}
+                    className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                  />
+                </div>
+                <SettingsToggleRow
+                  label="Telemetry"
+                  description="Share anonymized usage to improve Guard."
+                  checked={draft.telemetry}
+                  onChange={handleTelemetryToggle}
+                />
+                <SettingsToggleRow
+                  label="Cloud sync"
+                  description="Sync receipts and policy with Guard Cloud when connected."
+                  checked={draft.sync}
+                  onChange={handleSyncToggle}
+                />
+                <SettingsToggleRow
+                  label="Billing features"
+                  description="Enable paid supply-chain and blocked-install analytics."
+                  checked={draft.billing}
+                  onChange={handleBillingToggle}
+                />
+                {perfSnapshot !== null && perfSnapshot.cloud_state === "local_only" && draft.billing ? (
+                  <p className="guard-settings-caption -mt-1 text-slate-500">
+                    Billing features require a cloud connection. Connect this machine to access paid features.
+                  </p>
+                ) : null}
+              </div>
+            </SettingsFormSection>
+          </div>
+        )}
+
+        {activeTab === "approval" && (
+          <div className="space-y-4">
+            {!approvalGateEnabled ? (
+              <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
+                <p className="text-sm text-brand-dark">
+                  Add a password or authenticator so allow and trust changes need proof before they apply.
+                </p>
+              </div>
+            ) : null}
             <ApprovalGateCard
               enabled={approvalGateEnabled}
               gateConfig={draft.approval_gate ?? null}
@@ -1079,63 +1215,62 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               onRevokePasswordChange={handleRevokePasswordChange}
               onRevokeCooldown={handleRevokeCooldown}
             />
-          </fieldset>
-        </AccordionSection>
-
-        <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4">
-          <div>
-            <p className="text-sm font-semibold text-brand-dark">Advanced settings</p>
-            <p className="text-xs text-slate-500">Fine-tune individual risk controls and diagnostics.</p>
           </div>
-          <label className="relative inline-flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              id="advanced-toggle"
-              checked={showAdvanced}
-              onChange={handleAdvancedToggle}
-              className="peer sr-only"
-              aria-label="Show advanced settings"
-            />
-            <div className="h-6 w-11 rounded-full bg-slate-200 transition-colors peer-checked:bg-brand-blue" />
-            <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
-          </label>
-        </div>
+        )}
 
-        {showAdvanced && (
-          <>
-        <AccordionSection
-          title="Risk choices"
-          subtitle={draft.security_level !== "custom" ? `Managed by ${securityLevelLabel(draft.security_level)}` : "Custom overrides active"}
-          expanded={expandedSections["risk"]}
-          onToggle={handleToggleRisk}
-          sectionId="risk"
-        >
-          <div className="space-y-4">
-            {draft.security_level !== "custom" && (
-              <p className="text-sm text-slate-500">All risk behaviors are set by the <span className="font-semibold">{securityLevelLabel(draft.security_level)}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.</p>
-            )}
-            <div className={`divide-y divide-slate-100 border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
-              {riskControls.map((risk) => (
-                <RiskControlRow
-                  key={risk.key}
-                  risk={risk}
-                  value={draft.risk_actions[risk.key] ?? "require-reapproval"}
-                  disabled={draft.security_level !== "custom"}
-                  onChange={handleRiskActionChange(risk.key)}
-                  showConsequence={draft.security_level === "custom"}
-                />
-              ))}
-            </div>
-            <div className={`grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
-              <div>
-                <p className="text-sm font-medium text-brand-dark">Codex reading local secret files</p>
-                <p className="text-xs text-slate-500">Use this only for trusted projects where Codex should read files such as .env or .npmrc without Guard asking.</p>
+        {activeTab === "notifications" && (
+          <NotificationSetupCard
+            result={notificationSetup}
+            settingUp={settingUpNotifications}
+            onSetup={handleSetupNotifications}
+          />
+        )}
+
+        {activeTab === "advanced" && (
+          <div className="space-y-6">
+            <SettingsFormSection
+              title="Risk choices"
+              description={
+                draft.security_level !== "custom"
+                  ? `Managed by ${securityLevelLabel(draft.security_level)}. Select Custom on the Protection tab to override.`
+                  : "Custom overrides active for this machine."
+              }
+            >
+              <div className={`space-y-1 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
+                {riskControls.map((risk) => (
+                  <RiskControlRow
+                    key={risk.key}
+                    risk={risk}
+                    value={draft.risk_actions[risk.key] ?? "require-reapproval"}
+                    disabled={draft.security_level !== "custom"}
+                    onChange={handleRiskActionChange(risk.key)}
+                    showConsequence={draft.security_level === "custom"}
+                  />
+                ))}
+                <div className="grid gap-2 border-t border-slate-100 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
+                  <div>
+                    <p className="text-sm font-medium text-brand-dark">Codex reading local secret files</p>
+                    <p className="text-xs text-slate-500">
+                      Use only for trusted projects where Codex should read .env or .npmrc without Guard asking.
+                    </p>
+                  </div>
+                  <SettingSelect
+                    label="Codex should"
+                    value={
+                      draft.harness_risk_actions.codex?.local_secret_read
+                      ?? draft.risk_actions.local_secret_read
+                      ?? "require-reapproval"
+                    }
+                    options={actionOptions}
+                    onChange={handleCodexSecretReadChange}
+                    disabled={draft.security_level !== "custom"}
+                  />
+                </div>
               </div>
-              <SettingSelect label="Codex should" value={draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval"} options={actionOptions} onChange={handleCodexSecretReadChange} disabled={draft.security_level !== "custom"} />
-            </div>
-            <div className="border-t border-slate-100 pt-3">
-              <SectionLabel>Advanced defaults</SectionLabel>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            </SettingsFormSection>
+
+            <SettingsFormSection title="Advanced defaults">
+              <div className="grid gap-3 py-3 sm:grid-cols-2">
                 <SettingSelect label="New action" value={draft.default_action} options={actionOptions} onChange={handleStringChange("default_action")} />
                 <SettingSelect label="Unknown source" value={draft.unknown_publisher_action} options={actionOptions} onChange={handleStringChange("unknown_publisher_action")} />
                 <SettingSelect label="Changed command" value={draft.changed_hash_action} options={actionOptions} onChange={handleStringChange("changed_hash_action")} />
@@ -1143,119 +1278,152 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 <SettingSelect label="Subprocess action" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
                 <SettingSelect label="Approval surface" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
               </div>
-            </div>
-          </div>
-        </AccordionSection>
+            </SettingsFormSection>
 
-        <AccordionSection
-          title="Diagnostics & data"
-          subtitle="Clear approvals, export logs, repair"
-          expanded={expandedSections["diagnostics"]}
-          onToggle={handleToggleDiagnostics}
-          sectionId="diagnostics"
-        >
-          <div className="space-y-4">
-            <NotificationSetupCard
-              result={notificationSetup}
-              settingUp={settingUpNotifications}
-              onSetup={handleSetupNotifications}
-            />
-            {perfSnapshot !== null && <DiagnosticsPerfCard snapshot={perfSnapshot} />}
-            <div className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-brand-dark">Approval gate proof</p>
-                  <p className="mt-1 max-w-2xl text-xs text-slate-500">
-                    If approval gate or authenticator is enabled, enter the proof here before clearing approvals or the queue.
-                  </p>
+            <SettingsFormSection title="Diagnostics and data" description="Maintenance, exports, and local cleanup.">
+              <div className="space-y-4 py-3">
+                {perfSnapshot !== null ? <DiagnosticsPerfCard snapshot={perfSnapshot} /> : null}
+                <input
+                  ref={settingsImportInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  className="sr-only"
+                  onChange={handleImportSettingsFile}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                />
+                <div className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Approval gate proof</p>
+                      <p className="mt-1 max-w-2xl text-xs text-slate-500">
+                        Enter proof here before clearing approvals or the review queue.
+                      </p>
+                    </div>
+                    {draft.approval_gate?.totp_enabled === true ? (
+                      <Badge tone="blue">Authenticator required</Badge>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={approvalGateCurrentPassword}
+                        onChange={handleApprovalGateCurrentPassword}
+                        className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={approvalGateTotpCode}
+                        onChange={handleApprovalGateTotpCode}
+                        placeholder="123456"
+                        className="mt-1 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      />
+                    </label>
+                  </div>
                 </div>
-                {draft.approval_gate?.totp_enabled === true ? (
-                  <Badge tone="blue">Authenticator required</Badge>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Clear saved approvals</p>
+                      <p className="text-xs text-slate-500">Guard will ask again for every action that was previously approved.</p>
+                      <div className="mt-2">
+                        <ActionButton onClick={handleClearApprovals} disabled={clearingApprovals} variant="outline">
+                          {clearingApprovals ? "Clearing…" : "Clear approvals"}
+                        </ActionButton>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Clear review queue</p>
+                      <p className="text-xs text-slate-500">Removes pending review items only.</p>
+                      <div className="mt-2">
+                        <ActionButton onClick={handleClearReviewQueue} disabled={clearingReviewQueue} variant="outline">
+                          {clearingReviewQueue ? "Clearing…" : "Clear review queue"}
+                        </ActionButton>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Clear evidence log</p>
+                      <p className="text-xs text-slate-500">Permanently removes local audit history.</p>
+                      <div className="mt-2">
+                        <ActionButton onClick={handleClearEvidence} disabled={clearingEvidence} variant="outline">
+                          {clearingEvidence ? "Clearing…" : "Clear evidence"}
+                        </ActionButton>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Export settings</p>
+                      <p className="text-xs text-slate-500">Download local Guard preferences as JSON.</p>
+                      <div className="mt-2">
+                        <ActionButton onClick={handleExportSettings} disabled={exportingSettings} variant="secondary">
+                          {exportingSettings ? "Exporting…" : "Export settings"}
+                        </ActionButton>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Import settings</p>
+                      <p className="text-xs text-slate-500">Restore preferences from a Guard settings export file.</p>
+                      <div className="mt-2">
+                        <ActionButton onClick={handleImportSettingsClick} disabled={importingSettings} variant="secondary">
+                          {importingSettings ? "Importing…" : "Import settings"}
+                        </ActionButton>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Export diagnostics</p>
+                      <p className="text-xs text-slate-500">Download evidence and runtime details for support.</p>
+                      <div className="mt-2">
+                        <ActionButton onClick={handleExportDiagnostics} disabled={exporting} variant="secondary">
+                          {exporting ? "Exporting…" : "Export diagnostics"}
+                        </ActionButton>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Reset to defaults</p>
+                      <p className="text-xs text-slate-500">Restore factory local settings on this machine.</p>
+                      <div className="mt-2">
+                        <ActionButton onClick={handleResetSettings} disabled={resettingSettings} variant="outline">
+                          {resettingSettings ? "Resetting…" : "Reset settings"}
+                        </ActionButton>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-brand-dark">Repair approval center</p>
+                      <p className="text-xs text-slate-500">Use when the approval link fails after Guard restarts.</p>
+                      <div className="mt-2">
+                        <ActionButton onClick={handleRepairApprovalCenter} disabled={repairing} variant="secondary">
+                          {repairing ? "Repairing…" : "Repair"}
+                        </ActionButton>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {actionMessage ? (
+                  <div
+                    className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+                      actionMessageKind === "error"
+                        ? "border-brand-attention/20 bg-brand-attention/[0.04] text-brand-dark"
+                        : "border-brand-blue/15 bg-brand-blue/[0.04] text-brand-dark"
+                    }`}
+                    role={actionMessageKind === "error" ? "alert" : "status"}
+                  >
+                    {actionMessage}
+                  </div>
                 ) : null}
               </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
-                  <input
-                    type="password"
-                    autoComplete="current-password"
-                    value={approvalGateCurrentPassword}
-                    onChange={handleApprovalGateCurrentPassword}
-                    className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={approvalGateTotpCode}
-                    onChange={handleApprovalGateTotpCode}
-                    placeholder="123456"
-                    className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                  />
-                </label>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm font-semibold text-brand-dark">Clear saved approvals</p>
-                  <p className="text-xs text-slate-500">Removes all stored allow and block decisions. Guard will ask again for every action that was previously approved.</p>
-                  <div className="mt-2">
-                    <ActionButton onClick={handleClearApprovals} disabled={clearingApprovals} variant="outline">{clearingApprovals ? "Clearing…" : "Clear approvals"}</ActionButton>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-brand-dark">Clear review queue</p>
-                  <p className="text-xs text-slate-500">Removes pending review items only. It does not save allow/block decisions or clear audit evidence.</p>
-                  <div className="mt-2">
-                    <ActionButton onClick={handleClearReviewQueue} disabled={clearingReviewQueue} variant="outline">{clearingReviewQueue ? "Clearing…" : "Clear review queue"}</ActionButton>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-brand-dark">Clear evidence log</p>
-                  <p className="text-xs text-slate-500">Permanently removes all recorded evidence. This action cannot be undone and removes the local audit history.</p>
-                  <div className="mt-2">
-                    <ActionButton onClick={handleClearEvidence} disabled={clearingEvidence} variant="outline">{clearingEvidence ? "Clearing…" : "Clear evidence"}</ActionButton>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm font-semibold text-brand-dark">Export diagnostics</p>
-                  <p className="text-xs text-slate-500">Downloads a JSON file with local Guard evidence for debugging or support requests.</p>
-                  <div className="mt-2">
-                    <ActionButton onClick={handleExportDiagnostics} disabled={exporting} variant="secondary">{exporting ? "Exporting…" : "Export"}</ActionButton>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-brand-dark">Repair approval center</p>
-                  <p className="text-xs text-slate-500">Resets the approval center locator. Use this when the approval link returns an API error after Guard restarts.</p>
-                  <div className="mt-2">
-                    <ActionButton onClick={handleRepairApprovalCenter} disabled={repairing} variant="secondary">{repairing ? "Repairing…" : "Repair"}</ActionButton>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {actionMessage ? (
-              <div
-                className={`rounded-xl border px-4 py-3 text-sm font-medium ${
-                  actionMessageKind === "error"
-                    ? "border-brand-attention/20 bg-brand-attention/[0.04] text-brand-dark"
-                    : "border-brand-blue/15 bg-brand-blue/[0.04] text-brand-dark"
-                }`}
-                role={actionMessageKind === "error" ? "alert" : "status"}
-              >
-                {actionMessage}
-              </div>
-            ) : null}
+            </SettingsFormSection>
           </div>
-        </AccordionSection>
-          </>
         )}
-      </div>
+      </SettingsSectionShell>
 
       <div
         className="sticky bottom-4 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur"
@@ -1309,46 +1477,6 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               <button onClick={cancelModeChange} className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50">Keep current mode</button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-type AccordionSectionProps = {
-  title: string;
-  subtitle: string;
-  expanded: boolean;
-  onToggle: () => void;
-  sectionId: string;
-  children: React.ReactNode;
-};
-
-function AccordionSection(props: AccordionSectionProps) {
-  const panelId = `accordion-panel-${props.sectionId}`;
-  const buttonId = `accordion-btn-${props.sectionId}`;
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-100">
-      <button
-        id={buttonId}
-        onClick={props.onToggle}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50/60"
-        aria-expanded={props.expanded}
-        aria-controls={panelId}
-      >
-        <div>
-          <p className="text-sm font-semibold text-brand-dark">{props.title}</p>
-          <p className="text-xs text-slate-400">{props.subtitle}</p>
-        </div>
-        {props.expanded ? (
-          <HiMiniChevronUp className="h-4 w-4 text-slate-400" aria-hidden="true" />
-        ) : (
-          <HiMiniChevronDown className="h-4 w-4 text-slate-400" aria-hidden="true" />
-        )}
-      </button>
-      {props.expanded && (
-        <div id={panelId} role="region" aria-labelledby={buttonId} className="border-t border-slate-100 px-4 py-4">
-          {props.children}
         </div>
       )}
     </div>
