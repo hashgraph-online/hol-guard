@@ -1019,8 +1019,30 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   recoveryCalls.push({ url, init });
   const path = new URL(url, "http://127.0.0.1:4174").pathname;
   if (path === "/v1/requests/req-stale-token/approve") {
-    return new Response(JSON.stringify({ error: "unauthorized", message: "Guard session expired." }), {
-      status: 401,
+    if (recoveryCalls.length === 1) {
+      return new Response(JSON.stringify({ error: "unauthorized", message: "Guard session expired." }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        resolved: true,
+        item: { ...pageItem, request_id: "req-stale-token", status: "resolved" },
+        remaining_pending_count: 0,
+        next_selectable_request_id: null,
+        remaining_pending_summaries: [],
+        resolved_duplicate_ids: []
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  }
+  if (path === "/v1/initialize") {
+    return new Response(JSON.stringify({ dashboard_session_token: "fresh-dashboard-session" }), {
+      status: 200,
       headers: { "Content-Type": "application/json" }
     });
   }
@@ -1038,15 +1060,24 @@ try {
 } catch (error) {
   recoveredResolutionError = error;
 }
-assert(recoveryCalls.length === 1, "L077b: stale dashboard session does not call initialize for root-token mint");
+assert(recoveryCalls.length === 3, "L077b: stale dashboard session refreshes and retries once");
 assert(
   headerValue(recoveryCalls[0].init, "X-Guard-Dashboard-Session") === "stale-resolve-token",
   "L077b: first resolve attempt uses dashboard session from current URL"
 );
 assert(
-  recoveredResolutionError instanceof Error && recoveredResolutionError.message.includes("Guard session expired"),
-  "L077b: stale dashboard session surfaces expiration error"
+  recoveryCalls[1].url === "http://127.0.0.1:4781/v1/initialize",
+  "L077b: stale dashboard session refresh calls initialize"
 );
+assert(
+  headerValue(recoveryCalls[1].init, "X-Guard-Dashboard-Session") === "stale-resolve-token",
+  "L077b: stale dashboard session refresh uses stale signed session"
+);
+assert(
+  headerValue(recoveryCalls[2].init, "X-Guard-Dashboard-Session") === "fresh-dashboard-session",
+  "L077b: stale dashboard session retry uses refreshed dashboard session"
+);
+assert(recoveredResolutionError === null, "L077b: stale dashboard session resolves after refresh");
 
 installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const malformedRefreshCalls: RecordedFetch[] = [];
@@ -1206,18 +1237,56 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
   retryResumeCalls.push({ url, init });
   const path = new URL(url, "http://127.0.0.1:4174").pathname;
   if (path === "/v1/requests/req-retry-resume/resume") {
-    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+    if (retryResumeCalls.length === 1) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(
+      JSON.stringify({
+        status: "sent",
+        supported: true,
+        attempt_count: 2,
+        request_id: "req-retry-resume",
+        operation_id: "op-3",
+        harness: "codex",
+        resolution_action: "allow",
+        strategy: "reply",
+        thread_id: "thread-retry",
+        reason: null,
+        message: null,
+        last_error: null,
+        created_at: null,
+        updated_at: null,
+        last_attempt_at: null,
+        sent_at: "2025-01-01T00:00:00Z"
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  }
+  if (path === "/v1/initialize") {
+    return new Response(JSON.stringify({ dashboard_session_token: "fresh-retry-resume-session" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
   }
   return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
 };
 
-let retryResumeError: unknown = null;
-try {
-  await retryResume("req-retry-resume");
-} catch (error) {
-  retryResumeError = error;
-}
-assert(retryResumeCalls.length === 1, "L080: retryResume does not call initialize to mint replacement session");
-assert(retryResumeError instanceof Error && retryResumeError.message.includes("401"), "L080: retryResume surfaces unauthorized response");
+const retriedResume = await retryResume("req-retry-resume");
+assert(retryResumeCalls.length === 3, "L080: retryResume refreshes and retries once");
+assert(retriedResume.status === "sent", "L080: retryResume returns retried resume status");
+assert(
+  headerValue(retryResumeCalls[1].init, "X-Guard-Dashboard-Session") === "stale-retry-resume-token",
+  "L080: retryResume refresh uses stale signed session"
+);
+assert(
+  headerValue(retryResumeCalls[2].init, "X-Guard-Dashboard-Session") === "fresh-retry-resume-session",
+  "L080: retryResume retry uses refreshed dashboard session"
+);
 
 console.log("guard-api.test.ts: all tests passed");

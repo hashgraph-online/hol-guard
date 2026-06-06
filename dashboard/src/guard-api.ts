@@ -61,6 +61,7 @@ import {
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
+const GUARD_SURFACE_PROTOCOL_VERSIONS = ["1.1", "1.0"] as const;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
 
@@ -234,7 +235,17 @@ function withGuardAuthForToken(
 
 async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
-  return fetch(requestInput, withGuardAuth(init));
+  const guardToken = readGuardToken();
+  const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));
+  if (response.status !== 401 || !guardToken || input instanceof Request) {
+    return response;
+  }
+  const refreshedGuardToken = await refreshGuardDashboardSession(guardToken);
+  if (!refreshedGuardToken || refreshedGuardToken === guardToken) {
+    return response;
+  }
+  saveGuardToken(refreshedGuardToken);
+  return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 
 function guardAuthHeaders(): HeadersInit {
@@ -244,6 +255,37 @@ function guardAuthHeaders(): HeadersInit {
 
 function guardAuthHeadersForToken(guardToken: string | null): HeadersInit {
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
+}
+
+function parseDashboardSessionToken(payload: unknown): string | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const dashboardSessionToken = payload["dashboard_session_token"];
+  return typeof dashboardSessionToken === "string" && dashboardSessionToken.trim() ? dashboardSessionToken : null;
+}
+
+async function refreshGuardDashboardSession(guardToken: string): Promise<string | null> {
+  try {
+    const response = await fetch(guardApiInput("/v1/initialize"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeadersForToken(guardToken)
+      },
+      body: JSON.stringify({
+        client_name: "guard-dashboard-web",
+        surface: "dashboard",
+        supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS]
+      })
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return parseDashboardSessionToken(await response.json());
+  } catch {
+    return null;
+  }
 }
 
 export function guardAwareHref(href: string): string {
