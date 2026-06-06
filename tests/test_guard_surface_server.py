@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
 from codex_plugin_scanner.guard.local_dashboard_session import (
+    LOCAL_DASHBOARD_SESSION_AUDIENCE,
     LOCAL_DASHBOARD_SESSION_VERSION,
     build_local_dashboard_session_token,
 )
@@ -76,6 +77,7 @@ class TestGuardSurfaceServer:
         claims = _decode_dashboard_session_claims(token)
 
         assert claims["version"] == LOCAL_DASHBOARD_SESSION_VERSION
+        assert claims["aud"] == LOCAL_DASHBOARD_SESSION_AUDIENCE
         assert claims["surface"] == "approval-center"
         assert claims["expires_at"] != "1970-01-01T00:00:00+00:00"
         assert claims["custom"] == "value"
