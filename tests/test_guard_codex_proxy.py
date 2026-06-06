@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from io import StringIO
 from pathlib import Path
 
@@ -214,6 +215,35 @@ def _nested_request_child_command_with_risky_tool(marker_path: Path) -> list[str
             ]
         ),
     ]
+
+
+def _hung_response_child_command() -> list[str]:
+    return [
+        sys.executable,
+        "-u",
+        "-c",
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "import time",
+                "for line in sys.stdin:",
+                "    message = json.loads(line)",
+                "    if message.get('id') is None:",
+                "        continue",
+                "    time.sleep(60)",
+            ]
+        ),
+    ]
+
+
+class _BlockingInput:
+    def __init__(self, sleep_seconds: float = 0.2) -> None:
+        self.sleep_seconds = sleep_seconds
+
+    def readline(self) -> str:
+        time.sleep(self.sleep_seconds)
+        return ""
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -1404,3 +1434,87 @@ def test_codex_guard_proxy_invalidates_catalog_on_server_list_changed_notificati
     assert response["id"] == 7
     assert proxy._tool_catalog == {}
     assert proxy._tool_catalog_pending is None
+
+
+def test_codex_guard_proxy_returns_timeout_error_when_child_server_hangs(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_hung_response_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_child_response_timeout_seconds", lambda: 0.05)
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+        ]
+    )
+
+    assert result["responses"][0]["error"]["code"] == -32002
+    assert result["events"][0]["decision"] == "timeout"
+    assert result["responses"][0]["error"]["data"]["source"] == "child_response"
+
+
+def test_codex_guard_proxy_returns_timeout_error_to_child_for_nested_request_timeout(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_nested_request_timeout_seconds", lambda: 0.05)
+    child_stdin = StringIO()
+    server_output = StringIO()
+
+    proxy._proxy_child_request(
+        payload={"jsonrpc": "2.0", "id": "child-sampling-timeout", "method": "sampling/createMessage", "params": {}},
+        child_stdin=child_stdin,
+        child_stdout=StringIO(),
+        client_input=_BlockingInput(),
+        server_output=server_output,
+    )
+
+    child_reply = json.loads(child_stdin.getvalue().splitlines()[0])
+    assert json.loads(server_output.getvalue().splitlines()[0])["id"] == "child-sampling-timeout"
+    assert child_reply["id"] == "child-sampling-timeout"
+    assert child_reply["error"]["code"] == -32002
+    assert child_reply["error"]["data"]["source"] == "nested_client_response"
+
+
+def test_codex_guard_proxy_cancels_inline_approval_after_timeout(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(tmp_path / "dangerous-call.json"),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(proxy, "_inline_approval_timeout_seconds", lambda: 0.05)
+
+    result = proxy._request_inline_approval(
+        {"jsonrpc": "2.0", "id": "guard-elicitation-timeout", "method": "elicitation/create", "params": {}},
+        input_stream=_BlockingInput(),
+        output_stream=StringIO(),
+        child_stdin=StringIO(),
+        child_stdout=StringIO(),
+    )
+
+    assert result == {"action": "cancel", "reason": "timeout"}

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
+import threading
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,6 +19,16 @@ from ..models import HarnessDetection
 from ..receipts import build_receipt
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
 from ..store import GuardStore
+
+_DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0
+_PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
+
+
+class ProxyIoTimeoutError(TimeoutError):
+    def __init__(self, *, source: str, timeout_seconds: float) -> None:
+        super().__init__(f"timeout waiting for {source}")
+        self.source = source
+        self.timeout_seconds = timeout_seconds
 
 
 def _redact_scalar(value: str) -> str:
@@ -69,6 +82,69 @@ def _blocked_tool_response(
     return payload
 
 
+def _timeout_response(
+    message_id: Any,
+    *,
+    source: str,
+    timeout_seconds: float,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": message_id,
+        "error": {
+            "code": -32002,
+            "message": message,
+            "data": {
+                "source": source,
+                "timeout_seconds": timeout_seconds,
+            },
+        },
+    }
+
+
+def _is_timeout_response(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    error = payload.get("error")
+    return isinstance(error, dict) and error.get("code") == -32002
+
+
+def _readline_with_timeout(stream: Any, timeout_seconds: float, *, source: str) -> str:
+    result_queue: queue.Queue[tuple[bool, object]] = queue.Queue(maxsize=1)
+
+    def _reader() -> None:
+        try:
+            result_queue.put((True, stream.readline()))
+        except BaseException as exc:  # pragma: no cover - surfaced through queue
+            result_queue.put((False, exc))
+
+    threading.Thread(target=_reader, daemon=True).start()
+    try:
+        ok, result = result_queue.get(timeout=timeout_seconds)
+    except queue.Empty as exc:
+        raise ProxyIoTimeoutError(source=source, timeout_seconds=timeout_seconds) from exc
+    if ok:
+        return result if isinstance(result, str) else ""
+    raise result
+
+
+def _quarantine_process(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    with suppress(Exception):
+        process.terminate()
+    try:
+        process.wait(timeout=_PROXY_TERMINATION_TIMEOUT_SECONDS)
+        return
+    except Exception:
+        pass
+    with suppress(Exception):
+        process.kill()
+    with suppress(Exception):
+        process.wait(timeout=_PROXY_TERMINATION_TIMEOUT_SECONDS)
+
+
 class StdioGuardProxy:
     """Proxy JSON-RPC traffic to a stdio subprocess while recording metadata-only events."""
 
@@ -91,6 +167,12 @@ class StdioGuardProxy:
         self.approval_center_url = approval_center_url
         self.harness = harness
         self.env = env or {}
+
+    def _response_timeout_seconds(self) -> float:
+        configured = getattr(self.guard_config, "approval_wait_timeout_seconds", None)
+        if isinstance(configured, (int, float)) and configured > 0:
+            return min(float(configured), _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS)
+        return _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS
 
     def run_session(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         responses, events, return_code = self._run_messages(messages)
@@ -124,6 +206,8 @@ class StdioGuardProxy:
                 if response is not None:
                     output_stream.write(json.dumps(response, separators=(",", ":")) + "\n")
                     output_stream.flush()
+                    if _is_timeout_response(response):
+                        break
             assert process.stdin is not None
             process.stdin.close()
             process.wait(timeout=5)
@@ -149,6 +233,8 @@ class StdioGuardProxy:
                     events=events,
                     output_stream=None,
                 )
+                if responses and _is_timeout_response(responses[-1]):
+                    break
             assert process.stdin is not None
             process.stdin.close()
             process.wait(timeout=5)
@@ -322,6 +408,8 @@ class StdioGuardProxy:
         )
         if response is None:
             return None
+        if _is_timeout_response(response):
+            event["decision"] = "timeout"
         responses.append(response)
         events.append(event)
         return response
@@ -337,7 +425,17 @@ class StdioGuardProxy:
             return None
         assert process.stdout is not None
         while True:
-            line = process.stdout.readline()
+            timeout_seconds = self._response_timeout_seconds()
+            try:
+                line = _readline_with_timeout(process.stdout, timeout_seconds, source="child_response")
+            except ProxyIoTimeoutError:
+                _quarantine_process(process)
+                return _timeout_response(
+                    message_id,
+                    source="child_response",
+                    timeout_seconds=timeout_seconds,
+                    message="Guard stdio proxy timed out waiting for the MCP server.",
+                )
             if not line:
                 raise RuntimeError("Guard stdio proxy did not receive a response from the MCP server.")
             response = json.loads(line)
