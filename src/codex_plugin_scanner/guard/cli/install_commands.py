@@ -228,11 +228,7 @@ def _native_mcp_server_names(config_path: Path) -> set[str]:
     mcp = payload.get("mcp")
     if not isinstance(mcp, dict):
         return set()
-    return {
-        name
-        for name in mcp
-        if isinstance(name, str) and not name.startswith("hol-guard::")
-    }
+    return {name for name in mcp if isinstance(name, str) and not name.startswith("hol-guard::")}
 
 
 def _opencode_protection_checks(context: HarnessContext, store: GuardStore | None) -> dict[str, object]:
@@ -249,11 +245,9 @@ def _opencode_protection_checks(context: HarnessContext, store: GuardStore | Non
     config_path = adapter._managed_install_config_path(context)
     shim_path = context.guard_home / "bin" / "guard-opencode"
     plugin_path = global_plugin_path(context)
-    loaded_config_paths = [
-        Path(path)
-        for path in adapter.detect(context).config_paths
-        if Path(path).is_file()
-    ] or ([config_path] if config_path.is_file() else [])
+    loaded_config_paths = [Path(path) for path in adapter.detect(context).config_paths if Path(path).is_file()] or (
+        [config_path] if config_path.is_file() else []
+    )
     has_loaded_mcp = any(opencode_config_has_mcp_servers(path) for path in loaded_config_paths)
     if not has_loaded_mcp:
         mcp_proxy_configured = False
