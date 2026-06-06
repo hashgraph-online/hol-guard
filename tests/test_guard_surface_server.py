@@ -108,7 +108,15 @@ class TestGuardSurfaceServer:
 
                 assert response.status == 200
                 assert "text/html" in response.headers.get("Content-Type", "")
+                assert response.headers.get("Content-Security-Policy") == (
+                    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                    "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
+                    "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+                )
+                assert response.headers.get("Referrer-Policy") == "no-referrer"
+                assert response.headers.get("X-Content-Type-Options") == "nosniff"
                 assert "Loading Local approval center" in body
+                assert "fonts.googleapis.com" not in body
                 assert "sessionStorage.setItem" not in body
                 assert "guard-token" not in body
                 assert daemon._server.auth_token not in body
@@ -127,6 +135,11 @@ class TestGuardSurfaceServer:
             ) as response:
                 response.read()
             with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/assets/index.css",
+                timeout=5,
+            ) as css_response:
+                css_body = css_response.read().decode("utf-8")
+            with urllib.request.urlopen(
                 f"http://127.0.0.1:{daemon.port}/favicon.ico",
                 timeout=5,
             ) as favicon_response:
@@ -138,6 +151,12 @@ class TestGuardSurfaceServer:
         assert response.headers.get("Cache-Control") == "no-store, max-age=0"
         assert response.headers.get("Pragma") == "no-cache"
         assert response.headers.get("Expires") == "0"
+        assert response.headers.get("Referrer-Policy") == "no-referrer"
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert css_response.status == 200
+        assert css_response.headers.get("Referrer-Policy") == "no-referrer"
+        assert css_response.headers.get("X-Content-Type-Options") == "nosniff"
+        assert "fonts.googleapis.com" not in css_body
         assert favicon_response.status == 200
         assert favicon_response.headers.get("Cache-Control") == "no-store, max-age=0"
 
