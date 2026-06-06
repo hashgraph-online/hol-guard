@@ -31,7 +31,15 @@ from ..runtime.package_intent import build_package_request_artifact, extract_pac
 from ..runtime.signals import RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..store import GuardStore
-from .stdio import _blocked_tool_response, _redact_json
+from .stdio import (
+    ProxyIoTimeoutError,
+    _blocked_tool_response,
+    _is_timeout_response,
+    _quarantine_process,
+    _readline_with_timeout,
+    _redact_json,
+    _timeout_response,
+)
 
 _PACKAGE_POLICY_ACTION_RANK = {
     "allow": 0,
@@ -94,6 +102,22 @@ class RuntimeMcpGuardProxy:
         self._tool_catalog: dict[str, dict[str, object]] = {}
         self._tool_catalog_pending: dict[str, dict[str, object]] | None = None
         self._tool_catalog_generation = 0
+        self._active_process: subprocess.Popen[str] | None = None
+
+    def _child_response_timeout_seconds(self) -> float:
+        configured = getattr(self.config, "approval_wait_timeout_seconds", None)
+        if isinstance(configured, (int, float)) and configured > 0:
+            return min(float(configured), 30.0)
+        return 30.0
+
+    def _nested_request_timeout_seconds(self) -> float:
+        return self._child_response_timeout_seconds()
+
+    def _inline_approval_timeout_seconds(self) -> float:
+        configured = getattr(self.config, "approval_wait_timeout_seconds", None)
+        if isinstance(configured, (int, float)) and configured > 0:
+            return float(configured)
+        return 120.0
 
     def run_session(
         self,
@@ -104,6 +128,7 @@ class RuntimeMcpGuardProxy:
         process = self._start_process()
         responses: list[dict[str, Any]] = []
         events: list[dict[str, Any]] = []
+        self._active_process = process
         try:
             assert process.stdin is not None
             assert process.stdout is not None
@@ -118,10 +143,14 @@ class RuntimeMcpGuardProxy:
                 )
                 if response is not None:
                     responses.append(response)
+                    if _is_timeout_response(response):
+                        events.append(event)
+                        break
                 events.append(event)
             process.stdin.close()
             process.wait(timeout=5)
         finally:
+            self._active_process = None
             if process.poll() is None:
                 process.terminate()
                 process.wait(timeout=5)
@@ -136,6 +165,7 @@ class RuntimeMcpGuardProxy:
         input_stream = stdin or sys.stdin
         output_stream = stdout or sys.stdout
         process = self._start_process()
+        self._active_process = process
         try:
             assert process.stdin is not None
             assert process.stdout is not None
@@ -161,10 +191,13 @@ class RuntimeMcpGuardProxy:
                 if response is not None:
                     output_stream.write(json.dumps(response) + "\n")
                     output_stream.flush()
+                    if _is_timeout_response(response):
+                        break
             process.stdin.close()
             process.wait(timeout=5)
             return int(process.returncode or 0)
         finally:
+            self._active_process = None
             if process.poll() is None:
                 process.terminate()
                 process.wait(timeout=5)
@@ -224,6 +257,8 @@ class RuntimeMcpGuardProxy:
                     request_cursor=list_cursor,
                     request_generation=list_generation,
                 )
+            if _is_timeout_response(response):
+                event["decision"] = "timeout"
             return response, event
 
         tool_name = str(params.get("name") or "unknown")
@@ -540,7 +575,7 @@ class RuntimeMcpGuardProxy:
             return response, {
                 "method": "tools/call",
                 "tool_name": tool_name,
-                "decision": f"package-{queue_policy_action}",
+                "decision": "timeout" if _is_timeout_response(response) else f"package-{queue_policy_action}",
                 "redacted_params": _redact_json(params),
             }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
@@ -683,7 +718,7 @@ class RuntimeMcpGuardProxy:
         return response, {
             "method": "tools/call",
             "tool_name": params.get("name"),
-            "decision": decision_source,
+            "decision": "timeout" if _is_timeout_response(response) else decision_source,
             "redacted_params": _redact_json(params),
         }
 
@@ -708,7 +743,19 @@ class RuntimeMcpGuardProxy:
             buffered_response = self._pop_buffered_child_response(request_id)
             if buffered_response is not None:
                 return buffered_response
-            line = child_stdout.readline()
+            timeout_seconds = self._child_response_timeout_seconds()
+            try:
+                line = _readline_with_timeout(child_stdout, timeout_seconds, source="child_response")
+            except ProxyIoTimeoutError:
+                active_process = self._active_process
+                if active_process is not None:
+                    _quarantine_process(active_process)
+                return _timeout_response(
+                    request_id,
+                    source="child_response",
+                    timeout_seconds=timeout_seconds,
+                    message="Guard runtime MCP proxy timed out waiting for the MCP server.",
+                )
             if not line:
                 raise RuntimeError("Guard stdio proxy did not receive a response from the MCP server.")
             payload = json.loads(line)
@@ -787,7 +834,25 @@ class RuntimeMcpGuardProxy:
             if buffered_response is not None:
                 self._forward_notification(buffered_response, child_stdin)
                 return
-            line = client_input.readline()
+            timeout_seconds = self._nested_request_timeout_seconds()
+            try:
+                line = _readline_with_timeout(
+                    client_input,
+                    timeout_seconds,
+                    source="nested_client_response",
+                    allow_background_wait=False,
+                )
+            except ProxyIoTimeoutError:
+                self._forward_notification(
+                    _timeout_response(
+                        request_id,
+                        source="nested_client_response",
+                        timeout_seconds=timeout_seconds,
+                        message="Guard runtime MCP proxy timed out waiting for the client response.",
+                    ),
+                    child_stdin,
+                )
+                return
             if not line:
                 raise RuntimeError("Guard runtime MCP proxy lost the client while waiting for a server response.")
             message = json.loads(line)
@@ -834,7 +899,16 @@ class RuntimeMcpGuardProxy:
             buffered_response = self._pop_buffered_client_response(request_id)
             if buffered_response is not None:
                 return _approval_payload(buffered_response)
-            line = input_stream.readline()
+            timeout_seconds = self._inline_approval_timeout_seconds()
+            try:
+                line = _readline_with_timeout(
+                    input_stream,
+                    timeout_seconds,
+                    source="inline_approval",
+                    allow_background_wait=False,
+                )
+            except ProxyIoTimeoutError:
+                return {"action": "cancel", "reason": "timeout"}
             if not line:
                 return {"action": "cancel"}
             payload = json.loads(line)
