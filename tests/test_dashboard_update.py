@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -12,7 +14,12 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.update_commands import build_guard_update_status_payload
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.dashboard_update import schedule_guard_dashboard_update
+from codex_plugin_scanner.guard.daemon.dashboard_update import (
+    build_dashboard_update_runner_command,
+    build_dashboard_update_runner_popen_kwargs,
+    dashboard_update_runner_script,
+    schedule_guard_dashboard_update,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -225,10 +232,48 @@ def test_schedule_guard_dashboard_update_spawns_runner(
     assert result["scheduled"] is True
     command = captured["command"]
     assert isinstance(command, list)
-    assert "codex_plugin_scanner.guard.daemon.dashboard_update_runner" in command
+    assert "-m" not in command
+    runner_script = dashboard_update_runner_script()
+    assert str(runner_script) in command
+    if sys.version_info >= (3, 11):
+        assert command[1] == "-P"
+        assert command[2] == str(runner_script)
+    else:
+        assert command[1] == str(runner_script)
     assert "--guard-home" in command
-    assert str(guard_home) in command
+    assert str(guard_home.resolve()) in command
     assert "--daemon-pid" in command
     assert "4242" in command
     assert "--daemon-port" in command
     assert "8787" in command
+    kwargs = captured["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs.get("cwd") == str(guard_home.resolve())
+
+
+def test_runner_command_avoids_module_shadowing_from_cwd(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    command = build_dashboard_update_runner_command(
+        guard_home.resolve(),
+        daemon_pid=99,
+        daemon_port=1234,
+    )
+    assert "-m" not in command
+    assert "codex_plugin_scanner.guard.daemon.dashboard_update_runner" not in command
+    runner_script = dashboard_update_runner_script()
+    assert str(runner_script) in command
+    assert runner_script.is_file()
+
+
+def test_runner_env_ignores_inherited_pythonpath(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    evil_root = tmp_path / "evil-repo" / "src"
+    evil_root.mkdir(parents=True)
+    monkeypatch.setenv("PYTHONPATH", str(evil_root))
+    env = build_dashboard_update_runner_popen_kwargs(tmp_path / "guard-home")["env"]
+    assert isinstance(env, dict)
+    pythonpath = str(env.get("PYTHONPATH", ""))
+    assert str(evil_root) not in pythonpath.split(os.pathsep)
+    assert str(dashboard_update_runner_script().resolve().parents[3]) in pythonpath
+    if sys.version_info >= (3, 11):
+        assert env.get("PYTHONSAFEPATH") == "1"
