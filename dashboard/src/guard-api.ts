@@ -2241,6 +2241,21 @@ export async function startPackageFirewallConnect(): Promise<PackageFirewallStat
   );
 }
 
+export async function fetchSupplyChainBundle(): Promise<SupplyChainBundle | null> {
+  const result = await readJson<unknown>("/v1/supply-chain/bundle");
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+  if ("error" in result) {
+    const message =
+      typeof (result as Record<string, unknown>).error === "string"
+        ? ((result as Record<string, unknown>).error as string)
+        : "Supply chain bundle unavailable";
+    throw new Error(message);
+  }
+  return result as SupplyChainBundle;
+}
+
 export async function runPackageFirewallAction(
   action: PackageFirewallActionType,
   manager: string | null,

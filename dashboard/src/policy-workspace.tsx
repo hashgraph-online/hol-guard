@@ -102,12 +102,25 @@ function policyTargetLabel(policy: GuardPolicyDecision): string {
   return policy.artifact_id ?? policy.publisher ?? policy.workspace ?? "Global";
 }
 
+function extractEvidenceSearchTerm(policy: GuardPolicyDecision): string | null {
+  const target = policyTargetLabel(policy);
+  if (!target || target === "Global") return null;
+  // For harness-scoped policies, artifact_id is transformed to a family key
+  // (e.g., "codex:project:global_tools" -> "family:global_tools").
+  // Receipts keep the original artifact_id, so we extract the base name
+  // and rely on substring matching in the evidence filter.
+  if (target.startsWith("family:")) {
+    return target.slice("family:".length);
+  }
+  return target;
+}
+
 function policyEvidenceHref(policy: GuardPolicyDecision): string {
   const params = new URLSearchParams();
   params.set("harness", policy.harness || "global");
-  const target = policyTargetLabel(policy);
-  if (target && target !== "Global") {
-    params.set("search", target);
+  const searchTerm = extractEvidenceSearchTerm(policy);
+  if (searchTerm) {
+    params.set("search", searchTerm);
   }
   return `/evidence?${params.toString()}`;
 }
@@ -321,10 +334,15 @@ export function PolicyWorkspace({
             Local remembered decisions and synced Guard Cloud bundle posture.
           </p>
         </div>
-        {onOpenSettings && (
-          <ActionButton variant="outline" onClick={onOpenSettings}>
+        {snapshot.dashboard_url && (
+          <a
+            href={snapshot.dashboard_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors"
+          >
             Open Guard Cloud Controls
-          </ActionButton>
+          </a>
         )}
       </div>
 
@@ -352,11 +370,16 @@ export function PolicyWorkspace({
           <Tag tone={modeCopy.tone}>{modeCopy.label}</Tag>
         </div>
         <p className="text-sm text-brand-dark/75">{modeCopy.description}</p>
-        {onOpenSettings && (
+        {snapshot.dashboard_url && (
           <div className="mt-3">
-            <ActionButton variant="ghost" onClick={onOpenSettings}>
+            <a
+              href={snapshot.dashboard_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-brand-blue hover:bg-brand-blue/5 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors"
+            >
               Review rollout in Guard Cloud Controls
-            </ActionButton>
+            </a>
           </div>
         )}
       </div>
