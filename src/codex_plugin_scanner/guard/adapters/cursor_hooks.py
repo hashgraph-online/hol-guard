@@ -100,6 +100,38 @@ def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, obje
     return normalized
 
 
+def _validated_hol_guard_src_path(path_str: str) -> str | None:
+    """Accept only directories that look like a hol-guard source tree."""
+
+    if not path_str.strip():
+        return None
+    try:
+        candidate = Path(path_str.strip()).expanduser().resolve()
+    except OSError:
+        return None
+    if not candidate.is_dir():
+        return None
+    if not (candidate / "codex_plugin_scanner").is_dir():
+        return None
+    return str(candidate)
+
+
+def cursor_hook_would_prompt_user(
+    *,
+    policy_action: str,
+    guard_payload: Mapping[str, object] | None = None,
+) -> bool:
+    """Return True when Guard maps this hook result to Cursor permission ask."""
+
+    if policy_action in {"require-reapproval", "review"}:
+        return True
+    return (
+        policy_action == "warn"
+        and guard_payload is not None
+        and _guard_payload_has_actionable_risk_for_policy(guard_payload)
+    )
+
+
 def cursor_hook_response_from_guard(
     *,
     policy_action: str,
@@ -442,6 +474,7 @@ _INHERIT_ENV_KEYS = (
     "CURSOR_TRACE_ID",
     "CURSOR_SESSION_ID",
     "CURSOR_TRANSCRIPT_PATH",
+    "HOL_GUARD_SRC",
 )
 
 _HOOK_SCRIPT_TEMPLATE = '''#!/usr/bin/env python3
@@ -468,7 +501,35 @@ def _hook_process_env() -> dict[str, str]:
         value = os.environ.get(key)
         if isinstance(value, str) and value:
             env[key] = value
+    dev_src = os.environ.get("HOL_GUARD_SRC")
+    validated = _validated_hol_guard_src_path(dev_src) if isinstance(dev_src, str) else None
+    if validated is not None:
+        env["PYTHONPATH"] = validated
+    else:
+        dev_src_file = Path(GUARD_HOME) / "cursor-dev-src"
+        if dev_src_file.is_file():
+            try:
+                configured_src = dev_src_file.read_text(encoding="utf-8").strip()
+            except OSError:
+                configured_src = ""
+            validated = _validated_hol_guard_src_path(configured_src)
+            if validated is not None:
+                env["PYTHONPATH"] = validated
     return env
+
+
+def _validated_hol_guard_src_path(path_str: str) -> str | None:
+    if not path_str.strip():
+        return None
+    try:
+        candidate = Path(path_str.strip()).expanduser().resolve()
+    except OSError:
+        return None
+    if not candidate.is_dir():
+        return None
+    if not (candidate / "codex_plugin_scanner").is_dir():
+        return None
+    return str(candidate)
 
 
 def _workspace_from_cursor_input(payload: dict[str, object]) -> str | None:
@@ -810,6 +871,8 @@ def _is_managed_hook_command(command: object) -> bool:
     if not isinstance(command, str):
         return False
     lowered = command.lower()
+    if "hol-guard-cursor-hook" in lowered:
+        return True
     if HOOK_SCRIPT_NAME.lower() in lowered:
         return True
     if "hol_guard_hook_argv" not in lowered.replace("-", "_"):

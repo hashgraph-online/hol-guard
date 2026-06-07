@@ -199,6 +199,77 @@ def test_cursor_hook_response_from_guard_allows_shell() -> None:
     assert response["permission"] == "allow"
 
 
+def test_cursor_hook_would_prompt_user_for_warn_with_risk() -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_would_prompt_user
+
+    assert cursor_hook_would_prompt_user(
+        policy_action="warn",
+        guard_payload={"risk_signals": ["destructive shell command"]},
+    )
+    assert not cursor_hook_would_prompt_user(policy_action="allow", guard_payload={})
+    assert cursor_hook_would_prompt_user(policy_action="require-reapproval", guard_payload={})
+
+
+def test_validated_hol_guard_src_path_rejects_non_guard_trees(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import _validated_hol_guard_src_path
+
+    assert _validated_hol_guard_src_path(str(tmp_path)) is None
+    src_root = tmp_path / "src"
+    src_root.mkdir()
+    (src_root / "codex_plugin_scanner").mkdir()
+    assert _validated_hol_guard_src_path(str(src_root)) == str(src_root.resolve())
+
+
+def test_cursor_after_shell_requires_observer_fields(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.models import GuardArtifact
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-after-shell-guard"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    guard_commands_module._record_cursor_pending_shell_permission(
+        store=store,
+        payload={
+            "conversation_id": conversation_id,
+            "hook_event_name": "beforeShellExecution",
+            "command": command,
+            "cwd": str(workspace_dir),
+        },
+        reason="Requests a sensitive native tool action.",
+        artifact=GuardArtifact(
+            artifact_id="cursor:project:shell:rm",
+            name="Shell",
+            harness="cursor",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(workspace_dir / ".cursor" / "mcp.json"),
+            command=command,
+        ),
+        artifact_hash="hash-cursor-shell",
+    )
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "hook_event_name": "afterShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+            }
+        ),
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+    assert saved is False
+
+
 def test_cursor_hook_should_block() -> None:
     assert cursor_hook_should_block(policy_action="block") is True
     assert cursor_hook_should_block(policy_action="allow") is False
@@ -297,6 +368,78 @@ def test_cursor_native_shell_approval_persists_after_shell(tmp_path: Path) -> No
         )
         is None
     )
+
+
+def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.models import GuardArtifact
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-session-allow"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    guard_commands_module._record_cursor_pending_shell_permission(
+        store=store,
+        payload={
+            "conversation_id": conversation_id,
+            "hook_event_name": "beforeShellExecution",
+            "command": command,
+            "cwd": str(workspace_dir),
+        },
+        reason="Requests a sensitive native tool action.",
+        artifact=GuardArtifact(
+            artifact_id="cursor:project:shell:rm",
+            name="Shell",
+            harness="cursor",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(workspace_dir / ".cursor" / "mcp.json"),
+            command=command,
+        ),
+        artifact_hash="hash-cursor-shell",
+    )
+
+    def _blocked_policy(**kwargs: object) -> bool:
+        del kwargs
+        return False
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(guard_commands_module, "_persist_cursor_native_permission_policy", _blocked_policy)
+    try:
+        saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+            store=store,
+            payload=prepare_cursor_hook_payload(
+                {
+                    "conversation_id": conversation_id,
+                    "hook_event_name": "afterShellExecution",
+                    "command": command,
+                    "cwd": str(workspace_dir),
+                    "duration": 12,
+                }
+            ),
+            harness="cursor",
+            home_dir=home_dir,
+            guard_home=home_dir,
+            workspace=workspace_dir,
+        )
+        assert saved is True
+        assert guard_commands_module._cursor_native_shell_is_approved(
+            store,
+            prepare_cursor_hook_payload(
+                {
+                    "conversation_id": conversation_id,
+                    "hook_event_name": "beforeShellExecution",
+                    "command": command,
+                    "cwd": str(workspace_dir),
+                }
+            ),
+        )
+    finally:
+        monkeypatch.undo()
 
 
 def test_uninstall_cursor_hooks_restores_backup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
