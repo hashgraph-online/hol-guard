@@ -2864,13 +2864,14 @@ def run_guard_command(
                 home_dir=context.home_dir,
                 guard_home=context.guard_home,
                 workspace=runtime_workspace,
+                hook_env=os.environ,
             )
             _emit(
                 "hook",
                 {
                     "recorded": saved,
                     "harness": "cursor",
-                    "policy_action": "allow",
+                    "session_approved": saved,
                 },
                 getattr(args, "json", False),
             )
@@ -3537,6 +3538,7 @@ def run_guard_command(
                     native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
                     _record_cursor_pending_shell_permission(
                         store=store,
+                        guard_home=context.guard_home,
                         payload=payload,
                         reason=native_reason,
                         artifact=runtime_artifact,
@@ -4747,16 +4749,34 @@ def _cursor_native_shell_is_approved(store: GuardStore, payload: Mapping[str, ob
 def _record_cursor_pending_shell_permission(
     *,
     store: GuardStore,
+    guard_home: Path,
     payload: dict[str, object],
     reason: str,
     artifact: GuardArtifact,
     artifact_hash: str,
 ) -> None:
+    from ..adapters.cursor_native_approval import (
+        compute_cursor_after_shell_proof,
+        cursor_generation_id,
+        ensure_cursor_hook_attestation_secret,
+    )
+
     conversation_id = _cursor_conversation_id(payload)
     command = _cursor_shell_command_from_payload(payload)
-    if conversation_id is None or command is None:
+    generation_id = cursor_generation_id(payload)
+    if conversation_id is None or command is None or generation_id is None:
         return
     saved_at = _now()
+    try:
+        secret = ensure_cursor_hook_attestation_secret(guard_home)
+        after_shell_proof = compute_cursor_after_shell_proof(
+            secret=secret,
+            conversation_id=conversation_id,
+            command=command,
+            generation_id=generation_id,
+        )
+    except OSError:
+        return
     notice_payload: dict[str, object] = {
         "saved_at": saved_at,
         "reason": reason,
@@ -4767,6 +4787,9 @@ def _record_cursor_pending_shell_permission(
         "config_path": artifact.config_path,
         "source_scope": artifact.source_scope,
         "command": command,
+        "conversation_id": conversation_id,
+        "generation_id": generation_id,
+        "after_shell_proof": after_shell_proof,
         "native_source": "cursor-native",
     }
     pending_key = _cursor_pending_shell_state_key(conversation_id, command)
@@ -4936,7 +4959,10 @@ def _persist_cursor_native_permission_after_shell(
     home_dir: Path,
     guard_home: Path,
     workspace: Path | None,
+    hook_env: Mapping[str, str] | None = None,
 ) -> bool:
+    from ..adapters.cursor_native_approval import cursor_after_shell_trusted
+
     prepared = payload
     conversation_id = _cursor_conversation_id(prepared)
     command = _cursor_shell_command_from_payload(prepared)
@@ -4953,6 +4979,15 @@ def _persist_cursor_native_permission_after_shell(
     if not _cursor_after_shell_observed(prepared):
         return False
     if not _cursor_pending_shell_is_fresh(pending, now=now):
+        return False
+    if not cursor_after_shell_trusted(
+        guard_home=guard_home,
+        pending=pending,
+        payload=prepared,
+        conversation_id=conversation_id,
+        command=command,
+        env=hook_env,
+    ):
         return False
     action_envelope = _hook_action_envelope(
         harness=harness,
@@ -4971,38 +5006,16 @@ def _persist_cursor_native_permission_after_shell(
     if runtime_artifact is None:
         return False
     runtime_artifact_hash = artifact_hash(runtime_artifact)
-    saved_policy = _persist_cursor_native_permission_policy(
+    session_saved = _record_cursor_native_shell_allow_state(
         store=store,
-        artifact_id=runtime_artifact.artifact_id,
+        conversation_id=conversation_id,
+        command=command,
+        artifact=runtime_artifact,
         artifact_hash=runtime_artifact_hash,
-        action="allow",
-        reason="Approved in Cursor native shell approval prompt.",
         now=now,
     )
-    session_saved = saved_policy
-    if not saved_policy:
-        session_saved = _record_cursor_native_shell_allow_state(
-            store=store,
-            conversation_id=conversation_id,
-            command=command,
-            artifact=runtime_artifact,
-            artifact_hash=runtime_artifact_hash,
-            now=now,
-        )
     if not session_saved:
         return False
-    if saved_policy:
-        try:
-            store.record_inventory_artifact(
-                artifact=runtime_artifact,
-                artifact_hash=runtime_artifact_hash,
-                policy_action="allow",
-                changed=False,
-                now=now,
-                approved=True,
-            )
-        except (OSError, sqlite3.Error):
-            return False
     _resolve_cursor_pending_approval_requests(
         store=store,
         pending=pending,
@@ -5015,12 +5028,12 @@ def _persist_cursor_native_permission_after_shell(
         artifact_hash=runtime_artifact_hash,
         policy_decision="allow",
         capabilities_summary=_runtime_capabilities_summary(runtime_artifact),
-        changed_capabilities=[runtime_artifact.artifact_type, "cursor-native-approved"],
-        provenance_summary=f"runtime shell command approved from {runtime_artifact.config_path}",
+        changed_capabilities=[runtime_artifact.artifact_type, "cursor-native-session-approved"],
+        provenance_summary=f"runtime shell command session-approved from {runtime_artifact.config_path}",
         artifact_name=runtime_artifact.name,
         source_scope=runtime_artifact.source_scope,
         user_override="cursor-native-approve",
-        approval_source="inline" if saved_policy else "harness-native-session",
+        approval_source="harness-native-session",
     )
     try:
         store.add_receipt(receipt)

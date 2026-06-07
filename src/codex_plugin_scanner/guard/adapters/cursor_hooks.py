@@ -12,6 +12,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from .base import HarnessContext
+from .cursor_native_approval import ensure_cursor_hook_attestation_secret
 
 HOOK_SCRIPT_NAME = "hol-guard-cursor-hook.py"
 _BLOCKING_MANAGED_HOOK_EVENTS = (
@@ -195,6 +196,7 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     script_path.parent.mkdir(parents=True, exist_ok=True)
     script_path.write_text(script_source, encoding="utf-8")
     _make_executable(script_path)
+    ensure_cursor_hook_attestation_secret(context.guard_home)
 
     original_text = hooks_path.read_text(encoding="utf-8") if hooks_path.is_file() else None
     backup_path = _hooks_backup_path(hooks_path, context)
@@ -481,6 +483,8 @@ _HOOK_SCRIPT_TEMPLATE = '''#!/usr/bin/env python3
 """Managed by HOL Guard. Re-run `hol-guard install cursor` after moving Guard home."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import subprocess
@@ -733,6 +737,57 @@ def _emit_cursor_response(
     return response, exit_code
 
 
+def _cursor_generation_id(payload: Mapping[str, object]) -> str | None:
+    for key in ("generation_id", "generationId"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _cursor_conversation_id(payload: Mapping[str, object]) -> str | None:
+    for key in ("conversation_id", "conversationId", "session_id", "sessionId"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    session_id = os.environ.get("CURSOR_SESSION_ID")
+    if isinstance(session_id, str) and session_id.strip():
+        return session_id.strip()
+    return None
+
+
+def _cursor_shell_command(payload: Mapping[str, object]) -> str | None:
+    command = payload.get("command")
+    if isinstance(command, str) and command.strip():
+        return command.strip()
+    tool_input = payload.get("tool_input")
+    if isinstance(tool_input, dict):
+        nested = tool_input.get("command")
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+    return None
+
+
+def _load_cursor_hook_attestation_secret() -> bytes | None:
+    secret_path = Path(GUARD_HOME) / "secrets" / "cursor-hook-attestation.key"
+    try:
+        secret = secret_path.read_bytes()
+    except OSError:
+        return None
+    return secret or None
+
+
+def _compute_cursor_after_shell_proof(payload: Mapping[str, object]) -> str | None:
+    conversation_id = _cursor_conversation_id(payload)
+    command = _cursor_shell_command(payload)
+    generation_id = _cursor_generation_id(payload)
+    secret = _load_cursor_hook_attestation_secret()
+    if conversation_id is None or command is None or generation_id is None or secret is None:
+        return None
+    message = "\\0".join((conversation_id, command, generation_id, "afterShellExecution")).encode("utf-8")
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
+
+
 def main() -> int:
     raw = sys.stdin.read()
     if not raw.strip():
@@ -758,6 +813,12 @@ def main() -> int:
                 guard_argv[workspace_index + 1] = workspace
         else:
             guard_argv.extend(["--workspace", workspace])
+    guard_env = _hook_process_env()
+    guard_env["HOL_GUARD_MANAGED_CURSOR_HOOK"] = "1"
+    if hook_event_name.strip().lower() == "aftershellexecution":
+        proof = _compute_cursor_after_shell_proof(prepared)
+        if proof:
+            guard_env["HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"] = proof
     try:
         proc = subprocess.run(
             [*GUARD_CLI, *guard_argv],
@@ -765,7 +826,7 @@ def main() -> int:
             capture_output=True,
             text=True,
             cwd=GUARD_HOME,
-            env=_hook_process_env(),
+            env=guard_env,
             timeout=GUARD_HOOK_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
