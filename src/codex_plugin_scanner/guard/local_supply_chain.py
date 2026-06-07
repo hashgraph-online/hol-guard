@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shlex
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -141,6 +142,7 @@ _SEVERITY_RANK = {
 }
 _PACKAGE_FIREWALL_REFRESH_ATTEMPTS: dict[str, float] = {}
 _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
+_PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
 
 
 def build_local_supply_chain_posture(
@@ -272,10 +274,11 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
         return entitlement
     refresh_key = str(store.guard_home.expanduser().resolve())
     now = time.monotonic()
-    last_refresh_at = _PACKAGE_FIREWALL_REFRESH_ATTEMPTS.get(refresh_key)
-    if last_refresh_at is not None and (now - last_refresh_at) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS:
-        return entitlement
-    _PACKAGE_FIREWALL_REFRESH_ATTEMPTS[refresh_key] = now
+    with _PACKAGE_FIREWALL_REFRESH_LOCK:
+        last_refresh_at = _PACKAGE_FIREWALL_REFRESH_ATTEMPTS.get(refresh_key)
+        if last_refresh_at is not None and (now - last_refresh_at) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS:
+            return entitlement
+        _PACKAGE_FIREWALL_REFRESH_ATTEMPTS[refresh_key] = now
     for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
         try:
             refresh(store)
