@@ -2289,6 +2289,18 @@ export async function startPackageFirewallConnect(): Promise<PackageFirewallStat
   );
 }
 
+export async function fetchSupplyChainBundle(): Promise<SupplyChainBundle | null> {
+  const wrapper = await readJson<unknown>("/v1/supply-chain/bundle");
+  if (!wrapper || typeof wrapper !== "object") {
+    return null;
+  }
+  const bundle = (wrapper as Record<string, unknown>).bundle;
+  if (bundle === null || bundle === undefined) {
+    return null;
+  }
+  return bundle as SupplyChainBundle;
+}
+
 export async function runPackageFirewallAction(
   action: PackageFirewallActionType,
   manager: string | null,

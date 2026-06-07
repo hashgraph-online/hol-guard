@@ -17,6 +17,7 @@ import type {
   PackageManagerProtection,
 } from "./guard-types";
 import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
+import { SupplyChainBundlePanel } from "./supply-chain-bundle-panel";
 
 type ManagerCoverageStatus = "protected" | "restart_required" | "path_repair" | "unprotected";
 
@@ -224,6 +225,8 @@ export function SupplyChainWorkspace({
         />
         <StatCard label="Unprotected managers" value={stats.unprotectedManagers} tone={stats.unprotectedManagers > 0 ? "attention" : "slate"} />
       </div>
+
+      <SupplyChainBundlePanel />
 
       <PackageFirewallPanel approvalGate={approvalGate} onStateChanged={onRuntimeRefresh} />
 
