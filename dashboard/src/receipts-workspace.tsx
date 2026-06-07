@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HiMiniArrowDownTray, HiMiniDocumentText } from "react-icons/hi2";
+import { HiMiniArrowDownTray, HiMiniDocumentText, HiMiniXMark } from "react-icons/hi2";
 
-import { EmptyState, ActionButton, SectionLabel } from "./approval-center-primitives";
+import { EmptyState, ActionButton, SectionLabel, IconActionButton } from "./approval-center-primitives";
 import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
 import type { EvidenceFilterState, EvidenceView, EvidenceSortKey } from "./evidence/evidence-types";
@@ -204,24 +204,21 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   const headerActions = useMemo(
     () => (
       <>
-        <button
-          type="button"
+        <IconActionButton
+          label="Export"
+          icon={<HiMiniDocumentText className="h-4 w-4" />}
+          variant="outline"
           onClick={handleOpenExport}
           aria-label="Export evidence"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark shadow-sm transition-colors hover:bg-slate-50"
-        >
-          <HiMiniDocumentText className="h-4 w-4 text-slate-400" aria-hidden="true" />
-          Export
-        </button>
+        />
         {onClearEvidence && receiptItems.length > 0 && (
-          <button
-            type="button"
+          <IconActionButton
+            label="Clear"
+            icon={<HiMiniXMark className="h-4 w-4" />}
+            variant="ghost"
             onClick={handleOpenClear}
             aria-label="Clear all evidence"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-brand-attention"
-          >
-            Clear
-          </button>
+          />
         )}
       </>
     ),
@@ -229,7 +226,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <WorkspacePageHeader
         eyebrow="Evidence"
         title={evidenceTitleForView(filters.view)}
