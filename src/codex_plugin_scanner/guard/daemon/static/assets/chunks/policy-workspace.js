@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, T as Tag, a1 as HiMiniMagnifyingGlass, E as EmptyState, i as harnessDisplayName, B as Badge, ag as HiMiniTrash, g as HiMiniCheckCircle, f as formatRelativeTime } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, T as Tag, a3 as HiMiniMagnifyingGlass, E as EmptyState, i as harnessDisplayName, B as Badge, ay as HiMiniDocumentText, az as guardAwareHref, ah as HiMiniTrash, g as HiMiniCheckCircle, aA as HiMiniBarsArrowUp, aB as HiMiniBarsArrowDown, f as formatRelativeTime } from "../guard-dashboard.js";
 function groupPoliciesByHarness(policies) {
   const map = /* @__PURE__ */ new Map();
   for (const p of policies) {
@@ -56,6 +56,40 @@ function resolveCloudPolicyBundleCopy(snapshot) {
     tone: "green"
   };
 }
+function policyTargetLabel(policy) {
+  return policy.artifact_id ?? policy.publisher ?? policy.workspace ?? "Global";
+}
+function policyEvidenceHref(policy) {
+  const params = new URLSearchParams();
+  params.set("harness", policy.harness || "global");
+  const target = policyTargetLabel(policy);
+  if (target && target !== "Global") {
+    params.set("search", target);
+  }
+  return `/evidence?${params.toString()}`;
+}
+function sortPolicies(policies, sort) {
+  if (sort === null) return policies;
+  const sorted = [...policies];
+  const dir = sort.direction === "asc" ? 1 : -1;
+  sorted.sort((a, b) => {
+    switch (sort.key) {
+      case "app":
+        return a.harness.localeCompare(b.harness) * dir;
+      case "scope":
+        return a.scope.localeCompare(b.scope) * dir;
+      case "action":
+        return a.action.localeCompare(b.action) * dir;
+      case "target":
+        return policyTargetLabel(a).localeCompare(policyTargetLabel(b)) * dir;
+      case "updated":
+        return (new Date(a.updated_at || 0).getTime() - new Date(b.updated_at || 0).getTime()) * dir;
+      default:
+        return 0;
+    }
+  });
+  return sorted;
+}
 function PolicyRow({ policy, onClear }) {
   const handleClear = reactExports.useCallback(() => onClear?.(policy), [onClear, policy]);
   const actionTone = policy.action === "allow" ? "success" : policy.action === "block" ? "destructive" : policy.action === "warn" ? "warning" : "default";
@@ -63,19 +97,57 @@ function PolicyRow({ policy, onClear }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-sm text-brand-dark min-w-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: harnessDisplayName(policy.harness) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-sm text-slate-500", children: policy.scope }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: actionTone, children: policy.action }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-xs text-slate-500 max-w-[200px]", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate block", title: policy.artifact_id ?? void 0, children: policy.artifact_id ?? policy.publisher ?? policy.workspace ?? "Global" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-xs text-slate-500 max-w-[200px]", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate block", title: policyTargetLabel(policy), children: policyTargetLabel(policy) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-xs text-slate-400 whitespace-nowrap", children: policy.updated_at ? formatRelativeTime(policy.updated_at) : null }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5", children: onClear && /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: handleClear,
-        "aria-label": `Clear policy for ${harnessDisplayName(policy.harness)}`,
-        className: "inline-flex items-center justify-center rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/50 transition-colors",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-      }
-    ) })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-0.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "a",
+        {
+          href: guardAwareHref(policyEvidenceHref(policy)),
+          className: "inline-flex h-8 w-8 items-center justify-center rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors",
+          "aria-label": `View evidence for ${harnessDisplayName(policy.harness)}`,
+          title: "View evidence",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4", "aria-hidden": "true" })
+        }
+      ),
+      onClear && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleClear,
+          "aria-label": `Clear policy for ${harnessDisplayName(policy.harness)}`,
+          className: "inline-flex h-8 w-8 items-center justify-center rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/50 transition-colors",
+          title: "Clear policy",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" })
+        }
+      )
+    ] }) })
   ] });
+}
+function SortHeader({ label, sortKey, activeSort, onSort, className }) {
+  const isActive = activeSort?.key === sortKey;
+  const ariaSort = isActive ? activeSort.direction === "asc" ? "ascending" : "descending" : "none";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "th",
+    {
+      scope: "col",
+      "aria-sort": ariaSort,
+      className: `px-4 py-2.5 text-left ${className ?? ""}`,
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: () => onSort(sortKey),
+          className: "group inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 transition-colors hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded px-1 -ml-1",
+          "aria-label": `Sort by ${label}, ${isActive ? activeSort.direction === "asc" ? "descending" : "ascending" : "ascending"}`,
+          children: [
+            label,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-3.5 w-3.5 items-center justify-center", "aria-hidden": "true", children: isActive ? activeSort.direction === "asc" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBarsArrowUp, { className: "h-3 w-3 text-brand-blue" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBarsArrowDown, { className: "h-3 w-3 text-brand-blue" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBarsArrowUp, { className: "h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" }) })
+          ]
+        }
+      )
+    }
+  );
 }
 function PolicyWorkspace({
   policies,
@@ -89,11 +161,23 @@ function PolicyWorkspace({
     harnessFilter: "",
     scopeFilter: ""
   });
+  const [sort, setSort] = reactExports.useState({ key: "updated", direction: "desc" });
   const handleSearchChange = reactExports.useCallback((e) => {
     setFilter((f) => ({ ...f, searchQuery: e.target.value }));
   }, []);
   const handleViewChange = reactExports.useCallback((v) => {
     setActiveView(v);
+  }, []);
+  const handleSort = reactExports.useCallback((key) => {
+    setSort((current) => {
+      if (current?.key === key) {
+        if (current.direction === "asc") {
+          return { key, direction: "desc" };
+        }
+        return { key, direction: "asc" };
+      }
+      return { key, direction: "asc" };
+    });
   }, []);
   const securityLevel = snapshot.security_level;
   const modeCopy = reactExports.useMemo(() => resolveSecurityModeCopy(securityLevel), [securityLevel]);
@@ -101,20 +185,16 @@ function PolicyWorkspace({
     return policies.filter((p) => {
       const q = filter.searchQuery.toLowerCase();
       if (q === "") return true;
-      return p.harness.toLowerCase().includes(q) || (p.artifact_id ?? "").toLowerCase().includes(q) || (p.workspace ?? "").toLowerCase().includes(q) || (p.publisher ?? "").toLowerCase().includes(q);
+      return p.harness.toLowerCase().includes(q) || (p.artifact_id ?? "").toLowerCase().includes(q) || (p.workspace ?? "").toLowerCase().includes(q) || (p.publisher ?? "").toLowerCase().includes(q) || p.scope.toLowerCase().includes(q) || p.action.toLowerCase().includes(q);
     });
   }, [policies, filter.searchQuery]);
-  const allowPolicies = reactExports.useMemo(
-    () => filteredPolicies.filter((p) => p.action === "allow"),
-    [filteredPolicies]
-  );
-  const blockPolicies = reactExports.useMemo(
-    () => filteredPolicies.filter((p) => p.action === "block"),
-    [filteredPolicies]
+  const sortedPolicies = reactExports.useMemo(
+    () => sortPolicies(filteredPolicies, sort),
+    [filteredPolicies, sort]
   );
   const exceptionPolicies = reactExports.useMemo(
-    () => filteredPolicies.filter((p) => p.action !== "allow" && p.action !== "block"),
-    [filteredPolicies]
+    () => sortedPolicies.filter((p) => p.action !== "allow" && p.action !== "block"),
+    [sortedPolicies]
   );
   reactExports.useMemo(() => groupPoliciesByHarness(policies), [policies]);
   const cloudBundleCopy = reactExports.useMemo(() => resolveCloudPolicyBundleCopy(snapshot), [snapshot]);
@@ -166,7 +246,7 @@ function PolicyWorkspace({
             value: filter.searchQuery,
             onChange: handleSearchChange,
             "aria-label": "Search policies",
-            className: "bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-36"
+            className: "bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-36 sm:w-48"
           }
         )
       ] })
@@ -174,8 +254,9 @@ function PolicyWorkspace({
     activeView === "rules" && /* @__PURE__ */ jsxRuntimeExports.jsx(
       PolicyTable,
       {
-        allowPolicies,
-        blockPolicies,
+        policies: sortedPolicies.filter((p) => p.action === "allow" || p.action === "block"),
+        sort,
+        onSort: handleSort,
         onClearPolicy
       }
     ),
@@ -183,8 +264,8 @@ function PolicyWorkspace({
     activeView === "strict" && /* @__PURE__ */ jsxRuntimeExports.jsx(StrictModeView, { snapshot, onOpenSettings })
   ] });
 }
-function PolicyTable({ allowPolicies, blockPolicies, onClearPolicy }) {
-  const allPolicies = [...allowPolicies, ...blockPolicies];
+function PolicyTable({ policies, sort, onSort, onClearPolicy }) {
+  const allPolicies = policies;
   if (allPolicies.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
@@ -195,13 +276,13 @@ function PolicyTable({ allowPolicies, blockPolicies, onClearPolicy }) {
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full min-w-[600px] text-sm", "aria-label": "Policy rules", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full min-w-[640px] text-sm", "aria-label": "Policy rules", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 bg-slate-50", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "App" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Scope" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Action" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Target" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Updated" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortHeader, { label: "App", sortKey: "app", activeSort: sort, onSort }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortHeader, { label: "Scope", sortKey: "scope", activeSort: sort, onSort }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortHeader, { label: "Action", sortKey: "action", activeSort: sort, onSort }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortHeader, { label: "Target", sortKey: "target", activeSort: sort, onSort }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortHeader, { label: "Updated", sortKey: "updated", activeSort: sort, onSort }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-4 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Actions" }) })
     ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: allPolicies.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -210,7 +291,7 @@ function PolicyTable({ allowPolicies, blockPolicies, onClearPolicy }) {
         policy: p,
         onClear: onClearPolicy
       },
-      `${p.harness}-${p.scope}-${p.artifact_id ?? p.publisher ?? p.workspace ?? "global"}`
+      `${p.harness}-${p.scope}-${policyTargetLabel(p)}-${p.updated_at ?? ""}`
     )) })
   ] }) }) });
 }
@@ -243,16 +324,29 @@ function ExceptionsView({
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-sm font-medium text-brand-dark", children: harnessDisplayName(p.harness) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: p.action }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-sm text-slate-500 max-w-[240px]", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate block", children: p.reason ?? "No reason recorded" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5", children: onClearPolicy && /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: () => onClearPolicy(p),
-              "aria-label": `Remove exception for ${harnessDisplayName(p.harness)}`,
-              className: "inline-flex items-center justify-center rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-            }
-          ) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-0.5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "a",
+              {
+                href: guardAwareHref(policyEvidenceHref(p)),
+                className: "inline-flex h-8 w-8 items-center justify-center rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors",
+                "aria-label": `View evidence for ${harnessDisplayName(p.harness)}`,
+                title: "View evidence",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4", "aria-hidden": "true" })
+              }
+            ),
+            onClearPolicy && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: () => onClearPolicy(p),
+                "aria-label": `Remove exception for ${harnessDisplayName(p.harness)}`,
+                className: "inline-flex h-8 w-8 items-center justify-center rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors",
+                title: "Remove exception",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" })
+              }
+            )
+          ] }) })
         ]
       },
       `${p.harness}-${p.scope}-${p.artifact_id ?? "global"}`

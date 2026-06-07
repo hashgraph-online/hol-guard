@@ -703,6 +703,7 @@ export function App() {
       onBulkBlock={handleBulkBlock}
       onRetry={handleRetry}
       onRepair={handleRepair}
+      onGuardReconnected={handleRetry}
       onClearEvidence={handleClearEvidence}
       fleetContent={
         runtime.kind === "ready" ? (

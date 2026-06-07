@@ -28,6 +28,8 @@ import {
 
 import { guardAwareHref } from "./guard-api";
 import { EMPTY_QUEUE_TITLE } from "./approval-center-utils";
+import { GuardUpdatePanel } from "./guard-update-panel";
+import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
 
 const footerSections = [
   {
@@ -70,6 +72,10 @@ export function ShellHeader(props: {
   view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
   onNavigate: (pathname: string) => void;
   onOpenMobileQueue?: () => void;
+  guardVersion?: string | null;
+  updateStatus?: GuardUpdateStatus | null;
+  onUpdateGuard?: () => void;
+  updatePhase?: GuardUpdatePhase;
 }) {
   function handleMobileNavigationChange(event: ChangeEvent<HTMLSelectElement>) {
     props.onNavigate(event.target.value);
@@ -131,6 +137,26 @@ export function ShellHeader(props: {
             {props.queuedCount > 99 ? "99+" : props.queuedCount}
           </a>
         )}
+        {props.guardVersion ? (
+          <span
+            className="hidden min-h-11 shrink-0 items-center rounded-full border border-white/20 bg-white/10 px-2.5 font-mono text-[10px] text-white/85 sm:inline-flex"
+            aria-label={`Guard version ${props.guardVersion}`}
+            title={`Guard version ${props.guardVersion}`}
+          >
+            v{props.guardVersion}
+          </span>
+        ) : null}
+        {props.updateStatus?.update_available && props.onUpdateGuard ? (
+          <button
+            type="button"
+            onClick={props.onUpdateGuard}
+            disabled={props.updatePhase === "updating" || props.updatePhase === "reconnecting"}
+            className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white px-3 py-2 text-xs font-semibold text-brand-blue transition-colors duration-150 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:cursor-not-allowed disabled:opacity-70"
+            aria-label="Update Guard to the latest version"
+          >
+            {props.updatePhase === "updating" || props.updatePhase === "reconnecting" ? "Updating…" : "Update"}
+          </button>
+        ) : null}
       </div>
     </header>
   );
@@ -153,6 +179,10 @@ export function ShellSidebar(props: {
   view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  guardVersion?: string | null;
+  updateStatus?: GuardUpdateStatus | null;
+  onUpdateGuard?: () => void;
+  updatePhase?: GuardUpdatePhase;
 }) {
   const collapsed = props.collapsed ?? false;
   return (
@@ -246,13 +276,28 @@ export function ShellSidebar(props: {
                     {props.activeHarness}
                   </span>
                 ) : null}
+                <GuardUpdatePanel
+                  guardVersion={props.guardVersion}
+                  updateStatus={props.updateStatus}
+                  updatePhase={props.updatePhase}
+                  onUpdateGuard={props.onUpdateGuard}
+                />
               </div>
             </div>
           ) : (
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-2">
               <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] font-bold ${props.queuedCount > 0 ? "bg-brand-blue/15 text-brand-blue" : "bg-slate-200 text-slate-400"}`}>
                 {props.queuedCount > 0 ? (props.queuedCount > 99 ? "99+" : props.queuedCount) : "0"}
               </span>
+              {props.guardVersion ? (
+                <span
+                  className="font-mono text-[9px] text-brand-dark/50"
+                  aria-label={`Guard version ${props.guardVersion}`}
+                  title={`Guard version ${props.guardVersion}`}
+                >
+                  v{props.guardVersion}
+                </span>
+              ) : null}
             </div>
           )}
         </div>

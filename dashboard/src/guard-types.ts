@@ -600,3 +600,29 @@ export type PackageFirewallActionResponse = {
   receipt: PackageFirewallReceipt | null;
   entitlement: PackageFirewallEntitlement;
 };
+
+export type GuardUpdateVersionCheck = {
+  source: string;
+  status: string;
+  current_version: string | null;
+  latest_version: string | null;
+  update_available: boolean | null;
+};
+
+export type GuardUpdateStatus = {
+  current_version: string;
+  latest_version: string | null;
+  installer: string;
+  version_check: GuardUpdateVersionCheck;
+  auto_updatable: boolean;
+  update_available: boolean;
+  blocked_reason: string | null;
+};
+
+export type GuardUpdateScheduleResult = {
+  scheduled: boolean;
+  message?: string;
+  error?: string;
+};
+
+export type GuardUpdatePhase = "idle" | "checking" | "updating" | "reconnecting" | "error";

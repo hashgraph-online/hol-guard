@@ -102,6 +102,7 @@ import type {
   DecisionScope
 } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
+import { useGuardUpdate } from "./guard-update-panel";
 
 type RequestState =
   | { kind: "loading" }
@@ -171,6 +172,7 @@ type LayoutProps = {
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;
   onRetryResume?: () => void;
+  onGuardReconnected?: () => void;
 };
 
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
@@ -219,6 +221,13 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     });
   }, []);
 
+  const {
+    guardVersion,
+    updateStatus,
+    updatePhase,
+    onUpdateGuard,
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
+
   return (
     <div className="min-h-screen bg-white text-brand-dark">
       <ShellHeader
@@ -227,8 +236,22 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         view={props.view}
         onNavigate={props.onNavigate}
         onOpenMobileQueue={handleOpenMobileQueue}
+        guardVersion={guardVersion}
+        updateStatus={updateStatus}
+        updatePhase={updatePhase}
+        onUpdateGuard={onUpdateGuard}
       />
-      <ShellSidebar queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} collapsed={sidebarCollapsed} onToggleCollapse={handleToggleSidebar} />
+      <ShellSidebar
+        queuedCount={queuedItems.length}
+        activeHarness={activeHarness}
+        view={props.view}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
+        guardVersion={guardVersion}
+        updateStatus={updateStatus}
+        updatePhase={updatePhase}
+        onUpdateGuard={onUpdateGuard}
+      />
       {mobileQueueOpen && props.view === "inbox" && props.requests.kind === "ready" && (
         <MobileQueueDrawer
           requests={props.requests.items}

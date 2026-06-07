@@ -641,4 +641,40 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
     return tuple(contexts)
 
 
-__all__ = ["run_guard_update"]
+def build_guard_update_status_payload() -> dict[str, object]:
+    current_version = _current_version()
+    installer = _installer_kind()
+    direct_url = _direct_url_payload()
+    local_source_install = _local_source_install_payload(direct_url)
+    version_check = _version_check_payload(current_version)
+    auto_updatable = True
+    blocked_reason: str | None = None
+
+    if isinstance(direct_url, dict):
+        if bool(direct_url.get("dir_info", {}).get("editable")):
+            auto_updatable = False
+            blocked_reason = (
+                "This install was set up from local source code. "
+                "Re-run your usual local install command instead."
+            )
+        elif local_source_install is not None and bool(local_source_install.get("path_exists")):
+            auto_updatable = False
+            blocked_reason = (
+                "This install was set up from a local folder. "
+                "Re-run your usual local install command instead."
+            )
+
+    update_available = auto_updatable and version_check.get("update_available") is True
+    latest_version = version_check.get("latest_version")
+    return {
+        "current_version": current_version,
+        "latest_version": latest_version if isinstance(latest_version, str) else None,
+        "installer": installer,
+        "version_check": version_check,
+        "auto_updatable": auto_updatable,
+        "update_available": update_available,
+        "blocked_reason": blocked_reason,
+    }
+
+
+__all__ = ["build_guard_update_status_payload", "run_guard_update"]

@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/use-resolved-approval-gate.js","assets/chunks/runtime-overview.js","assets/chunks/audit-workspace.js","assets/chunks/policy-workspace.js","assets/chunks/feed-health-workspace.js"])))=>i.map(i=>d[i]);
-import { r as reactExports, j as jsxRuntimeExports, J as TabBar, ak as __vitePreload } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, al as WorkspacePageHeader, am as __vitePreload } from "../guard-dashboard.js";
 const SupplyChainWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
 );
@@ -37,13 +37,16 @@ function SupplyChainHubWorkspace(props) {
     [props.onNavigate]
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Supply chain" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: hubTitleForTab(tab) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs: hubTabs, active: tab, onChange: handleTabChange })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      WorkspacePageHeader,
+      {
+        eyebrow: "Supply chain",
+        title: hubTitleForTab(tab),
+        tabs: hubTabs,
+        activeTab: tab,
+        onTabChange: handleTabChange
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: [
       tab === "supply-chain" && /* @__PURE__ */ jsxRuntimeExports.jsx(
         SupplyChainWorkspace,

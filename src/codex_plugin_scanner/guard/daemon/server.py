@@ -128,6 +128,8 @@ from ..store_evidence import (
     export_evidence_json,
     list_evidence,
 )
+from ..cli.update_commands import build_guard_update_status_payload
+from .dashboard_update import schedule_guard_dashboard_update
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state,
@@ -910,6 +912,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             config = load_guard_config(store.guard_home)
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
+        if parsed.path == "/v1/update/status":
+            self._write_json(build_guard_update_status_payload())
+            return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
             self._handle_session_resume(path_parts[2])
             return
@@ -1186,6 +1191,32 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/daemon/repair":
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
             self._write_json(result)
+            return
+        if parsed.path == "/v1/update":
+            status_payload = build_guard_update_status_payload()
+            if status_payload.get("auto_updatable") is not True:
+                self._write_json(
+                    {
+                        "error": "update_not_supported",
+                        "message": status_payload.get("blocked_reason")
+                        or "Automatic update is not available for this install.",
+                    },
+                    status=400,
+                )
+                return
+            if status_payload.get("update_available") is not True:
+                self._write_json(
+                    {
+                        "error": "update_not_available",
+                        "message": "Guard is already on the latest version.",
+                    },
+                    status=400,
+                )
+                return
+            guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+            daemon_pid = os.getpid()
+            daemon_port = int(self.server.server_address[1])  # type: ignore[attr-defined]
+            self._write_json(schedule_guard_dashboard_update(guard_home, daemon_pid, daemon_port))
             return
         if parsed.path == "/v1/notifications/setup":
             self._handle_notification_setup(payload)
@@ -3252,6 +3283,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
             "/v1/notifications/setup",
+            "/v1/update/status",
         }:
             return True
         if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
@@ -3266,6 +3298,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
                 return True
         if self.command == "POST":
+            if path == "/v1/update":
+                return True
             if (
                 len(path_parts) == 4
                 and path_parts[:2] == ["v1", "requests"]
@@ -3441,6 +3475,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/settings/export",
             "/v1/settings/import",
             "/v1/settings/reset",
+            "/v1/update",
+            "/v1/update/status",
         }:
             return True
         if len(path_parts) == 3 and path_parts[:2] in (["v1", "requests"], ["v1", "receipts"]):
@@ -3795,6 +3831,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
             "/v1/notifications/setup",
+            "/v1/update",
         }:
             return True
         if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:

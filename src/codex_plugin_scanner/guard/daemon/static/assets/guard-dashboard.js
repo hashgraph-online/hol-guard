@@ -13804,6 +13804,71 @@ async function repairApprovalCenter() {
   }
   return response.json();
 }
+function normalizeGuardUpdateVersionCheck(raw) {
+  const value = isRecord(raw) ? raw : {};
+  return {
+    source: stringValue(value.source) ?? "pypi",
+    status: stringValue(value.status) ?? "unavailable",
+    current_version: stringValue(value.current_version),
+    latest_version: stringValue(value.latest_version),
+    update_available: typeof value.update_available === "boolean" ? value.update_available : null
+  };
+}
+function normalizeGuardUpdateStatus(raw) {
+  const value = isRecord(raw) ? raw : {};
+  const versionCheck = normalizeGuardUpdateVersionCheck(value.version_check);
+  const currentVersion = stringValue(value.current_version) ?? versionCheck.current_version ?? "unknown";
+  const latestVersion = stringValue(value.latest_version) ?? versionCheck.latest_version;
+  return {
+    current_version: currentVersion,
+    latest_version: latestVersion,
+    installer: stringValue(value.installer) ?? "pip",
+    version_check: versionCheck,
+    auto_updatable: booleanValue(value.auto_updatable),
+    update_available: booleanValue(value.update_available),
+    blocked_reason: stringValue(value.blocked_reason)
+  };
+}
+async function fetchGuardUpdateStatus() {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      current_version: "0.0.0-demo",
+      latest_version: "0.0.0-demo",
+      installer: "pip",
+      version_check: {
+        source: "pypi",
+        status: "current",
+        current_version: "0.0.0-demo",
+        latest_version: "0.0.0-demo",
+        update_available: false
+      },
+      auto_updatable: true,
+      update_available: false,
+      blocked_reason: null
+    });
+  }
+  const payload = await readJson("/v1/update/status");
+  return normalizeGuardUpdateStatus(payload);
+}
+async function scheduleGuardUpdate() {
+  if (isGuardDemoMode()) {
+    return {
+      scheduled: true,
+      message: "Demo mode cannot update Guard."
+    };
+  }
+  const response = await fetchWithGuardAuth("/v1/update", { method: "POST" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = stringValue(payload.message) ?? stringValue(payload.error) ?? `Guard update failed with ${response.status}`;
+    throw new Error(message);
+  }
+  return {
+    scheduled: booleanValue(payload.scheduled),
+    message: stringValue(payload.message) ?? void 0,
+    error: stringValue(payload.error) ?? void 0
+  };
+}
 async function setupDesktopNotifications() {
   if (isGuardDemoMode()) {
     return {
@@ -14428,6 +14493,12 @@ function HiMiniBellAlert(props) {
 function HiMiniBeaker(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.5 3.528v4.644c0 .729-.29 1.428-.805 1.944l-1.217 1.216a8.75 8.75 0 0 1 3.55.621l.502.201a7.25 7.25 0 0 0 4.178.365l-2.403-2.403a2.75 2.75 0 0 1-.805-1.944V3.528a40.205 40.205 0 0 0-3 0Zm4.5.084.19.015a.75.75 0 1 0 .12-1.495 41.364 41.364 0 0 0-6.62 0 .75.75 0 0 0 .12 1.495L7 3.612v4.56c0 .331-.132.649-.366.883L2.6 13.09c-1.496 1.496-.817 4.15 1.403 4.475C5.961 17.852 7.963 18 10 18s4.039-.148 5.997-.436c2.22-.325 2.9-2.979 1.403-4.475l-4.034-4.034A1.25 1.25 0 0 1 13 8.172v-4.56Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniBarsArrowUp(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h6.365a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .55.24l3.25 3.5a.75.75 0 1 1-1.1 1.02l-1.95-2.1v6.59a.75.75 0 0 1-1.5 0V9.66l-1.95 2.1a.75.75 0 1 1-1.1-1.02l3.25-3.5A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75H7A.75.75 0 0 1 7 12H2.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniBarsArrowDown(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h7.508a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .75.75v6.59l1.95-2.1a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0l-3.25-3.5a.75.75 0 1 1 1.1-1.02l1.95 2.1V7.75A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75h4.562a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniArrowTopRightOnSquare(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -14982,6 +15053,143 @@ function buildCodexResumeUx(resume) {
     showRetry: false
   };
 }
+const UPDATE_STATUS_POLL_MS = 6e4;
+const RECONNECT_POLL_MS = 1500;
+const RECONNECT_TIMEOUT_MS = 12e4;
+function updateStatusLabel(status) {
+  if (!status) {
+    return "Checking version…";
+  }
+  if (status.update_available && status.latest_version) {
+    return `Version ${status.latest_version} is ready`;
+  }
+  return `Version ${status.current_version}`;
+}
+function updateHelpCopy(status, phase) {
+  if (phase === "updating") {
+    return "Guard is installing the update. The dashboard will pause briefly and reopen when ready.";
+  }
+  if (phase === "reconnecting") {
+    return "Reconnecting to Guard after the update…";
+  }
+  if (phase === "error") {
+    return "The update did not finish. Try again or run hol-guard update from your terminal.";
+  }
+  if (status?.update_available) {
+    return "This restarts Guard for a moment. Open approvals will stay saved.";
+  }
+  if (status && !status.auto_updatable && status.blocked_reason) {
+    return status.blocked_reason;
+  }
+  return null;
+}
+function GuardUpdatePanel(props) {
+  const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
+  const phase = props.updatePhase ?? "idle";
+  const helpCopy = updateHelpCopy(props.updateStatus, phase);
+  const showUpdateButton = props.updateStatus?.update_available === true && props.updateStatus.auto_updatable && phase !== "updating" && phase !== "reconnecting";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: props.compact ? "space-y-1" : "space-y-2", children: [
+    version ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/60", "aria-label": `Guard version ${version}`, children: [
+      "v",
+      version
+    ] }) : null,
+    props.updateStatus?.update_available ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/75", children: updateStatusLabel(props.updateStatus) }) : null,
+    helpCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: helpCopy }) : null,
+    showUpdateButton && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        onClick: props.onUpdateGuard,
+        className: "inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-brand-blue/30 bg-white px-3 py-2 text-sm font-semibold text-brand-blue transition-colors hover:bg-brand-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0", "aria-hidden": "true" }),
+          "Update Guard"
+        ]
+      }
+    ) : null,
+    (phase === "updating" || phase === "reconnecting") && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "inline-flex min-h-11 items-center gap-2 text-[11px] font-medium text-brand-blue", role: "status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
+      phase === "updating" ? "Updating Guard…" : "Reconnecting…"
+    ] })
+  ] });
+}
+function useGuardUpdate(options) {
+  const [updateStatus, setUpdateStatus] = reactExports.useState(null);
+  const [updatePhase, setUpdatePhase] = reactExports.useState("checking");
+  const reconnectStartedAt = reactExports.useRef(null);
+  const refreshUpdateStatus = reactExports.useCallback(async () => {
+    try {
+      const status = await fetchGuardUpdateStatus();
+      setUpdateStatus(status);
+      if (updatePhase === "checking" || updatePhase === "idle") {
+        setUpdatePhase("idle");
+      }
+    } catch {
+      if (updatePhase === "checking") {
+        setUpdatePhase("idle");
+      }
+    }
+  }, [updatePhase]);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    void fetchGuardUpdateStatus().then((status) => {
+      if (!cancelled) {
+        setUpdateStatus(status);
+        setUpdatePhase("idle");
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setUpdatePhase("idle");
+      }
+    });
+    const pollId = window.setInterval(() => {
+      if (updatePhase === "updating" || updatePhase === "reconnecting") {
+        return;
+      }
+      void refreshUpdateStatus();
+    }, UPDATE_STATUS_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(pollId);
+    };
+  }, [refreshUpdateStatus, updatePhase]);
+  const waitForReconnect = reactExports.useCallback(async () => {
+    reconnectStartedAt.current = Date.now();
+    while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
+      try {
+        await repairApprovalCenter();
+        await fetchGuardUpdateStatus();
+        setUpdatePhase("idle");
+        options?.onReconnected?.();
+        return;
+      } catch {
+        await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
+      }
+    }
+    setUpdatePhase("error");
+  }, [options]);
+  const onUpdateGuard = reactExports.useCallback(async () => {
+    if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
+      return;
+    }
+    setUpdatePhase("updating");
+    try {
+      await scheduleGuardUpdate();
+      setUpdatePhase("reconnecting");
+      await waitForReconnect();
+      await refreshUpdateStatus();
+    } catch {
+      setUpdatePhase("error");
+    }
+  }, [refreshUpdateStatus, updateStatus, waitForReconnect]);
+  return {
+    guardVersion: updateStatus?.current_version ?? null,
+    updateStatus,
+    updatePhase,
+    onUpdateGuard,
+    refreshUpdateStatus
+  };
+}
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
     props.onNavigate(event.target.value);
@@ -15038,7 +15246,30 @@ function ShellHeader(props) {
             "aria-label": `${props.queuedCount} Guard actions queued`,
             children: props.queuedCount > 99 ? "99+" : props.queuedCount
           }
-        )
+        ),
+        props.guardVersion ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "span",
+          {
+            className: "hidden min-h-11 shrink-0 items-center rounded-full border border-white/20 bg-white/10 px-2.5 font-mono text-[10px] text-white/85 sm:inline-flex",
+            "aria-label": `Guard version ${props.guardVersion}`,
+            title: `Guard version ${props.guardVersion}`,
+            children: [
+              "v",
+              props.guardVersion
+            ]
+          }
+        ) : null,
+        props.updateStatus?.update_available && props.onUpdateGuard ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: props.onUpdateGuard,
+            disabled: props.updatePhase === "updating" || props.updatePhase === "reconnecting",
+            className: "inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white px-3 py-2 text-xs font-semibold text-brand-blue transition-colors duration-150 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:cursor-not-allowed disabled:opacity-70",
+            "aria-label": "Update Guard to the latest version",
+            children: props.updatePhase === "updating" || props.updatePhase === "reconnecting" ? "Updating…" : "Update"
+          }
+        ) : null
       ] })
     }
   );
@@ -15112,8 +15343,31 @@ function ShellSidebar(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue", children: props.queuedCount > 0 ? "Review" : "Clear" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: props.queuedCount > 0 ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.` : "No local approvals are waiting." }),
-        props.activeHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex rounded-full bg-white/70 px-2 py-1 font-mono text-[10px] font-semibold text-slate-500", children: props.activeHarness }) : null
-      ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] font-bold ${props.queuedCount > 0 ? "bg-brand-blue/15 text-brand-blue" : "bg-slate-200 text-slate-400"}`, children: props.queuedCount > 0 ? props.queuedCount > 99 ? "99+" : props.queuedCount : "0" }) }) })
+        props.activeHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex rounded-full bg-white/70 px-2 py-1 font-mono text-[10px] font-semibold text-slate-500", children: props.activeHarness }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          GuardUpdatePanel,
+          {
+            guardVersion: props.guardVersion,
+            updateStatus: props.updateStatus,
+            updatePhase: props.updatePhase,
+            onUpdateGuard: props.onUpdateGuard
+          }
+        )
+      ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] font-bold ${props.queuedCount > 0 ? "bg-brand-blue/15 text-brand-blue" : "bg-slate-200 text-slate-400"}`, children: props.queuedCount > 0 ? props.queuedCount > 99 ? "99+" : props.queuedCount : "0" }),
+        props.guardVersion ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "span",
+          {
+            className: "font-mono text-[9px] text-brand-dark/50",
+            "aria-label": `Guard version ${props.guardVersion}`,
+            title: `Guard version ${props.guardVersion}`,
+            children: [
+              "v",
+              props.guardVersion
+            ]
+          }
+        ) : null
+      ] }) })
     ] })
   ] });
 }
@@ -15173,6 +15427,14 @@ const ActionButton = reactExports.forwardRef(
   }
 );
 ActionButton.displayName = "ActionButton";
+function IconActionButton({ label, icon, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel }) {
+  const base = "inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-9 h-9 px-2.5 sm:px-3";
+  const tone = variant === "primary" ? "bg-brand-blue text-white shadow-sm hover:bg-brand-blue/90" : variant === "danger" ? "bg-brand-purple text-white shadow-sm hover:bg-brand-purple/90" : variant === "ghost" ? "text-slate-600 hover:bg-slate-100" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick, disabled, "aria-label": ariaLabel ?? label, className: `${base} ${tone}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-4 w-4 ${spinning ? "animate-spin" : ""}`, "aria-hidden": "true", children: icon }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: spinning ? "Running..." : label })
+  ] });
+}
 function PaginationControls(props) {
   const firstItem = props.totalItems === 0 ? 0 : (props.page - 1) * props.pageSize + 1;
   const lastItem = Math.min(props.totalItems, props.page * props.pageSize);
@@ -16076,12 +16338,7 @@ function writeEvidenceUrlState(state) {
   url.search = params.toString();
   window.history.replaceState({}, "", url.toString());
 }
-function EvidenceHero({
-  totalCount,
-  lastActivityAt,
-  onExport,
-  onClear
-}) {
+function EvidenceHero({ totalCount, lastActivityAt }) {
   const lastActivityLabel = lastActivityAt ? new Date(lastActivityAt).toLocaleDateString(void 0, {
     month: "short",
     day: "numeric",
@@ -16094,54 +16351,24 @@ function EvidenceHero({
       className: "guard-surface-in relative overflow-hidden rounded-2xl border border-brand-blue/10 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)] p-5 sm:p-6",
       role: "region",
       "aria-label": "Evidence summary",
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative space-y-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Evidence" }),
-          hasEvidence ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "success", children: [
-            totalCount,
+      children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-green/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4 text-brand-green", "aria-hidden": "true" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-2", children: hasEvidence ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "success", children: [
+            totalCount.toLocaleString(),
             " actions recorded"
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "No actions yet" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-3xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-green/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4 text-brand-green", "aria-hidden": "true" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold tracking-tight text-brand-dark sm:text-2xl", children: hasEvidence ? `${totalCount.toLocaleString()} action${totalCount !== 1 ? "s" : ""} recorded` : "Evidence" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: [
-              "Every action Guard reviewed on this machine.",
-              lastActivityLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-                " Last activity on ",
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-dark", children: lastActivityLabel }),
-                "."
-              ] })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "No actions yet" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: [
+            "Every action Guard reviewed on this machine.",
+            lastActivityLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              " ",
+              "Last activity on ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-dark", children: lastActivityLabel }),
+              "."
             ] })
           ] })
-        ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              onClick: onExport,
-              "aria-label": "Export evidence",
-              className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors shadow-sm",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }),
-                "Export"
-              ]
-            }
-          ),
-          onClear && totalCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: onClear,
-              "aria-label": "Clear all evidence",
-              className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors shadow-sm",
-              children: "Clear"
-            }
-          )
         ] })
-      ] })
+      ] }) })
     }
   );
 }
@@ -18562,7 +18789,29 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
   ] });
 }
 const CategoryTab = reactExports.memo(CategoryTabRaw);
+function WorkspacePageHeader({
+  eyebrow,
+  title,
+  tabs,
+  activeTab,
+  onTabChange,
+  actions
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: eyebrow }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: title })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "-mx-1 w-full overflow-x-auto px-1 sm:mx-0 sm:w-auto sm:overflow-visible [&>div]:!flex-nowrap", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs, active: activeTab, onChange: onTabChange }) }),
+      actions ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: actions }) : null
+    ] })
+  ] });
+}
 const PAGE_SIZE = 50;
+function evidenceTitleForView(view) {
+  return VIEW_TABS.find((tab) => tab.key === view)?.label ?? "Evidence";
+}
 function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
   const initial = reactExports.useMemo(() => readEvidenceUrlState(), []);
   const [filters, setFilters] = reactExports.useState(initial);
@@ -18689,17 +18938,47 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
     );
   }
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
+  const headerActions = reactExports.useMemo(
+    () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: handleOpenExport,
+          "aria-label": "Export evidence",
+          className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark shadow-sm transition-colors hover:bg-slate-50",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }),
+            "Export"
+          ]
+        }
+      ),
+      onClearEvidence && receiptItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleOpenClear,
+          "aria-label": "Clear all evidence",
+          className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-brand-attention",
+          children: "Clear"
+        }
+      )
+    ] }),
+    [handleOpenExport, handleOpenClear, onClearEvidence, receiptItems.length]
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EvidenceHero,
+      WorkspacePageHeader,
       {
-        totalCount: receiptItems.length,
-        lastActivityAt: metrics.lastActivityAt,
-        onExport: handleOpenExport,
-        onClear: handleOpenClear
+        eyebrow: "Evidence",
+        title: evidenceTitleForView(filters.view),
+        tabs: tabOptions,
+        activeTab: filters.view,
+        onTabChange: handleViewChange,
+        actions: headerActions
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs: tabOptions, active: filters.view, onChange: handleViewChange }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: receiptItems.length, lastActivityAt: metrics.lastActivityAt }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-1", children: [
       filters.view === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
@@ -18737,7 +19016,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
                 }
               )
             ] }),
-            selectedReceipt && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            selectedReceipt && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
               EvidenceActionDetail,
               {
                 receipt: selectedReceipt,
@@ -18790,11 +19069,11 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
           id: "tabpanel-export",
           role: "tabpanel",
           "aria-labelledby": "tab-export",
-          className: "space-y-4 guard-fade-in",
+          className: "guard-fade-in space-y-4",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Export Evidence" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/70 leading-relaxed", children: "Download your evidence records as CSV or JSON for analysis or backup." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "Download your evidence records as CSV or JSON for analysis or backup." }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleOpenExport, children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
                 "Open export options"
@@ -18802,7 +19081,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Cloud Sync" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/70 leading-relaxed", children: "Keep evidence in sync across devices. Cloud backup lets you access your evidence history from any device. Available in HOL Guard Cloud." })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "Keep evidence in sync across devices. Cloud backup lets you access your evidence history from any device. Available in HOL Guard Cloud." })
             ] })
           ]
         }
@@ -21120,6 +21399,12 @@ function ApprovalCenterLayout(props) {
       return next;
     });
   }, []);
+  const {
+    guardVersion,
+    updateStatus,
+    updatePhase,
+    onUpdateGuard
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ShellHeader,
@@ -21128,10 +21413,27 @@ function ApprovalCenterLayout(props) {
         activeHarness,
         view: props.view,
         onNavigate: props.onNavigate,
-        onOpenMobileQueue: handleOpenMobileQueue
+        onOpenMobileQueue: handleOpenMobileQueue,
+        guardVersion,
+        updateStatus,
+        updatePhase,
+        onUpdateGuard
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ShellSidebar, { queuedCount: queuedItems.length, activeHarness, view: props.view, collapsed: sidebarCollapsed, onToggleCollapse: handleToggleSidebar }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ShellSidebar,
+      {
+        queuedCount: queuedItems.length,
+        activeHarness,
+        view: props.view,
+        collapsed: sidebarCollapsed,
+        onToggleCollapse: handleToggleSidebar,
+        guardVersion,
+        updateStatus,
+        updatePhase,
+        onUpdateGuard
+      }
+    ),
     mobileQueueOpen && props.view === "inbox" && props.requests.kind === "ready" && /* @__PURE__ */ jsxRuntimeExports.jsx(
       MobileQueueDrawer,
       {
@@ -23394,6 +23696,7 @@ function App() {
         onBulkBlock: handleBulkBlock,
         onRetry: handleRetry,
         onRepair: handleRepair,
+        onGuardReconnected: handleRetry,
         onClearEvidence: handleClearEvidence,
         fleetContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           FleetWorkspace,
@@ -23437,7 +23740,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  resetSettings as $,
+  exportSettings as $,
   ActionButton as A,
   Badge as B,
   getDefaultExportFromCjs as C,
@@ -23447,58 +23750,65 @@ export {
   GuardHero as G,
   HiMiniShieldCheck as H,
   HiMiniAdjustmentsHorizontal as I,
-  TabBar as J,
-  fetchSettings as K,
-  fetchRuntimeSnapshot as L,
-  revokeApprovalGateCooldown as M,
-  enrollApprovalGateTotp as N,
-  verifyApprovalGateTotp as O,
+  HiMiniCog6Tooth as J,
+  HiMiniCircleStack as K,
+  TabBar as L,
+  fetchSettings as M,
+  fetchRuntimeSnapshot as N,
+  revokeApprovalGateCooldown as O,
   ProofStrip as P,
-  disableApprovalGateTotp as Q,
-  updateSettings as R,
+  enrollApprovalGateTotp as Q,
+  verifyApprovalGateTotp as R,
   SectionLabel as S,
   Tag as T,
-  clearPolicy as U,
-  clearReviewQueue as V,
-  clearEvidence as W,
-  exportDiagnostics as X,
-  repairApprovalCenter as Y,
-  exportSettings as Z,
-  importSettings as _,
+  disableApprovalGateTotp as U,
+  updateSettings as V,
+  clearPolicy as W,
+  clearReviewQueue as X,
+  clearEvidence as Y,
+  exportDiagnostics as Z,
+  repairApprovalCenter as _,
   HiMiniInformationCircle as a,
-  setupDesktopNotifications as a0,
-  HiMiniMagnifyingGlass as a1,
-  HiMiniCog6Tooth as a2,
-  approvalGateCooldownLabel as a3,
-  fetchApprovalPage as a4,
-  fetchPolicy as a5,
-  HiMiniArrowLeft as a6,
-  HiMiniHome as a7,
-  detectCategory as a8,
-  CATEGORIES as a9,
-  policyIdentityKey as aa,
-  HiMiniChartBar as ab,
-  runHarnessAction as ac,
-  GuardHarnessActionError as ad,
-  HiMiniRocketLaunch as ae,
-  HiMiniArrowPath as af,
-  HiMiniTrash as ag,
-  clearLabelForScope as ah,
-  formatHarnessCommand as ai,
-  HiMiniCommandLine as aj,
-  __vitePreload as ak,
-  HiMiniArrowTopRightOnSquare as al,
-  fetchPackageFirewallStatus as am,
-  runPackageFirewallAction as an,
-  runPackageAudit as ao,
-  runPackageSync as ap,
-  startPackageFirewallConnect as aq,
-  openPackageFirewallShell as ar,
-  HiMiniBugAnt as as,
-  HiMiniBeaker as at,
-  runAuditRemediation as au,
-  HiMiniSignal as av,
-  HiMiniClock as aw,
+  importSettings as a0,
+  resetSettings as a1,
+  setupDesktopNotifications as a2,
+  HiMiniMagnifyingGlass as a3,
+  approvalGateCooldownLabel as a4,
+  fetchApprovalPage as a5,
+  fetchPolicy as a6,
+  HiMiniArrowLeft as a7,
+  HiMiniHome as a8,
+  detectCategory as a9,
+  HiMiniBarsArrowUp as aA,
+  HiMiniBarsArrowDown as aB,
+  HiMiniSignal as aC,
+  HiMiniClock as aD,
+  CATEGORIES as aa,
+  policyIdentityKey as ab,
+  HiMiniChartBar as ac,
+  runHarnessAction as ad,
+  GuardHarnessActionError as ae,
+  HiMiniRocketLaunch as af,
+  HiMiniArrowPath as ag,
+  HiMiniTrash as ah,
+  clearLabelForScope as ai,
+  formatHarnessCommand as aj,
+  HiMiniCommandLine as ak,
+  WorkspacePageHeader as al,
+  __vitePreload as am,
+  HiMiniArrowTopRightOnSquare as an,
+  fetchPackageFirewallStatus as ao,
+  runPackageFirewallAction as ap,
+  runPackageAudit as aq,
+  runPackageSync as ar,
+  startPackageFirewallConnect as as,
+  openPackageFirewallShell as at,
+  HiMiniBugAnt as au,
+  IconActionButton as av,
+  HiMiniBeaker as aw,
+  runAuditRemediation as ax,
+  HiMiniDocumentText as ay,
+  guardAwareHref as az,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,

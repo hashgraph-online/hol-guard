@@ -44,6 +44,9 @@ import type {
   GuardSettingsPayload,
   GuardSettingsExport,
   GuardSettings,
+  GuardUpdateScheduleResult,
+  GuardUpdateStatus,
+  GuardUpdateVersionCheck,
   DecisionScope,
   RiskSignalV2,
   RiskSignalV2Category,
@@ -1452,6 +1455,79 @@ export async function repairApprovalCenter(): Promise<{ repaired: boolean; clear
     throw new Error(`Repair failed with ${response.status}`);
   }
   return response.json() as Promise<{ repaired: boolean; cleared: string[] }>;
+}
+
+function normalizeGuardUpdateVersionCheck(raw: unknown): GuardUpdateVersionCheck {
+  const value = isRecord(raw) ? raw : {};
+  return {
+    source: stringValue(value.source) ?? "pypi",
+    status: stringValue(value.status) ?? "unavailable",
+    current_version: stringValue(value.current_version),
+    latest_version: stringValue(value.latest_version),
+    update_available:
+      typeof value.update_available === "boolean" ? value.update_available : null,
+  };
+}
+
+export function normalizeGuardUpdateStatus(raw: unknown): GuardUpdateStatus {
+  const value = isRecord(raw) ? raw : {};
+  const versionCheck = normalizeGuardUpdateVersionCheck(value.version_check);
+  const currentVersion = stringValue(value.current_version) ?? versionCheck.current_version ?? "unknown";
+  const latestVersion = stringValue(value.latest_version) ?? versionCheck.latest_version;
+  return {
+    current_version: currentVersion,
+    latest_version: latestVersion,
+    installer: stringValue(value.installer) ?? "pip",
+    version_check: versionCheck,
+    auto_updatable: booleanValue(value.auto_updatable),
+    update_available: booleanValue(value.update_available),
+    blocked_reason: stringValue(value.blocked_reason),
+  };
+}
+
+export async function fetchGuardUpdateStatus(): Promise<GuardUpdateStatus> {
+  if (isGuardDemoMode()) {
+    return normalizeGuardUpdateStatus({
+      current_version: "0.0.0-demo",
+      latest_version: "0.0.0-demo",
+      installer: "pip",
+      version_check: {
+        source: "pypi",
+        status: "current",
+        current_version: "0.0.0-demo",
+        latest_version: "0.0.0-demo",
+        update_available: false,
+      },
+      auto_updatable: true,
+      update_available: false,
+      blocked_reason: null,
+    });
+  }
+  const payload = await readJson<unknown>("/v1/update/status");
+  return normalizeGuardUpdateStatus(payload);
+}
+
+export async function scheduleGuardUpdate(): Promise<GuardUpdateScheduleResult> {
+  if (isGuardDemoMode()) {
+    return {
+      scheduled: true,
+      message: "Demo mode cannot update Guard.",
+    };
+  }
+  const response = await fetchWithGuardAuth("/v1/update", { method: "POST" });
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      stringValue(payload.message) ??
+      stringValue(payload.error) ??
+      `Guard update failed with ${response.status}`;
+    throw new Error(message);
+  }
+  return {
+    scheduled: booleanValue(payload.scheduled),
+    message: stringValue(payload.message) ?? undefined,
+    error: stringValue(payload.error) ?? undefined,
+  };
 }
 
 export async function setupDesktopNotifications(): Promise<GuardNotificationSetupResult> {
