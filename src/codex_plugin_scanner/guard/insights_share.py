@@ -109,7 +109,11 @@ def build_insights_share_payload(
 
     if include_top_artifacts:
         top_artifacts = analytics.get("top_artifacts")
-        artifact_rows = [row for row in top_artifacts if isinstance(row, dict)] if isinstance(top_artifacts, list) else []
+        artifact_rows = (
+            [row for row in top_artifacts if isinstance(row, dict)]
+            if isinstance(top_artifacts, list)
+            else []
+        )
         payload["topArtifacts"] = [
             {
                 "label": str(row.get("name") or "Protected action")[:120],
