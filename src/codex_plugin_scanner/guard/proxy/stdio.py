@@ -17,6 +17,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from ..approvals import approval_delivery_payload, approval_prompt_flow, first_approval_url, queue_blocked_approvals
 from ..consumer import artifact_hash
+from ..daemon.manager import load_guard_daemon_auth_token
 from ..models import HarnessDetection
 from ..receipts import build_receipt
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
@@ -407,6 +408,7 @@ class StdioGuardProxy:
                             },
                             store=self.guard_store,
                             approval_center_url=self.approval_center_url,
+                            auth_token=load_guard_daemon_auth_token(self.guard_store.guard_home),
                         )
                         managed_install = self.guard_store.get_managed_install(self.harness)
                         approval_flow = approval_prompt_flow(

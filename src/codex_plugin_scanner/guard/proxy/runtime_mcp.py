@@ -15,6 +15,7 @@ from ..approvals import first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
 from ..consumer.service import artifact_hash as compute_artifact_hash
 from ..daemon import ensure_guard_daemon
+from ..daemon.manager import load_guard_daemon_auth_token
 from ..mcp_tool_calls import (
     allow_tool_call,
     block_tool_call,
@@ -624,6 +625,7 @@ class RuntimeMcpGuardProxy:
                 store=self.store,
                 approval_center_url=approval_center_url,
                 now=_now(),
+                auth_token=load_guard_daemon_auth_token(self.store.guard_home),
             )
         request_id = str(queued[0]["request_id"]) if queued else "stored-block"
         review_url = first_approval_url(queued) or approval_center_url
@@ -977,6 +979,7 @@ class RuntimeMcpGuardProxy:
             store=self.store,
             approval_center_url=approval_center_url,
             now=_now(),
+            auth_token=load_guard_daemon_auth_token(self.store.guard_home),
         )
         block_tool_call(
             store=self.store,
