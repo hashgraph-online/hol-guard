@@ -275,3 +275,5 @@ def test_runner_env_ignores_inherited_pythonpath(tmp_path: Path, monkeypatch: py
     pythonpath = str(env.get("PYTHONPATH", ""))
     assert str(evil_root) not in pythonpath.split(os.pathsep)
     assert str(dashboard_update_runner_script().resolve().parents[3]) in pythonpath
+    if sys.version_info >= (3, 11):
+        assert env.get("PYTHONSAFEPATH") == "1"

@@ -55,6 +55,7 @@ def build_dashboard_update_runner_command(
     daemon_pid: int,
     daemon_port: int,
 ) -> list[str]:
+    resolved_home = guard_home.expanduser().resolve()
     runner_script = dashboard_update_runner_script()
     command = [sys.executable]
     if sys.version_info >= (3, 11):
@@ -63,7 +64,7 @@ def build_dashboard_update_runner_command(
         [
             str(runner_script),
             "--guard-home",
-            str(guard_home),
+            str(resolved_home),
             "--daemon-pid",
             str(daemon_pid),
             "--daemon-port",
