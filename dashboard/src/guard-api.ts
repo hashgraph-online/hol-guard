@@ -2242,18 +2242,15 @@ export async function startPackageFirewallConnect(): Promise<PackageFirewallStat
 }
 
 export async function fetchSupplyChainBundle(): Promise<SupplyChainBundle | null> {
-  const result = await readJson<unknown>("/v1/supply-chain/bundle");
-  if (!result || typeof result !== "object") {
+  const wrapper = await readJson<unknown>("/v1/supply-chain/bundle");
+  if (!wrapper || typeof wrapper !== "object") {
     return null;
   }
-  if ("error" in result) {
-    const message =
-      typeof (result as Record<string, unknown>).error === "string"
-        ? ((result as Record<string, unknown>).error as string)
-        : "Supply chain bundle unavailable";
-    throw new Error(message);
+  const bundle = (wrapper as Record<string, unknown>).bundle;
+  if (bundle === null || bundle === undefined) {
+    return null;
   }
-  return result as SupplyChainBundle;
+  return bundle as SupplyChainBundle;
 }
 
 export async function runPackageFirewallAction(

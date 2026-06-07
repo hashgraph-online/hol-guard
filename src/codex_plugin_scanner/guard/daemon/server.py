@@ -2030,11 +2030,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_get_supply_chain_bundle(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
         workspace_id = store.get_cloud_workspace_id()
-        bundle = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
-        if bundle is None:
-            self._write_json({"error": "supply_chain_bundle_not_cached"}, status=404)
-            return
-        self._write_json(bundle)
+        wrapper = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
+        bundle = wrapper.get("bundle") if isinstance(wrapper, dict) else None
+        self._write_json({"bundle": bundle})
 
     def _supply_chain_connect_flow(self, entitlement: dict[str, object]) -> dict[str, object] | None:
         return _resolve_package_firewall_connect_flow(server=self.server, entitlement=entitlement)  # type: ignore[arg-type]
