@@ -66,7 +66,7 @@ const ABOUT_OPEN_SOURCE_NOTE = "Open-source core. View the repository license fo
 const ABOUT_PARTNER_SECTION_TITLE = "Standards partner program";
 const ABOUT_PARTNER_SECTION_BODY = "Join teams building on HOL open standards. Partners get early access to protocol drafts, co-marketing, and direct engineering support.";
 const ABOUT_PARTNER_CTA = "Become a partner";
-const ABOUT_PARTNER_CTA_HREF = "https://hol.org";
+const ABOUT_PARTNER_CTA_HREF = "https://hol.org/guard/partners";
 const ABOUT_AFFILIATE_SECTION_TITLE = "Affiliate starter kit";
 const ABOUT_AFFILIATE_SECTION_BODY = "Share Guard with your community and score a recurring commission on qualified referrals.";
 const ABOUT_AFFILIATE_CTA = "Learn about affiliates";
@@ -142,6 +142,9 @@ const ABOUT_AFFILIATE_TERMS = {
   cookieWindow: "120 days",
   qualificationNote: "Qualified paid customers after approval"
 };
+function AboutSectionLabel({ children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block", children });
+}
 function useEditorialVisibility(threshold = 0.08) {
   const ref = reactExports.useRef(null);
   const [state, setState] = reactExports.useState("idle");
@@ -280,13 +283,13 @@ function PartnerLevelRow({
 function AboutWorkspace() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-20 pb-10", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-3xl", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-4xl sm:text-5xl font-black tracking-tight text-brand-dark leading-[0.95] mb-6", children: ABOUT_HERO_TITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-4xl sm:text-5xl font-black tracking-tight text-brand-dark leading-none mb-6", children: ABOUT_HERO_TITLE }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xl sm:text-2xl font-medium text-brand-blue mb-6", children: ABOUT_HERO_SUBTITLE }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-brand-dark/75 max-w-2xl", children: ABOUT_HERO_BODY })
     ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(EditorialSection, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-8", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block", children: ABOUT_LOCAL_SECTION_TITLE }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: ABOUT_LOCAL_SECTION_TITLE }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-slate-500 max-w-2xl", children: ABOUT_LOCAL_SECTION_BODY })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid sm:grid-cols-2 gap-x-12 gap-y-8", children: ABOUT_TRUST_CARDS.map((card, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -300,13 +303,13 @@ function AboutWorkspace() {
       )) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-3xl", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block", children: ABOUT_MISSION_SECTION_TITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: ABOUT_MISSION_SECTION_TITLE }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg leading-relaxed text-brand-dark/75", children: ABOUT_MISSION_SECTION_BODY }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-slate-400", children: ABOUT_OPEN_SOURCE_NOTE })
     ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(EditorialSection, { threshold: 0.15, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-10", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block", children: "Choose your path" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: "Choose your path" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-slate-500 max-w-2xl", children: "There are many ways to participate in the Guard ecosystem." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
@@ -325,7 +328,7 @@ function AboutWorkspace() {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-3xl", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block", children: ABOUT_PARTNER_SECTION_TITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: ABOUT_PARTNER_SECTION_TITLE }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-brand-dark/75 mb-8", children: ABOUT_PARTNER_SECTION_BODY }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ABOUT_PARTNER_LEVELS.map((level, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(PartnerLevelRow, { level, index: i }, level.name)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6 pt-4 border-t border-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -341,7 +344,7 @@ function AboutWorkspace() {
       ) })
     ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-3xl", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block", children: ABOUT_AFFILIATE_SECTION_TITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: ABOUT_AFFILIATE_SECTION_TITLE }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-brand-dark/75 mb-8", children: ABOUT_AFFILIATE_SECTION_BODY }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8", children: [
         { label: "Commission", value: ABOUT_AFFILIATE_TERMS.commissionRate },

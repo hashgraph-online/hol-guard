@@ -59,7 +59,9 @@ const storyTabSource = readFileSync(join(__dirname, "story-tab.tsx"), "utf8");
 assert(!storyTabSource.includes("\u2014"), "GR247: no em dash in story-tab.tsx");
 
 const analyticsSource = readFileSync(join(__dirname, "evidence-analytics-panel.tsx"), "utf8");
+const surfaceSource = readFileSync(join(__dirname, "evidence-insights-surface.tsx"), "utf8");
 assert(!analyticsSource.includes("\u2014"), "GR247: no em dash in evidence-analytics-panel.tsx");
+assert(!surfaceSource.includes("\u2014"), "GR247: no em dash in evidence-insights-surface.tsx");
 
 const filterBarSource = readFileSync(join(__dirname, "evidence-filter-bar.tsx"), "utf8");
 assert(
@@ -74,8 +76,8 @@ assert(
 );
 
 assert(
-  analyticsSource.includes("brand-blue") || analyticsSource.includes("brand-"),
-  "GR230: analytics panel uses brand color class names"
+  analyticsSource.includes("brand-blue") || analyticsSource.includes("brand-") || surfaceSource.includes("brand-"),
+  "GR230: analytics uses brand color class names"
 );
 
 assert(

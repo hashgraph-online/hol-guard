@@ -410,3 +410,25 @@ class TestReceiptAnalytics:
         assert len(analytics["daily_activity"]) == 7
         assert analytics["by_harness"][0]["harness"] == "codex"
         assert analytics["top_artifacts"][0]["total"] >= 1
+
+    def test_receipt_analytics_merges_artifact_names_case_insensitively(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        store.add_receipt(_make_receipt(
+            receipt_id="r1",
+            harness="codex",
+            policy_decision="allow",
+            artifact_name="bash",
+        ))
+        store.add_receipt(_make_receipt(
+            receipt_id="r2",
+            harness="codex",
+            policy_decision="allow",
+            artifact_name="Bash",
+        ))
+
+        analytics = store.receipt_analytics(top_limit=5)
+        bash_entries = [entry for entry in analytics["top_artifacts"] if entry["name"].lower() == "bash"]
+
+        assert analytics["total"] == 2
+        assert len(bash_entries) == 1
+        assert bash_entries[0]["total"] == 2
