@@ -74,11 +74,12 @@ def build_dashboard_update_runner_command(
 
 
 def build_dashboard_update_runner_popen_kwargs(guard_home: Path) -> dict[str, object]:
+    resolved_home = guard_home.expanduser().resolve()
     return {
         "stdin": subprocess.DEVNULL,
         "stdout": subprocess.DEVNULL,
         "stderr": subprocess.DEVNULL,
-        "cwd": str(guard_home),
+        "cwd": str(resolved_home),
         "env": _runner_env(),
     }
 
