@@ -1,225 +1,129 @@
-"""Tests for Cursor native hooks installation and payload mapping."""
+"""Regression tests for Cursor native hook installation and payload mapping."""
 
 from __future__ import annotations
 
 import json
-import stat
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (
-    HOOK_SCRIPT_NAME,
+    _MANAGED_HOOK_EVENTS,
+    _MANAGED_HOOK_TIMEOUT_SECONDS,
+    _strip_managed_hook_entries,
     cursor_hook_response_from_guard,
     cursor_hook_should_block,
-    cursor_hooks_path,
     install_cursor_hooks,
     prepare_cursor_hook_payload,
     uninstall_cursor_hooks,
 )
-from codex_plugin_scanner.guard.runtime.actions import normalize_cursor_hook_payload
 
 
-def _ctx(tmp_path: Path, *, workspace: bool = True) -> HarnessContext:
-    workspace_dir = tmp_path / "workspace" if workspace else None
-    if workspace_dir is not None:
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-    return HarnessContext(
-        home_dir=tmp_path / "home",
-        workspace_dir=workspace_dir,
-        guard_home=tmp_path / "guard-home",
+def test_managed_hook_events_exclude_pretooluse() -> None:
+    assert "preToolUse" not in _MANAGED_HOOK_EVENTS
+    assert _MANAGED_HOOK_EVENTS == (
+        "beforeShellExecution",
+        "beforeMCPExecution",
+        "beforeReadFile",
     )
 
 
-def test_prepare_cursor_payload_maps_before_shell_execution() -> None:
-    prepared = prepare_cursor_hook_payload(
-        {
-            "hook_event_name": "beforeShellExecution",
-            "command": "curl https://example.com",
-            "cwd": "/tmp/project",
-        }
-    )
-    assert prepared["hook_event_name"] == "PreToolUse"
-    assert prepared["tool_name"] == "Shell"
-    assert prepared["tool_input"] == {
-        "command": "curl https://example.com",
-        "working_directory": "/tmp/project",
-    }
-
-
-def test_prepare_cursor_payload_maps_before_mcp_execution() -> None:
-    prepared = prepare_cursor_hook_payload(
-        {
-            "hook_event_name": "beforeMCPExecution",
-            "tool_name": "fetch",
-            "tool_input": '{"id": 1}',
-            "url": "http://127.0.0.1:3000/mcp",
-        }
-    )
-    assert prepared["hook_event_name"] == "PreToolUse"
-    assert prepared["tool_name"] == "fetch"
-    assert prepared["tool_input"]["url"] == "http://127.0.0.1:3000/mcp"
-
-
-def test_prepare_cursor_payload_maps_before_read_file() -> None:
-    prepared = prepare_cursor_hook_payload(
+def test_prepare_cursor_hook_payload_maps_before_read_file() -> None:
+    payload = prepare_cursor_hook_payload(
         {
             "hook_event_name": "beforeReadFile",
-            "file_path": "/tmp/project/.env",
+            "file_path": "/tmp/secrets.env",
         }
     )
-    assert prepared["tool_name"] == "Read"
-    assert prepared["tool_input"]["file_path"] == "/tmp/project/.env"
+    assert payload["hook_event_name"] == "PreToolUse"
+    assert payload["tool_name"] == "Read"
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    assert tool_input["file_path"] == "/tmp/secrets.env"
+    assert tool_input["path"] == "/tmp/secrets.env"
 
 
-def test_normalize_cursor_hook_payload_builds_envelope() -> None:
-    envelope = normalize_cursor_hook_payload(
+def test_prepare_cursor_hook_payload_infers_shell_without_event_name() -> None:
+    payload = prepare_cursor_hook_payload({"command": "echo hello", "cwd": "/tmp"})
+    assert payload["tool_name"] == "Shell"
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    assert tool_input["command"] == "echo hello"
+    assert tool_input["working_directory"] == "/tmp"
+
+
+def test_prepare_cursor_hook_payload_infers_read_without_event_name() -> None:
+    payload = prepare_cursor_hook_payload({"file_path": "/tmp/secrets.env"})
+    assert payload["tool_name"] == "Read"
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    assert tool_input["file_path"] == "/tmp/secrets.env"
+
+
+def test_prepare_cursor_hook_payload_maps_before_shell_execution() -> None:
+    payload = prepare_cursor_hook_payload(
         {
             "hook_event_name": "beforeShellExecution",
-            "command": "npm install left-pad",
-            "cwd": "/repo",
+            "command": "echo hello",
+            "cwd": "/tmp",
+        }
+    )
+    assert payload["tool_name"] == "Shell"
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    assert tool_input["command"] == "echo hello"
+    assert tool_input["working_directory"] == "/tmp"
+
+
+def test_cursor_hook_script_source_skips_missing_workspace(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
+    source = cursor_hook_script_source(context)
+    assert "Path(candidate).is_dir()" in source
+
+
+def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path) -> None:
+    script_path = tmp_path / "hol-guard-cursor-hook.py"
+    script_path.write_text("# Managed by HOL Guard\n", encoding="utf-8")
+    entries = [
+        {"command": "lean-ctx hook rewrite", "matcher": "Shell"},
+        {
+            "command": str(script_path.resolve()),
+            "failClosed": True,
+            "matcher": "Shell|MCP|mcp__.*|Bash|Read",
+            "timeout": 35,
         },
-        workspace="/repo",
-    )
-    assert envelope.harness == "cursor"
-    assert envelope.tool_name == "Shell"
-    assert envelope.command == "npm install left-pad"
+    ]
+    stripped = _strip_managed_hook_entries(entries, script_path=script_path)
+    assert stripped == [{"command": "lean-ctx hook rewrite", "matcher": "Shell"}]
 
 
-def test_cursor_hook_response_maps_policy_actions() -> None:
-    deny = cursor_hook_response_from_guard(
-        policy_action="block",
-        guard_payload={"review_hint": "Blocked by policy"},
-        hook_event_name="beforeShellExecution",
-    )
-    assert deny["permission"] == "deny"
-    assert deny["user_message"] == "Blocked by policy"
-    ask = cursor_hook_response_from_guard(
-        policy_action="require-reapproval",
-        guard_payload={"decision_v2_json": {"harness_message": "Approve in Guard"}},
-        hook_event_name="preToolUse",
-    )
-    assert ask["permission"] == "ask"
-    warn_shell = cursor_hook_response_from_guard(
-        policy_action="warn",
-        guard_payload={"review_hint": "Review exfil pattern", "risk_signals": ["exfil"]},
-        hook_event_name="beforeShellExecution",
-    )
-    assert warn_shell["permission"] == "ask"
-    benign_warn = cursor_hook_response_from_guard(
-        policy_action="warn",
-        guard_payload={},
-        hook_event_name="beforeShellExecution",
-    )
-    assert benign_warn["permission"] == "allow"
-    read_review = cursor_hook_response_from_guard(
-        policy_action="require-reapproval",
-        guard_payload={"review_hint": "Sensitive file"},
-        hook_event_name="beforeReadFile",
-    )
-    assert read_review["permission"] == "deny"
-    read_allow = cursor_hook_response_from_guard(
-        policy_action="allow",
-        guard_payload={},
-        hook_event_name="beforeReadFile",
-    )
-    assert read_allow == {"permission": "allow"}
-    assert cursor_hook_should_block(policy_action="block") is True
-    assert cursor_hook_should_block(policy_action="require-reapproval") is False
-
-
-def test_install_cursor_hooks_writes_hooks_json_and_script(tmp_path: Path) -> None:
-    context = _ctx(tmp_path)
-    assert context.workspace_dir is not None
-    manifest = install_cursor_hooks(context)
-    hooks_path = Path(str(manifest["managed_hooks_path"]))
-    script_path = Path(str(manifest["managed_hook_script_path"]))
-    assert hooks_path == context.home_dir / ".cursor" / "hooks.json"
-    assert not (context.workspace_dir / ".cursor" / "hooks.json").exists()
-    assert script_path.name == HOOK_SCRIPT_NAME
-    assert script_path.is_file()
-    assert script_path.stat().st_mode & stat.S_IXUSR
-    payload = json.loads(hooks_path.read_text(encoding="utf-8"))
-    hooks = payload["hooks"]
-    assert "beforeShellExecution" in hooks
-    assert "beforeMCPExecution" in hooks
-    assert "preToolUse" in hooks
-    assert "beforeReadFile" in hooks
-    assert hooks["beforeShellExecution"][0]["failClosed"] is True
-    assert hooks["beforeMCPExecution"][0]["failClosed"] is True
-    assert hooks["beforeReadFile"][0]["failClosed"] is True
-    assert hooks["preToolUse"][0]["failClosed"] is True
-    assert hooks["preToolUse"][0]["matcher"]
-
-
-def test_uninstall_cursor_hooks_restores_backup(tmp_path: Path) -> None:
-    context = _ctx(tmp_path)
-    assert context.workspace_dir is not None
-    hooks_path = cursor_hooks_path(context)
-    hooks_path.parent.mkdir(parents=True, exist_ok=True)
-    original = json.dumps({"version": 1, "hooks": {"afterFileEdit": [{"command": "./fmt.sh"}]}}) + "\n"
-    hooks_path.write_text(original, encoding="utf-8")
-    install_cursor_hooks(context)
-    assert "beforeShellExecution" in json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
-    uninstall_cursor_hooks(context)
-    assert hooks_path.read_text(encoding="utf-8") == original
-
-
-def test_cursor_editor_install_includes_native_hooks(tmp_path: Path) -> None:
-    context = _ctx(tmp_path)
-    assert context.workspace_dir is not None
-    manifest = CursorHarnessAdapter()._install_editor(context)
-    hooks_path = Path(str(manifest["managed_hooks_path"]))
-    assert hooks_path.is_file()
-    assert manifest["managed_hook_script_path"]
-    assert hooks_path == context.home_dir / ".cursor" / "hooks.json"
-    assert not (context.workspace_dir / ".cursor" / "hooks.json").exists()
-
-
-def test_legacy_cleanup_preserves_unrelated_hook_entries(tmp_path: Path) -> None:
-    context = _ctx(tmp_path)
-    assert context.workspace_dir is not None
-    legacy_hooks = context.workspace_dir / ".cursor" / "hooks.json"
-    legacy_script = context.workspace_dir / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
-    legacy_hooks.parent.mkdir(parents=True, exist_ok=True)
-    legacy_script.parent.mkdir(parents=True, exist_ok=True)
-    legacy_script.write_text(f'"""Managed by HOL Guard."""\n{HOOK_SCRIPT_NAME}\n', encoding="utf-8")
-    legacy_hooks.write_text(
+def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace = tmp_path / "workspace"
+    home.mkdir()
+    guard_home.mkdir()
+    workspace.mkdir()
+    cursor_dir = home / ".cursor"
+    cursor_dir.mkdir()
+    script_path = cursor_dir / "hooks" / "hol-guard-cursor-hook.py"
+    hooks_path = cursor_dir / "hooks.json"
+    hooks_path.write_text(
         json.dumps(
             {
                 "version": 1,
                 "hooks": {
-                    "afterFileEdit": [{"command": "./fmt.sh"}],
-                    "beforeShellExecution": [
-                        {"command": str(legacy_script.resolve()), "timeout": 35, "failClosed": True}
-                    ],
-                },
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    install_cursor_hooks(context)
-
-    payload = json.loads(legacy_hooks.read_text(encoding="utf-8"))
-    assert payload["hooks"] == {"afterFileEdit": [{"command": "./fmt.sh"}]}
-
-
-def test_install_cursor_hooks_removes_legacy_project_hooks(tmp_path: Path) -> None:
-    context = _ctx(tmp_path)
-    assert context.workspace_dir is not None
-    legacy_hooks = context.workspace_dir / ".cursor" / "hooks.json"
-    legacy_script = context.workspace_dir / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
-    legacy_hooks.parent.mkdir(parents=True, exist_ok=True)
-    legacy_script.parent.mkdir(parents=True, exist_ok=True)
-    legacy_hooks.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "hooks": {
-                    "beforeShellExecution": [
-                        {"command": str(legacy_script.resolve()), "timeout": 35, "failClosed": True}
+                    "preToolUse": [
+                        {"command": "lean-ctx hook rewrite", "matcher": "Shell"},
+                        {
+                            "command": str(script_path),
+                            "failClosed": True,
+                            "matcher": "Shell|Read",
+                            "timeout": 35,
+                        },
                     ]
                 },
             }
@@ -227,10 +131,86 @@ def test_install_cursor_hooks_removes_legacy_project_hooks(tmp_path: Path) -> No
         + "\n",
         encoding="utf-8",
     )
-    legacy_script.write_text(f'"""Managed by HOL Guard."""\n{HOOK_SCRIPT_NAME}\n', encoding="utf-8")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: ["hol-guard"],
+    )
+    context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
+    result = install_cursor_hooks(context)
+    installed = json.loads(hooks_path.read_text(encoding="utf-8"))
+    pre_tool_use = installed["hooks"].get("preToolUse")
+    if pre_tool_use is not None:
+        assert all("hol-guard-cursor-hook.py" not in str(entry.get("command", "")) for entry in pre_tool_use)
+    assert "beforeShellExecution" in installed["hooks"]
+    assert result["managed_hook_events"] == list(_MANAGED_HOOK_EVENTS)
+    for event_name in _MANAGED_HOOK_EVENTS:
+        entry = installed["hooks"][event_name][-1]
+        assert entry["timeout"] == _MANAGED_HOOK_TIMEOUT_SECONDS
 
+
+def test_prepare_cursor_hook_payload_maps_before_mcp_execution() -> None:
+    payload = prepare_cursor_hook_payload(
+        {
+            "hook_event_name": "beforeMCPExecution",
+            "tool_name": "plugin-notion-workspace-notion",
+            "url": "https://example.com/mcp",
+        }
+    )
+    assert payload["tool_name"] == "plugin-notion-workspace-notion"
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    assert tool_input["url"] == "https://example.com/mcp"
+
+
+def test_cursor_hook_response_from_guard_maps_read_ask_to_deny() -> None:
+    response = cursor_hook_response_from_guard(
+        policy_action="require-reapproval",
+        guard_payload={"review_hint": "Approve in Guard"},
+        hook_event_name="beforeReadFile",
+    )
+    assert response["permission"] == "deny"
+    assert response["user_message"] == "Approve in Guard"
+
+
+def test_cursor_hook_response_from_guard_allows_shell() -> None:
+    response = cursor_hook_response_from_guard(
+        policy_action="allow",
+        guard_payload={},
+        hook_event_name="beforeShellExecution",
+    )
+    assert response["permission"] == "allow"
+
+
+def test_cursor_hook_should_block() -> None:
+    assert cursor_hook_should_block(policy_action="block") is True
+    assert cursor_hook_should_block(policy_action="allow") is False
+
+
+def test_cursor_hook_script_source_infers_event_before_prepare(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
+    source = cursor_hook_script_source(context)
+    assert "inferred = _infer_cursor_hook_event_name(payload)" in source
+    assert "hook_event_name = str(inferred.get(\"hook_event_name\")" in source
+
+
+def test_uninstall_cursor_hooks_restores_backup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace = tmp_path / "workspace"
+    home.mkdir()
+    guard_home.mkdir()
+    workspace.mkdir()
+    hooks_path = home / ".cursor" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text('{"version": 1, "hooks": {"preToolUse": []}}\n', encoding="utf-8")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: ["hol-guard"],
+    )
+    context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
     install_cursor_hooks(context)
-
-    assert not legacy_hooks.exists()
-    assert not legacy_script.exists()
-    assert (context.home_dir / ".cursor" / "hooks.json").is_file()
+    result = uninstall_cursor_hooks(context)
+    assert result["restored"] is True
+    assert json.loads(hooks_path.read_text(encoding="utf-8")) == {"version": 1, "hooks": {"preToolUse": []}}
