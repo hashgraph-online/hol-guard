@@ -80,3 +80,4 @@ assert(
 assert(isFineTuningEditable("custom") === true, "fine-tuning: custom level is editable");
 assert(isFineTuningEditable("strict") === false, "fine-tuning: strict level is locked until custom");
 assert(isFineTuningEditable("balanced") === false, "fine-tuning: balanced level is locked until custom");
+assert(isFineTuningEditable("relaxed") === false, "fine-tuning: relaxed level is locked until custom");

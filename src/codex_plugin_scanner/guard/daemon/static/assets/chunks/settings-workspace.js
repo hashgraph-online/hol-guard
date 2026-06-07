@@ -1488,7 +1488,7 @@ function resolveFineTuningSectionDescription(securityLevel) {
   if (securityLevel === "custom") {
     return "You are overriding the preset for this machine.";
   }
-  return `These rules follow ${securityLevelLabel(securityLevel)}. Use Custom fine-tuning to edit each action type here.`;
+  return `These rules follow the ${securityLevelLabel(securityLevel)} preset. Use Custom fine-tuning to edit each action type here.`;
 }
 function isFineTuningEditable(securityLevel) {
   return securityLevel === "custom";
@@ -2871,9 +2871,6 @@ function SettingToggle(props) {
   ] });
 }
 function FineTuningPresetBanner(props) {
-  const handleSwitch = reactExports.useCallback(() => {
-    props.onSwitchToCustom();
-  }, [props.onSwitchToCustom]);
   if (isFineTuningEditable(props.securityLevel)) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -2884,13 +2881,13 @@ function FineTuningPresetBanner(props) {
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
-            "Using ",
+            "Using the ",
             securityLevelLabel(props.securityLevel),
             " preset"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Individual rules match this preset. Switch to Custom to change how Guard handles each risky action type on this machine." })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 w-full shrink-0 sm:mt-0 sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleSwitch, children: "Use Custom fine-tuning" }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 w-full shrink-0 sm:mt-0 sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onSwitchToCustom, children: "Use Custom fine-tuning" }) })
       ]
     }
   );

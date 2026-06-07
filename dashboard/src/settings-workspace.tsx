@@ -75,7 +75,7 @@ export function resolveFineTuningSectionDescription(
   if (securityLevel === "custom") {
     return "You are overriding the preset for this machine.";
   }
-  return `These rules follow ${securityLevelLabel(securityLevel)}. Use Custom fine-tuning to edit each action type here.`;
+  return `These rules follow the ${securityLevelLabel(securityLevel)} preset. Use Custom fine-tuning to edit each action type here.`;
 }
 
 export function isFineTuningEditable(securityLevel: GuardSettings["security_level"]): boolean {
@@ -1679,10 +1679,6 @@ function FineTuningPresetBanner(props: {
   securityLevel: GuardSettings["security_level"];
   onSwitchToCustom: () => void;
 }) {
-  const handleSwitch = useCallback(() => {
-    props.onSwitchToCustom();
-  }, [props.onSwitchToCustom]);
-
   if (isFineTuningEditable(props.securityLevel)) return null;
 
   return (
@@ -1693,14 +1689,14 @@ function FineTuningPresetBanner(props: {
     >
       <div className="min-w-0">
         <p className="text-sm font-medium text-brand-dark">
-          Using {securityLevelLabel(props.securityLevel)} preset
+          Using the {securityLevelLabel(props.securityLevel)} preset
         </p>
         <p className="mt-1 text-sm text-slate-500">
           Individual rules match this preset. Switch to Custom to change how Guard handles each risky action type on this machine.
         </p>
       </div>
       <div className="mt-3 w-full shrink-0 sm:mt-0 sm:w-auto">
-        <ActionButton onClick={handleSwitch}>Use Custom fine-tuning</ActionButton>
+        <ActionButton onClick={props.onSwitchToCustom}>Use Custom fine-tuning</ActionButton>
       </div>
     </div>
   );
