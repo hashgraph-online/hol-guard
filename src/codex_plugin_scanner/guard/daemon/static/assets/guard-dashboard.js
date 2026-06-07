@@ -16051,7 +16051,6 @@ function ShellSidebar(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue", children: props.queuedCount > 0 ? "Review" : "Clear" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: props.queuedCount > 0 ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.` : "No local approvals are waiting." }),
-        props.activeHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex rounded-full bg-white/70 px-2 py-1 font-mono text-[10px] font-semibold text-slate-500", children: props.activeHarness }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           GuardUpdatePanel,
           {
@@ -22027,7 +22026,6 @@ function ApprovalCenterLayout(props) {
     }
   });
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
-  const activeHarness = props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
   const handleOpenMobileQueue = reactExports.useCallback(() => setMobileQueueOpen(true), []);
   const handleCloseMobileQueue = reactExports.useCallback(() => setMobileQueueOpen(false), []);
   const handleToggleSidebar = reactExports.useCallback(() => {
@@ -22051,7 +22049,6 @@ function ApprovalCenterLayout(props) {
       ShellHeader,
       {
         queuedCount: queuedItems.length,
-        activeHarness,
         view: props.view,
         onNavigate: props.onNavigate,
         onOpenMobileQueue: handleOpenMobileQueue,
@@ -22065,7 +22062,6 @@ function ApprovalCenterLayout(props) {
       ShellSidebar,
       {
         queuedCount: queuedItems.length,
-        activeHarness,
         view: props.view,
         collapsed: sidebarCollapsed,
         onToggleCollapse: handleToggleSidebar,

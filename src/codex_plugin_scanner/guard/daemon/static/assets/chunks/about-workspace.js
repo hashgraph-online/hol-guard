@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, H as HiMiniShieldCheck, an as HiMiniDocumentText, D as HiMiniLockClosed, o as HiMiniCloud, ao as HiMiniArrowTopRightOnSquare, ap as HiMiniCheckBadge, B as Badge, r as reactExports } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, H as HiMiniShieldCheck, an as HiMiniDocumentText, D as HiMiniLockClosed, o as HiMiniCloud, ao as HiMiniArrowTopRightOnSquare, ap as HiMiniCheckBadge, B as Badge, r as reactExports } from "../guard-dashboard.js";
 const ALLOWED_HOSTS = /* @__PURE__ */ new Set([
   "hol.org",
   "www.hol.org",
@@ -66,7 +66,7 @@ const ABOUT_OPEN_SOURCE_NOTE = "Open-source core. View the repository license fo
 const ABOUT_PARTNER_SECTION_TITLE = "Standards partner program";
 const ABOUT_PARTNER_SECTION_BODY = "Join teams building on HOL open standards. Partners get early access to protocol drafts, co-marketing, and direct engineering support.";
 const ABOUT_PARTNER_CTA = "Become a partner";
-const ABOUT_PARTNER_CTA_HREF = "mailto:partners@hol.org";
+const ABOUT_PARTNER_CTA_HREF = "https://hol.org/guard/partners";
 const ABOUT_AFFILIATE_SECTION_TITLE = "Affiliate starter kit";
 const ABOUT_AFFILIATE_SECTION_BODY = "Share Guard with your community and score a recurring commission on qualified referrals.";
 const ABOUT_AFFILIATE_CTA = "Learn about affiliates";
@@ -95,19 +95,19 @@ const ABOUT_PATH_CARDS = [
     title: "Protect locally",
     description: "Install HOL Guard and start intercepting risky harness actions on this machine.",
     ctaLabel: "Get started",
-    ctaHref: "https://hol.org/guard/docs/install"
+    ctaHref: "https://hol.org/guard/install"
   },
   {
     title: "Sync with your team",
     description: "Connect to Guard Cloud for shared policy bundles and cross-device fleet visibility.",
     ctaLabel: "Guard Cloud",
-    ctaHref: "https://github.com/hashgraph-online/hol-guard"
+    ctaHref: "https://hol.org/guard"
   },
   {
     title: "Validate packages in CI",
     description: "Add the plugin-scanner to your CI pipeline to catch risky dependencies before deploy.",
     ctaLabel: "CI docs",
-    ctaHref: "https://hol.org/guard/docs/ci"
+    ctaHref: "https://hol.org/guard/docs/plugin-scanner/report-formats-and-ci"
   },
   {
     title: "Build standards",
@@ -142,6 +142,9 @@ const ABOUT_AFFILIATE_TERMS = {
   cookieWindow: "120 days",
   qualificationNote: "Qualified paid customers after approval"
 };
+function AboutSectionLabel({ children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block", children });
+}
 function useEditorialVisibility(threshold = 0.08) {
   const ref = reactExports.useRef(null);
   const [state, setState] = reactExports.useState("idle");
@@ -229,17 +232,17 @@ function AboutExternalLink({
     }
   );
 }
-function TrustRow({
+function TrustPillar({
   title,
   desc,
   icon
 }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-4 py-5 border-b border-slate-100 last:border-b-0", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-blue/[0.06] text-brand-blue", children: icon }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm leading-relaxed text-slate-500", children: desc })
-    ] })
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-l-4 border-brand-blue/60 pl-6 py-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0 flex h-8 w-8 items-center justify-center rounded-lg bg-brand-blue/[0.06] text-brand-blue", children: icon }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-bold text-brand-dark", children: title })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-slate-500", children: desc })
   ] });
 }
 function PathStep({
@@ -249,12 +252,12 @@ function PathStep({
   ctaLabel,
   ctaHref
 }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative grid grid-cols-[40px_1fr] gap-4 sm:gap-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 border-brand-blue bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-sm font-black text-brand-blue", children: String(index + 1).padStart(2, "0") }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-0.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-sm font-bold text-brand-dark", children: title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-500", children: desc }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative grid grid-cols-[48px_1fr] gap-4 sm:gap-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-2 border-brand-blue bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-sm font-black text-brand-blue", children: String(index + 1).padStart(2, "0") }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-base font-bold text-brand-dark", children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-sm leading-relaxed text-slate-500", children: desc }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         AboutExternalLink,
         {
           href: ctaHref,
@@ -272,25 +275,25 @@ function PartnerLevelRow({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 py-5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-baseline gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs font-black text-brand-blue/70", children: String(index + 1).padStart(2, "0") }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-bold text-brand-dark", children: level.name })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-bold text-brand-dark", children: level.name })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 ml-7 text-sm leading-relaxed text-slate-500", children: level.description })
   ] });
 }
 function AboutWorkspace() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-16 pb-10", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { className: "rounded-2xl border border-brand-blue/10 bg-gradient-to-br from-brand-blue/[0.04] to-brand-dark/[0.02] p-6 sm:p-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mb-2 text-2xl font-bold tracking-tight text-brand-dark sm:text-3xl", children: ABOUT_HERO_TITLE }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-4 text-lg font-medium text-brand-blue", children: ABOUT_HERO_SUBTITLE }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/75", children: ABOUT_HERO_BODY })
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-20 pb-10", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-3xl", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-4xl sm:text-5xl font-black tracking-tight text-brand-dark leading-none mb-6", children: ABOUT_HERO_TITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xl sm:text-2xl font-medium text-brand-blue mb-6", children: ABOUT_HERO_SUBTITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-brand-dark/75 max-w-2xl", children: ABOUT_HERO_BODY })
     ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(EditorialSection, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: ABOUT_LOCAL_SECTION_TITLE }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-500", children: ABOUT_LOCAL_SECTION_BODY })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-8", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: ABOUT_LOCAL_SECTION_TITLE }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-slate-500 max-w-2xl", children: ABOUT_LOCAL_SECTION_BODY })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white px-5 py-1 shadow-sm", children: ABOUT_TRUST_CARDS.map((card, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        TrustRow,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid sm:grid-cols-2 gap-x-12 gap-y-8", children: ABOUT_TRUST_CARDS.map((card, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        TrustPillar,
         {
           title: card.title,
           desc: card.description,
@@ -299,19 +302,19 @@ function AboutWorkspace() {
         card.title
       )) })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-6 sm:p-8 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: ABOUT_MISSION_SECTION_TITLE }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/75", children: ABOUT_MISSION_SECTION_BODY }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-xs text-slate-400", children: ABOUT_OPEN_SOURCE_NOTE })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-3xl", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: ABOUT_MISSION_SECTION_TITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg leading-relaxed text-brand-dark/75", children: ABOUT_MISSION_SECTION_BODY }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-slate-400", children: ABOUT_OPEN_SOURCE_NOTE })
     ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(EditorialSection, { threshold: 0.15, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-8", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Choose your path" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-500", children: "There are many ways to participate in the Guard ecosystem." })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-10", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: "Choose your path" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-slate-500 max-w-2xl", children: "There are many ways to participate in the Guard ecosystem." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute left-[19px] top-0 bottom-0 w-[2px] bg-slate-100 sm:left-[23px]" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-10", children: ABOUT_PATH_CARDS.map((card, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute left-[23px] top-0 bottom-0 w-[2px] bg-slate-100" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-12", children: ABOUT_PATH_CARDS.map((card, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           PathStep,
           {
             index: i,
@@ -324,10 +327,10 @@ function AboutWorkspace() {
         )) })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-6 sm:p-8 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: ABOUT_PARTNER_SECTION_TITLE }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/75", children: ABOUT_PARTNER_SECTION_BODY }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: ABOUT_PARTNER_LEVELS.map((level, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(PartnerLevelRow, { level, index: i }, level.name)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-3xl", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: ABOUT_PARTNER_SECTION_TITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-brand-dark/75 mb-8", children: ABOUT_PARTNER_SECTION_BODY }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: ABOUT_PARTNER_LEVELS.map((level, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(PartnerLevelRow, { level, index: i }, level.name)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6 pt-4 border-t border-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
         AboutExternalLink,
         {
@@ -340,10 +343,10 @@ function AboutWorkspace() {
         }
       ) })
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-6 sm:p-8 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: ABOUT_AFFILIATE_SECTION_TITLE }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 mb-6 text-sm leading-relaxed text-brand-dark/75", children: ABOUT_AFFILIATE_SECTION_BODY }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-3xl", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AboutSectionLabel, { children: ABOUT_AFFILIATE_SECTION_TITLE }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base leading-relaxed text-brand-dark/75 mb-8", children: ABOUT_AFFILIATE_SECTION_BODY }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8", children: [
         { label: "Commission", value: ABOUT_AFFILIATE_TERMS.commissionRate },
         { label: "Duration", value: ABOUT_AFFILIATE_TERMS.commissionDuration },
         { label: "Cookie window", value: ABOUT_AFFILIATE_TERMS.cookieWindow },
@@ -370,7 +373,7 @@ function AboutWorkspace() {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: ABOUT_AFFILIATE_DISCLOSURE })
       ] })
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "rounded-2xl border border-slate-100 bg-white p-6 sm:p-8 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EditorialSection, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "border-t border-slate-100 pt-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckBadge, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "HOL Guard" }),

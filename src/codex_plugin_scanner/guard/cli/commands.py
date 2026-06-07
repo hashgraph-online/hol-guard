@@ -3285,6 +3285,28 @@ def run_guard_command(
             artifact_id = runtime_artifact.artifact_id
             artifact_name = runtime_artifact.name
             policy_harness = _canonical_harness_name(args.harness)
+            if (
+                policy_harness == "cursor"
+                and event_name == "PreToolUse"
+                and runtime_artifact.artifact_type == "tool_action_request"
+                and _cursor_native_shell_is_approved(store, payload)
+            ):
+                response_payload = {
+                    "recorded": True,
+                    "harness": policy_harness,
+                    "artifact_id": artifact_id,
+                    "artifact_name": artifact_name,
+                    "artifact_type": runtime_artifact.artifact_type,
+                    "policy_action": "allow",
+                }
+                _emit("hook", response_payload, getattr(args, "json", False))
+                _record_harness_usage_for_hook(
+                    store=store,
+                    action_envelope=action_envelope,
+                    payload=payload,
+                    policy_action="allow",
+                )
+                return 0
             stored_policy_action = _runtime_stored_policy_action(
                 store=store,
                 harness=policy_harness,
@@ -3501,6 +3523,25 @@ def run_guard_command(
             }
             if package_evaluation is not None:
                 response_payload["supply_chain_evaluation"] = package_evaluation.to_dict()
+            if (
+                _canonical_harness_name(args.harness) == "cursor"
+                and event_name == "PreToolUse"
+                and runtime_artifact.artifact_type == "tool_action_request"
+            ):
+                from ..adapters.cursor_hooks import cursor_hook_would_prompt_user
+
+                if cursor_hook_would_prompt_user(
+                    policy_action=policy_action,
+                    guard_payload=response_payload,
+                ):
+                    native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
+                    _record_cursor_pending_shell_permission(
+                        store=store,
+                        payload=payload,
+                        reason=native_reason,
+                        artifact=runtime_artifact,
+                        artifact_hash=runtime_artifact_hash,
+                    )
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
                 additional_context = _claude_prompt_additional_context(
@@ -3516,18 +3557,6 @@ def run_guard_command(
                     and policy_action == "require-reapproval"
                 ):
                     _record_claude_permission_notice(
-                        store=store,
-                        payload=payload,
-                        reason=native_reason,
-                        artifact=runtime_artifact,
-                        artifact_hash=runtime_artifact_hash,
-                    )
-                if (
-                    _canonical_harness_name(args.harness) == "cursor"
-                    and event_name == "PreToolUse"
-                    and policy_action == "require-reapproval"
-                ):
-                    _record_cursor_pending_shell_permission(
                         store=store,
                         payload=payload,
                         reason=native_reason,
@@ -3685,13 +3714,19 @@ def run_guard_command(
                     if (
                         _canonical_harness_name(args.harness) == "cursor"
                         and event_name == "PreToolUse"
-                        and policy_action == "require-reapproval"
+                        and runtime_artifact.artifact_type == "tool_action_request"
                     ):
-                        _attach_cursor_pending_approval_request_ids(
-                            store=store,
-                            payload=payload,
-                            response_payload=response_payload,
-                        )
+                        from ..adapters.cursor_hooks import cursor_hook_would_prompt_user
+
+                        if cursor_hook_would_prompt_user(
+                            policy_action=policy_action,
+                            guard_payload=response_payload,
+                        ):
+                            _attach_cursor_pending_approval_request_ids(
+                                store=store,
+                                payload=payload,
+                                response_payload=response_payload,
+                            )
                     response_payload["approval_center_url"] = approval_center_url
                     response_payload["review_hint"] = approval_center_hint(
                         context=context,
@@ -4629,6 +4664,86 @@ def _append_cursor_pending_shell_key(
         return
 
 
+def _cursor_native_shell_allow_state_key(conversation_id: str, command: str) -> str:
+    return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
+
+
+_CURSOR_PENDING_SHELL_MAX_AGE_SECONDS = 30 * 60
+
+
+def _cursor_pending_shell_is_fresh(pending: Mapping[str, object], *, now: str) -> bool:
+    saved_at = _optional_string(pending.get("saved_at"))
+    if saved_at is None:
+        return False
+    try:
+        saved_time = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
+        current_time = datetime.fromisoformat(now.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if saved_time.tzinfo is None:
+        saved_time = saved_time.replace(tzinfo=timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    age_seconds = (current_time - saved_time).total_seconds()
+    return 0 <= age_seconds <= _CURSOR_PENDING_SHELL_MAX_AGE_SECONDS
+
+
+def _cursor_after_shell_observed(payload: Mapping[str, object]) -> bool:
+    duration = payload.get("duration")
+    if isinstance(duration, (int, float)) and not isinstance(duration, bool):
+        return duration >= 0
+    output = payload.get("output")
+    return isinstance(output, str)
+
+
+def _record_cursor_native_shell_allow_state(
+    *,
+    store: GuardStore,
+    conversation_id: str,
+    command: str,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    now: str,
+) -> bool:
+    allow_payload: dict[str, object] = {
+        "saved_at": now,
+        "action": "allow",
+        "artifact_id": artifact.artifact_id,
+        "artifact_hash": artifact_hash,
+        "artifact_name": artifact.name,
+        "command": command,
+        "native_source": "cursor-native",
+    }
+    try:
+        store.set_sync_payload(
+            _cursor_native_shell_allow_state_key(conversation_id, command),
+            allow_payload,
+            now,
+        )
+    except (OSError, sqlite3.Error):
+        return False
+    return True
+
+
+def _cursor_native_shell_is_approved(store: GuardStore, payload: Mapping[str, object]) -> bool:
+    conversation_id = _cursor_conversation_id(dict(payload))
+    command = _cursor_shell_command_from_payload(payload)
+    if conversation_id is None or command is None:
+        return False
+    try:
+        approved = store.get_sync_payload(_cursor_native_shell_allow_state_key(conversation_id, command))
+    except (OSError, sqlite3.Error):
+        return False
+    if not isinstance(approved, dict) or approved.get("action") != "allow":
+        return False
+    now = _now()
+    if not _cursor_pending_shell_is_fresh(approved, now=now):
+        with suppress(OSError, sqlite3.Error):
+            store.delete_sync_payload(_cursor_native_shell_allow_state_key(conversation_id, command))
+        return False
+    return True
+
+
 def _record_cursor_pending_shell_permission(
     *,
     store: GuardStore,
@@ -4834,6 +4949,11 @@ def _persist_cursor_native_permission_after_shell(
     )
     if pending is None:
         return False
+    now = _now()
+    if not _cursor_after_shell_observed(prepared):
+        return False
+    if not _cursor_pending_shell_is_fresh(pending, now=now):
+        return False
     action_envelope = _hook_action_envelope(
         harness=harness,
         payload=prepared,
@@ -4851,7 +4971,6 @@ def _persist_cursor_native_permission_after_shell(
     if runtime_artifact is None:
         return False
     runtime_artifact_hash = artifact_hash(runtime_artifact)
-    now = _now()
     saved_policy = _persist_cursor_native_permission_policy(
         store=store,
         artifact_id=runtime_artifact.artifact_id,
@@ -4860,19 +4979,30 @@ def _persist_cursor_native_permission_after_shell(
         reason="Approved in Cursor native shell approval prompt.",
         now=now,
     )
+    session_saved = saved_policy
     if not saved_policy:
-        return False
-    try:
-        store.record_inventory_artifact(
+        session_saved = _record_cursor_native_shell_allow_state(
+            store=store,
+            conversation_id=conversation_id,
+            command=command,
             artifact=runtime_artifact,
             artifact_hash=runtime_artifact_hash,
-            policy_action="allow",
-            changed=False,
             now=now,
-            approved=True,
         )
-    except (OSError, sqlite3.Error):
+    if not session_saved:
         return False
+    if saved_policy:
+        try:
+            store.record_inventory_artifact(
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                policy_action="allow",
+                changed=False,
+                now=now,
+                approved=True,
+            )
+        except (OSError, sqlite3.Error):
+            return False
     _resolve_cursor_pending_approval_requests(
         store=store,
         pending=pending,
@@ -4890,7 +5020,7 @@ def _persist_cursor_native_permission_after_shell(
         artifact_name=runtime_artifact.name,
         source_scope=runtime_artifact.source_scope,
         user_override="cursor-native-approve",
-        approval_source="inline",
+        approval_source="inline" if saved_policy else "harness-native-session",
     )
     try:
         store.add_receipt(receipt)
