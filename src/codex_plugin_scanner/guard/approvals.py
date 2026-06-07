@@ -607,7 +607,12 @@ def build_runtime_snapshot(
     snapshot_now = now or _now()
     config = load_guard_config(store.guard_home)
     latest_connect_state = _build_latest_connect_state(store, snapshot_now)
-    cloud_context = _build_runtime_cloud_context(store, latest_connect_state=latest_connect_state)
+    oauth_storage_health = store.get_oauth_local_credential_health()
+    cloud_context = _build_runtime_cloud_context(
+        store,
+        latest_connect_state=latest_connect_state,
+        oauth_storage_health=oauth_storage_health,
+    )
     headline_state = _resolve_runtime_headline_state(
         pending_count=store.count_approval_requests(),
         runtime_state=store.get_runtime_state(),
@@ -617,7 +622,7 @@ def build_runtime_snapshot(
         "generated_at": snapshot_now,
         "approval_center_url": approval_center_url,
         "runtime_state": store.get_runtime_state(),
-        "oauth_storage_health": store.get_oauth_local_credential_health(),
+        "oauth_storage_health": oauth_storage_health,
         "device": _build_runtime_device_context(store),
         "latest_connect_state": latest_connect_state,
         "proof_status": _build_runtime_proof_status(latest_connect_state),
@@ -798,9 +803,12 @@ def _now() -> str:
 def _build_runtime_cloud_context(
     store: GuardStore,
     latest_connect_state: dict[str, object] | None,
+    *,
+    oauth_storage_health: dict[str, object] | None = None,
 ) -> dict[str, object]:
     cloud_profile = store.get_cloud_sync_profile()
-    oauth_storage_health = store.get_oauth_local_credential_health()
+    if oauth_storage_health is None:
+        oauth_storage_health = store.get_oauth_local_credential_health()
     oauth_repair_required = (
         bool(oauth_storage_health.get("configured")) and oauth_storage_health.get("state") == "degraded"
     )
