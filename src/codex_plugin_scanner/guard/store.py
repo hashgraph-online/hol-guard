@@ -3891,11 +3891,7 @@ class GuardStore:
             return None
         cached_at, cached_health = cached
         state = cached_health.get("state")
-        ttl = (
-            _OAUTH_HEALTH_CACHE_TTL_SECONDS
-            if state == "healthy"
-            else _OAUTH_HEALTH_DEGRADED_CACHE_TTL_SECONDS
-        )
+        ttl = _OAUTH_HEALTH_CACHE_TTL_SECONDS if state == "healthy" else _OAUTH_HEALTH_DEGRADED_CACHE_TTL_SECONDS
         if (time.monotonic() - cached_at) >= ttl:
             _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
             return None
