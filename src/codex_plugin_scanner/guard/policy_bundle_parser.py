@@ -47,7 +47,11 @@ def _stable_serialize(value: object) -> str:
 
 
 def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
-    bundle_core = {key: policy_bundle[key] for key in _POLICY_BUNDLE_CORE_KEYS}
+    bundle_core: dict[str, object] = {}
+    for key in _POLICY_BUNDLE_CORE_KEYS:
+        if key not in policy_bundle:
+            raise ValueError(f"missing_policy_bundle_key:{key}")
+        bundle_core[key] = policy_bundle[key]
     min_daemon_version = _non_empty_string(policy_bundle.get("minDaemonVersion"))
     if min_daemon_version is not None:
         bundle_core["minDaemonVersion"] = min_daemon_version
@@ -167,3 +171,9 @@ def validated_policy_bundle_payload(
         "rules": rules,
         "acknowledgements": acknowledgements,
     }, None
+
+
+non_empty_string = _non_empty_string
+POLICY_BUNDLE_DEFAULT_ENVIRONMENTS = _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS
+POLICY_BUNDLE_RULE_ACTIONS = _POLICY_BUNDLE_RULE_ACTIONS
+POLICY_BUNDLE_RULE_MATCHER_FAMILIES = _POLICY_BUNDLE_RULE_MATCHER_FAMILIES

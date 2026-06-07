@@ -94,6 +94,18 @@ def test_hgc073_tampered_hash_rejected() -> None:
     assert reason == "bundle_hash_mismatch"
 
 
+def test_hgc073_missing_core_key_raises_for_hash() -> None:
+    bundle = _sample_policy_bundle()
+    del bundle["rules"]
+
+    try:
+        computed_policy_bundle_hash(bundle)
+    except ValueError as exc:
+        assert "missing_policy_bundle_key:rules" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for missing policy bundle key")
+
+
 def test_hgc074_persists_active_cloud_policy_version_in_guard_store(tmp_path: Path) -> None:
     home = tmp_path / "guard-home"
     store = GuardStore(home)
@@ -131,22 +143,41 @@ def test_hgc075_preserves_last_known_good_policy_on_invalid_update(tmp_path: Pat
     assert rejected_bundle is None
     assert rejection_reason == "missing_required_field"
 
-    last_good_before = store.get_sync_payload("policy_bundle_last_good")
-    existing_policy_bundle = store.get_sync_payload("policy_bundle")
+    store.set_sync_payload(
+        "policy_bundle_last_error",
+        {"reason": rejection_reason or "invalid_policy_bundle"},
+        now,
+    )
 
-    if rejected_bundle is not None:
-        store.set_sync_payload("policy_bundle", rejected_bundle, now)
-        store.set_sync_payload("policy_bundle_last_good", rejected_bundle, now)
-    else:
-        store.set_sync_payload(
-            "policy_bundle_last_error",
-            {"reason": rejection_reason or "invalid_policy_bundle"},
-            now,
-        )
-
-    assert store.get_sync_payload("policy_bundle_last_good") == last_good_before
     assert store.get_sync_payload("policy_bundle_last_good") == validated_bundle
-    assert store.get_sync_payload("policy_bundle") == existing_policy_bundle
+    assert store.get_sync_payload("policy_bundle") == validated_bundle
     assert store.get_sync_payload("policy_bundle_last_error") == {
         "reason": "missing_required_field",
     }
+
+
+def test_hgc075_updates_last_known_good_on_valid_replacement(tmp_path: Path) -> None:
+    store = _guard_store(tmp_path)
+    now = "2026-04-19T00:00:10+00:00"
+    first_bundle = _sample_policy_bundle()
+    first_validated, first_reason = validated_policy_bundle_payload(first_bundle)
+
+    assert first_reason is None
+    assert first_validated is not None
+
+    store.set_sync_payload("policy_bundle", first_validated, now)
+    store.set_sync_payload("policy_bundle_last_good", first_validated, now)
+
+    replacement_bundle = _sample_policy_bundle()
+    replacement_bundle["bundleVersion"] = "policy-2026-04-20.1"
+    replacement_bundle["bundleHash"] = computed_policy_bundle_hash(replacement_bundle)
+    replacement_validated, replacement_reason = validated_policy_bundle_payload(replacement_bundle)
+
+    assert replacement_reason is None
+    assert replacement_validated is not None
+
+    store.set_sync_payload("policy_bundle", replacement_validated, now)
+    store.set_sync_payload("policy_bundle_last_good", replacement_validated, now)
+
+    assert store.get_sync_payload("policy_bundle") == replacement_validated
+    assert store.get_sync_payload("policy_bundle_last_good") == replacement_validated
