@@ -110,9 +110,7 @@ def build_insights_share_payload(
     if include_top_artifacts:
         top_artifacts = analytics.get("top_artifacts")
         artifact_rows = (
-            [row for row in top_artifacts if isinstance(row, dict)]
-            if isinstance(top_artifacts, list)
-            else []
+            [row for row in top_artifacts if isinstance(row, dict)] if isinstance(top_artifacts, list) else []
         )
         payload["topArtifacts"] = [
             {
@@ -132,13 +130,9 @@ def normalized_insights_share_url(sync_url: str) -> str:
             (parsed.scheme, parsed.netloc, "/registry/api/v1/guard/insights/shares", parsed.query, "")
         )
     if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, "/api/guard/insights/shares", parsed.query, "")
-        )
+        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "/api/guard/insights/shares", parsed.query, ""))
     if parsed.path.rstrip("/") == "/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, "/guard/insights/shares", parsed.query, "")
-        )
+        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "/guard/insights/shares", parsed.query, ""))
     base = sync_url.rstrip("/")
     if base.endswith("/receipts/sync"):
         return base[: -len("/receipts/sync")] + "/insights/shares"
