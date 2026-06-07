@@ -41,6 +41,23 @@ def test_prepare_cursor_hook_payload_maps_before_read_file() -> None:
     assert tool_input["path"] == "/tmp/secrets.env"
 
 
+def test_prepare_cursor_hook_payload_infers_shell_without_event_name() -> None:
+    payload = prepare_cursor_hook_payload({"command": "echo hello", "cwd": "/tmp"})
+    assert payload["tool_name"] == "Shell"
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    assert tool_input["command"] == "echo hello"
+    assert tool_input["working_directory"] == "/tmp"
+
+
+def test_prepare_cursor_hook_payload_infers_read_without_event_name() -> None:
+    payload = prepare_cursor_hook_payload({"file_path": "/tmp/secrets.env"})
+    assert payload["tool_name"] == "Read"
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    assert tool_input["file_path"] == "/tmp/secrets.env"
+
+
 def test_prepare_cursor_hook_payload_maps_before_shell_execution() -> None:
     payload = prepare_cursor_hook_payload(
         {
@@ -54,6 +71,14 @@ def test_prepare_cursor_hook_payload_maps_before_shell_execution() -> None:
     assert isinstance(tool_input, dict)
     assert tool_input["command"] == "echo hello"
     assert tool_input["working_directory"] == "/tmp"
+
+
+def test_cursor_hook_script_source_skips_missing_workspace(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
+    source = cursor_hook_script_source(context)
+    assert "Path(candidate).is_dir()" in source
 
 
 def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path) -> None:
@@ -110,8 +135,9 @@ def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, mon
     context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
     result = install_cursor_hooks(context)
     installed = json.loads(hooks_path.read_text(encoding="utf-8"))
-    pre_tool_use = installed["hooks"]["preToolUse"]
-    assert all("hol-guard-cursor-hook.py" not in str(entry.get("command", "")) for entry in pre_tool_use)
+    pre_tool_use = installed["hooks"].get("preToolUse")
+    if pre_tool_use is not None:
+        assert all("hol-guard-cursor-hook.py" not in str(entry.get("command", "")) for entry in pre_tool_use)
     assert "beforeShellExecution" in installed["hooks"]
     assert result["managed_hook_events"] == list(_MANAGED_HOOK_EVENTS)
     for event_name in _MANAGED_HOOK_EVENTS:

@@ -28,10 +28,27 @@ _LEGACY_MANAGED_COMMAND_MARKERS = (
 )
 
 
+def _infer_cursor_hook_event_name(payload: Mapping[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    if _raw_hook_event_name(normalized):
+        return normalized
+    file_path = normalized.get("file_path")
+    if isinstance(file_path, str) and file_path.strip():
+        normalized["hook_event_name"] = "beforeReadFile"
+        return normalized
+    command = normalized.get("command")
+    if isinstance(command, str) and command.strip():
+        normalized["hook_event_name"] = "beforeShellExecution"
+        return normalized
+    if normalized.get("tool_name") is not None or normalized.get("tool_input") is not None:
+        normalized["hook_event_name"] = "preToolUse"
+    return normalized
+
+
 def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
     """Map Cursor hook stdin JSON into Guard hook normalization shape."""
 
-    normalized = dict(payload)
+    normalized = _infer_cursor_hook_event_name(payload)
     raw_event = _raw_hook_event_name(normalized)
     if raw_event == "beforeshellexecution":
         normalized["hook_event_name"] = "PreToolUse"
@@ -168,7 +185,13 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     for event_name in _MANAGED_HOOK_EVENTS:
         entry = _managed_hook_entry(context, script_path=script_path, event_name=event_name)
         hooks[event_name] = _merge_hook_entries(hooks.get(event_name), entry, event_name=event_name)
-    hooks["preToolUse"] = _strip_managed_hook_entries(hooks.get("preToolUse"), script_path=script_path)
+    pre_tool_use = hooks.get("preToolUse")
+    if pre_tool_use is not None:
+        stripped = _strip_managed_hook_entries(pre_tool_use, script_path=script_path)
+        if stripped:
+            hooks["preToolUse"] = stripped
+        else:
+            hooks.pop("preToolUse", None)
     payload["hooks"] = hooks
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
     hooks_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -442,15 +465,21 @@ def _hook_process_env() -> dict[str, str]:
 def _workspace_from_cursor_input(payload: dict[str, object]) -> str | None:
     project_dir = os.environ.get("CURSOR_PROJECT_DIR")
     if isinstance(project_dir, str) and project_dir.strip():
-        return project_dir.strip()
+        candidate = project_dir.strip()
+        if Path(candidate).is_dir():
+            return candidate
     roots = payload.get("workspace_roots") or payload.get("workspaceRoots")
     if isinstance(roots, list):
         for item in roots:
             if isinstance(item, str) and item.strip():
-                return item.strip()
+                candidate = item.strip()
+                if Path(candidate).is_dir():
+                    return candidate
     cwd = payload.get("cwd")
     if isinstance(cwd, str) and cwd.strip():
-        return cwd.strip()
+        candidate = cwd.strip()
+        if Path(candidate).is_dir():
+            return candidate
     return None
 
 
@@ -479,8 +508,25 @@ def _raw_hook_event_name(payload: dict[str, object]) -> str:
     return ""
 
 
-def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+def _infer_cursor_hook_event_name(payload: dict[str, object]) -> dict[str, object]:
     normalized = dict(payload)
+    if _raw_hook_event_name(normalized):
+        return normalized
+    file_path = normalized.get("file_path")
+    if isinstance(file_path, str) and file_path.strip():
+        normalized["hook_event_name"] = "beforeReadFile"
+        return normalized
+    command = normalized.get("command")
+    if isinstance(command, str) and command.strip():
+        normalized["hook_event_name"] = "beforeShellExecution"
+        return normalized
+    if normalized.get("tool_name") is not None or normalized.get("tool_input") is not None:
+        normalized["hook_event_name"] = "preToolUse"
+    return normalized
+
+
+def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = _infer_cursor_hook_event_name(payload)
     raw_event = _raw_hook_event_name(normalized)
     if raw_event == "beforeshellexecution":
         normalized["hook_event_name"] = "PreToolUse"
