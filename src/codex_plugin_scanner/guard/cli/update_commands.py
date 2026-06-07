@@ -654,14 +654,12 @@ def build_guard_update_status_payload() -> dict[str, object]:
         if bool(direct_url.get("dir_info", {}).get("editable")):
             auto_updatable = False
             blocked_reason = (
-                "This install was set up from local source code. "
-                "Re-run your usual local install command instead."
+                "This install was set up from local source code. Re-run your usual local install command instead."
             )
         elif local_source_install is not None and bool(local_source_install.get("path_exists")):
             auto_updatable = False
             blocked_reason = (
-                "This install was set up from a local folder. "
-                "Re-run your usual local install command instead."
+                "This install was set up from a local folder. Re-run your usual local install command instead."
             )
 
     update_available = auto_updatable and version_check.get("update_available") is True
