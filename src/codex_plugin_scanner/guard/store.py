@@ -2293,13 +2293,13 @@ class GuardStore:
         top_limit: int = 10,
     ) -> dict[str, object]:
         """Aggregate receipt metrics without loading full receipt rows."""
-        from datetime import UTC, datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         activity_days = max(1, min(activity_days, 366))
         trend_days = max(1, min(trend_days, activity_days))
         top_limit = max(1, min(top_limit, 50))
 
-        now = datetime.now(tz=UTC)
+        now = datetime.now(tz=timezone.utc)
         start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         activity_start = start_of_today - timedelta(days=activity_days - 1)
         trend_start = start_of_today - timedelta(days=trend_days - 1)
@@ -2419,7 +2419,10 @@ class GuardStore:
             )
 
         active_day_streak = 0
-        for entry in reversed(daily_activity):
+        streak_entries = list(reversed(daily_activity))
+        if streak_entries and int(streak_entries[0]["total"]) == 0:
+            streak_entries = streak_entries[1:]
+        for entry in streak_entries:
             if int(entry["total"]) > 0:
                 active_day_streak += 1
             else:

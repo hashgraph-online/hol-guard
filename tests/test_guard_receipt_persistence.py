@@ -366,26 +366,33 @@ class TestInventoryForExplain:
 
 class TestReceiptAnalytics:
     def test_receipt_analytics_aggregates_across_all_rows(self, tmp_path: Path) -> None:
+        from datetime import datetime, timedelta, timezone
+
         store = _make_store(tmp_path)
+        now = datetime.now(tz=timezone.utc)
+        t1 = (now - timedelta(days=6)).isoformat().replace("+00:00", "Z")
+        t2 = (now - timedelta(days=5)).isoformat().replace("+00:00", "Z")
+        t3 = now.isoformat().replace("+00:00", "Z")
+
         store.add_receipt(_make_receipt(
             receipt_id="r1",
             harness="codex",
             policy_decision="allow",
-            timestamp="2026-06-01T10:00:00Z",
+            timestamp=t1,
             artifact_name="install npm",
         ))
         store.add_receipt(_make_receipt(
             receipt_id="r2",
             harness="codex",
             policy_decision="block",
-            timestamp="2026-06-02T10:00:00Z",
+            timestamp=t2,
             artifact_name="curl outbound",
         ))
         store.add_receipt(_make_receipt(
             receipt_id="r3",
             harness="claude",
             policy_decision="ask",
-            timestamp="2026-06-07T10:00:00Z",
+            timestamp=t3,
             artifact_name="read secrets",
         ))
 
@@ -396,7 +403,7 @@ class TestReceiptAnalytics:
         assert analytics["blocked"] == 1
         assert analytics["reviewed"] == 1
         assert len(analytics["trend_buckets"]) == 7
-        assert analytics["trend_buckets"][0]["date_key"] == "2026-06-01"
+        assert analytics["trend_buckets"][0]["date_key"] == (now - timedelta(days=6)).strftime("%Y-%m-%d")
         assert analytics["trend_buckets"][0]["allowed"] == 1
         assert analytics["trend_buckets"][1]["blocked"] == 1
         assert analytics["trend_buckets"][-1]["reviewed"] == 1

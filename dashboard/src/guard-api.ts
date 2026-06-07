@@ -1175,10 +1175,23 @@ function buildReceiptAnalyticsFromSample(receipts: GuardReceipt[]): GuardReceipt
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     dailyMap.set(key, (dailyMap.get(key) ?? 0) + 1);
   }
-  const daily_activity: GuardReceiptDailyActivity[] = Array.from(dailyMap.entries()).map(([date_key, total]) => ({
-    date_key,
-    total,
-  }));
+  const daily_activity: GuardReceiptDailyActivity[] = [];
+  const oneDay = 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  for (let offset = 89; offset >= 0; offset -= 1) {
+    const d = new Date(nowMs - offset * oneDay);
+    const date_key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    daily_activity.push({ date_key, total: dailyMap.get(date_key) ?? 0 });
+  }
+  let active_day_streak = 0;
+  const streakEntries = [...daily_activity].reverse();
+  if (streakEntries[0]?.total === 0) {
+    streakEntries.shift();
+  }
+  for (const entry of streakEntries) {
+    if (entry.total > 0) active_day_streak += 1;
+    else break;
+  }
   return {
     total: receipts.length,
     allowed,
@@ -1186,7 +1199,7 @@ function buildReceiptAnalyticsFromSample(receipts: GuardReceipt[]): GuardReceipt
     reviewed,
     first_activity_at: timestamps[0] ?? null,
     last_activity_at: timestamps[timestamps.length - 1] ?? null,
-    active_day_streak: daily_activity.length > 0 ? 1 : 0,
+    active_day_streak,
     peak_day_total: Math.max(...daily_activity.map((entry) => entry.total), 0),
     daily_activity,
     trend_buckets,
