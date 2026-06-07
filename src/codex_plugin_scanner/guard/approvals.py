@@ -352,9 +352,7 @@ def _append_guard_token_to_url(url: str, auth_token: str) -> str:
     """Append a fresh guard-token fragment to an approval URL."""
     parsed = urlparse(url)
     fragment_pairs = [
-        (key, value)
-        for key, value in parse_qsl(parsed.fragment, keep_blank_values=True)
-        if key != "guard-token"
+        (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
     ]
     fragment_pairs.append(
         (
