@@ -5,6 +5,8 @@ import {
   buildTotpQrImageOptions,
   formatTotpManualKey,
   resolveSecurityLevelDescription,
+  resolveFineTuningSectionDescription,
+  isFineTuningEditable,
 } from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 
@@ -60,3 +62,21 @@ assert(
   formatTotpEnrollmentExpiry("not-a-date") === "Enrollment expiration unknown.",
   "T743: invalid TOTP expiry should not render Invalid Date"
 );
+
+const strictFineTuningDescription = resolveFineTuningSectionDescription("strict");
+assert(
+  strictFineTuningDescription.includes("Strict"),
+  "fine-tuning: strict description should name the preset"
+);
+assert(
+  !strictFineTuningDescription.includes("Protection"),
+  "fine-tuning: strict description should not send users to another tab"
+);
+assert(
+  strictFineTuningDescription.includes("Custom"),
+  "fine-tuning: strict description should mention Custom mode"
+);
+
+assert(isFineTuningEditable("custom") === true, "fine-tuning: custom level is editable");
+assert(isFineTuningEditable("strict") === false, "fine-tuning: strict level is locked until custom");
+assert(isFineTuningEditable("balanced") === false, "fine-tuning: balanced level is locked until custom");

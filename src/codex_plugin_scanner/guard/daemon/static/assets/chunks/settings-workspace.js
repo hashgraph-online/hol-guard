@@ -1484,6 +1484,15 @@ function resolveSecurityLevelCardDescription(level) {
   if (level === "strict") return "Ask more often, including new network destinations.";
   return "Use the exact choices below for this machine and connected apps.";
 }
+function resolveFineTuningSectionDescription(securityLevel) {
+  if (securityLevel === "custom") {
+    return "You are overriding the preset for this machine.";
+  }
+  return `These rules follow ${securityLevelLabel(securityLevel)}. Use Custom fine-tuning to edit each action type here.`;
+}
+function isFineTuningEditable(securityLevel) {
+  return securityLevel === "custom";
+}
 function buildClearPolicyPayload(all) {
   return { all };
 }
@@ -1842,6 +1851,9 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     });
     setSaveError(null);
   }, []);
+  const handleSwitchToCustomFineTuning = reactExports.useCallback(() => {
+    handleSecurityLevelChange("custom");
+  }, [handleSecurityLevelChange]);
   const handleRiskActionChange = reactExports.useCallback(
     (riskKey) => (event) => {
       setDraft((value) => {
@@ -2394,12 +2406,19 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     hasSearch && searchMatches.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No settings match your search." }),
     hasSearch && riskSearchMatches.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Matching fine-tuning rules" }),
+      !isFineTuningEditable(draft.security_level) ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        FineTuningPresetBanner,
+        {
+          securityLevel: draft.security_level,
+          onSwitchToCustom: handleSwitchToCustomFineTuning
+        }
+      ) }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 divide-y divide-slate-100 border-t border-slate-100", children: visibleRiskControls.map((risk) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         RiskControlRow,
         {
           risk,
           value: draft.risk_actions[risk.key] ?? "require-reapproval",
-          disabled: draft.security_level !== "custom",
+          disabled: !isFineTuningEditable(draft.security_level),
           onChange: handleRiskActionChange(risk.key),
           showConsequence: true
         },
@@ -2560,42 +2579,51 @@ function SettingsWorkspace({ onApprovalGateChange }) {
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsActionMessage, { message: actionMessage, kind: actionMessageKind })
           ] }),
-          activeTab === "risk" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            SettingsFormSection,
-            {
-              title: "Risky action types",
-              description: draft.security_level !== "custom" ? `Follows ${securityLevelLabel(draft.security_level)}. Choose Custom on Protection to edit each type.` : "You are overriding the preset for this machine.",
-              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `space-y-1 ${draft.security_level !== "custom" ? "opacity-60" : ""}`, children: [
-                riskControls.map((risk) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  RiskControlRow,
-                  {
-                    risk,
-                    value: draft.risk_actions[risk.key] ?? "require-reapproval",
-                    disabled: draft.security_level !== "custom",
-                    onChange: handleRiskActionChange(risk.key),
-                    showConsequence: draft.security_level === "custom"
-                  },
-                  risk.key
-                )),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-2 border-t border-slate-100 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Codex reading secret files" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Only for trusted projects where Codex may read .env or .npmrc without an extra prompt." })
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    SettingSelect,
+          activeTab === "risk" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: [
+            !isFineTuningEditable(draft.security_level) ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              FineTuningPresetBanner,
+              {
+                securityLevel: draft.security_level,
+                onSwitchToCustom: handleSwitchToCustomFineTuning
+              }
+            ) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              SettingsFormSection,
+              {
+                title: "Risky action types",
+                description: resolveFineTuningSectionDescription(draft.security_level),
+                children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `space-y-1 ${!isFineTuningEditable(draft.security_level) ? "opacity-60" : ""}`, children: [
+                  riskControls.map((risk) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    RiskControlRow,
                     {
-                      label: "Codex should",
-                      value: draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval",
-                      options: actionOptions,
-                      onChange: handleCodexSecretReadChange,
-                      disabled: draft.security_level !== "custom"
-                    }
-                  )
+                      risk,
+                      value: draft.risk_actions[risk.key] ?? "require-reapproval",
+                      disabled: !isFineTuningEditable(draft.security_level),
+                      onChange: handleRiskActionChange(risk.key),
+                      showConsequence: isFineTuningEditable(draft.security_level)
+                    },
+                    risk.key
+                  )),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-2 border-t border-slate-100 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Codex reading secret files" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Only for trusted projects where Codex may read .env or .npmrc without an extra prompt." })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      SettingSelect,
+                      {
+                        label: "Codex should",
+                        value: draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval",
+                        options: actionOptions,
+                        onChange: handleCodexSecretReadChange,
+                        disabled: !isFineTuningEditable(draft.security_level)
+                      }
+                    )
+                  ] })
                 ] })
-              ] })
-            }
-          ) }),
+              }
+            )
+          ] }),
           activeTab === "defaults" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-0 flex-1 flex-col space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
             SettingsFormSection,
             {
@@ -2841,6 +2869,31 @@ function SettingToggle(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark", children: props.label }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: props.id, name: props.id, type: "checkbox", checked: props.checked, onChange: props.onChange, className: "h-4 w-4 accent-brand-blue" })
   ] });
+}
+function FineTuningPresetBanner(props) {
+  const handleSwitch = reactExports.useCallback(() => {
+    props.onSwitchToCustom();
+  }, [props.onSwitchToCustom]);
+  if (isFineTuningEditable(props.securityLevel)) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-4 sm:flex sm:items-center sm:justify-between sm:gap-4",
+      role: "region",
+      "aria-label": "Fine-tuning preset controls",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
+            "Using ",
+            securityLevelLabel(props.securityLevel),
+            " preset"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Individual rules match this preset. Switch to Custom to change how Guard handles each risky action type on this machine." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 w-full shrink-0 sm:mt-0 sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleSwitch, children: "Use Custom fine-tuning" }) })
+      ]
+    }
+  );
 }
 function SecurityLevelCard({ level, isSelected, onSelect }) {
   const LevelIcon = level.icon;
@@ -3177,6 +3230,8 @@ export {
   formatTotpEnrollmentExpiry,
   formatTotpManualKey,
   hasUnsavedChanges,
+  isFineTuningEditable,
+  resolveFineTuningSectionDescription,
   resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription
 };
