@@ -119,6 +119,7 @@ from ..shims import (
     uninstall_package_shims,
 )
 from ..stable_digest import stable_digest_hex
+from ..insights_share import publish_insights_share
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
@@ -1221,6 +1222,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/daemon/repair":
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
             self._write_json(result)
+            return
+        if parsed.path == "/v1/insights/share":
+            self._handle_insights_share_publish(payload)
             return
         if parsed.path == "/v1/update":
             status_payload = build_guard_update_status_payload()
@@ -2573,6 +2577,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             payload["resolved"] = resolved
         self._write_json(payload, status=error.status)
 
+    def _handle_insights_share_publish(self, payload: dict[str, object]) -> None:
+        include_top_artifacts = self._optional_bool(payload.get("includeTopArtifacts"), default=False)
+        show_display_name = self._optional_bool(payload.get("showDisplayName"), default=False)
+        display_name_value = payload.get("displayName")
+        display_name = display_name_value.strip()[:120] if isinstance(display_name_value, str) else None
+        store = self.server.store  # type: ignore[attr-defined]
+        try:
+            result = publish_insights_share(
+                store,
+                include_top_artifacts=include_top_artifacts,
+                show_display_name=show_display_name,
+                display_name=display_name,
+            )
+        except Exception as error:  # noqa: BLE001
+            message = str(error).strip() or "Unable to publish Guard insights share."
+            self._write_json({"error": "insights_share_failed", "message": message}, status=502)
+            return
+        self._write_json(result)
+
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")
         if not isinstance(settings, dict):
@@ -3301,6 +3324,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/requests",
             "/v1/receipts",
             "/v1/receipts/analytics",
+            "/v1/insights/share",
             "/v1/receipts/latest",
             "/v1/policy",
             "/v1/evidence",
@@ -3505,6 +3529,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/sync",
             "/v1/receipts",
             "/v1/receipts/analytics",
+            "/v1/insights/share",
             "/v1/receipts/latest",
             "/v1/requests",
             "/v1/requests/clear",
@@ -3868,6 +3893,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/approval-gate/totp/verify",
             "/v1/approval-gate/totp/disable",
             "/v1/daemon/repair",
+            "/v1/insights/share",
             "/v1/notifications/setup",
             "/v1/update",
         }:

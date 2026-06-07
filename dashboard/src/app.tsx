@@ -386,6 +386,7 @@ export function App() {
   const handleOpenInbox = useCallback(() => navigate("/inbox"), []);
   const handleOpenFleet = useCallback(() => navigate("/fleet"), []);
   const handleOpenEvidence = useCallback(() => navigate("/evidence"), []);
+  const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
@@ -690,6 +691,7 @@ export function App() {
             onOpenInbox={handleOpenInbox}
             onOpenFleet={handleOpenFleet}
             onOpenEvidence={handleOpenEvidence}
+            onOpenInsights={handleOpenInsights}
             onOpenSettings={handleOpenSettings}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}

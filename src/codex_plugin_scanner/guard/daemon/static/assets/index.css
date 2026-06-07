@@ -4622,6 +4622,16 @@
       }
     }
 
+    .hover\:text-brand-blue\/80:hover {
+      color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:text-brand-blue\/80:hover {
+        color: color-mix(in oklab, var(--brand-blue) 80%, transparent);
+      }
+    }
+
     .hover\:text-brand-dark:hover, .hover\:text-brand-dark\/70:hover {
       color: var(--brand-dark);
     }

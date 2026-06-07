@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, i as harnessDisplayName, k as isDisplayableHarness, E as EmptyState, G as GuardHero, P as ProofStrip, l as formatNumber, m as HiMiniSparkles, n as HiMiniXMark, o as HiMiniCloud, p as HiMiniQuestionMarkCircle, q as HiMiniBolt, B as Badge, s as HiMiniChevronRight, t as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, E as EvidenceInsightsHeadlineBento, i as fetchReceiptAnalytics, k as harnessDisplayName, l as isDisplayableHarness, m as EmptyState, n as EvidenceInsightsShareModal, G as GuardHero, P as ProofStrip, o as formatNumber, p as HiMiniSparkles, q as HiMiniXMark, s as HiMiniCloud, t as HiMiniQuestionMarkCircle, u as HiMiniBolt, B as Badge, v as HiMiniChevronRight, w as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 import { D as DeviceProofCard, r as resolveCloudIntelCopy } from "./runtime-overview.js";
 function resolveHomeProtectionStatus(snapshot) {
@@ -208,6 +208,75 @@ function HomeProtectionModule({
     }
   );
 }
+function EvidenceInsightsHomePreview({
+  analytics,
+  runtime,
+  onOpenInsights,
+  onShare
+}) {
+  if (analytics.total <= 0) {
+    return null;
+  }
+  const cloudConnected = runtime?.cloud_state === "paired_active";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Your Guard stats" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Full-store insights from this machine." })
+      ] }),
+      cloudConnected && onShare ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onShare, children: "Share stats" }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics, variant: "compact" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: onOpenInsights,
+        className: "text-sm font-semibold text-brand-blue hover:text-brand-blue/80",
+        children: "See all insights →"
+      }
+    ) })
+  ] });
+}
+const ANALYTICS_CACHE_TTL_MS = 6e4;
+let analyticsCache = null;
+async function loadReceiptAnalyticsCached(force = false) {
+  if (!force && analyticsCache && analyticsCache.expiresAt > Date.now()) {
+    return analyticsCache.data;
+  }
+  const data = await fetchReceiptAnalytics();
+  analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
+  return data;
+}
+function useReceiptAnalytics(enabled) {
+  const [state, setState] = reactExports.useState(
+    () => enabled ? { kind: "loading" } : { kind: "idle" }
+  );
+  reactExports.useEffect(() => {
+    if (!enabled) {
+      setState({ kind: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setState({ kind: "loading" });
+    loadReceiptAnalyticsCached().then((data) => {
+      if (!cancelled) {
+        setState({ kind: "ready", data });
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        setState({
+          kind: "error",
+          message: error instanceof Error ? error.message : "Unable to load analytics."
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+  return state;
+}
 const safeLocalStorage = {
   getItem(key) {
     try {
@@ -270,7 +339,10 @@ function HomeWorkspace(props) {
   const [clearTotpCode, setClearTotpCode] = reactExports.useState("");
   const [clearError, setClearError] = reactExports.useState(null);
   const [clearSubmitting, setClearSubmitting] = reactExports.useState(false);
+  const [shareOpen, setShareOpen] = reactExports.useState(false);
   const toastTimerRef = reactExports.useRef(null);
+  const analyticsEnabled = props.runtime.kind === "ready" && (props.runtime.snapshot?.receipt_count ?? 0) > 0;
+  const analyticsState = useReceiptAnalytics(analyticsEnabled);
   reactExports.useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -341,7 +413,12 @@ function HomeWorkspace(props) {
     () => snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null,
     [snapshot, queuedCount]
   );
-  const streak = reactExports.useMemo(() => snapshot ? computeStreak(snapshot.latest_receipts) : 0, [snapshot]);
+  const streak = reactExports.useMemo(() => {
+    if (analyticsState.kind === "ready") {
+      return analyticsState.data.active_day_streak;
+    }
+    return snapshot ? computeStreak(snapshot.latest_receipts) : 0;
+  }, [analyticsState, snapshot]);
   const cloudUpsellVisible = reactExports.useMemo(
     () => snapshot ? resolveCloudUpsellVisible(queuedCount, snapshot.cloud_state) : false,
     [snapshot, queuedCount]
@@ -370,6 +447,14 @@ function HomeWorkspace(props) {
   }
   if (!snapshot) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    shareOpen && analyticsState.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceInsightsShareModal,
+      {
+        analytics: analyticsState.data,
+        runtime: snapshot,
+        onClose: () => setShareOpen(false)
+      }
+    ) : null,
     toastMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/90 px-4 py-3 shadow-lg backdrop-blur", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: toastMessage })
@@ -393,6 +478,15 @@ function HomeWorkspace(props) {
         ]
       }
     ),
+    analyticsState.kind === "loading" && analyticsEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-40 w-full rounded-2xl" }) : analyticsState.kind === "ready" && props.onOpenInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceInsightsHomePreview,
+      {
+        analytics: analyticsState.data,
+        runtime: snapshot,
+        onOpenInsights: props.onOpenInsights,
+        onShare: () => setShareOpen(true)
+      }
+    ) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(StreakMilestoneBanner, { streak }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       NewAppDiscoveryBanner,
