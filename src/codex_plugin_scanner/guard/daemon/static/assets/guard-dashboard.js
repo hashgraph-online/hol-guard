@@ -15286,7 +15286,8 @@ const sidebarLinks = [
   { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
-  { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
+  { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
+  { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }
 ];
 function ShellSidebar(props) {
   const collapsed = props.collapsed ?? false;
@@ -18802,14 +18803,14 @@ function WorkspacePageHeader({
   onTabChange,
   actions
 }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: eyebrow }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: title })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "-mx-1 w-full overflow-x-auto px-1 sm:mx-0 sm:w-auto sm:overflow-visible [&>div]:!flex-nowrap", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs, active: activeTab, onChange: onTabChange }) }),
-      actions ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: actions }) : null
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "-mx-1 w-full overflow-x-auto px-1 pb-1 sm:mx-0 sm:w-auto sm:pb-0 [&>div]:!flex-nowrap", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs, active: activeTab, onChange: onTabChange }) }),
+      actions ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center justify-end gap-2", children: actions }) : null
     ] })
   ] });
 }
@@ -18945,33 +18946,30 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
   const headerActions = reactExports.useMemo(
     () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        IconActionButton,
         {
-          type: "button",
+          label: "Export",
+          icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4" }),
+          variant: "outline",
           onClick: handleOpenExport,
-          "aria-label": "Export evidence",
-          className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark shadow-sm transition-colors hover:bg-slate-50",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }),
-            "Export"
-          ]
+          "aria-label": "Export evidence"
         }
       ),
       onClearEvidence && receiptItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
+        IconActionButton,
         {
-          type: "button",
+          label: "Clear",
+          icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4" }),
+          variant: "ghost",
           onClick: handleOpenClear,
-          "aria-label": "Clear all evidence",
-          className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-brand-attention",
-          children: "Clear"
+          "aria-label": "Clear all evidence"
         }
       )
     ] }),
     [handleOpenExport, handleOpenClear, onClearEvidence, receiptItems.length]
   );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       WorkspacePageHeader,
       {
@@ -21451,7 +21449,7 @@ function ApprovalCenterLayout(props) {
         onBulkBlock: props.onBulkBlock
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewWorkspace,
       {
         requests: props.requests.kind === "ready" ? props.requests.items : [],
@@ -23192,6 +23190,7 @@ function viewTitle(view) {
   if (view === "audit") return "Audit";
   if (view === "policy") return "Policy";
   if (view === "feed-health") return "Feed Health";
+  if (view === "about") return "About";
   return "App detail";
 }
 function parseAppDetail(pathname) {
@@ -23232,6 +23231,9 @@ function resolveView(pathname) {
   }
   if (pathname === "/feed-health") {
     return "feed-health";
+  }
+  if (pathname === "/about") {
+    return "about";
   }
   if (pathname === "/inbox" || pathname === "/requests" || pathname === "/approvals" || pathname.startsWith("/requests/") || pathname.startsWith("/approvals/")) {
     return "inbox";
