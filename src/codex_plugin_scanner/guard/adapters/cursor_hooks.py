@@ -103,11 +103,11 @@ def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, obje
 def _validated_hol_guard_src_path(path_str: str) -> str | None:
     """Accept only directories that look like a hol-guard source tree."""
 
-    if not path_str.strip():
-        return None
     try:
+        if not isinstance(path_str, str) or not path_str.strip():
+            return None
         candidate = Path(path_str.strip()).expanduser().resolve()
-    except OSError:
+    except (OSError, RuntimeError, ValueError, TypeError):
         return None
     if not candidate.is_dir():
         return None
@@ -519,11 +519,11 @@ def _hook_process_env() -> dict[str, str]:
 
 
 def _validated_hol_guard_src_path(path_str: str) -> str | None:
-    if not path_str.strip():
-        return None
     try:
+        if not isinstance(path_str, str) or not path_str.strip():
+            return None
         candidate = Path(path_str.strip()).expanduser().resolve()
-    except OSError:
+    except (OSError, RuntimeError, ValueError, TypeError):
         return None
     if not candidate.is_dir():
         return None

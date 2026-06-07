@@ -370,7 +370,10 @@ def test_cursor_native_shell_approval_persists_after_shell(tmp_path: Path) -> No
     )
 
 
-def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:
+def test_cursor_native_shell_session_allow_survives_approval_gate_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
     from codex_plugin_scanner.guard.cli import commands as guard_commands_module
     from codex_plugin_scanner.guard.models import GuardArtifact
@@ -407,39 +410,86 @@ def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path
         del kwargs
         return False
 
-    monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(guard_commands_module, "_persist_cursor_native_permission_policy", _blocked_policy)
-    try:
-        saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-            store=store,
-            payload=prepare_cursor_hook_payload(
-                {
-                    "conversation_id": conversation_id,
-                    "hook_event_name": "afterShellExecution",
-                    "command": command,
-                    "cwd": str(workspace_dir),
-                    "duration": 12,
-                }
-            ),
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "hook_event_name": "afterShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+                "duration": 12,
+            }
+        ),
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+    assert saved is True
+    assert guard_commands_module._cursor_native_shell_is_approved(
+        store,
+        prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "hook_event_name": "beforeShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+            }
+        ),
+    )
+
+
+def test_cursor_after_shell_rejects_boolean_duration(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.models import GuardArtifact
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-bool-duration"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    guard_commands_module._record_cursor_pending_shell_permission(
+        store=store,
+        payload={
+            "conversation_id": conversation_id,
+            "hook_event_name": "beforeShellExecution",
+            "command": command,
+            "cwd": str(workspace_dir),
+        },
+        reason="Requests a sensitive native tool action.",
+        artifact=GuardArtifact(
+            artifact_id="cursor:project:shell:rm",
+            name="Shell",
             harness="cursor",
-            home_dir=home_dir,
-            guard_home=home_dir,
-            workspace=workspace_dir,
-        )
-        assert saved is True
-        assert guard_commands_module._cursor_native_shell_is_approved(
-            store,
-            prepare_cursor_hook_payload(
-                {
-                    "conversation_id": conversation_id,
-                    "hook_event_name": "beforeShellExecution",
-                    "command": command,
-                    "cwd": str(workspace_dir),
-                }
-            ),
-        )
-    finally:
-        monkeypatch.undo()
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(workspace_dir / ".cursor" / "mcp.json"),
+            command=command,
+        ),
+        artifact_hash="hash-cursor-shell",
+    )
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "hook_event_name": "afterShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+                "duration": True,
+            }
+        ),
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+    assert saved is False
 
 
 def test_uninstall_cursor_hooks_restores_backup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

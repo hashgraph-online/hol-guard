@@ -4690,7 +4690,7 @@ def _cursor_pending_shell_is_fresh(pending: Mapping[str, object], *, now: str) -
 
 def _cursor_after_shell_observed(payload: Mapping[str, object]) -> bool:
     duration = payload.get("duration")
-    if isinstance(duration, (int, float)):
+    if isinstance(duration, (int, float)) and not isinstance(duration, bool):
         return duration >= 0
     output = payload.get("output")
     return isinstance(output, str)
@@ -4734,7 +4734,14 @@ def _cursor_native_shell_is_approved(store: GuardStore, payload: Mapping[str, ob
         approved = store.get_sync_payload(_cursor_native_shell_allow_state_key(conversation_id, command))
     except (OSError, sqlite3.Error):
         return False
-    return isinstance(approved, dict) and approved.get("action") == "allow"
+    if not isinstance(approved, dict) or approved.get("action") != "allow":
+        return False
+    now = _now()
+    if not _cursor_pending_shell_is_fresh(approved, now=now):
+        with suppress(OSError, sqlite3.Error):
+            store.delete_sync_payload(_cursor_native_shell_allow_state_key(conversation_id, command))
+        return False
+    return True
 
 
 def _record_cursor_pending_shell_permission(
