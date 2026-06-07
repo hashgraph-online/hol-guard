@@ -212,10 +212,8 @@ export function SupplyChainBundlePanel() {
               {["critical", "high", "medium", "low"].map((sev) => {
                 const count = severityCounts[sev] ?? 0;
                 const tone =
-                  sev === "critical"
+                  sev === "critical" || sev === "high"
                     ? "destructive"
-                    : sev === "high"
-                    ? "attention"
                     : sev === "medium"
                     ? "attention"
                     : "default";
