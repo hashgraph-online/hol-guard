@@ -15,6 +15,7 @@ from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateInput, require_approval_decision
 from .config import load_guard_config
+from .daemon.manager import load_guard_daemon_auth_token
 from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
@@ -48,27 +49,10 @@ class ApprovalRequestAlreadyResolvedError(ValueError):
     """Raised when an approval request was already resolved."""
 
 
-def build_approval_request_url(
-    approval_center_url: str, request_id: str, *, auth_token: str | None = None
-) -> str:
+def build_approval_request_url(approval_center_url: str, request_id: str) -> str:
     """Build the canonical local dashboard deep link for one approval request."""
 
-    url = f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
-    if auth_token is None:
-        return url
-    parsed = urlparse(url)
-    fragment_pairs = [
-        (key, value)
-        for key, value in parse_qsl(parsed.fragment, keep_blank_values=True)
-        if key != "guard-token"
-    ]
-    fragment_pairs.append(
-        (
-            "guard-token",
-            build_local_dashboard_session_token(auth_token=auth_token, surface="approval-center"),
-        )
-    )
-    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
+    return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
 
 
 def _normalize_harness_slug(harness: str | None) -> str | None:
@@ -161,7 +145,6 @@ def queue_blocked_approvals(
     store: GuardStore,
     approval_center_url: str,
     now: str | None = None,
-    auth_token: str | None = None,
 ) -> list[dict[str, object]]:
     timestamp = now or _now()
     artifacts_by_id = {artifact.artifact_id: artifact for artifact in detection.artifacts}
@@ -207,7 +190,7 @@ def queue_blocked_approvals(
             launch_target=launch_target,
             transport=artifact.transport if artifact is not None else None,
             review_command=f"{GUARD_COMMAND} approvals approve {request_id}",
-            approval_url=build_approval_request_url(approval_center_url, request_id, auth_token=auth_token),
+            approval_url=build_approval_request_url(approval_center_url, request_id),
             workspace=_workspace_scope_target(item, artifact),
             publisher=artifact.publisher if artifact is not None else None,
             risk_summary=risk_summary,
@@ -228,7 +211,7 @@ def queue_blocked_approvals(
                 request,
                 request_id=persisted_request_id,
                 review_command=f"{GUARD_COMMAND} approvals approve {persisted_request_id}",
-                approval_url=build_approval_request_url(approval_center_url, persisted_request_id, auth_token=auth_token),
+                approval_url=build_approval_request_url(approval_center_url, persisted_request_id),
             )
         _notify_pending_approval(store=store, request=request)
         queued.append(request.to_dict())
@@ -365,6 +348,26 @@ def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -
     return artifact_id, artifact_hash
 
 
+def _append_guard_token_to_url(url: str, auth_token: str) -> str:
+    """Append a fresh guard-token fragment to an approval URL."""
+    parsed = urlparse(url)
+    fragment_pairs = [
+        (key, value)
+        for key, value in parse_qsl(parsed.fragment, keep_blank_values=True)
+        if key != "guard-token"
+    ]
+    fragment_pairs.append(
+        (
+            "guard-token",
+            build_local_dashboard_session_token(
+                auth_token=auth_token,
+                surface="approval-center",
+            ),
+        )
+    )
+    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
+
+
 def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest) -> None:
     try:
         config = load_guard_config(
@@ -377,12 +380,16 @@ def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest
         return
     if store.approval_desktop_notified_at(request.request_id) is not None:
         return
+    auth_token = load_guard_daemon_auth_token(store.guard_home)
+    approval_url = request.approval_url
+    if auth_token:
+        approval_url = _append_guard_token_to_url(approval_url, auth_token)
     notify_pending_approval_once(
         DesktopApprovalNotification(
             request_id=request.request_id,
             title="HOL Guard needs approval",
             message=_approval_notification_message(request),
-            approval_url=request.approval_url,
+            approval_url=approval_url,
         ),
         on_success=lambda: store.mark_approval_desktop_notified(
             request.request_id,

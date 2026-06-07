@@ -3056,7 +3056,6 @@ def run_guard_command(
                 risk_categories=decision.risk_categories,
             )
             approval_center_url = ensure_guard_daemon(guard_home)
-            auth_token = load_guard_daemon_auth_token(guard_home)
             approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
             try:
                 daemon_client = load_guard_surface_daemon_client(guard_home)
@@ -3067,7 +3066,6 @@ def run_guard_command(
                     store=store,
                     approval_center_url=approval_center_url,
                     now=now,
-                    auth_token=auth_token,
                 )
             else:
                 session = daemon_client.start_session(
@@ -3353,7 +3351,6 @@ def run_guard_command(
                         artifact=runtime_artifact,
                         artifact_digest=runtime_artifact_hash,
                         approval_center_url=load_guard_daemon_url(guard_home) or "http://127.0.0.1:5474",
-                        auth_token=load_guard_daemon_auth_token(guard_home),
                         action_envelope=action_envelope,
                     )
                 _record_harness_usage_for_hook(
@@ -3593,7 +3590,6 @@ def run_guard_command(
                 if not _prompt_requires_hard_block(runtime_artifact) and should_queue_approval_center:
                     approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                     approval_center_url = ensure_guard_daemon(guard_home)
-                    auth_token = load_guard_daemon_auth_token(guard_home)
                     runtime_detection = _runtime_detection(args.harness, runtime_artifact)
                     evaluation_payload = {
                         "artifacts": [
@@ -3627,7 +3623,6 @@ def run_guard_command(
                             store=store,
                             approval_center_url=approval_center_url,
                             now=_now(),
-                            auth_token=auth_token,
                         )
                     else:
                         session = browser_approval_daemon_client.start_session(
@@ -6582,7 +6577,6 @@ def _headless_approval_resolver(
         managed_install = _managed_install_for(store, args.harness)
         approval_flow = approval_prompt_flow(args.harness, managed_install=managed_install)
         approval_center_url = ensure_guard_daemon(context.guard_home)
-        auth_token = load_guard_daemon_auth_token(context.guard_home)
         try:
             daemon_client = load_guard_surface_daemon_client(context.guard_home)
         except RuntimeError:
@@ -6592,7 +6586,6 @@ def _headless_approval_resolver(
                 store=store,
                 approval_center_url=approval_center_url,
                 now=_now(),
-                auth_token=auth_token,
             )
             payload["approval_requests"] = queued
             payload["approval_center_url"] = approval_center_url
@@ -9616,7 +9609,6 @@ def _queue_claude_native_approval_gate_fallback(
     artifact: GuardArtifact,
     artifact_digest: str,
     approval_center_url: str,
-    auth_token: str | None = None,
     action_envelope: GuardActionEnvelope | None = None,
 ) -> list[dict[str, object]]:
     now = _now()
@@ -9642,7 +9634,6 @@ def _queue_claude_native_approval_gate_fallback(
         store=store,
         approval_center_url=approval_center_url,
         now=now,
-        auth_token=auth_token,
     )
     store.add_event(
         "approval_gate/native_fallback_queued",

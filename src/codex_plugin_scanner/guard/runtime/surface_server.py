@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 
 from ..approvals import queue_blocked_approvals
 from ..codex_resume import seed_request_resume_record
-from ..daemon.manager import load_guard_daemon_auth_token
 from ..models import GuardArtifact, HarnessDetection
 from ..schemas import build_surface_server_contract
 from ..schemas.surface_server import (
@@ -231,7 +230,6 @@ class GuardSurfaceRuntime:
             store=self.store,
             approval_center_url=approval_center_url,
             now=_now(),
-            auth_token=load_guard_daemon_auth_token(self.store.guard_home),
         )
         operation = self.start_operation(
             session_id=session_id,
