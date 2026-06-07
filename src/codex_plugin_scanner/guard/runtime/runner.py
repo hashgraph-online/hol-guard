@@ -1,5 +1,6 @@
 """Guard wrapper-mode runtime execution."""
 from __future__ import annotations
+
 import hashlib
 import io
 import json
@@ -38,10 +39,12 @@ from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
 from ..policy_bundle_parser import (
-    non_empty_string,
     POLICY_BUNDLE_DEFAULT_ENVIRONMENTS,
     POLICY_BUNDLE_RULE_ACTIONS,
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
+    non_empty_string,
+)
+from ..policy_bundle_parser import (
     validated_policy_bundle_payload as _validated_policy_bundle_payload,
 )
 from ..redaction import redact_sensitive_text
