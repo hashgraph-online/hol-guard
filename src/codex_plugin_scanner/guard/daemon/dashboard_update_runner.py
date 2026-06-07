@@ -34,6 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         if exit_code != 0:
             message = update_payload.get("message") or update_payload.get("error") or "Guard update failed."
             print(str(message), file=sys.stderr)
+            ensure_guard_daemon_after_update(guard_home)
             return 1
 
         retire_all_guard_daemons_for_home(guard_home)

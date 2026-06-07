@@ -70,11 +70,7 @@ def _daemon_launcher_env() -> dict[str, str]:
 
 
 def ensure_guard_daemon(guard_home: Path, *, start_timeout: float | None = None) -> str:
-    timeout = (
-        GUARD_DAEMON_START_TIMEOUT_SECONDS
-        if start_timeout is None
-        else start_timeout
-    )
+    timeout = GUARD_DAEMON_START_TIMEOUT_SECONDS if start_timeout is None else start_timeout
     _reap_stale_ephemeral_guard_daemons(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
     existing_url = load_guard_daemon_url(guard_home)
