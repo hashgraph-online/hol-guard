@@ -1,19 +1,12 @@
-import { SectionLabel, Badge } from "../approval-center-primitives";
+import { Badge } from "../approval-center-primitives";
 import { HiMiniDocumentText } from "react-icons/hi2";
 
 export interface EvidenceHeroProps {
   totalCount: number;
   lastActivityAt: string | null;
-  onExport: () => void;
-  onClear?: () => void;
 }
 
-export function EvidenceHero({
-  totalCount,
-  lastActivityAt,
-  onExport,
-  onClear,
-}: EvidenceHeroProps) {
+export function EvidenceHero({ totalCount, lastActivityAt }: EvidenceHeroProps) {
   const lastActivityLabel = lastActivityAt
     ? new Date(lastActivityAt).toLocaleDateString(undefined, {
         month: "short",
@@ -30,57 +23,29 @@ export function EvidenceHero({
       role="region"
       aria-label="Evidence summary"
     >
-      <div className="relative space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <SectionLabel>Evidence</SectionLabel>
-          {hasEvidence ? (
-            <Badge tone="success">{totalCount} actions recorded</Badge>
-          ) : (
-            <Badge tone="default">No actions yet</Badge>
-          )}
-        </div>
-
-        <div className="max-w-3xl">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-green/10">
-              <HiMiniDocumentText className="h-4 w-4 text-brand-green" aria-hidden="true" />
-            </span>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight text-brand-dark sm:text-2xl">
-                {hasEvidence
-                  ? `${totalCount.toLocaleString()} action${totalCount !== 1 ? "s" : ""} recorded`
-                  : "Evidence"}
-              </h1>
-              <p className="mt-2 text-sm leading-relaxed text-brand-dark/70">
-                Every action Guard reviewed on this machine.
-                {lastActivityLabel && (
-                  <> Last activity on <span className="font-medium text-brand-dark">{lastActivityLabel}</span>.</>
-                )}
-              </p>
+      <div className="relative">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-green/10">
+            <HiMiniDocumentText className="h-4 w-4 text-brand-green" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {hasEvidence ? (
+                <Badge tone="success">{totalCount.toLocaleString()} actions recorded</Badge>
+              ) : (
+                <Badge tone="default">No actions yet</Badge>
+              )}
             </div>
+            <p className="mt-2 text-sm leading-relaxed text-brand-dark/70">
+              Every action Guard reviewed on this machine.
+              {lastActivityLabel && (
+                <>
+                  {" "}
+                  Last activity on <span className="font-medium text-brand-dark">{lastActivityLabel}</span>.
+                </>
+              )}
+            </p>
           </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onExport}
-            aria-label="Export evidence"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors shadow-sm"
-          >
-            <HiMiniDocumentText className="h-4 w-4 text-slate-400" aria-hidden="true" />
-            Export
-          </button>
-          {onClear && totalCount > 0 && (
-            <button
-              type="button"
-              onClick={onClear}
-              aria-label="Clear all evidence"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors shadow-sm"
-            >
-              Clear
-            </button>
-          )}
         </div>
       </div>
     </section>

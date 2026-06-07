@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HiMiniArrowDownTray } from "react-icons/hi2";
+import { HiMiniArrowDownTray, HiMiniDocumentText } from "react-icons/hi2";
 
-import { EmptyState, TabBar, ActionButton, SectionLabel } from "./approval-center-primitives";
+import { EmptyState, ActionButton, SectionLabel } from "./approval-center-primitives";
 import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
 import type { EvidenceFilterState, EvidenceView, EvidenceSortKey } from "./evidence/evidence-types";
@@ -28,6 +28,7 @@ import { EvidenceExportDrawer } from "./evidence/evidence-export-drawer";
 import { EvidenceClearModal } from "./evidence/evidence-clear-modal";
 import { AppTab } from "./evidence/app-tab";
 import { CategoryTab } from "./evidence/category-tab";
+import { WorkspacePageHeader } from "./workspace-page-header";
 
 export type ReceiptsState =
   | { kind: "loading" }
@@ -39,6 +40,10 @@ const PAGE_SIZE = 50;
 interface EvidenceWorkbenchProps {
   receiptItems: GuardReceipt[];
   onClearEvidence?: () => void;
+}
+
+function evidenceTitleForView(view: EvidenceView): string {
+  return VIEW_TABS.find((tab) => tab.key === view)?.label ?? "Evidence";
 }
 
 function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchProps) {
@@ -196,16 +201,45 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
 
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
 
+  const headerActions = useMemo(
+    () => (
+      <>
+        <button
+          type="button"
+          onClick={handleOpenExport}
+          aria-label="Export evidence"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark shadow-sm transition-colors hover:bg-slate-50"
+        >
+          <HiMiniDocumentText className="h-4 w-4 text-slate-400" aria-hidden="true" />
+          Export
+        </button>
+        {onClearEvidence && receiptItems.length > 0 && (
+          <button
+            type="button"
+            onClick={handleOpenClear}
+            aria-label="Clear all evidence"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-brand-attention"
+          >
+            Clear
+          </button>
+        )}
+      </>
+    ),
+    [handleOpenExport, handleOpenClear, onClearEvidence, receiptItems.length],
+  );
+
   return (
     <div className="space-y-4">
-      <EvidenceHero
-        totalCount={receiptItems.length}
-        lastActivityAt={metrics.lastActivityAt}
-        onExport={handleOpenExport}
-        onClear={handleOpenClear}
+      <WorkspacePageHeader
+        eyebrow="Evidence"
+        title={evidenceTitleForView(filters.view)}
+        tabs={tabOptions}
+        activeTab={filters.view}
+        onTabChange={handleViewChange}
+        actions={headerActions}
       />
 
-      <TabBar tabs={tabOptions} active={filters.view} onChange={handleViewChange} />
+      <EvidenceHero totalCount={receiptItems.length} lastActivityAt={metrics.lastActivityAt} />
 
       <div className="pt-1">
         {filters.view === "actions" && (
@@ -238,7 +272,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
               />
             </div>
             {selectedReceipt && (
-              <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
+              <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
                 <EvidenceActionDetail
                   receipt={selectedReceipt}
                   onClose={handleCloseDetail}
@@ -290,11 +324,11 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             id="tabpanel-export"
             role="tabpanel"
             aria-labelledby="tab-export"
-            className="space-y-4 guard-fade-in"
+            className="guard-fade-in space-y-4"
           >
             <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <SectionLabel>Export Evidence</SectionLabel>
-              <p className="mt-2 text-sm text-brand-dark/70 leading-relaxed">
+              <p className="mt-2 text-sm leading-relaxed text-brand-dark/70">
                 Download your evidence records as CSV or JSON for analysis or backup.
               </p>
               <div className="mt-4">
@@ -306,7 +340,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             </div>
             <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <SectionLabel>Cloud Sync</SectionLabel>
-              <p className="mt-2 text-sm text-brand-dark/70 leading-relaxed">
+              <p className="mt-2 text-sm leading-relaxed text-brand-dark/70">
                 Keep evidence in sync across devices. Cloud backup lets you access your evidence history from any device. Available in HOL Guard Cloud.
               </p>
             </div>

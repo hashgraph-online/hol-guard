@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback } from "react";
-import { TabBar } from "./approval-center-primitives";
 import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import { WorkspacePageHeader } from "./workspace-page-header";
 
 const SupplyChainWorkspace = lazy(() =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
@@ -37,11 +37,11 @@ function viewToTab(view: string): HubTab {
 
 export function SupplyChainHubWorkspace(props: {
   activeView: string;
-	  snapshot: GuardRuntimeSnapshot;
-	  receipts: GuardReceipt[];
-	  policies: GuardPolicyDecision[];
-	  approvalGate: GuardApprovalGatePublicConfig | null;
-	  onClearPolicy: (policy: GuardPolicyDecision) => void;
+  snapshot: GuardRuntimeSnapshot;
+  receipts: GuardReceipt[];
+  policies: GuardPolicyDecision[];
+  approvalGate: GuardApprovalGatePublicConfig | null;
+  onClearPolicy: (policy: GuardPolicyDecision) => void;
   onOpenSettings: () => void;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -59,13 +59,13 @@ export function SupplyChainHubWorkspace(props: {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Supply chain</p>
-          <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{hubTitleForTab(tab)}</h1>
-        </div>
-        <TabBar tabs={hubTabs} active={tab} onChange={handleTabChange} />
-      </div>
+      <WorkspacePageHeader
+        eyebrow="Supply chain"
+        title={hubTitleForTab(tab)}
+        tabs={hubTabs}
+        activeTab={tab}
+        onTabChange={handleTabChange}
+      />
       <Suspense fallback={<LazyFallback />}>
         {tab === "supply-chain" && (
           <SupplyChainWorkspace
@@ -74,10 +74,10 @@ export function SupplyChainHubWorkspace(props: {
             onGoHome={props.onGoHome}
             onRuntimeRefresh={props.onRuntimeRefresh}
           />
-	        )}
-	        {tab === "audit" && (
-	          <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} approvalGate={props.approvalGate} />
-	        )}
+        )}
+        {tab === "audit" && (
+          <AuditWorkspace snapshot={props.snapshot} receipts={props.receipts} approvalGate={props.approvalGate} />
+        )}
         {tab === "policy" && (
           <PolicyWorkspace
             policies={props.policies}
