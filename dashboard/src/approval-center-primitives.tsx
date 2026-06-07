@@ -394,6 +394,34 @@ export const ActionButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, Ac
 );
 ActionButton.displayName = "ActionButton";
 
+type IconActionButtonProps = {
+  label: string;
+  icon: ReactNode;
+  variant?: "primary" | "outline" | "danger" | "ghost";
+  onClick: () => void;
+  disabled?: boolean;
+  spinning?: boolean;
+  "aria-label"?: string;
+};
+
+export function IconActionButton({ label, icon, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel }: IconActionButtonProps) {
+  const base = "inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-9 h-9 px-2.5 sm:px-3";
+  const tone =
+    variant === "primary"
+      ? "bg-brand-blue text-white shadow-sm hover:bg-brand-blue/90"
+      : variant === "danger"
+        ? "bg-brand-purple text-white shadow-sm hover:bg-brand-purple/90"
+        : variant === "ghost"
+          ? "text-slate-600 hover:bg-slate-100"
+          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300";
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={ariaLabel ?? label} className={`${base} ${tone}`}>
+      <span className={`h-4 w-4 ${spinning ? "animate-spin" : ""}`} aria-hidden="true">{icon}</span>
+      <span className="hidden sm:inline">{spinning ? "Running..." : label}</span>
+    </button>
+  );
+}
+
 export function ListControls(props: {
   searchLabel: string;
   searchValue: string;
