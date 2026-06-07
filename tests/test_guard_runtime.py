@@ -13458,6 +13458,36 @@ def test_guard_runtime_blocks_unsafe_cd_before_pytest_module_invocation(tmp_path
     assert match.action_class == "destructive shell command"
 
 
+def test_guard_runtime_blocks_pythonpath_ruff_module_shadow(tmp_path):
+    malicious_dir = tmp_path / "malicious"
+    malicious_dir.mkdir()
+    _write_text(malicious_dir / "ruff.py", "from pathlib import Path; Path('marker').write_text('owned')\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTHONPATH=./malicious python3 -m ruff check --fix ."},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_allows_cd_with_parentheses_in_directory_name(tmp_path):
+    project_dir = tmp_path / "project (2024)"
+    project_dir.mkdir()
+    tests_dir = project_dir / "tests"
+    tests_dir.mkdir()
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f'cd "{project_dir.name}" && python3 -m ruff check ../src/foo.py'},
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
 def test_guard_runtime_blocks_shadowed_pytest_module_invocation(tmp_path):
     _write_text(tmp_path / "pytest.py", "from pathlib import Path; Path('marker').write_text('owned')\n")
 

@@ -5680,6 +5680,13 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
                 return False
             if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
                 return False
+            if _python_module_may_be_shadowed_from_execution_context(
+                module_root,
+                cwd=cwd,
+                segment=segment,
+                command_index=command_index,
+            ):
+                return False
             if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
                 return False
             saw_python_module = True
@@ -5923,7 +5930,9 @@ def _shell_directory_setup_segment_is_safe(command_name: str, segment_args: list
 
 
 def _shell_token_has_command_substitution(token: str) -> bool:
-    return any(character in token for character in ("$", "`", "(", ")", "<", ">", "|", "&", ";", "\n"))
+    if "$(" in token or "`" in token:
+        return True
+    return any(character in token for character in ("$", "<", ">", "|", "&", ";", "\n"))
 
 
 def _python_module_root_from_args(args: list[str]) -> str | None:
@@ -6148,14 +6157,62 @@ def _python_module_args_are_safe(module: str, module_args: list[str], *, cwd: Pa
 
 
 def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
+    return _python_module_may_be_shadowed_in_search_roots(module_root, [cwd] if cwd is not None else [])
+
+
+def _python_module_may_be_shadowed_from_execution_context(
+    module_root: str | None,
+    *,
+    cwd: Path | None,
+    segment: list[str],
+    command_index: int,
+) -> bool:
+    if module_root is None:
+        return True
+    search_roots: list[Path] = []
+    if cwd is not None:
+        search_roots.append(cwd)
+    search_roots.extend(_pythonpath_search_roots_from_segment(segment, command_index, cwd=cwd))
+    return _python_module_may_be_shadowed_in_search_roots(module_root, search_roots)
+
+
+def _pythonpath_search_roots_from_segment(
+    segment: list[str],
+    command_index: int,
+    *,
+    cwd: Path | None,
+) -> list[Path]:
     if cwd is None:
+        return []
+    search_roots: list[Path] = []
+    for token in segment[:command_index]:
+        if _shell_env_assignment_key(token) != "PYTHONPATH":
+            continue
+        path_value = token.split("=", 1)[1] if "=" in token else ""
+        for entry in path_value.split(":"):
+            normalized_entry = entry.strip()
+            if not normalized_entry:
+                continue
+            candidate = Path(normalized_entry)
+            search_roots.append(candidate if candidate.is_absolute() else cwd / candidate)
+    return search_roots
+
+
+def _python_module_may_be_shadowed_in_search_roots(module_root: str, search_roots: list[Path]) -> bool:
+    if not search_roots:
         return True
     shadow_paths = _SAFE_PYTHON_MODULE_SHADOW_PATHS.get(module_root)
     if shadow_paths is None:
         return True
-    if module_root == "pytest" and _pytest_local_entry_point_metadata_exists(cwd):
-        return True
-    return any((cwd / shadow_path).exists() for shadow_path in shadow_paths)
+    for search_root in search_roots:
+        if module_root == "pytest" and _pytest_local_entry_point_metadata_exists(search_root):
+            return True
+        try:
+            if any((search_root / shadow_path).exists() for shadow_path in shadow_paths):
+                return True
+        except OSError:
+            return True
+    return False
 
 
 def _pytest_local_entry_point_metadata_exists(cwd: Path) -> bool:
