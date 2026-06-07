@@ -86,6 +86,7 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
+from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
     build_local_supply_chain_posture,
@@ -119,7 +120,6 @@ from ..shims import (
     uninstall_package_shims,
 )
 from ..stable_digest import stable_digest_hex
-from ..insights_share import publish_insights_share
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
@@ -2590,7 +2590,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 show_display_name=show_display_name,
                 display_name=display_name,
             )
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             message = str(error).strip() or "Unable to publish Guard insights share."
             self._write_json({"error": "insights_share_failed", "message": message}, status=502)
             return
