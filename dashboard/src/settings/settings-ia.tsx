@@ -2,11 +2,19 @@ import type { ReactNode } from "react";
 import {
   HiMiniAdjustmentsHorizontal,
   HiMiniBellAlert,
+  HiMiniCircleStack,
+  HiMiniCog6Tooth,
   HiMiniLockClosed,
   HiMiniShieldCheck,
 } from "react-icons/hi2";
 
-export type LocalSettingsTabKey = "protection" | "approval" | "notifications" | "advanced";
+export type LocalSettingsTabKey =
+  | "protection"
+  | "approval"
+  | "notifications"
+  | "risk"
+  | "defaults"
+  | "maintenance";
 
 export type LocalSettingsNavGroupKey = "local";
 
@@ -22,25 +30,29 @@ export interface LocalSettingsNavItem {
   summary: string;
   group: LocalSettingsNavGroupKey;
   icon: ReactNode;
+  mobileLabel?: string;
 }
 
 export const localSettingsNavGroups: readonly LocalSettingsNavGroup[] = [
   {
     key: "local",
     label: "This machine",
-    summary: "Protection, approval gate, alerts, and fine-tuning for local Guard.",
+    summary: "Protection, approval checks, alerts, tuning, and local upkeep.",
   },
 ] as const;
 
 const ICON_PROTECTION = <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true" />;
 const ICON_APPROVAL = <HiMiniLockClosed className="h-4 w-4" aria-hidden="true" />;
 const ICON_NOTIFICATIONS = <HiMiniBellAlert className="h-4 w-4" aria-hidden="true" />;
-const ICON_ADVANCED = <HiMiniAdjustmentsHorizontal className="h-4 w-4" aria-hidden="true" />;
+const ICON_RISK = <HiMiniAdjustmentsHorizontal className="h-4 w-4" aria-hidden="true" />;
+const ICON_DEFAULTS = <HiMiniCog6Tooth className="h-4 w-4" aria-hidden="true" />;
+const ICON_MAINTENANCE = <HiMiniCircleStack className="h-4 w-4" aria-hidden="true" />;
 
 export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
   {
     key: "protection",
     label: "Protection",
+    mobileLabel: "Protect",
     summary: "Security level, mode, sync, and what Guard pauses.",
     group: "local",
     icon: ICON_PROTECTION,
@@ -48,33 +60,66 @@ export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
   {
     key: "approval",
     label: "Approval gate",
-    summary: "Password, authenticator, cooldown, and strict decisions.",
+    mobileLabel: "Gate",
+    summary: "Password, app code, cooldown, and extra checks.",
     group: "local",
     icon: ICON_APPROVAL,
   },
   {
     key: "notifications",
     label: "Notifications",
+    mobileLabel: "Alerts",
     summary: "Desktop alerts when Guard needs your attention.",
     group: "local",
     icon: ICON_NOTIFICATIONS,
   },
   {
-    key: "advanced",
-    label: "Advanced",
-    summary: "Risk controls, diagnostics, export, and maintenance.",
+    key: "risk",
+    label: "Fine-tuning",
+    mobileLabel: "Tune",
+    summary: "Pick what Guard does for each risky action type.",
     group: "local",
-    icon: ICON_ADVANCED,
+    icon: ICON_RISK,
+  },
+  {
+    key: "defaults",
+    label: "Fallback rules",
+    mobileLabel: "Fallback",
+    summary: "What Guard does when it has not seen something before.",
+    group: "local",
+    icon: ICON_DEFAULTS,
+  },
+  {
+    key: "maintenance",
+    label: "Data & repair",
+    mobileLabel: "Data",
+    summary: "Export, reset, clear logs, and fix connection issues.",
+    group: "local",
+    icon: ICON_MAINTENANCE,
   },
 ] as const;
+
+
+export const localSettingsMobileTabLabels: Record<LocalSettingsTabKey, string> = Object.fromEntries(
+  localSettingsNavItems.map((item) => [item.key, item.mobileLabel ?? item.label]),
+) as Record<LocalSettingsTabKey, string>;
 
 export const localSettingsTabLabels: Record<LocalSettingsTabKey, string> = {
   protection: "Protection",
   approval: "Approval gate",
   notifications: "Notifications",
-  advanced: "Advanced",
+  risk: "Fine-tuning",
+  defaults: "Fallback rules",
+  maintenance: "Data & repair",
 };
 
 export function isLocalSettingsTabKey(value: string): value is LocalSettingsTabKey {
-  return value === "protection" || value === "approval" || value === "notifications" || value === "advanced";
+  return (
+    value === "protection"
+    || value === "approval"
+    || value === "notifications"
+    || value === "risk"
+    || value === "defaults"
+    || value === "maintenance"
+  );
 }
