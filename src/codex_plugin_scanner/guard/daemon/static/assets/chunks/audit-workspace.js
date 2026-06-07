@@ -1,4 +1,4 @@
-import { r as reactExports, au as runAuditRemediation, ad as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, a1 as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, b as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton, v as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
+import { r as reactExports, ax as runAuditRemediation, ae as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, a3 as HiMiniMagnifyingGlass, E as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, b as HiMiniExclamationTriangle, i as harnessDisplayName, f as formatRelativeTime, s as HiMiniChevronRight, A as ActionButton, ay as HiMiniDocumentText, az as guardAwareHref, av as IconActionButton, ag as HiMiniArrowPath, H as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];
@@ -18,14 +18,20 @@ function deriveFrontendAuditResults(receipts, snapshot) {
         remediationAction: restartRequired ? null : {
           action: "package_shim_path",
           manager: mgr,
-          label: `Install Guard for ${mgr}`
+          label: "Install Guard"
         },
-        resolved: false
+        resolved: false,
+        evidenceHref: restartRequired ? null : `/evidence?harness=global&search=${encodeURIComponent(mgr)}`
       });
     }
   }
   const blockedReceipts = receipts.filter((r) => r.policy_decision === "block");
   for (const r of blockedReceipts.slice(0, 20)) {
+    const evidenceParams = new URLSearchParams();
+    evidenceParams.set("harness", r.harness || "global");
+    if (r.artifact_name) {
+      evidenceParams.set("search", r.artifact_name);
+    }
     results.push({
       id: `blocked-${r.receipt_id}`,
       severity: "medium",
@@ -36,7 +42,8 @@ function deriveFrontendAuditResults(receipts, snapshot) {
       timestamp: r.timestamp,
       remediation: "Review the action in evidence and adjust policy if it was a false positive.",
       remediationAction: null,
-      resolved: true
+      resolved: true,
+      evidenceHref: `/evidence?${evidenceParams.toString()}`
     });
   }
   if (snapshot.runtime_state === null) {
@@ -50,7 +57,8 @@ function deriveFrontendAuditResults(receipts, snapshot) {
       timestamp: snapshot.generated_at,
       remediation: "Start Guard with hol-guard bootstrap or check system logs.",
       remediationAction: null,
-      resolved: false
+      resolved: false,
+      evidenceHref: null
     });
   }
   return results;
@@ -124,13 +132,52 @@ function AuditRowActions(props) {
   const handleMarkResolved = reactExports.useCallback(() => onMarkResolved?.(result.id), [onMarkResolved, result.id]);
   const handleRunRemediation = reactExports.useCallback(() => onRunRemediation(result), [onRunRemediation, result]);
   if (result.remediationAction !== null) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleRunRemediation, disabled: running, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-      running ? "Running..." : result.remediationAction.label
-    ] }) });
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
+      result.evidenceHref && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "a",
+        {
+          href: guardAwareHref(result.evidenceHref),
+          className: "inline-flex h-9 w-9 items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors",
+          "aria-label": `View evidence for ${result.title}`,
+          title: "View evidence",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4", "aria-hidden": "true" })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        IconActionButton,
+        {
+          variant: "primary",
+          label: result.remediationAction.label,
+          icon: running ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4" }),
+          onClick: handleRunRemediation,
+          disabled: running,
+          spinning: running
+        }
+      )
+    ] });
   }
   if (onMarkResolved) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleMarkResolved, children: "Resolve" }) });
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
+      result.evidenceHref && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "a",
+        {
+          href: guardAwareHref(result.evidenceHref),
+          className: "inline-flex h-9 w-9 items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors",
+          "aria-label": `View evidence for ${result.title}`,
+          title: "View evidence",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-4 w-4", "aria-hidden": "true" })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        IconActionButton,
+        {
+          variant: "outline",
+          label: "Resolve",
+          icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4" }),
+          onClick: handleMarkResolved
+        }
+      )
+    ] });
   }
   return null;
 }

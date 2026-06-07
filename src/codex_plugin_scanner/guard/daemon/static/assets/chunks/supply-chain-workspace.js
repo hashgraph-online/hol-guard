@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, A as ActionButton, af as HiMiniArrowPath, H as HiMiniShieldCheck, al as HiMiniArrowTopRightOnSquare, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, h as HiMiniXCircle, r as reactExports, am as fetchPackageFirewallStatus, an as runPackageFirewallAction, ad as GuardHarnessActionError, ao as runPackageAudit, ap as runPackageSync, aq as startPackageFirewallConnect, ar as openPackageFirewallShell, S as SectionLabel, a1 as HiMiniMagnifyingGlass, E as EmptyState, as as HiMiniBugAnt, v as HiMiniWrenchScrewdriver, at as HiMiniBeaker, ag as HiMiniTrash, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ag as HiMiniArrowPath, H as HiMiniShieldCheck, an as HiMiniArrowTopRightOnSquare, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, h as HiMiniXCircle, r as reactExports, ao as fetchPackageFirewallStatus, ap as runPackageFirewallAction, ae as GuardHarnessActionError, aq as runPackageAudit, ar as runPackageSync, as as startPackageFirewallConnect, at as openPackageFirewallShell, S as SectionLabel, a3 as HiMiniMagnifyingGlass, E as EmptyState, au as HiMiniBugAnt, av as IconActionButton, ah as HiMiniTrash, v as HiMiniWrenchScrewdriver, aw as HiMiniBeaker, i as harnessDisplayName, B as Badge, d as HiMiniChevronUp, e as HiMiniChevronDown, f as formatRelativeTime } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 function UpgradeCta({ entitlement }) {
@@ -383,33 +383,67 @@ function ManagerRow({
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 sm:gap-3", role: "cell", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: status.tone, children: status.label }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "shrink-0", children: isConfirmingRemove ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onRemoveCancel, disabled: anyPending, children: "Cancel" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ActionButton,
+            IconActionButton,
+            {
+              variant: "ghost",
+              label: "Cancel",
+              icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4" }),
+              onClick: onRemoveCancel,
+              disabled: anyPending
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            IconActionButton,
             {
               variant: "danger",
+              label: "Confirm",
+              icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4" }),
               onClick: handleRemoveConfirm,
-              disabled: anyPending,
-              children: "Confirm"
+              disabled: anyPending
             }
           )
         ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
-          showInstall && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: handleInstall, disabled: anyPending, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-            "Protect"
-          ] }),
-          showRepair && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: handleRepair, disabled: anyPending, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-            "Fix PATH"
-          ] }),
-          showTest && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: handleTest, disabled: anyPending, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-            "Test"
-          ] }),
-          showRemove && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "danger", onClick: handleRemoveRequest, disabled: anyPending, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "mr-1 h-3.5 w-3.5", "aria-hidden": "true" }),
-            "Remove"
-          ] })
+          showInstall && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            IconActionButton,
+            {
+              variant: "primary",
+              label: "Protect",
+              icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4" }),
+              onClick: handleInstall,
+              disabled: anyPending
+            }
+          ),
+          showRepair && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            IconActionButton,
+            {
+              variant: "primary",
+              label: "Fix PATH",
+              icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4" }),
+              onClick: handleRepair,
+              disabled: anyPending
+            }
+          ),
+          showTest && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            IconActionButton,
+            {
+              variant: "outline",
+              label: "Test",
+              icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4" }),
+              onClick: handleTest,
+              disabled: anyPending
+            }
+          ),
+          showRemove && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            IconActionButton,
+            {
+              variant: "danger",
+              label: "Remove",
+              icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4" }),
+              onClick: handleRemoveRequest,
+              disabled: anyPending
+            }
+          )
         ] }) })
       ] })
     ] }),
