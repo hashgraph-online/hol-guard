@@ -17,12 +17,9 @@ HOOK_SCRIPT_NAME = "hol-guard-cursor-hook.py"
 _MANAGED_HOOK_EVENTS = (
     "beforeShellExecution",
     "beforeMCPExecution",
-    "preToolUse",
     "beforeReadFile",
 )
-_PRETOOL_MATCHER = r"Shell|MCP|mcp__.*|Bash|Read"
-_HOOK_ARGV_ENV = "HOL_GUARD_HOOK_ARGV"
-_MANAGED_HOOK_TIMEOUT_SECONDS = 35
+_MANAGED_HOOK_TIMEOUT_SECONDS = 45
 _LEGACY_MANAGED_COMMAND_MARKERS = (
     "hol-guard-cursor-hook.py",
     "HOL_GUARD_HOOK_ARGV",
@@ -31,10 +28,27 @@ _LEGACY_MANAGED_COMMAND_MARKERS = (
 )
 
 
+def _infer_cursor_hook_event_name(payload: Mapping[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    if _raw_hook_event_name(normalized):
+        return normalized
+    file_path = normalized.get("file_path")
+    if isinstance(file_path, str) and file_path.strip():
+        normalized["hook_event_name"] = "beforeReadFile"
+        return normalized
+    command = normalized.get("command")
+    if isinstance(command, str) and command.strip():
+        normalized["hook_event_name"] = "beforeShellExecution"
+        return normalized
+    if normalized.get("tool_name") is not None or normalized.get("tool_input") is not None:
+        normalized["hook_event_name"] = "preToolUse"
+    return normalized
+
+
 def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
     """Map Cursor hook stdin JSON into Guard hook normalization shape."""
 
-    normalized = dict(payload)
+    normalized = _infer_cursor_hook_event_name(payload)
     raw_event = _raw_hook_event_name(normalized)
     if raw_event == "beforeshellexecution":
         normalized["hook_event_name"] = "PreToolUse"
@@ -171,6 +185,13 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     for event_name in _MANAGED_HOOK_EVENTS:
         entry = _managed_hook_entry(context, script_path=script_path, event_name=event_name)
         hooks[event_name] = _merge_hook_entries(hooks.get(event_name), entry, event_name=event_name)
+    pre_tool_use = hooks.get("preToolUse")
+    if pre_tool_use is not None:
+        stripped = _strip_managed_hook_entries(pre_tool_use, script_path=script_path)
+        if stripped:
+            hooks["preToolUse"] = stripped
+        else:
+            hooks.pop("preToolUse", None)
     payload["hooks"] = hooks
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
     hooks_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -392,7 +413,7 @@ def cursor_hook_script_source(context: HarnessContext) -> str:
         )
         .replace(
             "__GUARD_HOOK_TIMEOUT_SECONDS__",
-            str(max(_MANAGED_HOOK_TIMEOUT_SECONDS - 5, 1)),
+            str(max(_MANAGED_HOOK_TIMEOUT_SECONDS - 3, 1)),
         )
     )
 
@@ -444,16 +465,108 @@ def _hook_process_env() -> dict[str, str]:
 def _workspace_from_cursor_input(payload: dict[str, object]) -> str | None:
     project_dir = os.environ.get("CURSOR_PROJECT_DIR")
     if isinstance(project_dir, str) and project_dir.strip():
-        return project_dir.strip()
+        candidate = project_dir.strip()
+        if Path(candidate).is_dir():
+            return candidate
     roots = payload.get("workspace_roots") or payload.get("workspaceRoots")
     if isinstance(roots, list):
         for item in roots:
             if isinstance(item, str) and item.strip():
-                return item.strip()
+                candidate = item.strip()
+                if Path(candidate).is_dir():
+                    return candidate
     cwd = payload.get("cwd")
     if isinstance(cwd, str) and cwd.strip():
-        return cwd.strip()
+        candidate = cwd.strip()
+        if Path(candidate).is_dir():
+            return candidate
     return None
+
+
+def _tool_input_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, list):
+        return {"arguments": list(value)}
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {"raw": value.strip()}
+        if isinstance(parsed, dict):
+            return dict(parsed)
+        if isinstance(parsed, list):
+            return {"arguments": list(parsed)}
+    return {}
+
+
+def _raw_hook_event_name(payload: dict[str, object]) -> str:
+    for key in ("hook_event_name", "hookEventName", "hook_name", "hookName", "event", "eventName"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return ""
+
+
+def _infer_cursor_hook_event_name(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    if _raw_hook_event_name(normalized):
+        return normalized
+    file_path = normalized.get("file_path")
+    if isinstance(file_path, str) and file_path.strip():
+        normalized["hook_event_name"] = "beforeReadFile"
+        return normalized
+    command = normalized.get("command")
+    if isinstance(command, str) and command.strip():
+        normalized["hook_event_name"] = "beforeShellExecution"
+        return normalized
+    if normalized.get("tool_name") is not None or normalized.get("tool_input") is not None:
+        normalized["hook_event_name"] = "preToolUse"
+    return normalized
+
+
+def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = _infer_cursor_hook_event_name(payload)
+    raw_event = _raw_hook_event_name(normalized)
+    if raw_event == "beforeshellexecution":
+        normalized["hook_event_name"] = "PreToolUse"
+        normalized.setdefault("tool_name", "Shell")
+        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        command = normalized.get("command")
+        if isinstance(command, str) and command.strip():
+            tool_input.setdefault("command", command.strip())
+        cwd = normalized.get("cwd")
+        if isinstance(cwd, str) and cwd.strip():
+            tool_input.setdefault("working_directory", cwd.strip())
+        normalized["tool_input"] = tool_input
+        return normalized
+    if raw_event == "beforemcpexecution":
+        normalized["hook_event_name"] = "PreToolUse"
+        tool_name = normalized.get("tool_name")
+        if isinstance(tool_name, str) and tool_name.strip():
+            normalized["tool_name"] = tool_name.strip()
+        else:
+            normalized.setdefault("tool_name", "MCP")
+        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        for key in ("url", "command"):
+            value = normalized.get(key)
+            if isinstance(value, str) and value.strip():
+                tool_input.setdefault(key, value.strip())
+        normalized["tool_input"] = tool_input
+        return normalized
+    if raw_event == "beforereadfile":
+        normalized["hook_event_name"] = "PreToolUse"
+        normalized.setdefault("tool_name", "Read")
+        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        file_path = normalized.get("file_path")
+        if isinstance(file_path, str) and file_path.strip():
+            tool_input.setdefault("file_path", file_path.strip())
+            tool_input.setdefault("path", file_path.strip())
+        normalized["tool_input"] = tool_input
+        return normalized
+    if raw_event == "pretooluse":
+        normalized["hook_event_name"] = "PreToolUse"
+    return normalized
 
 
 def _guard_payload_has_actionable_risk(guard_payload: dict[str, object]) -> bool:
@@ -556,7 +669,10 @@ def main() -> int:
     if not isinstance(payload, dict):
         print(json.dumps({"permission": "deny", "user_message": "HOL Guard received invalid Cursor hook input."}))
         return 2
-    workspace = _workspace_from_cursor_input(payload)
+    inferred = _infer_cursor_hook_event_name(payload)
+    hook_event_name = str(inferred.get("hook_event_name") or inferred.get("hookEventName") or "preToolUse")
+    prepared = _prepare_cursor_hook_payload(inferred)
+    workspace = _workspace_from_cursor_input(prepared)
     guard_argv = list(GUARD_HOOK_ARGV)
     if workspace:
         if "--workspace" in guard_argv:
@@ -568,13 +684,26 @@ def main() -> int:
     try:
         proc = subprocess.run(
             [*GUARD_CLI, *guard_argv],
-            input=json.dumps(payload),
+            input=json.dumps(prepared),
             capture_output=True,
             text=True,
             cwd=GUARD_HOME,
             env=_hook_process_env(),
             timeout=GUARD_HOOK_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired:
+        print(
+            json.dumps(
+                {
+                    "permission": "deny",
+                    "user_message": (
+                        f"HOL Guard hook timed out after {GUARD_HOOK_TIMEOUT_SECONDS}s. "
+                        "Run `hol-guard status`, approve pending requests, then retry."
+                    ),
+                }
+            )
+        )
+        return 2
     except Exception as exc:
         print(
             json.dumps(
@@ -594,7 +723,6 @@ def main() -> int:
         except json.JSONDecodeError:
             guard_payload = {}
     policy_action = str(guard_payload.get("policy_action") or "allow")
-    hook_event_name = str(payload.get("hook_event_name") or payload.get("hookEventName") or "preToolUse")
     if proc.returncode != 0 and not guard_payload:
         print(
             json.dumps(
@@ -632,9 +760,14 @@ def _managed_hook_entry(
         "timeout": _MANAGED_HOOK_TIMEOUT_SECONDS,
         "failClosed": event_name in _MANAGED_HOOK_EVENTS,
     }
-    if event_name == "preToolUse":
-        entry["matcher"] = _PRETOOL_MATCHER
     return entry
+
+
+def _strip_managed_hook_entries(entries: object, *, script_path: Path) -> list[object]:
+    if not isinstance(entries, list):
+        return []
+    command = str(script_path.resolve())
+    return [entry for entry in entries if not _is_managed_hook_entry(entry, command=command)]
 
 
 def _merge_hook_entries(entries: object, hook_entry: dict[str, object], *, event_name: str) -> list[object]:
