@@ -3,7 +3,8 @@ import { HiMiniArrowDownTray, HiMiniDocumentText, HiMiniXMark } from "react-icon
 
 import { EmptyState, ActionButton, SectionLabel, IconActionButton } from "./approval-center-primitives";
 import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
-import type { GuardReceipt } from "./guard-types";
+import type { GuardReceipt, GuardReceiptAnalytics, GuardRuntimeSnapshot } from "./guard-types";
+import { fetchReceiptAnalytics } from "./guard-api";
 import type { EvidenceFilterState, EvidenceView, EvidenceSortKey } from "./evidence/evidence-types";
 import { filterEvidence } from "./evidence/evidence-filters";
 import { sortEvidence } from "./evidence/evidence-sort";
@@ -39,20 +40,25 @@ const PAGE_SIZE = 50;
 
 interface EvidenceWorkbenchProps {
   receiptItems: GuardReceipt[];
+  runtime: GuardRuntimeSnapshot | null;
   onClearEvidence?: () => void;
+  onNavigate?: (pathname: string) => void;
 }
 
 function evidenceTitleForView(view: EvidenceView): string {
   return VIEW_TABS.find((tab) => tab.key === view)?.label ?? "Evidence";
 }
 
-function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchProps) {
+function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate }: EvidenceWorkbenchProps) {
   const initial = useMemo(() => readEvidenceUrlState(), []);
   const [filters, setFilters] = useState<EvidenceFilterState>(initial);
   const [debouncedSearch, setDebouncedSearch] = useState(initial.search);
   const [page, setPage] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
+  const [analyticsState, setAnalyticsState] = useState<
+    { kind: "idle" } | { kind: "loading" } | { kind: "ready"; data: GuardReceiptAnalytics } | { kind: "error"; message: string }
+  >({ kind: "idle" });
 
   const urlSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -179,6 +185,46 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   }, [onClearEvidence]);
 
   useEffect(() => {
+    if (filters.view !== "insights") {
+      return;
+    }
+    let cancelled = false;
+    setAnalyticsState({ kind: "loading" });
+    fetchReceiptAnalytics()
+      .then((data) => {
+        if (!cancelled) setAnalyticsState({ kind: "ready", data });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setAnalyticsState({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Could not load analytics",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.view, receiptItems.length]);
+
+  const handleFilterDay = useCallback((dateKey: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      view: "actions",
+      day: dateKey,
+      time: "all",
+    }));
+  }, []);
+
+  const handleViewActions = useCallback(() => {
+    setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
+  }, []);
+
+  const handleFilterHarnessFromInsights = useCallback((harness: string) => {
+    setFilters((prev) => ({ ...prev, view: "actions", harness, day: "" }));
+  }, []);
+
+  useEffect(() => {
     function handlePopState() {
       const urlState = readEvidenceUrlState();
       setFilters(urlState);
@@ -286,11 +332,23 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             aria-labelledby="tab-insights"
             className="guard-fade-in"
           >
-            <EvidenceAnalyticsPanel
-              metrics={metrics}
-              onFilterHarness={handleFilterHarness}
-              onFilterCategory={handleFilterCategory}
-            />
+            {analyticsState.kind === "loading" || analyticsState.kind === "idle" ? (
+              <div className="flex items-center justify-center py-16 text-sm text-slate-500">Loading insights…</div>
+            ) : analyticsState.kind === "error" ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {analyticsState.message}
+              </div>
+            ) : (
+              <EvidenceAnalyticsPanel
+                analytics={analyticsState.data}
+                runtime={runtime}
+                sampleCount={receiptItems.length}
+                onFilterHarness={handleFilterHarnessFromInsights}
+                onFilterDay={handleFilterDay}
+                onViewActions={handleViewActions}
+                onOpenCloud={onNavigate ? () => onNavigate("/fleet") : undefined}
+              />
+            )}
           </div>
         )}
 
@@ -362,14 +420,27 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   );
 }
 
-export function ReceiptsWorkspace(props: { receipts: ReceiptsState; onClearEvidence?: () => void }) {
+export function ReceiptsWorkspace(props: {
+  receipts: ReceiptsState;
+  runtime?: { kind: "ready"; snapshot: GuardRuntimeSnapshot } | { kind: "loading" | "error" };
+  onClearEvidence?: () => void;
+  onNavigate?: (pathname: string) => void;
+}) {
   if (props.receipts.kind === "loading") {
     return <EvidenceLoadingState />;
   }
   if (props.receipts.kind === "error") {
     return <EvidenceErrorState message={props.receipts.message} />;
   }
-  return <EvidenceWorkbench receiptItems={props.receipts.items} onClearEvidence={props.onClearEvidence} />;
+  const runtime = props.runtime?.kind === "ready" ? props.runtime.snapshot : null;
+  return (
+    <EvidenceWorkbench
+      receiptItems={props.receipts.items}
+      runtime={runtime}
+      onClearEvidence={props.onClearEvidence}
+      onNavigate={props.onNavigate}
+    />
+  );
 }
 
 export function filterReceiptItems(

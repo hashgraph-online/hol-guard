@@ -350,6 +350,49 @@ export type GuardReceipt = {
   action_envelope_json?: GuardActionEnvelope | null;
 };
 
+export type GuardReceiptAnalyticsBucket = {
+  date_key: string;
+  label: string;
+  allowed: number;
+  blocked: number;
+  reviewed: number;
+};
+
+export type GuardReceiptDailyActivity = {
+  date_key: string;
+  total: number;
+};
+
+export type GuardReceiptHarnessStat = {
+  harness: string;
+  total: number;
+  allowed: number;
+  blocked: number;
+};
+
+export type GuardReceiptArtifactStat = {
+  name: string;
+  total: number;
+  allowed: number;
+  blocked: number;
+};
+
+export type GuardReceiptAnalytics = {
+  total: number;
+  allowed: number;
+  blocked: number;
+  reviewed: number;
+  first_activity_at: string | null;
+  last_activity_at: string | null;
+  active_day_streak: number;
+  peak_day_total: number;
+  daily_activity: GuardReceiptDailyActivity[];
+  trend_buckets: GuardReceiptAnalyticsBucket[];
+  by_harness: GuardReceiptHarnessStat[];
+  top_artifacts: GuardReceiptArtifactStat[];
+  loaded_sample_limit: number;
+};
+
 export type GuardArtifactDiff = {
   artifact_id: string;
   harness: string;
