@@ -165,7 +165,7 @@ function guardParam(name: string): string | null {
   return guardParams().get(name);
 }
 
-function readGuardToken(): string | null {
+export function readGuardToken(): string | null {
   const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (guardTokenLocationKey !== locationKey) {
     guardTokenOverride = null;
@@ -236,7 +236,10 @@ async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
     if (!response.ok) {
       return false;
     }
-    const payload = (await response.json()) as Record<string, unknown>;
+    const payload: unknown = await response.json();
+    if (!isRecord(payload)) {
+      return false;
+    }
     return payload.ok === true && payload.compatibility_version === 2;
   } catch {
     return false;
@@ -329,7 +332,7 @@ export async function fetchGuardUpdateStatusAtOrigin(
   return normalizeGuardUpdateStatus(await response.json());
 }
 
-function redirectToGuardDaemonOrigin(
+export function redirectToGuardDaemonOrigin(
   origin: string,
   guardToken: string | null,
 ): void {
@@ -383,10 +386,6 @@ export async function reconnectGuardDaemonAfterUpdate(
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
     if (refreshedToken) {
       saveGuardToken(refreshedToken);
-    }
-
-    if (origin !== window.location.origin) {
-      redirectToGuardDaemonOrigin(origin, refreshedToken ?? guardToken);
     }
 
     return origin;

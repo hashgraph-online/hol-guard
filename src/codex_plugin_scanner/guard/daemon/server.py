@@ -915,7 +915,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/update/status":
             self._write_json(
                 merge_dashboard_update_progress(
-                    self.server.store.guard_home,  # type: ignore[attr-defined]
+                    store.guard_home,
                     build_guard_update_status_payload(),
                 )
             )

@@ -142,7 +142,10 @@ def schedule_guard_dashboard_update(
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
     else:
         kwargs["start_new_session"] = True
+    stderr_target = kwargs.get("stderr")
     process = subprocess.Popen(command, **kwargs)
+    if stderr_target is not None and hasattr(stderr_target, "close"):
+        stderr_target.close()
     _write_update_lock(
         lock_path,
         {

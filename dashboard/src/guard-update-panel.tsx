@@ -4,6 +4,8 @@ import { HiMiniArrowPath } from "react-icons/hi2";
 import {
   fetchGuardUpdateStatus,
   reconnectGuardDaemonAfterUpdate,
+  readGuardToken,
+  redirectToGuardDaemonOrigin,
   scheduleGuardUpdate,
 } from "./guard-api";
 import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
@@ -155,6 +157,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
             throw new Error("Guard daemon not found");
           }
           if (origin !== window.location.origin) {
+            redirectToGuardDaemonOrigin(origin, readGuardToken());
             return true;
           }
           const status = await fetchGuardUpdateStatus();
