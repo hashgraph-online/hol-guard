@@ -1,4 +1,5 @@
 """Guard wrapper-mode runtime execution."""
+
 from __future__ import annotations
 
 import hashlib
