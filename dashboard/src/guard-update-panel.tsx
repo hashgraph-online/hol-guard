@@ -143,7 +143,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
   }, [refreshUpdateStatus]);
 
   const waitForReconnect = useCallback(
-    async (expectedPreviousVersion: string, expectedLatestVersion: string | null) => {
+    async (expectedPreviousVersion: string, expectedLatestVersion: string | null): Promise<boolean> => {
       reconnectStartedAt.current = Date.now();
       while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
         try {
@@ -155,13 +155,13 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
             throw new Error("Guard daemon not found");
           }
           if (origin !== window.location.origin) {
-            return;
+            return true;
           }
           const status = await fetchGuardUpdateStatus();
           setUpdateStatus(status);
           setUpdatePhase("idle");
           options?.onReconnected?.();
-          return;
+          return false;
         } catch {
           await new Promise<void>((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
         }
@@ -183,8 +183,8 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
       const scheduleResult = await scheduleGuardUpdate();
       if (scheduleResult.scheduled === false && scheduleResult.error === "update_in_progress") {
         setUpdatePhase("reconnecting");
-        await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
-        if (window.location.origin === (window.sessionStorage.getItem("guardDaemon") ?? window.location.origin)) {
+        const redirected = await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
+        if (!redirected) {
           window.location.reload();
         }
         return;
@@ -193,8 +193,10 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
         throw new Error(scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled.");
       }
       setUpdatePhase("reconnecting");
-      await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
-      window.location.reload();
+      const redirected = await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
+      if (!redirected) {
+        window.location.reload();
+      }
     } catch {
       setUpdatePhase("error");
     }
