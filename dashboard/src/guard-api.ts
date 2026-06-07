@@ -69,6 +69,7 @@ const GUARD_SURFACE_PROTOCOL_VERSIONS = ["1.1", "1.0"] as const;
 const DEFAULT_GUARD_DAEMON_PORT = 4781;
 const GUARD_DAEMON_PORT_RANGE = 1000;
 const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
+const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
 const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
@@ -210,12 +211,19 @@ function preferredGuardDaemonPort(): number {
 }
 
 export function buildGuardDaemonCandidatePorts(preferredPort: number): number[] {
-  const offset = preferredPort - DEFAULT_GUARD_DAEMON_PORT;
   const ports: number[] = [];
+  const inStandardRange =
+    preferredPort >= DEFAULT_GUARD_DAEMON_PORT &&
+    preferredPort < DEFAULT_GUARD_DAEMON_PORT + GUARD_DAEMON_PORT_RANGE;
   for (let step = 0; step < GUARD_DAEMON_DISCOVERY_PROBE_COUNT; step += 1) {
-    const candidateOffset =
-      ((offset + step) % GUARD_DAEMON_PORT_RANGE + GUARD_DAEMON_PORT_RANGE) % GUARD_DAEMON_PORT_RANGE;
-    ports.push(DEFAULT_GUARD_DAEMON_PORT + candidateOffset);
+    if (inStandardRange) {
+      const offset = preferredPort - DEFAULT_GUARD_DAEMON_PORT;
+      const candidateOffset =
+        ((offset + step) % GUARD_DAEMON_PORT_RANGE + GUARD_DAEMON_PORT_RANGE) % GUARD_DAEMON_PORT_RANGE;
+      ports.push(DEFAULT_GUARD_DAEMON_PORT + candidateOffset);
+    } else {
+      ports.push(preferredPort + step);
+    }
   }
   return ports;
 }
@@ -237,14 +245,30 @@ async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
   }
 }
 
-export async function discoverGuardDaemonOrigin(preferredPort = preferredGuardDaemonPort()): Promise<string | null> {
-  for (const port of buildGuardDaemonCandidatePorts(preferredPort)) {
-    const origin = `http://127.0.0.1:${port}`;
-    if (await probeGuardDaemonHealth(origin)) {
-      return origin;
+async function probeGuardDaemonCandidatePortsInBatches(
+  ports: number[],
+  probe: (port: number, origin: string) => Promise<boolean>,
+): Promise<string | null> {
+  for (let index = 0; index < ports.length; index += GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE) {
+    const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (port) => {
+        const origin = `http://127.0.0.1:${port}`;
+        const ok = await probe(port, origin);
+        return { port, origin, ok };
+      }),
+    );
+    const active = results.find((result) => result.ok);
+    if (active) {
+      return active.origin;
     }
   }
   return null;
+}
+
+export async function discoverGuardDaemonOrigin(preferredPort = preferredGuardDaemonPort()): Promise<string | null> {
+  const ports = buildGuardDaemonCandidatePorts(preferredPort);
+  return probeGuardDaemonCandidatePortsInBatches(ports, async (_port, origin) => probeGuardDaemonHealth(origin));
 }
 
 function updateReconnectSucceeded(
@@ -327,24 +351,34 @@ export async function reconnectGuardDaemonAfterUpdate(
   const guardToken = readGuardToken();
   const reconnectOptions = options ?? {};
   const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
+  const ports = buildGuardDaemonCandidatePorts(preferredGuardDaemonPort());
 
-  for (const port of buildGuardDaemonCandidatePorts(preferredGuardDaemonPort())) {
-    const origin = `http://127.0.0.1:${port}`;
-    if (!(await probeGuardDaemonHealth(origin))) {
+  for (let index = 0; index < ports.length; index += GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE) {
+    const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (port) => {
+        const origin = `http://127.0.0.1:${port}`;
+        if (!(await probeGuardDaemonHealth(origin))) {
+          return null;
+        }
+        try {
+          const status = await fetchGuardUpdateStatusAtOrigin(origin, guardToken);
+          if (awaitingVersionChange && !updateReconnectSucceeded(status, reconnectOptions)) {
+            return null;
+          }
+          return { origin, status };
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const active = results.find((result) => result !== null);
+    if (!active) {
       continue;
     }
 
-    let status: GuardUpdateStatus;
-    try {
-      status = await fetchGuardUpdateStatusAtOrigin(origin, guardToken);
-    } catch {
-      continue;
-    }
-
-    if (awaitingVersionChange && !updateReconnectSucceeded(status, reconnectOptions)) {
-      continue;
-    }
-
+    const { origin } = active;
     saveGuardDaemonOrigin(origin);
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
     if (refreshedToken) {

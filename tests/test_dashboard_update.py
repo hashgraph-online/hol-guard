@@ -293,6 +293,10 @@ def test_merge_dashboard_update_progress_includes_lock_metadata(
         FakeProcess,
     )
     monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update._pid_is_running",
+        lambda pid: pid == 5151,
+    )
+    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.dashboard_update.build_guard_update_status_payload",
         lambda: {
             "current_version": "2.0.508",
@@ -342,6 +346,10 @@ def test_dashboard_update_runner_retires_all_daemons_before_upgrade(
         lambda _home, **kwargs: calls.append("retire") or [],
     )
     monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner._retire_guard_daemon_pid",
+        lambda pid, **kwargs: calls.append(f"retire_pid:{pid}"),
+    )
+    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.dashboard_update_runner.clear_guard_daemon_state",
         lambda _home: calls.append("clear_state"),
     )
@@ -378,9 +386,11 @@ def test_dashboard_update_runner_retires_all_daemons_before_upgrade(
     assert exit_code == 0
     assert calls == [
         "retire",
+        "retire_pid:5150",
         "clear_state",
         "repair_locator",
         "retire",
+        "retire_pid:5150",
         "clear_state",
         "ensure",
         "clear_lock",

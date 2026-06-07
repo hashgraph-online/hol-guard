@@ -58,6 +58,9 @@ def merge_dashboard_update_progress(
     status_payload: dict[str, object],
 ) -> dict[str, object]:
     payload = dict(status_payload)
+    if not dashboard_update_in_progress(guard_home):
+        payload["update_in_progress"] = False
+        return payload
     lock_payload = read_dashboard_update_lock(guard_home)
     if lock_payload is None:
         payload["update_in_progress"] = False

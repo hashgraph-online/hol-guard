@@ -10,6 +10,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard.cli.update_commands import run_guard_update
 from codex_plugin_scanner.guard.daemon.dashboard_update import clear_dashboard_update_lock
 from codex_plugin_scanner.guard.daemon.manager import (
+    _retire_guard_daemon_pid,
     clear_guard_daemon_state,
     ensure_guard_daemon_after_update,
     repair_approval_center_locator,
@@ -25,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         time.sleep(_DASHBOARD_UPDATE_DAEMON_SETTLE_SECONDS)
         retire_all_guard_daemons_for_home(guard_home)
+        _retire_guard_daemon_pid(args.daemon_pid, expected_guard_home=guard_home)
         clear_guard_daemon_state(guard_home)
         repair_approval_center_locator(guard_home)
 
@@ -35,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         retire_all_guard_daemons_for_home(guard_home)
+        _retire_guard_daemon_pid(args.daemon_pid, expected_guard_home=guard_home)
         clear_guard_daemon_state(guard_home)
         ensure_guard_daemon_after_update(guard_home)
         return 0
