@@ -94,7 +94,7 @@ def _policy_bundle_acknowledgement_is_valid(acknowledgement: object) -> bool:
 def validated_policy_bundle_payload(
     policy_bundle: dict[str, object],
 ) -> tuple[dict[str, object] | None, str | None]:
-    required_top_level = (*_POLICY_BUNDLE_CORE_KEYS, "bundleVersion", "bundleHash", "acknowledgements")
+    required_top_level = (*_POLICY_BUNDLE_CORE_KEYS, "bundleHash", "acknowledgements")
     if any(key not in policy_bundle for key in required_top_level):
         return None, "missing_required_field"
     if policy_bundle.get("contractVersion") != "guard-policy-bundle.v1":
