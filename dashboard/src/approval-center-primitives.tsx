@@ -69,7 +69,7 @@ const footerSections = [
 export function ShellHeader(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
+  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
   onNavigate: (pathname: string) => void;
   onOpenMobileQueue?: () => void;
   guardVersion?: string | null;
@@ -170,13 +170,14 @@ const sidebarLinks = [
   { href: "/fleet", label: "Protect", view: "fleet", icon: HiMiniShieldCheck },
   { href: "/evidence", label: "Evidence", view: "evidence", icon: HiMiniDocumentText },
   { href: "/supply-chain", label: "Supply chain", view: "supply-chain", icon: HiMiniSquares2X2 },
-  { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
+  { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal },
+  { href: "/about", label: "About", view: "about", icon: HiMiniInformationCircle }
 ] as const;
 
 export function ShellSidebar(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
+  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   guardVersion?: string | null;

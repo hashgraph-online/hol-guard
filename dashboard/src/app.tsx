@@ -31,6 +31,9 @@ const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.He
 const SupplyChainHubWorkspace = lazy(() =>
   import("./supply-chain-hub-workspace").then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
+const AboutWorkspace = lazy(() =>
+  import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
+);
 
 function LazyFallback() {
   return (
@@ -116,7 +119,7 @@ function parseRequestId(pathname: string): string | null {
   return null;
 }
 
-type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health";
+type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
 
 export function viewTitle(view: AppView): string {
   if (view === "home") return "Home";
@@ -128,6 +131,7 @@ export function viewTitle(view: AppView): string {
   if (view === "audit") return "Audit";
   if (view === "policy") return "Policy";
   if (view === "feed-health") return "Feed Health";
+  if (view === "about") return "About";
   return "App detail";
 }
 
@@ -170,6 +174,9 @@ export function resolveView(pathname: string): AppView {
   }
   if (pathname === "/feed-health") {
     return "feed-health";
+  }
+  if (pathname === "/about") {
+    return "about";
   }
   if (
     pathname === "/inbox" ||
@@ -749,6 +756,11 @@ export function App() {
             />
           </Suspense>
         ) : null
+      }
+      aboutContent={
+        <Suspense fallback={<LazyFallback />}>
+          <AboutWorkspace />
+        </Suspense>
       }
     />
     {helpOpen && (
