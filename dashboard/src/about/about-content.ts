@@ -22,7 +22,7 @@ export const ABOUT_PARTNER_SECTION_BODY =
   "Join teams building on HOL open standards. Partners get early access to protocol drafts, co-marketing, and direct engineering support.";
 
 export const ABOUT_PARTNER_CTA = "Become a partner";
-export const ABOUT_PARTNER_CTA_HREF = "mailto:partners@hol.org";
+export const ABOUT_PARTNER_CTA_HREF = "https://hol.org";
 
 export const ABOUT_AFFILIATE_SECTION_TITLE = "Affiliate starter kit";
 export const ABOUT_AFFILIATE_SECTION_BODY =
@@ -61,19 +61,19 @@ export const ABOUT_PATH_CARDS: PathCard[] = [
     title: "Protect locally",
     description: "Install HOL Guard and start intercepting risky harness actions on this machine.",
     ctaLabel: "Get started",
-    ctaHref: "https://hol.org/guard/docs/install",
+    ctaHref: "https://hol.org/guard/install",
   },
   {
     title: "Sync with your team",
     description: "Connect to Guard Cloud for shared policy bundles and cross-device fleet visibility.",
     ctaLabel: "Guard Cloud",
-    ctaHref: "https://github.com/hashgraph-online/hol-guard",
+    ctaHref: "https://hol.org/guard",
   },
   {
     title: "Validate packages in CI",
     description: "Add the plugin-scanner to your CI pipeline to catch risky dependencies before deploy.",
     ctaLabel: "CI docs",
-    ctaHref: "https://hol.org/guard/docs/ci",
+    ctaHref: "https://hol.org/guard/docs/plugin-scanner/report-formats-and-ci",
   },
   {
     title: "Build standards",
