@@ -927,7 +927,6 @@ def test_tool_action_request_classifier_keeps_sensitive_docker_actions_blocked(c
 @pytest.mark.parametrize(
     "command",
     [
-        "python -m ruff check --fix .",
         "python -m ruff check --add-noqa .",
         "python -m ruff format .",
         "python -m ruff --config ruff.toml format .",
@@ -949,6 +948,17 @@ def test_tool_action_request_classifier_blocks_mutating_python_module_invocation
 
     assert request is not None
     assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_allows_safe_ruff_fix_invocations(tmp_path):
+    for command in (
+        "python -m ruff check --fix .",
+        "python -m ruff check --fix-only .",
+        "cd repo && python3 -m ruff check --fix src/foo.py",
+    ):
+        request = extract_sensitive_tool_action_request("bash", {"command": command}, cwd=tmp_path)
+
+        assert request is None, command
 
 
 def test_tool_action_request_classifier_detects_read_only_filter_redirection_write():
