@@ -236,6 +236,7 @@ def test_install_cursor_hooks_registers_after_shell_observer(tmp_path: Path, mon
 
 
 def test_cursor_native_shell_approval_persists_after_shell(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
     from codex_plugin_scanner.guard.cli import commands as guard_commands_module
     from codex_plugin_scanner.guard.models import GuardArtifact
     from codex_plugin_scanner.guard.store import GuardStore
@@ -268,13 +269,15 @@ def test_cursor_native_shell_approval_persists_after_shell(tmp_path: Path) -> No
     )
     saved = guard_commands_module._persist_cursor_native_permission_after_shell(
         store=store,
-        payload={
-            "conversation_id": conversation_id,
-            "hook_event_name": "afterShellExecution",
-            "command": command,
-            "cwd": str(workspace_dir),
-            "duration": 15,
-        },
+        payload=prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "hook_event_name": "afterShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+                "duration": 15,
+            }
+        ),
         harness="cursor",
         home_dir=home_dir,
         guard_home=home_dir,

@@ -4605,14 +4605,26 @@ def _append_cursor_pending_shell_key(
 ) -> None:
     index_key = _cursor_pending_shell_index_key(conversation_id)
     try:
-        index_payload = store.get_sync_payload(index_key)
-    except (OSError, sqlite3.Error):
-        index_payload = None
-    pending_keys = [str(item) for item in index_payload] if isinstance(index_payload, list) else []
-    if pending_key not in pending_keys:
-        pending_keys.append(pending_key)
-    try:
-        store.set_sync_payload(index_key, pending_keys, now)
+        with store._connect() as connection:
+            connection.execute("begin immediate")
+            row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                (index_key,),
+            ).fetchone()
+            pending_keys = _sync_payload_list_from_row(row)
+            if pending_key in pending_keys:
+                return
+            pending_keys.append(pending_key)
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values (?, ?, ?)
+                on conflict(state_key) do update set
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (index_key, json.dumps(pending_keys), now),
+            )
     except (OSError, sqlite3.Error):
         return
 
@@ -4810,9 +4822,7 @@ def _persist_cursor_native_permission_after_shell(
     guard_home: Path,
     workspace: Path | None,
 ) -> bool:
-    from ..adapters.cursor_hooks import prepare_cursor_hook_payload
-
-    prepared = _normalize_hook_payload(prepare_cursor_hook_payload(payload))
+    prepared = payload
     conversation_id = _cursor_conversation_id(prepared)
     command = _cursor_shell_command_from_payload(prepared)
     if conversation_id is None or command is None:
@@ -4882,7 +4892,10 @@ def _persist_cursor_native_permission_after_shell(
         user_override="cursor-native-approve",
         approval_source="inline",
     )
-    store.add_receipt(receipt)
+    try:
+        store.add_receipt(receipt)
+    except (OSError, sqlite3.Error):
+        return False
     pending_key = _cursor_pending_shell_state_key(conversation_id, command)
     _remove_cursor_pending_shell_permission(
         store,

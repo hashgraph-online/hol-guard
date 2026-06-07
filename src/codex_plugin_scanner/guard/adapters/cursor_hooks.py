@@ -47,35 +47,30 @@ def _infer_cursor_hook_event_name(payload: Mapping[str, object]) -> dict[str, ob
     return normalized
 
 
+def _cursor_shell_hook_payload(normalized: dict[str, object], *, hook_event_name: str) -> dict[str, object]:
+    payload = dict(normalized)
+    payload["hook_event_name"] = hook_event_name
+    payload.setdefault("tool_name", "Shell")
+    tool_input = _tool_input_dict(payload.get("tool_input"))
+    command = payload.get("command")
+    if isinstance(command, str) and command.strip():
+        tool_input.setdefault("command", command.strip())
+    cwd = payload.get("cwd")
+    if isinstance(cwd, str) and cwd.strip():
+        tool_input.setdefault("working_directory", cwd.strip())
+    payload["tool_input"] = tool_input
+    return payload
+
+
 def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
     """Map Cursor hook stdin JSON into Guard hook normalization shape."""
 
     normalized = _infer_cursor_hook_event_name(payload)
     raw_event = _raw_hook_event_name(normalized)
     if raw_event == "aftershellexecution":
-        normalized["hook_event_name"] = "afterShellExecution"
-        normalized.setdefault("tool_name", "Shell")
-        tool_input = _tool_input_dict(normalized.get("tool_input"))
-        command = normalized.get("command")
-        if isinstance(command, str) and command.strip():
-            tool_input.setdefault("command", command.strip())
-        cwd = normalized.get("cwd")
-        if isinstance(cwd, str) and cwd.strip():
-            tool_input.setdefault("working_directory", cwd.strip())
-        normalized["tool_input"] = tool_input
-        return normalized
+        return _cursor_shell_hook_payload(normalized, hook_event_name="afterShellExecution")
     if raw_event == "beforeshellexecution":
-        normalized["hook_event_name"] = "PreToolUse"
-        normalized.setdefault("tool_name", "Shell")
-        tool_input = _tool_input_dict(normalized.get("tool_input"))
-        command = normalized.get("command")
-        if isinstance(command, str) and command.strip():
-            tool_input.setdefault("command", command.strip())
-        cwd = normalized.get("cwd")
-        if isinstance(cwd, str) and cwd.strip():
-            tool_input.setdefault("working_directory", cwd.strip())
-        normalized["tool_input"] = tool_input
-        return normalized
+        return _cursor_shell_hook_payload(normalized, hook_event_name="PreToolUse")
     if raw_event == "beforemcpexecution":
         normalized["hook_event_name"] = "PreToolUse"
         tool_name = normalized.get("tool_name")
@@ -539,33 +534,28 @@ def _infer_cursor_hook_event_name(payload: dict[str, object]) -> dict[str, objec
     return normalized
 
 
+def _cursor_shell_hook_payload(normalized: dict[str, object], hook_event_name: str) -> dict[str, object]:
+    payload = dict(normalized)
+    payload["hook_event_name"] = hook_event_name
+    payload.setdefault("tool_name", "Shell")
+    tool_input = _tool_input_dict(payload.get("tool_input"))
+    command = payload.get("command")
+    if isinstance(command, str) and command.strip():
+        tool_input.setdefault("command", command.strip())
+    cwd = payload.get("cwd")
+    if isinstance(cwd, str) and cwd.strip():
+        tool_input.setdefault("working_directory", cwd.strip())
+    payload["tool_input"] = tool_input
+    return payload
+
+
 def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     normalized = _infer_cursor_hook_event_name(payload)
     raw_event = _raw_hook_event_name(normalized)
     if raw_event == "aftershellexecution":
-        normalized["hook_event_name"] = "afterShellExecution"
-        normalized.setdefault("tool_name", "Shell")
-        tool_input = _tool_input_dict(normalized.get("tool_input"))
-        command = normalized.get("command")
-        if isinstance(command, str) and command.strip():
-            tool_input.setdefault("command", command.strip())
-        cwd = normalized.get("cwd")
-        if isinstance(cwd, str) and cwd.strip():
-            tool_input.setdefault("working_directory", cwd.strip())
-        normalized["tool_input"] = tool_input
-        return normalized
+        return _cursor_shell_hook_payload(normalized, "afterShellExecution")
     if raw_event == "beforeshellexecution":
-        normalized["hook_event_name"] = "PreToolUse"
-        normalized.setdefault("tool_name", "Shell")
-        tool_input = _tool_input_dict(normalized.get("tool_input"))
-        command = normalized.get("command")
-        if isinstance(command, str) and command.strip():
-            tool_input.setdefault("command", command.strip())
-        cwd = normalized.get("cwd")
-        if isinstance(cwd, str) and cwd.strip():
-            tool_input.setdefault("working_directory", cwd.strip())
-        normalized["tool_input"] = tool_input
-        return normalized
+        return _cursor_shell_hook_payload(normalized, "PreToolUse")
     if raw_event == "beforemcpexecution":
         normalized["hook_event_name"] = "PreToolUse"
         tool_name = normalized.get("tool_name")
