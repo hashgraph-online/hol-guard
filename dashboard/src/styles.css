@@ -33,6 +33,14 @@
   --surface-3: #e4e7f0;
   --shadow-brand-blue: 0 4px 14px 0 rgba(85, 153, 254, 0.39);
   --shadow-brand-green: 0 4px 14px 0 rgba(72, 223, 123, 0.39);
+  --evidence-allowed: #48df7b;
+  --evidence-stopped: #f59e0b;
+  --evidence-reviewed: #5599fe;
+  --evidence-heatmap-0: #eef1f8;
+  --evidence-heatmap-1: #d4e8ff;
+  --evidence-heatmap-2: #8fc0ff;
+  --evidence-heatmap-3: #5599fe;
+  --evidence-heatmap-4: #48df7b;
   --gradient-brand: linear-gradient(135deg, #5599fe 0%, #b56cff 50%, #48df7b 100%);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
@@ -67,6 +75,9 @@
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
+  --color-evidence-allowed: var(--evidence-allowed);
+  --color-evidence-stopped: var(--evidence-stopped);
+  --color-evidence-reviewed: var(--evidence-reviewed);
   --color-ring-offset-background: hsl(var(--background-hsl));
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -276,4 +287,84 @@ a:focus-visible {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+
+  .evidence-metric-enter,
+  .evidence-share-bar-fill-animate,
+  .evidence-heatmap-motion {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.evidence-heatmap-0 {
+  background-color: var(--evidence-heatmap-0);
+}
+
+.evidence-heatmap-1 {
+  background-color: var(--evidence-heatmap-1);
+}
+
+.evidence-heatmap-2 {
+  background-color: var(--evidence-heatmap-2);
+}
+
+.evidence-heatmap-3 {
+  background-color: var(--evidence-heatmap-3);
+}
+
+.evidence-heatmap-4 {
+  background-color: var(--evidence-heatmap-4);
+}
+
+.evidence-heatmap-active {
+  outline: 2px solid color-mix(in srgb, var(--brand-blue) 45%, white);
+  outline-offset: 1px;
+}
+
+.evidence-heatmap-motion.evidence-heatmap-active {
+  transform: scale(1.12);
+}
+
+.evidence-chart-allowed {
+  background-color: var(--evidence-allowed);
+}
+
+.evidence-chart-stopped {
+  background-color: var(--evidence-stopped);
+}
+
+.evidence-chart-reviewed {
+  background-color: var(--evidence-reviewed);
+}
+
+.evidence-share-bar-fill {
+  width: 100%;
+}
+
+@keyframes evidence-share-bar-enter {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(var(--share-scale, 1));
+  }
+}
+
+.evidence-share-bar-fill-animate {
+  animation: evidence-share-bar-enter 400ms var(--ease-out-quart) both;
+}
+
+@keyframes evidence-metric-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.evidence-metric-enter {
+  animation: evidence-metric-enter 280ms var(--ease-out-quart) both;
 }

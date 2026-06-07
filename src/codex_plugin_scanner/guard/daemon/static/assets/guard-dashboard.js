@@ -12688,9 +12688,6 @@ function HiFunnel(props) {
 function HiBars3(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiOutlineShieldCheck(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" }, "child": [] }] })(props);
-}
 function HiMiniXMark(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" }, "child": [] }] })(props);
 }
@@ -12799,9 +12796,6 @@ function HiMiniCodeBracket(props) {
 function HiMiniCloud(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M1 12.5A4.5 4.5 0 0 0 5.5 17H15a4 4 0 0 0 1.866-7.539 3.504 3.504 0 0 0-4.504-4.272A4.5 4.5 0 0 0 4.06 8.235 4.502 4.502 0 0 0 1 12.5Z" }, "child": [] }] })(props);
 }
-function HiMiniCloudArrowUp(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.5 17a4.5 4.5 0 0 1-1.44-8.765 4.5 4.5 0 0 1 8.302-3.046 3.5 3.5 0 0 1 4.504 4.272A4 4 0 0 1 15 17H5.5Zm3.75-2.75a.75.75 0 0 0 1.5 0V9.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0l-3.25 3.5a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
 function HiMiniClock(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12834,6 +12828,9 @@ function HiMiniCheck(props) {
 }
 function HiMiniCheckCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCheckBadge(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M16.403 12.652a3 3 0 0 0 0-5.304 3 3 0 0 0-3.75-3.751 3 3 0 0 0-5.305 0 3 3 0 0 0-3.751 3.75 3 3 0 0 0 0 5.305 3 3 0 0 0 3.75 3.751 3 3 0 0 0 5.305 0 3 3 0 0 0 3.751-3.75Zm-2.546-4.46a.75.75 0 0 0-1.214-.883l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniChartBar(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.5 2A1.5 1.5 0 0 0 14 3.5v13a1.5 1.5 0 0 0 1.5 1.5h1a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-1ZM9.5 6A1.5 1.5 0 0 0 8 7.5v9A1.5 1.5 0 0 0 9.5 18h1a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 10.5 6h-1ZM3.5 10A1.5 1.5 0 0 0 2 11.5v5A1.5 1.5 0 0 0 3.5 18h1A1.5 1.5 0 0 0 6 16.5v-5A1.5 1.5 0 0 0 4.5 10h-1Z" }, "child": [] }] })(props);
@@ -13938,6 +13935,11 @@ function getDemoDiff(artifactId, harness) {
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
 const GUARD_SURFACE_PROTOCOL_VERSIONS = ["1.1", "1.0"];
+const DEFAULT_GUARD_DAEMON_PORT = 4781;
+const GUARD_DAEMON_PORT_RANGE = 1e3;
+const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
+const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
+const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
 let guardTokenOverride = null;
 let guardTokenLocationKey = null;
 async function readJson(input, init) {
@@ -14006,6 +14008,152 @@ function readGuardToken() {
 function saveGuardToken(guardToken) {
   guardTokenOverride = guardToken;
   window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+}
+function saveGuardDaemonOrigin(daemonOrigin) {
+  window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+}
+function preferredGuardDaemonPort() {
+  const fromOrigin = readGuardDaemonOrigin();
+  if (fromOrigin) {
+    try {
+      const port2 = Number(new URL(fromOrigin).port);
+      if (Number.isInteger(port2) && port2 > 0) {
+        return port2;
+      }
+    } catch {
+    }
+  }
+  const port = Number(window.location.port);
+  if (Number.isInteger(port) && port > 0) {
+    return port;
+  }
+  return DEFAULT_GUARD_DAEMON_PORT;
+}
+function buildGuardDaemonCandidatePorts(preferredPort) {
+  const ports = [];
+  const inStandardRange = preferredPort >= DEFAULT_GUARD_DAEMON_PORT && preferredPort < DEFAULT_GUARD_DAEMON_PORT + GUARD_DAEMON_PORT_RANGE;
+  for (let step = 0; step < GUARD_DAEMON_DISCOVERY_PROBE_COUNT; step += 1) {
+    if (inStandardRange) {
+      const offset = preferredPort - DEFAULT_GUARD_DAEMON_PORT;
+      const candidateOffset = ((offset + step) % GUARD_DAEMON_PORT_RANGE + GUARD_DAEMON_PORT_RANGE) % GUARD_DAEMON_PORT_RANGE;
+      ports.push(DEFAULT_GUARD_DAEMON_PORT + candidateOffset);
+    } else {
+      ports.push(preferredPort + step);
+    }
+  }
+  return ports;
+}
+async function probeGuardDaemonHealth(origin) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${origin}/healthz`, { signal: controller.signal });
+    if (!response.ok) {
+      return false;
+    }
+    const payload = await response.json();
+    if (!isRecord(payload)) {
+      return false;
+    }
+    return payload.ok === true && payload.compatibility_version === 2;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+function updateReconnectSucceeded(status, options) {
+  if (!options.expectedPreviousVersion) {
+    return true;
+  }
+  if (status.update_available !== true) {
+    return true;
+  }
+  if (options.expectedLatestVersion && status.current_version === options.expectedLatestVersion) {
+    return true;
+  }
+  return status.current_version !== options.expectedPreviousVersion;
+}
+async function initializeGuardDashboardSessionAtOrigin(origin, guardToken) {
+  try {
+    const response = await fetch(`${origin}/v1/initialize`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {}
+      },
+      body: JSON.stringify({
+        client_name: "guard-dashboard-web",
+        surface: "dashboard",
+        supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS]
+      })
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return parseDashboardSessionToken(await response.json());
+  } catch {
+    return null;
+  }
+}
+async function fetchGuardUpdateStatusAtOrigin(origin, guardToken) {
+  const response = await fetch(`${origin}/v1/update/status`, {
+    headers: guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {}
+  });
+  if (!response.ok) {
+    throw new Error(`Update status failed with ${response.status}`);
+  }
+  return normalizeGuardUpdateStatus(await response.json());
+}
+function redirectToGuardDaemonOrigin(origin, guardToken) {
+  const url = new URL(origin);
+  url.pathname = window.location.pathname;
+  url.search = window.location.search;
+  const fragmentPairs = [];
+  if (guardToken) {
+    fragmentPairs.push(`${GUARD_TOKEN_PARAM}=${encodeURIComponent(guardToken)}`);
+  }
+  fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(origin)}`);
+  url.hash = fragmentPairs.join("&");
+  window.location.replace(url.toString());
+}
+async function reconnectGuardDaemonAfterUpdate(options) {
+  const guardToken = readGuardToken();
+  const reconnectOptions = options ?? {};
+  const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
+  const ports = buildGuardDaemonCandidatePorts(preferredGuardDaemonPort());
+  for (let index = 0; index < ports.length; index += GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE) {
+    const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (port) => {
+        const origin2 = `http://127.0.0.1:${port}`;
+        if (!await probeGuardDaemonHealth(origin2)) {
+          return null;
+        }
+        try {
+          const status = await fetchGuardUpdateStatusAtOrigin(origin2, guardToken);
+          if (awaitingVersionChange && !updateReconnectSucceeded(status, reconnectOptions)) {
+            return null;
+          }
+          return { origin: origin2, status };
+        } catch {
+          return null;
+        }
+      })
+    );
+    const active = results.find((result) => result !== null);
+    if (!active) {
+      continue;
+    }
+    const { origin } = active;
+    saveGuardDaemonOrigin(origin);
+    const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
+    if (refreshedToken) {
+      saveGuardToken(refreshedToken);
+    }
+    return origin;
+  }
+  return null;
 }
 function readGuardDaemonOrigin() {
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
@@ -14826,10 +14974,23 @@ function buildReceiptAnalyticsFromSample(receipts) {
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     dailyMap.set(key, (dailyMap.get(key) ?? 0) + 1);
   }
-  const daily_activity = Array.from(dailyMap.entries()).map(([date_key, total]) => ({
-    date_key,
-    total
-  }));
+  const daily_activity = [];
+  const oneDay = 24 * 60 * 60 * 1e3;
+  const nowMs = Date.now();
+  for (let offset = 89; offset >= 0; offset -= 1) {
+    const d = new Date(nowMs - offset * oneDay);
+    const date_key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    daily_activity.push({ date_key, total: dailyMap.get(date_key) ?? 0 });
+  }
+  let active_day_streak = 0;
+  const streakEntries = [...daily_activity].reverse();
+  if (streakEntries[0]?.total === 0) {
+    streakEntries.shift();
+  }
+  for (const entry of streakEntries) {
+    if (entry.total > 0) active_day_streak += 1;
+    else break;
+  }
   return {
     total: receipts.length,
     allowed,
@@ -14837,7 +14998,7 @@ function buildReceiptAnalyticsFromSample(receipts) {
     reviewed,
     first_activity_at: timestamps[0] ?? null,
     last_activity_at: timestamps[timestamps.length - 1] ?? null,
-    active_day_streak: daily_activity.length > 0 ? 1 : 0,
+    active_day_streak,
     peak_day_total: Math.max(...daily_activity.map((entry) => entry.total), 0),
     daily_activity,
     trend_buckets,
@@ -15170,7 +15331,8 @@ function normalizeGuardUpdateStatus(raw) {
     version_check: versionCheck,
     auto_updatable: booleanValue(value.auto_updatable),
     update_available: booleanValue(value.update_available),
-    blocked_reason: stringValue(value.blocked_reason)
+    blocked_reason: stringValue(value.blocked_reason),
+    update_in_progress: typeof value.update_in_progress === "boolean" ? value.update_in_progress : void 0
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -15566,7 +15728,7 @@ async function runPackageSync() {
 }
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
-const RECONNECT_TIMEOUT_MS = 12e4;
+const RECONNECT_TIMEOUT_MS = 18e4;
 function updateStatusLabel(status) {
   if (!status) {
     return "Checking version…";
@@ -15668,32 +15830,61 @@ function useGuardUpdate(options) {
       window.clearInterval(pollId);
     };
   }, [refreshUpdateStatus]);
-  const waitForReconnect = reactExports.useCallback(async () => {
-    reconnectStartedAt.current = Date.now();
-    while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
-      try {
-        await repairApprovalCenter();
-        await fetchGuardUpdateStatus();
-        setUpdatePhase("idle");
-        options?.onReconnected?.();
-        return;
-      } catch {
-        await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
+  const waitForReconnect = reactExports.useCallback(
+    async (expectedPreviousVersion, expectedLatestVersion) => {
+      reconnectStartedAt.current = Date.now();
+      while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
+        try {
+          const origin = await reconnectGuardDaemonAfterUpdate({
+            expectedPreviousVersion,
+            expectedLatestVersion
+          });
+          if (!origin) {
+            throw new Error("Guard daemon not found");
+          }
+          if (origin !== window.location.origin) {
+            redirectToGuardDaemonOrigin(origin, readGuardToken());
+            return true;
+          }
+          const status = await fetchGuardUpdateStatus();
+          setUpdateStatus(status);
+          setUpdatePhase("idle");
+          options?.onReconnected?.();
+          return false;
+        } catch {
+          await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
+        }
       }
-    }
-    setUpdatePhase("error");
-    throw new Error("Guard did not reconnect after the update.");
-  }, [options]);
+      setUpdatePhase("error");
+      throw new Error("Guard did not reconnect after the update.");
+    },
+    [options]
+  );
   const onUpdateGuard = reactExports.useCallback(async () => {
     if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
       return;
     }
+    const expectedPreviousVersion = updateStatus.current_version;
+    const expectedLatestVersion = updateStatus.latest_version;
     setUpdatePhase("updating");
     try {
-      await scheduleGuardUpdate();
+      const scheduleResult = await scheduleGuardUpdate();
+      if (scheduleResult.scheduled === false && scheduleResult.error === "update_in_progress") {
+        setUpdatePhase("reconnecting");
+        const redirected2 = await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
+        if (!redirected2) {
+          window.location.reload();
+        }
+        return;
+      }
+      if (scheduleResult.scheduled !== true) {
+        throw new Error(scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled.");
+      }
       setUpdatePhase("reconnecting");
-      await waitForReconnect();
-      window.location.reload();
+      const redirected = await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
+      if (!redirected) {
+        window.location.reload();
+      }
     } catch {
       setUpdatePhase("error");
     }
@@ -17682,21 +17873,52 @@ function EvidenceInsightStrip({ metrics }) {
     }
   );
 }
+var reactDomExports = requireReactDom();
+function formatEvidenceCount(value) {
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 1e4) return `${Math.round(value / 1e3)}K`;
+  if (value >= 1e3) return value.toLocaleString();
+  return String(value);
+}
+function formatDurationSince(iso) {
+  if (!iso) return "No activity yet";
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return "Recently";
+  const days = Math.max(0, Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1e3)));
+  if (days === 0) return "Today";
+  if (days === 1) return "1 day ago";
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? "1 month ago" : `${months} months ago`;
+}
+function formatDayLabel(dateKey) {
+  return (/* @__PURE__ */ new Date(`${dateKey}T12:00:00`)).toLocaleDateString(void 0, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
 function intensityClass(total, peak) {
-  if (total <= 0) return "bg-slate-100/80";
+  if (total <= 0) return "evidence-heatmap-0";
   const ratio = peak > 0 ? total / peak : 0;
-  if (ratio >= 0.75) return "bg-amber-600 hover:bg-amber-700";
-  if (ratio >= 0.4) return "bg-amber-400 hover:bg-amber-500";
-  if (ratio >= 0.15) return "bg-amber-200 hover:bg-amber-300";
-  return "bg-amber-100 hover:bg-amber-200";
+  if (ratio >= 0.75) return "evidence-heatmap-4";
+  if (ratio >= 0.4) return "evidence-heatmap-3";
+  if (ratio >= 0.15) return "evidence-heatmap-2";
+  return "evidence-heatmap-1";
 }
 function buildWeekColumns(days) {
   if (days.length === 0) return [];
+  const flatCells = days.map((day, index) => ({
+    date_key: day.date_key,
+    total: day.total,
+    flatIndex: index
+  }));
   const first = /* @__PURE__ */ new Date(`${days[0].date_key}T12:00:00`);
   const startPad = first.getDay();
   const cells = [
     ...Array.from({ length: startPad }, () => null),
-    ...days.map((day) => ({ date_key: day.date_key, total: day.total }))
+    ...flatCells
   ];
   const weeks = [];
   for (let index = 0; index < cells.length; index += 7) {
@@ -17727,381 +17949,522 @@ function monthLabels(weeks) {
   }
   return labels;
 }
+function flatCellsFromWeeks(weeks) {
+  const result = [];
+  for (const week of weeks) {
+    for (const cell of week) {
+      if (cell) result.push(cell);
+    }
+  }
+  return result;
+}
 function EvidenceActivityHeatmap({
   days,
   onSelectDay
 }) {
+  const gridRef = reactExports.useRef(null);
+  const cellRefs = reactExports.useRef(/* @__PURE__ */ new Map());
+  const [activeIndex, setActiveIndex] = reactExports.useState(0);
+  const [hoveredKey, setHoveredKey] = reactExports.useState(null);
+  const [tooltip, setTooltip] = reactExports.useState(null);
+  const [reduceMotion, setReduceMotion] = reactExports.useState(false);
   const peak = reactExports.useMemo(() => Math.max(...days.map((day) => day.total), 0), [days]);
   const weeks = reactExports.useMemo(() => buildWeekColumns(days), [days]);
   const labels = reactExports.useMemo(() => monthLabels(weeks), [weeks]);
-  const weekDays = ["S", "M", "T", "W", "T", "F", "S"];
+  const flatCells = reactExports.useMemo(() => flatCellsFromWeeks(weeks), [weeks]);
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const activeCell = flatCells[activeIndex] ?? null;
+  const displayKey = hoveredKey ?? activeCell?.date_key ?? null;
+  const displayCell = displayKey ? flatCells.find((c) => c.date_key === displayKey) ?? null : null;
+  reactExports.useEffect(() => {
+    setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
+  const updateTooltipForKey = reactExports.useCallback((dateKey) => {
+    if (!dateKey) {
+      setTooltip(null);
+      return;
+    }
+    const cell = flatCells.find((entry) => entry.date_key === dateKey);
+    const element = cellRefs.current.get(dateKey);
+    if (!cell || !element) {
+      setTooltip(null);
+      return;
+    }
+    const rect = element.getBoundingClientRect();
+    const aboveTop = rect.top - 8;
+    const belowTop = rect.bottom + 8;
+    const placement = aboveTop > 72 ? "above" : "below";
+    setTooltip({
+      dateKey: cell.date_key,
+      total: cell.total,
+      left: rect.left + rect.width / 2,
+      top: placement === "above" ? aboveTop : belowTop,
+      placement
+    });
+  }, [flatCells]);
+  reactExports.useLayoutEffect(() => {
+    updateTooltipForKey(displayKey);
+  }, [displayKey, updateTooltipForKey, weeks]);
+  reactExports.useEffect(() => {
+    const onScrollOrResize = () => updateTooltipForKey(displayKey);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [displayKey, updateTooltipForKey]);
+  const moveActive = reactExports.useCallback(
+    (delta) => {
+      if (flatCells.length === 0) return;
+      setActiveIndex((prev) => Math.max(0, Math.min(flatCells.length - 1, prev + delta)));
+    },
+    [flatCells]
+  );
+  const handleGridKeyDown = (event) => {
+    if (flatCells.length === 0) return;
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      moveActive(1);
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      moveActive(-1);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveActive(7);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveActive(-7);
+    } else if (event.key === "Enter" || event.key === " ") {
+      const cell = flatCells[activeIndex];
+      if (cell && cell.total > 0 && onSelectDay) {
+        event.preventDefault();
+        onSelectDay(cell.date_key);
+      }
+    }
+  };
+  const handleCellActivate = (dateKey, total) => {
+    if (total > 0 && onSelectDay) {
+      onSelectDay(dateKey);
+    }
+  };
   if (days.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 py-8 text-center", children: "No activity in this period." });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-8 text-center text-sm text-slate-400", children: "No activity in this period." });
   }
+  const tooltipNode = tooltip && typeof document !== "undefined" ? reactDomExports.createPortal(
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "pointer-events-none fixed z-[120] -translate-x-1/2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg",
+        style: {
+          left: tooltip.left,
+          top: tooltip.top,
+          transform: `translate(-50%, ${tooltip.placement === "above" ? "-100%" : "0"})`
+        },
+        role: "tooltip",
+        id: "evidence-heatmap-tooltip",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-semibold", children: formatDayLabel(tooltip.dateKey) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-0.5 text-slate-200", children: tooltip.total > 0 ? `${formatEvidenceCount(tooltip.total)} action${tooltip.total === 1 ? "" : "s"}` : "No activity" }),
+          tooltip.total > 0 && onSelectDay && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 text-[10px] text-slate-300", children: "Enter to view actions" })
+        ]
+      }
+    ),
+    document.body
+  ) : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto pb-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "inline-flex min-w-full flex-col gap-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 pl-7", children: labels.map((label, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-3 text-[10px] font-medium text-slate-400", children: label }, `label-${index}`)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-1 pt-0.5", children: weekDays.map((day, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "div",
-          {
-            className: "flex h-3 w-4 items-center justify-end text-[10px] text-slate-400",
-            "aria-hidden": index % 2 === 1,
-            children: index % 2 === 0 ? day : ""
-          },
-          day + index
-        )) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1", children: weeks.map((week, weekIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-1", children: week.map((cell, dayIndex) => {
-          if (!cell) {
-            return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-3 w-3 rounded-sm" }, `empty-${weekIndex}-${dayIndex}`);
+    tooltipNode,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        ref: gridRef,
+        className: "flex w-full min-w-0 gap-2 outline-none",
+        role: "grid",
+        "aria-label": "90 day activity heatmap",
+        "aria-describedby": displayCell ? "evidence-heatmap-tooltip" : void 0,
+        tabIndex: 0,
+        onKeyDown: handleGridKeyDown,
+        onFocus: () => {
+          if (!displayKey && flatCells[0]) {
+            setActiveIndex(0);
           }
-          const label = (/* @__PURE__ */ new Date(`${cell.date_key}T12:00:00`)).toLocaleDateString(void 0, {
-            month: "short",
-            day: "numeric"
-          });
-          return /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              disabled: cell.total <= 0,
-              onClick: () => cell.total > 0 && onSelectDay?.(cell.date_key),
-              className: `h-3 w-3 rounded-sm transition-colors ${intensityClass(cell.total, peak)} ${cell.total > 0 ? "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-blue" : "cursor-default"}`,
-              "aria-label": `${label}: ${cell.total} actions`,
-              title: `${label}: ${cell.total} actions`
-            },
-            cell.date_key
-          );
-        }) }, `week-${weekIndex}`)) })
-      ] })
-    ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 text-[10px] text-slate-500", children: [
+        },
+        onBlur: () => {
+          setHoveredKey(null);
+        },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex w-8 shrink-0 flex-col justify-between py-[1.125rem] text-[10px] font-medium text-slate-400", children: weekDays.map((day, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "leading-none", "aria-hidden": index % 2 === 1, children: index % 2 === 0 ? day.slice(0, 3) : "" }, day)) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "div",
+              {
+                className: "mb-1 grid gap-1",
+                style: { gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` },
+                role: "presentation",
+                children: labels.map((label, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "truncate text-[10px] font-medium text-slate-400", children: label }, `label-${index}`))
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "div",
+              {
+                className: "grid gap-1",
+                style: { gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` },
+                children: weeks.map((week, weekIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-rows-7 gap-1", role: "row", children: week.map((cell, dayIndex) => {
+                  if (!cell) {
+                    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "div",
+                      {
+                        className: "flex min-h-11 items-center justify-center",
+                        role: "gridcell",
+                        "aria-hidden": "true"
+                      },
+                      `empty-${weekIndex}-${dayIndex}`
+                    );
+                  }
+                  const isActive = activeCell?.date_key === cell.date_key;
+                  const isHovered = hoveredKey === cell.date_key;
+                  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "div",
+                    {
+                      className: "flex min-h-11 min-w-0 items-center justify-center",
+                      role: "gridcell",
+                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "button",
+                        {
+                          type: "button",
+                          ref: (node) => {
+                            if (node) cellRefs.current.set(cell.date_key, node);
+                            else cellRefs.current.delete(cell.date_key);
+                          },
+                          id: `heatmap-cell-${cell.date_key}`,
+                          tabIndex: -1,
+                          "aria-label": `${formatDayLabel(cell.date_key)}: ${cell.total} actions`,
+                          className: `aspect-square w-full max-h-4 max-w-4 rounded-[3px] transition-[transform,opacity] duration-150 ${intensityClass(cell.total, peak)} ${cell.total > 0 ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-80"} ${isActive || isHovered ? "evidence-heatmap-active" : ""} ${reduceMotion ? "" : "evidence-heatmap-motion"}`,
+                          onMouseEnter: () => {
+                            setHoveredKey(cell.date_key);
+                            setActiveIndex(cell.flatIndex);
+                          },
+                          onMouseLeave: () => setHoveredKey(null),
+                          onFocus: () => {
+                            setActiveIndex(cell.flatIndex);
+                            setHoveredKey(cell.date_key);
+                          },
+                          onBlur: () => setHoveredKey(null),
+                          onClick: () => handleCellActivate(cell.date_key, cell.total)
+                        }
+                      )
+                    },
+                    cell.date_key
+                  );
+                }) }, `week-${weekIndex}`))
+              }
+            )
+          ] })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 text-[10px] text-slate-500", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Less" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-slate-100/80" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-amber-100" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-amber-200" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-amber-400" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-amber-600" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-[2px] evidence-heatmap-0" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-[2px] evidence-heatmap-1" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-[2px] evidence-heatmap-2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-[2px] evidence-heatmap-3" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-[2px] evidence-heatmap-4" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "More" })
     ] })
   ] });
 }
-function formatCount(value) {
-  if (value >= 1e6) return `${(value / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
-  if (value >= 1e4) return `${Math.round(value / 1e3)}K`;
-  if (value >= 1e3) return value.toLocaleString();
-  return String(value);
-}
-function formatDurationSince(iso) {
-  if (!iso) return "No activity yet";
-  const ts = new Date(iso).getTime();
-  if (Number.isNaN(ts)) return "Recently";
-  const days = Math.max(0, Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1e3)));
-  if (days === 0) return "Today";
-  if (days === 1) return "1 day ago";
-  if (days < 30) return `${days} days ago`;
-  const months = Math.floor(days / 30);
-  return months === 1 ? "1 month ago" : `${months} months ago`;
-}
-function SummaryRibbon({ analytics }) {
-  const stopRate = analytics.total > 0 ? Math.round(analytics.blocked / analytics.total * 100) : 0;
-  const items = [
-    { label: "Lifetime actions", value: formatCount(analytics.total) },
-    { label: "Stopped", value: formatCount(analytics.blocked), detail: `${stopRate}% of total` },
-    { label: "Allowed", value: formatCount(analytics.allowed) },
-    { label: "Current streak", value: `${analytics.active_day_streak} day${analytics.active_day_streak === 1 ? "" : "s"}` },
-    { label: "Peak day", value: formatCount(analytics.peak_day_total) }
-  ];
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-100", children: items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-4 sm:py-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500", children: item.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-2xl font-semibold tabular-nums tracking-tight text-brand-dark", children: item.value }),
-    item.detail && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: item.detail })
-  ] }, item.label)) }) });
-}
-function TrendChart({ buckets }) {
-  const [hoveredKey, setHoveredKey] = reactExports.useState(null);
-  const maxTotal = Math.max(...buckets.map((bucket) => bucket.allowed + bucket.blocked + bucket.reviewed), 1);
-  const chartHeight = 160;
-  const hasAnyData = buckets.some((bucket) => bucket.allowed + bucket.blocked + bucket.reviewed > 0);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last 7 Days" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Stacked by decision: allowed, stopped, and reviewed." }),
-    !hasAnyData ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-40 items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "No activity in the last 7 days" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: "mt-5 flex items-end gap-2",
-          style: { height: chartHeight },
-          role: "img",
-          "aria-label": "Seven day activity chart",
-          children: buckets.map((bucket) => {
-            const total = bucket.allowed + bucket.blocked + bucket.reviewed;
-            const barHeight = total > 0 ? Math.max(Math.round(total / maxTotal * chartHeight), 6) : 0;
-            const blockedHeight = total > 0 ? Math.round(bucket.blocked / total * barHeight) : 0;
-            const allowedHeight = total > 0 ? Math.round(bucket.allowed / total * barHeight) : 0;
-            const reviewedHeight = Math.max(barHeight - blockedHeight - allowedHeight, 0);
-            const isHovered = hoveredKey === bucket.date_key;
-            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "div",
-              {
-                className: "relative flex min-w-0 flex-1 flex-col items-center justify-end",
-                onMouseEnter: () => setHoveredKey(bucket.date_key),
-                onMouseLeave: () => setHoveredKey(null),
-                children: [
-                  total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 text-[10px] font-semibold tabular-nums text-brand-dark", children: total }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex w-full flex-col justify-end", style: { height: chartHeight }, children: total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                    "div",
-                    {
-                      className: `flex w-full flex-col-reverse overflow-hidden rounded-md transition-opacity ${isHovered ? "opacity-100 ring-1 ring-inset ring-slate-200" : "opacity-95"}`,
-                      style: { height: barHeight },
-                      children: [
-                        bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-amber-500", style: { height: blockedHeight } }),
-                        bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-emerald-500", style: { height: allowedHeight } }),
-                        bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-brand-blue", style: { height: reviewedHeight } })
-                      ]
-                    }
-                  ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto h-1.5 w-1.5 rounded-full bg-slate-200", "aria-hidden": "true" }) }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-2 w-full truncate text-center text-[10px] font-medium text-slate-500", children: bucket.label }),
-                  isHovered && total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute bottom-full z-10 mb-2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-semibold", children: bucket.label }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex gap-3", children: [
-                      bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-emerald-300", children: [
-                        bucket.allowed,
-                        " allowed"
-                      ] }),
-                      bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-amber-300", children: [
-                        bucket.blocked,
-                        " stopped"
-                      ] }),
-                      bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-blue-300", children: [
-                        bucket.reviewed,
-                        " reviewed"
-                      ] })
-                    ] })
-                  ] })
-                ]
-              },
-              bucket.date_key
-            );
-          })
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-4 text-[11px] text-slate-500", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500" }),
-          "Allowed"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm bg-amber-500" }),
-          "Stopped"
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm bg-brand-blue" }),
-          "Reviewed"
-        ] })
-      ] })
-    ] })
-  ] });
-}
-function LocalDataCard(props) {
-  const beyondSample = props.analytics.total > props.sampleCount;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      onClick: props.onViewActions,
-      className: "group w-full rounded-xl border border-slate-200/80 bg-slate-50/60 px-4 py-3.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue sm:flex sm:items-center sm:justify-between sm:gap-4",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineShieldCheck, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Local evidence on this device" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: [
-            formatCount(props.analytics.total),
-            " actions stored locally",
-            beyondSample ? ` · list view shows the latest ${formatCount(props.sampleCount)}` : "",
-            props.analytics.last_activity_at ? ` · last activity ${formatDurationSince(props.analytics.last_activity_at)}` : ""
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-blue sm:mt-0", children: [
-          "Browse actions",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5", "aria-hidden": "true" })
-        ] })
-      ]
-    }
-  );
-}
-function CloudInsightsCard(props) {
-  const runtime = props.runtime;
-  if (!runtime) return null;
-  const isLocalOnly = runtime.cloud_state === "local_only";
-  if (isLocalOnly) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "a",
-      {
-        href: runtime.connect_url,
-        target: "_blank",
-        rel: "noreferrer",
-        className: "group flex w-full items-start justify-between gap-4 rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3.5 transition-colors hover:bg-brand-blue/[0.07] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Guard Cloud" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: "Sync evidence across devices, share fleet visibility, and unlock cross-machine analytics with a Guard Cloud subscription." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" })
-        ]
-      }
-    );
-  }
-  if (runtime.cloud_state !== "paired_active") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/80 bg-white px-4 py-3.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: runtime.cloud_state_label }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: runtime.cloud_state_detail })
-    ] });
-  }
-  const sync = runtime.cloud_sync_health;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 sm:flex sm:items-center sm:justify-between sm:gap-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Guard Cloud connected" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
-        sync.label,
-        sync.last_synced_at ? ` · last sync ${formatDurationSince(sync.last_synced_at)}` : "",
-        sync.pending_events > 0 ? ` · ${sync.pending_events} pending` : ""
-      ] }),
-      runtime.cloud_policy_rollout_state && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
-        "Policy rollout: ",
-        runtime.cloud_policy_rollout_state,
-        runtime.cloud_policy_bundle_version ? ` · bundle ${runtime.cloud_policy_bundle_version}` : ""
-      ] })
+function EvidenceDataProvenanceStrip({
+  analytics,
+  sampleCount,
+  runtime,
+  onViewActions
+}) {
+  const beyondSample = analytics.total > sampleCount;
+  const cloudNote = runtime?.cloud_state === "local_only" ? "Guard Cloud not connected." : runtime?.cloud_state === "paired_active" && runtime.cloud_sync_health.label !== "Synced" ? runtime.cloud_sync_health.label : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 border-t border-slate-100 px-5 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+      formatEvidenceCount(analytics.total),
+      " actions from full local store",
+      beyondSample ? ` · list shows latest ${formatEvidenceCount(sampleCount)}` : "",
+      analytics.last_activity_at ? ` · last activity ${formatDurationSince(analytics.last_activity_at)}` : "",
+      cloudNote ? ` · ${cloudNote}` : ""
     ] }),
-    props.onOpenCloud && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
         type: "button",
-        onClick: props.onOpenCloud,
-        className: "mt-3 inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 sm:mt-0",
+        onClick: onViewActions,
+        className: "inline-flex shrink-0 items-center gap-1 font-medium text-brand-blue transition-colors hover:text-brand-dark",
         children: [
-          "Open fleet",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+          "Browse actions",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
         ]
       }
     )
   ] });
 }
-function InsightFact({ label, value }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-baseline justify-between gap-3 border-b border-slate-100 py-2.5 last:border-b-0", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-slate-500", children: label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark text-right", children: value })
+function EvidenceShareBar({ label, count, shareOfTotal, onClick, animate = true }) {
+  const widthPct = Math.max(Math.min(Math.round(shareOfTotal), 100), shareOfTotal > 0 ? 4 : 0);
+  const Wrapper = onClick ? "button" : "div";
+  const wrapperProps = onClick ? {
+    type: "button",
+    onClick,
+    className: "group flex w-full min-h-11 items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+  } : {
+    className: "flex w-full min-h-11 items-center gap-3 rounded-lg px-2 py-2"
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(Wrapper, { ...wrapperProps, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm font-medium text-brand-dark", children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shrink-0 text-xs tabular-nums text-slate-500", children: [
+        formatEvidenceCount(count),
+        shareOfTotal > 0 ? ` · ${widthPct}%` : ""
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 h-2 overflow-hidden rounded-full bg-surface-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: `evidence-share-bar-fill h-full origin-left rounded-full bg-brand-blue ${animate ? "evidence-share-bar-fill-animate" : ""} ${onClick ? "group-hover:bg-[color-mix(in_srgb,var(--brand-blue)_85%,var(--brand-dark))]" : ""}`,
+        style: { ["--share-scale"]: widthPct / 100, transform: `scaleX(${widthPct / 100})` },
+        "aria-hidden": "true"
+      }
+    ) })
+  ] }) });
+}
+function HeadlineMetrics({ analytics }) {
+  const stopRate = analytics.total > 0 ? Math.round(analytics.blocked / analytics.total * 100) : 0;
+  const dominantApp = analytics.by_harness[0] ? harnessDisplayName(analytics.by_harness[0].harness) : "None yet";
+  const items = [
+    {
+      label: "Current streak",
+      value: `${analytics.active_day_streak}`,
+      unit: analytics.active_day_streak === 1 ? "day" : "days",
+      emphasis: "hero"
+    },
+    {
+      label: "Peak day",
+      value: formatEvidenceCount(analytics.peak_day_total),
+      unit: "actions",
+      emphasis: "hero"
+    },
+    {
+      label: "Lifetime actions",
+      value: formatEvidenceCount(analytics.total),
+      unit: null,
+      emphasis: "medium"
+    },
+    {
+      label: "Stopped",
+      value: formatEvidenceCount(analytics.blocked),
+      unit: `${stopRate}% of total`,
+      emphasis: "medium"
+    },
+    {
+      label: "Top app",
+      value: dominantApp,
+      unit: null,
+      emphasis: "quiet"
+    }
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3 lg:grid-cols-5", children: items.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `bg-white px-4 py-4 sm:py-5 evidence-metric-enter ${item.emphasis === "hero" ? "sm:py-6" : ""}`,
+      style: { animationDelay: `${index * 60}ms` },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500", children: item.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "p",
+          {
+            className: `mt-1 font-semibold tabular-nums tracking-tight text-brand-dark ${item.emphasis === "hero" ? "text-3xl" : item.emphasis === "medium" ? "text-xl" : "text-base truncate"}`,
+            children: [
+              item.value,
+              item.emphasis === "hero" && item.unit ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 text-sm font-medium text-slate-500", children: item.unit }) : null
+            ]
+          }
+        ),
+        item.emphasis !== "hero" && item.unit ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: item.unit }) : null
+      ]
+    },
+    item.label
+  )) });
+}
+function TrendChart({ buckets }) {
+  const [hoveredKey, setHoveredKey] = reactExports.useState(null);
+  const maxTotal = Math.max(...buckets.map((bucket) => bucket.allowed + bucket.blocked + bucket.reviewed), 1);
+  const chartHeight = 100;
+  const hasAnyData = buckets.some((bucket) => bucket.allowed + bucket.blocked + bucket.reviewed > 0);
+  if (!hasAnyData) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "px-5 py-6 text-sm text-slate-400", children: "No activity in the last 7 days." });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-5 py-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "flex items-end gap-2",
+        style: { minHeight: chartHeight },
+        role: "img",
+        "aria-label": "Seven day activity chart",
+        children: buckets.map((bucket) => {
+          const total = bucket.allowed + bucket.blocked + bucket.reviewed;
+          const barHeight = total > 0 ? Math.max(Math.round(total / maxTotal * chartHeight), 6) : 0;
+          const blockedHeight = total > 0 ? Math.round(bucket.blocked / total * barHeight) : 0;
+          const allowedHeight = total > 0 ? Math.round(bucket.allowed / total * barHeight) : 0;
+          const reviewedHeight = Math.max(barHeight - blockedHeight - allowedHeight, 0);
+          const isHovered = hoveredKey === bucket.date_key;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "div",
+            {
+              className: "relative flex min-w-0 flex-1 flex-col items-center justify-end",
+              onMouseEnter: () => setHoveredKey(bucket.date_key),
+              onMouseLeave: () => setHoveredKey(null),
+              children: [
+                total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 text-[10px] font-semibold tabular-nums text-brand-dark", children: total }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex w-full flex-col justify-end", style: { height: chartHeight }, children: total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "div",
+                  {
+                    className: `flex w-full flex-col-reverse overflow-hidden rounded-md transition-opacity ${isHovered ? "opacity-100 ring-1 ring-inset ring-slate-200" : "opacity-95"}`,
+                    style: { height: barHeight },
+                    children: [
+                      bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-stopped", style: { height: blockedHeight } }),
+                      bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-allowed", style: { height: allowedHeight } }),
+                      bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-reviewed", style: { height: reviewedHeight } })
+                    ]
+                  }
+                ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto h-1.5 w-1.5 rounded-full bg-slate-200", "aria-hidden": "true" }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-2 w-full truncate text-center text-[10px] font-medium text-slate-500", children: bucket.label }),
+                isHovered && total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute bottom-full z-10 mb-2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-semibold", children: bucket.label }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex gap-3", children: [
+                    bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-emerald-300", children: [
+                      bucket.allowed,
+                      " allowed"
+                    ] }),
+                    bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-amber-300", children: [
+                      bucket.blocked,
+                      " stopped"
+                    ] }),
+                    bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-blue-300", children: [
+                      bucket.reviewed,
+                      " reviewed"
+                    ] })
+                  ] })
+                ] })
+              ]
+            },
+            bucket.date_key
+          );
+        })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm evidence-chart-allowed" }),
+        "Allowed"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm evidence-chart-stopped" }),
+        "Stopped"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm evidence-chart-reviewed" }),
+        "Reviewed"
+      ] })
+    ] })
   ] });
 }
-function TopHarnessList(props) {
-  const maxTotal = props.items[0]?.total ?? 1;
+function HarnessShareList(props) {
   if (props.items.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "No app activity yet." });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-1", children: props.items.slice(0, 6).map((item) => {
-    const widthPct = Math.max(item.total / maxTotal * 100, 8);
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: () => props.onFilterHarness(item.harness),
-        className: "group flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm font-medium text-brand-dark", children: harnessDisplayName(item.harness) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs tabular-nums text-slate-500", children: formatCount(item.total) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full rounded-full bg-brand-blue/70 transition-all", style: { width: `${widthPct}%` } }) })
-        ] })
-      },
-      item.harness
-    );
-  }) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0.5", children: props.items.slice(0, 6).map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    EvidenceShareBar,
+    {
+      label: harnessDisplayName(item.harness),
+      count: item.total,
+      shareOfTotal: props.total > 0 ? item.total / props.total * 100 : 0,
+      onClick: () => props.onFilterHarness(item.harness)
+    },
+    item.harness
+  )) });
 }
-function EvidenceAnalyticsPanel({
+function ArtifactShareList(props) {
+  if (props.items.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "No recurring actions yet." });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0.5", children: props.items.slice(0, 6).map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    EvidenceShareBar,
+    {
+      label: item.name,
+      count: item.total,
+      shareOfTotal: props.total > 0 ? item.total / props.total * 100 : 0
+    },
+    item.name
+  )) });
+}
+function EvidenceInsightsSurface({
   analytics,
   runtime,
   sampleCount,
   onFilterHarness,
   onFilterDay,
-  onViewActions,
-  onOpenCloud
+  onViewActions
 }) {
-  const insightFacts = reactExports.useMemo(() => {
-    return [
-      {
-        label: "Most active app",
-        value: analytics.by_harness[0] ? harnessDisplayName(analytics.by_harness[0].harness) : "None yet"
-      },
-      {
-        label: "Top recurring action",
-        value: analytics.top_artifacts[0]?.name ?? "None yet"
-      },
-      {
-        label: "Reviewed actions",
-        value: formatCount(analytics.reviewed)
-      },
-      {
-        label: "Apps seen",
-        value: String(analytics.by_harness.length)
-      },
-      {
-        label: "Tracking since",
-        value: analytics.first_activity_at ? new Date(analytics.first_activity_at).toLocaleDateString(void 0, {
-          month: "short",
-          day: "numeric",
-          year: "numeric"
-        }) : "Not yet"
-      }
-    ];
-  }, [analytics]);
+  const [mounted, setMounted] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    setMounted(true);
+  }, []);
+  const artifactTotal = reactExports.useMemo(
+    () => analytics.top_artifacts.reduce((sum, item) => sum + item.total, 0),
+    [analytics.top_artifacts]
+  );
   if (analytics.total === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-16 text-center", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "No data yet" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Insights will appear once Guard records actions on this machine." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Insights appear once Guard records actions on this machine." })
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(LocalDataCard, { analytics, sampleCount, onViewActions }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(CloudInsightsCard, { runtime, onOpenCloud }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryRibbon, { analytics }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ${mounted ? "evidence-insights-mounted" : ""}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HeadlineMetrics, { analytics }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-5 py-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "90-Day Activity" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Daily action volume across your local evidence store." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceActivityHeatmap, { days: analytics.daily_activity, onSelectDay: onFilterDay }) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 min-h-[120px]", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceActivityHeatmap, { days: analytics.daily_activity, onSelectDay: onFilterDay }) })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(TrendChart, { buckets: analytics.trend_buckets }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-4 lg:grid-cols-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Activity Insights" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: insightFacts.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsx(InsightFact, { label: fact.label, value: fact.value }, fact.label)) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 border-t border-slate-100 lg:grid-cols-2 lg:divide-x lg:divide-slate-100", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-5 py-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Most Active Apps" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TopHarnessList, { items: analytics.by_harness, onFilterHarness }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HarnessShareList,
+          {
+            items: analytics.by_harness,
+            total: analytics.total,
+            onFilterHarness
+          }
+        ) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-5 py-5 lg:border-t-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Top Recurring Actions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ArtifactShareList, { items: analytics.top_artifacts, total: artifactTotal || analytics.total }) })
       ] })
     ] }),
-    analytics.top_artifacts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Top Recurring Actions" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 divide-y divide-slate-100", children: analytics.top_artifacts.slice(0, 6).map((action) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-4 py-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm text-brand-dark", children: action.name }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
-            formatCount(action.total),
-            "×"
-          ] }),
-          action.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "attention", children: [
-            formatCount(action.blocked),
-            " stopped"
-          ] })
-        ] })
-      ] }, action.name)) })
-    ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last 7 Days" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TrendChart, { buckets: analytics.trend_buckets })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceDataProvenanceStrip,
+      {
+        analytics,
+        sampleCount,
+        runtime,
+        onViewActions
+      }
+    )
   ] });
+}
+function EvidenceAnalyticsPanel(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsSurface, { ...props });
 }
 function exportReceiptsAsCsv(receipts, filters) {
   const headers = [
@@ -19015,6 +19378,7 @@ const CategoryTab = reactExports.memo(CategoryTabRaw);
 function WorkspacePageHeader({
   eyebrow,
   title,
+  description,
   tabs,
   activeTab,
   onTabChange,
@@ -19023,7 +19387,8 @@ function WorkspacePageHeader({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: eyebrow }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: title })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: title }),
+      description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: description }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "-mx-1 w-full overflow-x-auto px-1 pb-1 sm:mx-0 sm:w-auto sm:pb-0 [&>div]:!flex-nowrap", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs, active: activeTab, onChange: onTabChange }) }),
@@ -19161,6 +19526,9 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
       cancelled = true;
     };
   }, [filters.view, receiptItems.length]);
+  const handleViewActions = reactExports.useCallback(() => {
+    setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
+  }, []);
   const handleFilterDay = reactExports.useCallback((dateKey) => {
     setFilters((prev) => ({
       ...prev,
@@ -19168,9 +19536,6 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
       day: dateKey,
       time: "all"
     }));
-  }, []);
-  const handleViewActions = reactExports.useCallback(() => {
-    setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
   }, []);
   const handleFilterHarnessFromInsights = reactExports.useCallback((harness) => {
     setFilters((prev) => ({ ...prev, view: "actions", harness, day: "" }));
@@ -19196,6 +19561,13 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     );
   }
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
+  const insightsHeaderDescription = reactExports.useMemo(() => {
+    if (filters.view !== "insights") return void 0;
+    if (analyticsState.kind !== "ready") return "Loading analytics from your local evidence store.";
+    const total = analyticsState.data.total;
+    const formatted = total >= 1e6 ? `${(total / 1e6).toFixed(1).replace(/\.0$/, "")}M` : total >= 1e4 ? `${Math.round(total / 1e3)}K` : total.toLocaleString();
+    return `${formatted} actions in your full local store.`;
+  }, [filters.view, analyticsState]);
   const headerActions = reactExports.useMemo(
     () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19227,13 +19599,14 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
       {
         eyebrow: "Evidence",
         title: evidenceTitleForView(filters.view),
+        description: insightsHeaderDescription,
         tabs: tabOptions,
         activeTab: filters.view,
         onTabChange: handleViewChange,
         actions: headerActions
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: receiptItems.length, lastActivityAt: metrics.lastActivityAt }),
+    filters.view !== "insights" && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceHero, { totalCount: receiptItems.length, lastActivityAt: metrics.lastActivityAt }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-1", children: [
       filters.view === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "div",
@@ -19296,8 +19669,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
               sampleCount: receiptItems.length,
               onFilterHarness: handleFilterHarnessFromInsights,
               onFilterDay: handleFilterDay,
-              onViewActions: handleViewActions,
-              onOpenCloud: onNavigate ? () => onNavigate("/fleet") : void 0
+              onViewActions: handleViewActions
             }
           )
         }
@@ -24063,10 +24435,11 @@ export {
   HiMiniArrowLeft as a7,
   HiMiniHome as a8,
   detectCategory as a9,
-  HiMiniBarsArrowUp as aA,
-  HiMiniBarsArrowDown as aB,
-  HiMiniSignal as aC,
-  HiMiniClock as aD,
+  guardAwareHref as aA,
+  HiMiniBarsArrowUp as aB,
+  HiMiniBarsArrowDown as aC,
+  HiMiniSignal as aD,
+  HiMiniClock as aE,
   CATEGORIES as aa,
   policyIdentityKey as ab,
   HiMiniChartBar as ac,
@@ -24082,17 +24455,17 @@ export {
   __vitePreload as am,
   HiMiniDocumentText as an,
   HiMiniArrowTopRightOnSquare as ao,
-  fetchPackageFirewallStatus as ap,
-  runPackageFirewallAction as aq,
-  runPackageAudit as ar,
-  runPackageSync as as,
-  startPackageFirewallConnect as at,
-  openPackageFirewallShell as au,
-  HiMiniBugAnt as av,
-  IconActionButton as aw,
-  HiMiniBeaker as ax,
-  runAuditRemediation as ay,
-  guardAwareHref as az,
+  HiMiniCheckBadge as ap,
+  fetchPackageFirewallStatus as aq,
+  runPackageFirewallAction as ar,
+  runPackageAudit as as,
+  runPackageSync as at,
+  startPackageFirewallConnect as au,
+  openPackageFirewallShell as av,
+  HiMiniBugAnt as aw,
+  IconActionButton as ax,
+  HiMiniBeaker as ay,
+  runAuditRemediation as az,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,

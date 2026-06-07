@@ -207,6 +207,10 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     };
   }, [filters.view, receiptItems.length]);
 
+  const handleViewActions = useCallback(() => {
+    setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
+  }, []);
+
   const handleFilterDay = useCallback((dateKey: string) => {
     setFilters((prev) => ({
       ...prev,
@@ -214,10 +218,6 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
       day: dateKey,
       time: "all",
     }));
-  }, []);
-
-  const handleViewActions = useCallback(() => {
-    setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
   }, []);
 
   const handleFilterHarnessFromInsights = useCallback((harness: string) => {
@@ -246,6 +246,19 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   }
 
   const tabOptions = VIEW_TABS.map((t) => ({ value: t.key, label: t.label, id: t.key }));
+
+  const insightsHeaderDescription = useMemo(() => {
+    if (filters.view !== "insights") return undefined;
+    if (analyticsState.kind !== "ready") return "Loading analytics from your local evidence store.";
+    const total = analyticsState.data.total;
+    const formatted =
+      total >= 1_000_000
+        ? `${(total / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
+        : total >= 10_000
+          ? `${Math.round(total / 1_000)}K`
+          : total.toLocaleString();
+    return `${formatted} actions in your full local store.`;
+  }, [filters.view, analyticsState]);
 
   const headerActions = useMemo(
     () => (
@@ -276,13 +289,16 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
       <WorkspacePageHeader
         eyebrow="Evidence"
         title={evidenceTitleForView(filters.view)}
+        description={insightsHeaderDescription}
         tabs={tabOptions}
         activeTab={filters.view}
         onTabChange={handleViewChange}
         actions={headerActions}
       />
 
-      <EvidenceHero totalCount={receiptItems.length} lastActivityAt={metrics.lastActivityAt} />
+      {filters.view !== "insights" && (
+        <EvidenceHero totalCount={receiptItems.length} lastActivityAt={metrics.lastActivityAt} />
+      )}
 
       <div className="pt-1">
         {filters.view === "actions" && (
@@ -346,7 +362,6 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
                 onFilterHarness={handleFilterHarnessFromInsights}
                 onFilterDay={handleFilterDay}
                 onViewActions={handleViewActions}
-                onOpenCloud={onNavigate ? () => onNavigate("/fleet") : undefined}
               />
             )}
           </div>
