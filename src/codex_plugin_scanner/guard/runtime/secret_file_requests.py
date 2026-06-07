@@ -114,7 +114,7 @@ _DOCKER_BUILD_ARG_TOKEN_PREFIXES = (
     "glpat-",
     "sk-",
 )
-_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest"})
+_SAFE_PYTHON_MODULE_COMMANDS = frozenset({"pytest", "ruff"})
 _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
     "pytest": (
         "pytest.py",
@@ -123,6 +123,14 @@ _SAFE_PYTHON_MODULE_SHADOW_PATHS = {
         "pytest/__init__.pyc",
         "pytest/__main__.py",
         "pytest/__main__.pyc",
+    ),
+    "ruff": (
+        "ruff.py",
+        "ruff.pyc",
+        "ruff/__init__.py",
+        "ruff/__init__.pyc",
+        "ruff/__main__.py",
+        "ruff/__main__.pyc",
     ),
 }
 _PYTEST_OPTION_CONFIG_PATHS = ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml")
@@ -144,7 +152,7 @@ _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", 
 _PYTHON_MODULE_MUTATING_FLAGS = {
     "mypy": frozenset({"--install-types"}),
     "pytest": frozenset({"--basetemp", "--debug", "--junitxml"}),
-    "ruff": frozenset({"--add-noqa", "--fix", "--fix-only"}),
+    "ruff": frozenset({"--add-noqa"}),
 }
 _PYTHON_MODULE_MUTATING_SUBCOMMANDS = {
     "ruff": frozenset({"format"}),
@@ -5328,9 +5336,26 @@ def _split_shell_parts(command_text: str) -> list[str]:
             punctuation_chars=";&|",
         )
         lexer.whitespace_split = True
-        return list(lexer)
+        parts = list(lexer)
     except ValueError:
-        return command_text.split()
+        parts = command_text.split()
+    return _merge_shell_fd_redirect_parts(parts)
+
+
+def _merge_shell_fd_redirect_parts(parts: list[str]) -> list[str]:
+    merged: list[str] = []
+    index = 0
+    while index < len(parts):
+        token = parts[index]
+        if index + 2 < len(parts) and re.fullmatch(r"[012]?>", token) and parts[index + 1] == "&":
+            fd_prefix = token[:-1]
+            redirect_target = parts[index + 2]
+            merged.append(f"{fd_prefix}>&{redirect_target}" if fd_prefix else f">&{redirect_target}")
+            index += 3
+            continue
+        merged.append(token)
+        index += 1
+    return merged
 
 
 def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
@@ -5647,15 +5672,26 @@ def _looks_like_safe_python_module_invocation(parts: list[str], *, cwd: Path | N
             return False
         segment_args = segment[command_index + 1 :]
         if _is_python_interpreter_command(command_name):
-            if any(_shell_segment_sets_env_key(segment, command_index, env_key) for env_key in _PYTEST_UNSAFE_ENV_KEYS):
+            module_root = _python_module_root_from_args(segment_args)
+            unsafe_env_keys = _python_module_unsafe_env_keys(module_root)
+            if any(_shell_segment_sets_env_key(segment, command_index, env_key) for env_key in unsafe_env_keys):
                 return False
             if _shell_segment_uses_env_split_string_wrapper(segment, command_index):
                 return False
             if _shell_segment_uses_cwd_changing_wrapper(segment, command_index):
                 return False
+            if _python_module_may_be_shadowed_from_execution_context(
+                module_root,
+                cwd=cwd,
+                segment=segment,
+                command_index=command_index,
+            ):
+                return False
             if not _python_segment_runs_safe_module(segment_args, cwd=cwd):
                 return False
             saw_python_module = True
+            continue
+        if _shell_directory_setup_segment_is_safe(command_name, segment_args):
             continue
         if command_name in _READ_ONLY_LOOKUP_FILTERS and _read_only_lookup_filter_segment_is_safe(
             command_name,
@@ -5717,7 +5753,8 @@ def _contains_prior_pytest_state_mutation(parts: list[str]) -> bool:
         if _segment_targets_pytest(segment, command_name, command_index):
             return saw_state_mutation
         if command_name in {"cd", "pushd", "popd"}:
-            saw_state_mutation = True
+            if not _shell_directory_setup_segment_is_safe(command_name, segment[command_index + 1 :]):
+                saw_state_mutation = True
             continue
         if command_name == "set" and _shell_set_exports_assignments(segment[command_index + 1 :]):
             saw_state_mutation = True
@@ -5827,6 +5864,8 @@ def _looks_like_safe_pytest_binary_invocation(parts: list[str], *, cwd: Path | N
                 return False
             saw_pytest = True
             continue
+        if _shell_directory_setup_segment_is_safe(command_name, segment_args):
+            continue
         if command_name in _READ_ONLY_LOOKUP_FILTERS and _read_only_lookup_filter_segment_is_safe(
             command_name,
             segment_args,
@@ -5869,6 +5908,77 @@ def _pytest_binary_segment_is_safe(command_token: str, module_args: list[str], *
 def _shell_segment_sets_env_key(segment: list[str], command_index: int, env_key: str) -> bool:
     normalized_env_key = env_key.upper()
     return any(_shell_env_assignment_key(token) == normalized_env_key for token in segment[:command_index])
+
+
+def _shell_directory_setup_segment_is_safe(command_name: str, segment_args: list[str]) -> bool:
+    if command_name == "popd":
+        path_args = _shell_args_without_trailing_redirections(segment_args)
+        return not path_args or all(not _shell_token_has_command_substitution(token) for token in path_args)
+    if command_name not in {"cd", "pushd"}:
+        return False
+    path_args = _shell_args_without_trailing_redirections(segment_args)
+    if not path_args:
+        return False
+    for token in path_args:
+        if token in {"-", "--"}:
+            continue
+        if token.startswith("-"):
+            return False
+        if _shell_token_has_command_substitution(token):
+            return False
+    return True
+
+
+def _shell_token_has_command_substitution(token: str) -> bool:
+    if "$(" in token or "`" in token:
+        return True
+    return any(character in token for character in ("$", "<", ">", "|", "&", ";", "\n"))
+
+
+def _python_module_root_from_args(args: list[str]) -> str | None:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            return None
+        if arg in {"-c", "--command"} or arg.startswith(("-c", "--command=")):
+            return None
+        if arg == "-m":
+            module = args[index + 1] if index + 1 < len(args) else ""
+            return module.split(".", 1)[0] or None
+        if arg.startswith("-m") and len(arg) > 2:
+            return arg[2:].split(".", 1)[0] or None
+        if arg in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        if any(arg.startswith(option) and len(arg) > len(option) for option in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES):
+            index += 1
+            continue
+        if not arg.startswith("-"):
+            return None
+        index += 1
+    return None
+
+
+def _python_module_unsafe_env_keys(module_root: str | None) -> frozenset[str]:
+    if module_root == "pytest":
+        return _PYTEST_UNSAFE_ENV_KEYS
+    return _PYTEST_UNSAFE_ENV_KEYS - frozenset({"PYTHONPATH"})
+
+
+def _shell_args_without_trailing_redirections(args: list[str]) -> list[str]:
+    trimmed = list(args)
+    while trimmed and _is_shell_redirection_token(trimmed[-1]):
+        trimmed.pop()
+    return trimmed
+
+
+def _is_shell_redirection_token(token: str) -> bool:
+    if token in {"|", "|&"}:
+        return True
+    if _split_attached_redirection_token(token) is not None:
+        return True
+    return bool(re.fullmatch(r"[012]?>&?\S*", token) or re.fullmatch(r"[012]?>>?", token))
 
 
 def _shell_segment_uses_env_split_string_wrapper(segment: list[str], command_index: int) -> bool:
@@ -5974,6 +6084,7 @@ def _python_args_use_module_mode(args: list[str]) -> bool:
 
 
 def _python_segment_runs_safe_module(args: list[str], *, cwd: Path | None = None) -> bool:
+    args = _shell_args_without_trailing_redirections(args)
     if not args:
         return False
     index = 0
@@ -6046,14 +6157,62 @@ def _python_module_args_are_safe(module: str, module_args: list[str], *, cwd: Pa
 
 
 def _python_module_may_be_shadowed(module_root: str, cwd: Path | None) -> bool:
+    return _python_module_may_be_shadowed_in_search_roots(module_root, [cwd] if cwd is not None else [])
+
+
+def _python_module_may_be_shadowed_from_execution_context(
+    module_root: str | None,
+    *,
+    cwd: Path | None,
+    segment: list[str],
+    command_index: int,
+) -> bool:
+    if module_root is None:
+        return True
+    search_roots: list[Path] = []
+    if cwd is not None:
+        search_roots.append(cwd)
+    search_roots.extend(_pythonpath_search_roots_from_segment(segment, command_index, cwd=cwd))
+    return _python_module_may_be_shadowed_in_search_roots(module_root, search_roots)
+
+
+def _pythonpath_search_roots_from_segment(
+    segment: list[str],
+    command_index: int,
+    *,
+    cwd: Path | None,
+) -> list[Path]:
     if cwd is None:
+        return []
+    search_roots: list[Path] = []
+    for token in segment[:command_index]:
+        if _shell_env_assignment_key(token) != "PYTHONPATH":
+            continue
+        path_value = token.split("=", 1)[1] if "=" in token else ""
+        for entry in path_value.split(":"):
+            normalized_entry = entry.strip()
+            if not normalized_entry:
+                continue
+            candidate = Path(normalized_entry)
+            search_roots.append(candidate if candidate.is_absolute() else cwd / candidate)
+    return search_roots
+
+
+def _python_module_may_be_shadowed_in_search_roots(module_root: str, search_roots: list[Path]) -> bool:
+    if not search_roots:
         return True
     shadow_paths = _SAFE_PYTHON_MODULE_SHADOW_PATHS.get(module_root)
     if shadow_paths is None:
         return True
-    if module_root == "pytest" and _pytest_local_entry_point_metadata_exists(cwd):
-        return True
-    return any((cwd / shadow_path).exists() for shadow_path in shadow_paths)
+    for search_root in search_roots:
+        if module_root == "pytest" and _pytest_local_entry_point_metadata_exists(search_root):
+            return True
+        try:
+            if any((search_root / shadow_path).exists() for shadow_path in shadow_paths):
+                return True
+        except OSError:
+            return True
+    return False
 
 
 def _pytest_local_entry_point_metadata_exists(cwd: Path) -> bool:

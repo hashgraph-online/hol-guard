@@ -13411,6 +13411,83 @@ def test_guard_runtime_allows_simple_pytest_module_invocation(tmp_path):
     assert match is None
 
 
+def test_guard_runtime_allows_cd_prefixed_pytest_module_invocation(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {
+            "command": (
+                "cd tests && python3 -m pytest "
+                "test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
+                "test_release_checklist_references_smoke_evidence -q"
+            )
+        },
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
+def test_guard_runtime_allows_ruff_check_and_fix_module_invocations(tmp_path):
+    for command in (
+        "python3 -m ruff check src/codex_plugin_scanner/guard/runtime/secret_file_requests.py",
+        "python3 -m ruff check --fix src/codex_plugin_scanner/guard/runtime/secret_file_requests.py",
+        "PYTHONPATH=src python3 -m ruff check --fix src/codex_plugin_scanner/guard/runtime/secret_file_requests.py",
+    ):
+        match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+        assert match is None, command
+
+
+def test_guard_runtime_allows_chained_cd_and_ruff_dev_workflow(tmp_path):
+    command = (
+        "cd tests && PYTHONPATH=src python3 -m ruff check --fix ../src/foo.py 2>&1 && "
+        "PYTHONPATH=src python3 -m ruff check ../src/foo.py 2>&1"
+    )
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is None
+
+
+def test_guard_runtime_blocks_unsafe_cd_before_pytest_module_invocation(tmp_path):
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "cd $(rm -rf marker) && python3 -m pytest -q"},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_blocks_pythonpath_ruff_module_shadow(tmp_path):
+    malicious_dir = tmp_path / "malicious"
+    malicious_dir.mkdir()
+    _write_text(malicious_dir / "ruff.py", "from pathlib import Path; Path('marker').write_text('owned')\n")
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": "PYTHONPATH=./malicious python3 -m ruff check --fix ."},
+        cwd=tmp_path,
+    )
+
+    assert match is not None
+    assert match.action_class == "destructive shell command"
+
+
+def test_guard_runtime_allows_cd_with_parentheses_in_directory_name(tmp_path):
+    project_dir = tmp_path / "project (2024)"
+    project_dir.mkdir()
+    tests_dir = project_dir / "tests"
+    tests_dir.mkdir()
+
+    match = extract_sensitive_tool_action_request(
+        "Bash",
+        {"command": f'cd "{project_dir.name}" && python3 -m ruff check ../src/foo.py'},
+        cwd=tmp_path,
+    )
+
+    assert match is None
+
+
 def test_guard_runtime_blocks_shadowed_pytest_module_invocation(tmp_path):
     _write_text(tmp_path / "pytest.py", "from pathlib import Path; Path('marker').write_text('owned')\n")
 
@@ -13800,26 +13877,24 @@ def test_guard_runtime_checks_selected_test_path_ancestor_pytest_config_addopts(
     assert match.action_class == "destructive shell command"
 
 
-def test_guard_runtime_blocks_prior_cd_before_pytest(tmp_path):
+def test_guard_runtime_allows_prior_cd_before_pytest(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "cd sub && pytest -q"},
         cwd=tmp_path,
     )
 
-    assert match is not None
-    assert match.action_class == "destructive shell command"
+    assert match is None
 
 
-def test_guard_runtime_blocks_prior_pushd_before_pytest(tmp_path):
+def test_guard_runtime_allows_prior_pushd_before_pytest(tmp_path):
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "pushd sub >/dev/null; pytest -q"},
         cwd=tmp_path,
     )
 
-    assert match is not None
-    assert match.action_class == "destructive shell command"
+    assert match is None
 
 
 def test_guard_runtime_blocks_prior_exported_pytest_environment(tmp_path):
