@@ -1216,7 +1216,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
             daemon_pid = os.getpid()
             daemon_port = int(self.server.server_address[1])  # type: ignore[attr-defined]
-            self._write_json(schedule_guard_dashboard_update(guard_home, daemon_pid, daemon_port))
+            self._write_json(
+                schedule_guard_dashboard_update(
+                    guard_home,
+                    daemon_pid=daemon_pid,
+                    daemon_port=daemon_port,
+                )
+            )
             return
         if parsed.path == "/v1/notifications/setup":
             self._handle_notification_setup(payload)

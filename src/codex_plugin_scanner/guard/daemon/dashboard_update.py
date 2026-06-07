@@ -45,7 +45,12 @@ def dashboard_update_in_progress(guard_home: Path) -> bool:
     return True
 
 
-def schedule_guard_dashboard_update(guard_home: Path, *, daemon_pid: int) -> dict[str, object]:
+def schedule_guard_dashboard_update(
+    guard_home: Path,
+    *,
+    daemon_pid: int,
+    daemon_port: int,
+) -> dict[str, object]:
     guard_home = guard_home.expanduser().resolve()
     if dashboard_update_in_progress(guard_home):
         return {
@@ -63,6 +68,8 @@ def schedule_guard_dashboard_update(guard_home: Path, *, daemon_pid: int) -> dic
         str(guard_home),
         "--daemon-pid",
         str(daemon_pid),
+        "--daemon-port",
+        str(daemon_port),
     ]
     kwargs: dict[str, object] = {
         "stdin": subprocess.DEVNULL,
@@ -80,6 +87,7 @@ def schedule_guard_dashboard_update(guard_home: Path, *, daemon_pid: int) -> dic
         {
             "guard_home": str(guard_home),
             "daemon_pid": daemon_pid,
+            "daemon_port": daemon_port,
             "runner_pid": process.pid,
             "started_at": datetime.now(timezone.utc).isoformat(),
         },

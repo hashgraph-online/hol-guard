@@ -211,6 +211,8 @@ def test_schedule_guard_dashboard_update_spawns_runner(
             captured["command"] = command
             captured["kwargs"] = kwargs
 
+            self.pid = 4243
+
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.dashboard_update.subprocess.Popen",
         FakeProcess,

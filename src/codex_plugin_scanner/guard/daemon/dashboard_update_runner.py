@@ -34,6 +34,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Upgrade Guard and restart the local daemon.")
     parser.add_argument("--guard-home", required=True)
     parser.add_argument("--daemon-pid", type=int, required=True)
+    parser.add_argument("--daemon-port", type=int, required=True)
     return parser.parse_args(argv)
 
 
