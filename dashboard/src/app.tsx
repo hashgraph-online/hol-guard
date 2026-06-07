@@ -31,6 +31,9 @@ const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.He
 const SupplyChainHubWorkspace = lazy(() =>
   import("./supply-chain-hub-workspace").then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
+const AboutWorkspace = lazy(() =>
+  import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
+);
 
 function LazyFallback() {
   return (
@@ -753,6 +756,11 @@ export function App() {
             />
           </Suspense>
         ) : null
+      }
+      aboutContent={
+        <Suspense fallback={<LazyFallback />}>
+          <AboutWorkspace />
+        </Suspense>
       }
     />
     {helpOpen && (

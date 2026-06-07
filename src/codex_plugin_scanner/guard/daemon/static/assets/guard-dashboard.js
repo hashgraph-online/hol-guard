@@ -23155,6 +23155,9 @@ const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/h
 const SupplyChainHubWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
+const AboutWorkspace = reactExports.lazy(
+  () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
+);
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
@@ -23733,7 +23736,8 @@ function App() {
             onNavigate: navigate,
             onRuntimeRefresh: refreshStateAfterAction
           }
-        ) }) : null
+        ) }) : null,
+        aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, {}) })
       }
     ),
     helpOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: null, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HelpModal, { open: helpOpen, onClose: handleCloseHelp }) })
@@ -23803,18 +23807,18 @@ export {
   HiMiniCommandLine as ak,
   WorkspacePageHeader as al,
   __vitePreload as am,
-  HiMiniArrowTopRightOnSquare as an,
-  fetchPackageFirewallStatus as ao,
-  runPackageFirewallAction as ap,
-  runPackageAudit as aq,
-  runPackageSync as ar,
-  startPackageFirewallConnect as as,
-  openPackageFirewallShell as at,
-  HiMiniBugAnt as au,
-  IconActionButton as av,
-  HiMiniBeaker as aw,
-  runAuditRemediation as ax,
-  HiMiniDocumentText as ay,
+  HiMiniDocumentText as an,
+  HiMiniArrowTopRightOnSquare as ao,
+  fetchPackageFirewallStatus as ap,
+  runPackageFirewallAction as aq,
+  runPackageAudit as ar,
+  runPackageSync as as,
+  startPackageFirewallConnect as at,
+  openPackageFirewallShell as au,
+  HiMiniBugAnt as av,
+  IconActionButton as aw,
+  HiMiniBeaker as ax,
+  runAuditRemediation as ay,
   guardAwareHref as az,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,

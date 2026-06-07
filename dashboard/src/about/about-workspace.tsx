@@ -44,14 +44,21 @@ function AboutExternalLink({
   children: ReactNode;
   className?: string;
 }) {
-  const safe = assertSafeAboutExternalUrl(href);
+  let safe: { rel: string; target: string } | null = null;
+  let errorReason = "";
+  try {
+    safe = assertSafeAboutExternalUrl(href);
+  } catch (e) {
+    errorReason = e instanceof Error ? e.message : "Invalid URL";
+  }
+
   const handleClick = useCallback(() => {
     trackAboutEvent({ type: "about_external_link_clicked", href });
   }, [href]);
 
-  if (!safe.ok) {
+  if (!safe) {
     return (
-      <span className={`text-slate-400 cursor-not-allowed ${className ?? ""}`} title={safe.reason}>
+      <span className={`text-slate-400 cursor-not-allowed ${className ?? ""}`} title={errorReason}>
         {children}
       </span>
     );
@@ -60,8 +67,8 @@ function AboutExternalLink({
   return (
     <a
       href={href}
-      target="_blank"
-      rel="noreferrer"
+      target={safe.target}
+      rel={safe.rel}
       onClick={handleClick}
       className={`inline-flex items-center gap-1 transition-colors hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 ${className ?? ""}`}
     >
@@ -139,7 +146,7 @@ export function AboutWorkspace() {
             <TrustCard
               key={i}
               title={card.title}
-              desc={card.desc}
+              desc={card.description}
               icon={
                 i === 0 ? (
                   <HiMiniShieldCheck className="h-5 w-5" />
@@ -178,7 +185,7 @@ export function AboutWorkspace() {
             <PathCard
               key={i}
               title={card.title}
-              desc={card.desc}
+              desc={card.description}
               ctaLabel={card.ctaLabel}
               ctaHref={card.ctaHref}
             />
@@ -196,7 +203,7 @@ export function AboutWorkspace() {
           {ABOUT_PARTNER_LEVELS.map((level, i) => (
             <div key={i} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
               <h3 className="mb-1 text-sm font-semibold text-brand-dark">{level.name}</h3>
-              <p className="text-xs leading-relaxed text-slate-500">{level.desc}</p>
+              <p className="text-xs leading-relaxed text-slate-500">{level.description}</p>
             </div>
           ))}
         </div>
