@@ -69,6 +69,19 @@ export function resolveSecurityLevelCardDescription(level: "relaxed" | "balanced
   return "Use the exact choices below for this machine and connected apps.";
 }
 
+export function resolveFineTuningSectionDescription(
+  securityLevel: GuardSettings["security_level"],
+): string {
+  if (securityLevel === "custom") {
+    return "You are overriding the preset for this machine.";
+  }
+  return `These rules follow the ${securityLevelLabel(securityLevel)} preset. Use Custom fine-tuning to edit each action type here.`;
+}
+
+export function isFineTuningEditable(securityLevel: GuardSettings["security_level"]): boolean {
+  return securityLevel === "custom";
+}
+
 export function buildClearPolicyPayload(all: boolean): { harness?: string; all?: boolean } {
   return { all };
 }
@@ -475,6 +488,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     });
     setSaveError(null);
   }, []);
+
+  const handleSwitchToCustomFineTuning = useCallback(() => {
+    handleSecurityLevelChange("custom");
+  }, [handleSecurityLevelChange]);
 
   const handleRiskActionChange = useCallback(
     (riskKey: string) => (event: ChangeEvent<HTMLSelectElement>) => {
@@ -1074,13 +1091,21 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       {hasSearch && riskSearchMatches.length > 0 && (
         <div className="rounded-xl border border-slate-100 p-4">
           <SectionLabel>Matching fine-tuning rules</SectionLabel>
+          {!isFineTuningEditable(draft.security_level) ? (
+            <div className="mt-3">
+              <FineTuningPresetBanner
+                securityLevel={draft.security_level}
+                onSwitchToCustom={handleSwitchToCustomFineTuning}
+              />
+            </div>
+          ) : null}
           <div className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
             {visibleRiskControls.map((risk) => (
               <RiskControlRow
                 key={risk.key}
                 risk={risk}
                 value={draft.risk_actions[risk.key] ?? "require-reapproval"}
-                disabled={draft.security_level !== "custom"}
+                disabled={!isFineTuningEditable(draft.security_level)}
                 onChange={handleRiskActionChange(risk.key)}
                 showConsequence
               />
@@ -1261,23 +1286,25 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
         {activeTab === "risk" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-6">
+            {!isFineTuningEditable(draft.security_level) ? (
+              <FineTuningPresetBanner
+                securityLevel={draft.security_level}
+                onSwitchToCustom={handleSwitchToCustomFineTuning}
+              />
+            ) : null}
             <SettingsFormSection
               title="Risky action types"
-              description={
-                draft.security_level !== "custom"
-                  ? `Follows ${securityLevelLabel(draft.security_level)}. Choose Custom on Protection to edit each type.`
-                  : "You are overriding the preset for this machine."
-              }
+              description={resolveFineTuningSectionDescription(draft.security_level)}
             >
-              <div className={`space-y-1 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
+              <div className={`space-y-1 ${!isFineTuningEditable(draft.security_level) ? "opacity-60" : ""}`}>
                 {riskControls.map((risk) => (
                   <RiskControlRow
                     key={risk.key}
                     risk={risk}
                     value={draft.risk_actions[risk.key] ?? "require-reapproval"}
-                    disabled={draft.security_level !== "custom"}
+                    disabled={!isFineTuningEditable(draft.security_level)}
                     onChange={handleRiskActionChange(risk.key)}
-                    showConsequence={draft.security_level === "custom"}
+                    showConsequence={isFineTuningEditable(draft.security_level)}
                   />
                 ))}
                 <div className="grid gap-2 border-t border-slate-100 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
@@ -1296,7 +1323,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                     }
                     options={actionOptions}
                     onChange={handleCodexSecretReadChange}
-                    disabled={draft.security_level !== "custom"}
+                    disabled={!isFineTuningEditable(draft.security_level)}
                   />
                 </div>
               </div>
@@ -1645,6 +1672,33 @@ function SettingToggle(props: {
       <span className="text-sm text-brand-dark">{props.label}</span>
       <input id={props.id} name={props.id} type="checkbox" checked={props.checked} onChange={props.onChange} className="h-4 w-4 accent-brand-blue" />
     </label>
+  );
+}
+
+function FineTuningPresetBanner(props: {
+  securityLevel: GuardSettings["security_level"];
+  onSwitchToCustom: () => void;
+}) {
+  if (isFineTuningEditable(props.securityLevel)) return null;
+
+  return (
+    <div
+      className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-4 sm:flex sm:items-center sm:justify-between sm:gap-4"
+      role="region"
+      aria-label="Fine-tuning preset controls"
+    >
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-brand-dark">
+          Using the {securityLevelLabel(props.securityLevel)} preset
+        </p>
+        <p className="mt-1 text-sm text-slate-500">
+          Individual rules match this preset. Switch to Custom to change how Guard handles each risky action type on this machine.
+        </p>
+      </div>
+      <div className="mt-3 w-full shrink-0 sm:mt-0 sm:w-auto">
+        <ActionButton onClick={props.onSwitchToCustom}>Use Custom fine-tuning</ActionButton>
+      </div>
+    </div>
   );
 }
 
