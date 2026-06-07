@@ -15117,33 +15117,37 @@ function useGuardUpdate(options) {
   const [updateStatus, setUpdateStatus] = reactExports.useState(null);
   const [updatePhase, setUpdatePhase] = reactExports.useState("checking");
   const reconnectStartedAt = reactExports.useRef(null);
+  const updatePhaseRef = reactExports.useRef("checking");
+  reactExports.useEffect(() => {
+    updatePhaseRef.current = updatePhase;
+  }, [updatePhase]);
   const refreshUpdateStatus = reactExports.useCallback(async () => {
     try {
       const status = await fetchGuardUpdateStatus();
       setUpdateStatus(status);
-      if (updatePhase === "checking" || updatePhase === "idle") {
+      if (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle") {
         setUpdatePhase("idle");
       }
     } catch {
-      if (updatePhase === "checking") {
+      if (updatePhaseRef.current === "checking") {
         setUpdatePhase("idle");
       }
     }
-  }, [updatePhase]);
+  }, []);
   reactExports.useEffect(() => {
     let cancelled = false;
     void fetchGuardUpdateStatus().then((status) => {
-      if (!cancelled) {
+      if (!cancelled && (updatePhaseRef.current === "checking" || updatePhaseRef.current === "idle")) {
         setUpdateStatus(status);
         setUpdatePhase("idle");
       }
     }).catch(() => {
-      if (!cancelled) {
+      if (!cancelled && updatePhaseRef.current === "checking") {
         setUpdatePhase("idle");
       }
     });
     const pollId = window.setInterval(() => {
-      if (updatePhase === "updating" || updatePhase === "reconnecting") {
+      if (updatePhaseRef.current === "updating" || updatePhaseRef.current === "reconnecting") {
         return;
       }
       void refreshUpdateStatus();
@@ -15152,7 +15156,7 @@ function useGuardUpdate(options) {
       cancelled = true;
       window.clearInterval(pollId);
     };
-  }, [refreshUpdateStatus, updatePhase]);
+  }, [refreshUpdateStatus]);
   const waitForReconnect = reactExports.useCallback(async () => {
     reconnectStartedAt.current = Date.now();
     while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
@@ -15167,6 +15171,7 @@ function useGuardUpdate(options) {
       }
     }
     setUpdatePhase("error");
+    throw new Error("Guard did not reconnect after the update.");
   }, [options]);
   const onUpdateGuard = reactExports.useCallback(async () => {
     if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
@@ -15177,11 +15182,11 @@ function useGuardUpdate(options) {
       await scheduleGuardUpdate();
       setUpdatePhase("reconnecting");
       await waitForReconnect();
-      await refreshUpdateStatus();
+      window.location.reload();
     } catch {
       setUpdatePhase("error");
     }
-  }, [refreshUpdateStatus, updateStatus, waitForReconnect]);
+  }, [updateStatus, waitForReconnect]);
   return {
     guardVersion: updateStatus?.current_version ?? null,
     updateStatus,
