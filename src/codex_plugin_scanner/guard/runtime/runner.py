@@ -39,6 +39,16 @@ from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..package_firewall_entitlement import build_oauth_package_firewall_entitlement
+from ..policy_bundle_parser import (
+    POLICY_BUNDLE_DEFAULT_ENVIRONMENTS,
+    POLICY_BUNDLE_RULE_ACTIONS,
+    POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
+    computed_policy_bundle_hash,
+    non_empty_string,
+)
+from ..policy_bundle_parser import (
+    validated_policy_bundle_payload as _validated_policy_bundle_payload,
+)
 from ..redaction import redact_sensitive_text
 from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
@@ -54,6 +64,11 @@ from .supply_chain_bundle import (
     verify_supply_chain_bundle_response,
 )
 from .supply_chain_support import ecosystem_support_matrix
+
+
+def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
+    return computed_policy_bundle_hash(policy_bundle)
+
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
@@ -845,168 +860,6 @@ def _prompt_config_candidates(detection: HarnessDetection, context: HarnessConte
     return detection.config_paths
 
 
-_POLICY_BUNDLE_CORE_KEYS = (
-    "contractVersion",
-    "bundleVersion",
-    "issuedAt",
-    "expiresAt",
-    "verifier",
-    "rolloutState",
-    "policyDefaults",
-    "rules",
-)
-
-_POLICY_BUNDLE_DEFAULT_ACTIONS = frozenset({"allow", "warn", "block"})
-_POLICY_BUNDLE_MODE_VALUES = frozenset({"observe", "prompt", "enforce"})
-_POLICY_BUNDLE_REVIEW_ACTIONS = frozenset({"allow", "review", "block"})
-_POLICY_BUNDLE_CHANGED_HASH_ACTIONS = frozenset({"allow", "warn", "require-reapproval", "block"})
-_POLICY_BUNDLE_RULE_ACTIONS = frozenset({"allow", "block", "review", "ignore"})
-_POLICY_BUNDLE_ROLLOUT_STATES = frozenset(
-    {"draft", "simulated", "pending_approval", "enforcing", "enforced", "rollback_available"}
-)
-_POLICY_BUNDLE_SCOPE_KEYS = frozenset({"agents", "devices", "ecosystems", "environments", "harnesses", "locations"})
-_POLICY_BUNDLE_RULE_MATCHER_FAMILIES = frozenset(
-    {"file-read", "mcp", "package-request", "prompt", "prompt-env-read", "tool-action"}
-)
-_POLICY_BUNDLE_DEFAULT_ENVIRONMENTS = frozenset({"development"})
-
-
-def _stable_serialize(value: object) -> str:
-    if isinstance(value, list):
-        return f"[{','.join(_stable_serialize(item) for item in value)}]"
-    if isinstance(value, dict):
-        return (
-            "{"
-            + ",".join(
-                f"{json.dumps(key, separators=(',', ':'), ensure_ascii=False)}:{_stable_serialize(value[key])}"
-                for key in sorted(value)
-            )
-            + "}"
-        )
-    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
-
-
-def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
-    bundle_core = {key: policy_bundle[key] for key in _POLICY_BUNDLE_CORE_KEYS}
-    min_daemon_version = _non_empty_string(policy_bundle.get("minDaemonVersion"))
-    if min_daemon_version is not None:
-        bundle_core["minDaemonVersion"] = min_daemon_version
-    return f"sha256:{hashlib.sha256(_stable_serialize(bundle_core).encode('utf-8')).hexdigest()}"
-
-
-def _non_empty_string(value: object) -> str | None:
-    return value if isinstance(value, str) and value.strip() else None
-
-
-def _policy_bundle_string_list(value: object) -> bool:
-    return isinstance(value, list) and all(isinstance(item, str) for item in value)
-
-
-def _policy_bundle_rule_is_valid(rule: object) -> bool:
-    if not isinstance(rule, dict):
-        return False
-    if _non_empty_string(rule.get("ruleId")) is None:
-        return False
-    if rule.get("action") not in _POLICY_BUNDLE_RULE_ACTIONS:
-        return False
-    if not isinstance(rule.get("reason"), str):
-        return False
-    scope = rule.get("scope")
-    return isinstance(scope, dict) and all(
-        _policy_bundle_string_list(scope.get(key)) for key in _POLICY_BUNDLE_SCOPE_KEYS
-    )
-
-
-def _policy_bundle_acknowledgement_is_valid(acknowledgement: object) -> bool:
-    if not isinstance(acknowledgement, dict):
-        return False
-    if _non_empty_string(acknowledgement.get("deviceId")) is None:
-        return False
-    device_name = acknowledgement.get("deviceName")
-    if device_name is not None and _non_empty_string(device_name) is None:
-        return False
-    acknowledged_at = acknowledgement.get("acknowledgedAt")
-    if acknowledged_at is not None and _non_empty_string(acknowledged_at) is None:
-        return False
-    return acknowledgement.get("status") in {"pending", "synced", "failed", "offline"}
-
-
-def _validated_policy_bundle_payload(policy_bundle: dict[str, object]) -> tuple[dict[str, object] | None, str | None]:
-    required_top_level = (*_POLICY_BUNDLE_CORE_KEYS, "bundleVersion", "bundleHash", "acknowledgements")
-    if any(key not in policy_bundle for key in required_top_level):
-        return None, "missing_required_field"
-    if policy_bundle.get("contractVersion") != "guard-policy-bundle.v1":
-        return None, "unsupported_contract_version"
-    if _non_empty_string(policy_bundle.get("bundleVersion")) is None:
-        return None, "invalid_bundle_version"
-    issued_at = _non_empty_string(policy_bundle.get("issuedAt"))
-    if issued_at is None:
-        return None, "invalid_issued_at"
-    expires_at = policy_bundle.get("expiresAt")
-    if expires_at is not None and _non_empty_string(expires_at) is None:
-        return None, "invalid_expires_at"
-    verifier = policy_bundle.get("verifier")
-    if not isinstance(verifier, dict):
-        return None, "invalid_verifier"
-    if verifier.get("algorithm") != "sha256" or _non_empty_string(verifier.get("keyId")) is None:
-        return None, "invalid_verifier"
-    signature = verifier.get("signature")
-    # `signature` is forward-compatible bundle metadata today; the enforced integrity check is the
-    # stable bundle hash computed from the signed core fields below.
-    if signature is not None and _non_empty_string(signature) is None:
-        return None, "invalid_verifier"
-    if policy_bundle.get("rolloutState") not in _POLICY_BUNDLE_ROLLOUT_STATES:
-        return None, "invalid_rollout_state"
-    defaults = policy_bundle.get("policyDefaults")
-    if not isinstance(defaults, dict):
-        return None, "invalid_policy_defaults"
-    if defaults.get("mode") not in _POLICY_BUNDLE_MODE_VALUES:
-        return None, "invalid_policy_defaults"
-    if defaults.get("defaultAction") not in _POLICY_BUNDLE_DEFAULT_ACTIONS:
-        return None, "invalid_policy_defaults"
-    if defaults.get("unknownPublisherAction") not in _POLICY_BUNDLE_REVIEW_ACTIONS:
-        return None, "invalid_policy_defaults"
-    if defaults.get("changedHashAction") not in _POLICY_BUNDLE_CHANGED_HASH_ACTIONS:
-        return None, "invalid_policy_defaults"
-    if defaults.get("newNetworkDomainAction") not in _POLICY_BUNDLE_DEFAULT_ACTIONS:
-        return None, "invalid_policy_defaults"
-    if defaults.get("subprocessAction") not in _POLICY_BUNDLE_DEFAULT_ACTIONS:
-        return None, "invalid_policy_defaults"
-    if not isinstance(defaults.get("telemetryEnabled"), bool) or not isinstance(defaults.get("syncEnabled"), bool):
-        return None, "invalid_policy_defaults"
-    rules = policy_bundle.get("rules")
-    if not isinstance(rules, list) or not all(_policy_bundle_rule_is_valid(rule) for rule in rules):
-        return None, "invalid_rules"
-    acknowledgements = policy_bundle.get("acknowledgements")
-    if not isinstance(acknowledgements, list) or not all(
-        _policy_bundle_acknowledgement_is_valid(acknowledgement) for acknowledgement in acknowledgements
-    ):
-        return None, "invalid_acknowledgements"
-    bundle_hash = _non_empty_string(policy_bundle.get("bundleHash"))
-    if bundle_hash is None:
-        return None, "invalid_bundle_hash"
-    computed_hash = _computed_policy_bundle_hash(policy_bundle)
-    if bundle_hash != computed_hash:
-        return None, "bundle_hash_mismatch"
-    return {
-        "contractVersion": policy_bundle["contractVersion"],
-        "bundleVersion": policy_bundle["bundleVersion"],
-        "bundleHash": bundle_hash,
-        "issuedAt": issued_at,
-        "expiresAt": expires_at,
-        **(
-            {"minDaemonVersion": policy_bundle["minDaemonVersion"]}
-            if _non_empty_string(policy_bundle.get("minDaemonVersion"))
-            else {}
-        ),
-        "verifier": verifier,
-        "rolloutState": policy_bundle["rolloutState"],
-        "policyDefaults": defaults,
-        "rules": rules,
-        "acknowledgements": acknowledgements,
-    }, None
-
-
 def _policy_bundle_acknowledgement_payload(
     *,
     device_id: str,
@@ -1032,7 +885,7 @@ def _version_tuple(value: str) -> tuple[int, ...] | None:
 
 
 def _daemon_version_supported(policy_bundle: dict[str, object]) -> bool:
-    min_daemon_version = _non_empty_string(policy_bundle.get("minDaemonVersion"))
+    min_daemon_version = non_empty_string(policy_bundle.get("minDaemonVersion"))
     if min_daemon_version is None:
         return True
     current = _version_tuple(__version__)
@@ -1048,8 +901,8 @@ def _policy_bundle_is_version_downgrade(
 ) -> bool:
     if not isinstance(existing_bundle, dict) or not existing_bundle:
         return False
-    existing_issued_at = _non_empty_string(existing_bundle.get("issuedAt"))
-    next_issued_at = _non_empty_string(next_bundle.get("issuedAt"))
+    existing_issued_at = non_empty_string(existing_bundle.get("issuedAt"))
+    next_issued_at = non_empty_string(next_bundle.get("issuedAt"))
     if existing_issued_at is None or next_issued_at is None:
         return False
     try:
@@ -1062,7 +915,7 @@ def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
     explicit = rule.get("matcherFamilies")
     if isinstance(explicit, list):
         values = [
-            family for family in explicit if isinstance(family, str) and family in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
+            family for family in explicit if isinstance(family, str) and family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES
         ]
         return list(dict.fromkeys(values))
 
@@ -1071,13 +924,13 @@ def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
     if isinstance(scope, dict):
         if isinstance(scope.get("ecosystems"), list) and scope["ecosystems"]:
             derived.append("package-request")
-        if _non_empty_string(scope.get("mcp")) is not None or _non_empty_string(scope.get("tool")) is not None:
+        if non_empty_string(scope.get("mcp")) is not None or non_empty_string(scope.get("tool")) is not None:
             derived.append("mcp")
-        if _non_empty_string(scope.get("command")) is not None:
+        if non_empty_string(scope.get("command")) is not None:
             derived.append("tool-action")
-        if _non_empty_string(scope.get("path")) is not None or _non_empty_string(scope.get("secretType")) is not None:
+        if non_empty_string(scope.get("path")) is not None or non_empty_string(scope.get("secretType")) is not None:
             derived.append("file-read")
-    artifact_type = _non_empty_string(rule.get("artifactType"))
+    artifact_type = non_empty_string(rule.get("artifactType"))
     if artifact_type == "package_request":
         derived.append("package-request")
     if artifact_type == "tool_action_request":
@@ -1086,7 +939,7 @@ def _policy_bundle_rule_matcher_families(rule: dict[str, object]) -> list[str]:
         derived.append("file-read")
     if artifact_type == "prompt_request":
         derived.append("prompt")
-    return list(dict.fromkeys(family for family in derived if family in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES))
+    return list(dict.fromkeys(family for family in derived if family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES))
 
 
 def _policy_bundle_rule_matches_local_scope(
@@ -1105,7 +958,7 @@ def _policy_bundle_rule_matches_local_scope(
     if (
         isinstance(environments, list)
         and environments
-        and not any(isinstance(item, str) and item in _POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments)
+        and not any(isinstance(item, str) and item in POLICY_BUNDLE_DEFAULT_ENVIRONMENTS for item in environments)
     ):
         return False
     locations = scope.get("locations")
@@ -1143,13 +996,13 @@ def _build_policy_bundle_decisions(
         if not _policy_bundle_rule_matches_local_scope(item, device_id=device_id, device_name=device_name):
             continue
         action = item.get("action")
-        if action == "ignore" or action not in _POLICY_BUNDLE_RULE_ACTIONS:
+        if action == "ignore" or action not in POLICY_BUNDLE_RULE_ACTIONS:
             continue
         matcher_families = _policy_bundle_rule_matcher_families(item)
         if not matcher_families:
             continue
-        rule_id = _non_empty_string(item.get("ruleId")) or "bundle-rule"
-        reason = _non_empty_string(item.get("reason")) or f"Matched Guard Cloud rule {rule_id}."
+        rule_id = non_empty_string(item.get("ruleId")) or "bundle-rule"
+        reason = non_empty_string(item.get("reason")) or f"Matched Guard Cloud rule {rule_id}."
         for harness in _policy_bundle_rule_harnesses(item):
             for family in matcher_families:
                 decisions.append(
@@ -1161,7 +1014,7 @@ def _build_policy_bundle_decisions(
                         reason=reason,
                         owner=rule_id,
                         source="policy-bundle",
-                        expires_at=_non_empty_string(policy_bundle.get("expiresAt")),
+                        expires_at=non_empty_string(policy_bundle.get("expiresAt")),
                     )
                 )
     return decisions
@@ -1178,10 +1031,10 @@ def _parse_policy_simulation_timestamp(value: object) -> datetime | None:
 
 
 def _receipt_policy_bundle_matcher_family(receipt: dict[str, object]) -> str | None:
-    artifact_id = _non_empty_string(receipt.get("artifact_id"))
+    artifact_id = non_empty_string(receipt.get("artifact_id"))
     if artifact_id is None:
         return None
-    for family in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES:
+    for family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES:
         if f":{family}:" in artifact_id:
             return family
     return None
@@ -1216,7 +1069,7 @@ def simulate_policy_bundle_receipts(
         family = _receipt_policy_bundle_matcher_family(receipt)
         if family is None:
             continue
-        harness = _non_empty_string(receipt.get("harness")) or "*"
+        harness = non_empty_string(receipt.get("harness")) or "*"
         matched = next(
             (item for item in decisions if item.artifact_id == f"family:{family}" and item.harness in {harness, "*"}),
             None,
@@ -1238,7 +1091,7 @@ def simulate_policy_bundle_receipts(
                 "observed_action": receipt.get("policy_decision"),
                 "simulated_action": simulated_action,
                 "matched_rule_id": matched.owner if matched is not None else None,
-                "policy_version": _non_empty_string(policy_bundle.get("bundleHash")),
+                "policy_version": non_empty_string(policy_bundle.get("bundleHash")),
                 "timestamp": receipt.get("timestamp"),
             }
         )
@@ -1247,8 +1100,8 @@ def simulate_policy_bundle_receipts(
         stale = (generated_at_dt - latest_dt).total_seconds() > 24 * 60 * 60
     return {
         "generated_at": generated_at,
-        "policy_bundle_version": _non_empty_string(policy_bundle.get("bundleVersion")),
-        "policy_version": _non_empty_string(policy_bundle.get("bundleHash")),
+        "policy_bundle_version": non_empty_string(policy_bundle.get("bundleVersion")),
+        "policy_version": non_empty_string(policy_bundle.get("bundleHash")),
         "receipt_count": len(receipts),
         "summary": summary,
         "matches": matches,
