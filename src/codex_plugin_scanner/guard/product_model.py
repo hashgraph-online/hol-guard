@@ -297,6 +297,13 @@ LOCAL_API_OWNERSHIP = (
         writes_state=True,
     ),
     ApiOwnership(path="/v1/receipts", method="GET", category="unknown", auth_required=True, writes_state=False),
+    ApiOwnership(
+        path="/v1/receipts/analytics",
+        method="GET",
+        category="unknown",
+        auth_required=True,
+        writes_state=False,
+    ),
     ApiOwnership(path="/v1/receipts/latest", method="GET", category="unknown", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/receipts/{id}", method="GET", category="unknown", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/policy", method="GET", category="config", auth_required=True, writes_state=False),

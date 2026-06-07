@@ -7,6 +7,7 @@ import {
   GUARD_RISK_SIGNAL_V2_SEVERITIES,
   CODEX_RESUME_STATUSES
 } from "./guard-types";
+import { computeTrendBuckets } from "./evidence/evidence-metrics";
 import type {
   GuardActionEnvelope,
   GuardActionType,
@@ -39,6 +40,11 @@ import type {
   GuardQueueResolutionResult,
   GuardQueueSummary,
   GuardReceipt,
+  GuardReceiptAnalytics,
+  GuardReceiptAnalyticsBucket,
+  GuardReceiptArtifactStat,
+  GuardReceiptDailyActivity,
+  GuardReceiptHarnessStat,
   GuardRuntimeSnapshot,
   SupplyChainSnapshot,
   GuardSettingsPayload,
@@ -1284,6 +1290,148 @@ export async function fetchReceipts(): Promise<GuardReceipt[]> {
   }
   const payload = await readJson<{ items: RawGuardReceipt[] }>("/v1/receipts");
   return normalizeReceipts(payload.items);
+}
+
+function normalizeReceiptAnalyticsBucket(raw: unknown): GuardReceiptAnalyticsBucket | null {
+  if (!isRecord(raw)) return null;
+  const dateKey = raw["date_key"];
+  const label = raw["label"];
+  if (typeof dateKey !== "string" || typeof label !== "string") return null;
+  return {
+    date_key: dateKey,
+    label: label,
+    allowed: isNonNegativeNumber(raw["allowed"]) ? raw["allowed"] : 0,
+    blocked: isNonNegativeNumber(raw["blocked"]) ? raw["blocked"] : 0,
+    reviewed: isNonNegativeNumber(raw["reviewed"]) ? raw["reviewed"] : 0,
+  };
+}
+
+export function normalizeReceiptAnalytics(raw: unknown): GuardReceiptAnalytics | null {
+  if (!isRecord(raw)) return null;
+  const dailyRaw = raw["daily_activity"];
+  const trendRaw = raw["trend_buckets"];
+  const harnessRaw = raw["by_harness"];
+  const artifactRaw = raw["top_artifacts"];
+  const daily_activity = Array.isArray(dailyRaw)
+    ? dailyRaw
+        .map((entry) => {
+          if (!isRecord(entry) || typeof entry["date_key"] !== "string") return null;
+          return {
+            date_key: entry["date_key"],
+            total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
+          };
+        })
+        .filter((entry): entry is GuardReceiptDailyActivity => entry !== null)
+    : [];
+  const trend_buckets = Array.isArray(trendRaw)
+    ? trendRaw.map(normalizeReceiptAnalyticsBucket).filter((entry): entry is GuardReceiptAnalyticsBucket => entry !== null)
+    : [];
+  const by_harness = Array.isArray(harnessRaw)
+    ? harnessRaw
+        .map((entry) => {
+          if (!isRecord(entry) || typeof entry["harness"] !== "string") return null;
+          return {
+            harness: entry["harness"],
+            total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
+            allowed: isNonNegativeNumber(entry["allowed"]) ? entry["allowed"] : 0,
+            blocked: isNonNegativeNumber(entry["blocked"]) ? entry["blocked"] : 0,
+          };
+        })
+        .filter((entry): entry is GuardReceiptHarnessStat => entry !== null)
+    : [];
+  const top_artifacts = Array.isArray(artifactRaw)
+    ? artifactRaw
+        .map((entry) => {
+          if (!isRecord(entry) || typeof entry["name"] !== "string") return null;
+          return {
+            name: entry["name"],
+            total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
+            allowed: isNonNegativeNumber(entry["allowed"]) ? entry["allowed"] : 0,
+            blocked: isNonNegativeNumber(entry["blocked"]) ? entry["blocked"] : 0,
+          };
+        })
+        .filter((entry): entry is GuardReceiptArtifactStat => entry !== null)
+    : [];
+
+  return {
+    total: isNonNegativeNumber(raw["total"]) ? raw["total"] : 0,
+    allowed: isNonNegativeNumber(raw["allowed"]) ? raw["allowed"] : 0,
+    blocked: isNonNegativeNumber(raw["blocked"]) ? raw["blocked"] : 0,
+    reviewed: isNonNegativeNumber(raw["reviewed"]) ? raw["reviewed"] : 0,
+    first_activity_at: isStringOrNull(raw["first_activity_at"]) ? raw["first_activity_at"] : null,
+    last_activity_at: isStringOrNull(raw["last_activity_at"]) ? raw["last_activity_at"] : null,
+    active_day_streak: isNonNegativeNumber(raw["active_day_streak"]) ? raw["active_day_streak"] : 0,
+    peak_day_total: isNonNegativeNumber(raw["peak_day_total"]) ? raw["peak_day_total"] : 0,
+    daily_activity,
+    trend_buckets,
+    by_harness,
+    top_artifacts,
+    loaded_sample_limit: isNonNegativeNumber(raw["loaded_sample_limit"]) ? raw["loaded_sample_limit"] : 200,
+  };
+}
+
+function buildReceiptAnalyticsFromSample(receipts: GuardReceipt[]): GuardReceiptAnalytics {
+  const allowed = receipts.filter((r) => r.policy_decision === "allow").length;
+  const blocked = receipts.filter((r) => r.policy_decision === "block").length;
+  const reviewed = receipts.length - allowed - blocked;
+  const timestamps = receipts.map((r) => r.timestamp).sort();
+  const trend_buckets: GuardReceiptAnalyticsBucket[] = computeTrendBuckets(receipts, 7).map((bucket) => ({
+    date_key: bucket.dateKey,
+    label: bucket.label,
+    allowed: bucket.allowed,
+    blocked: bucket.blocked,
+    reviewed: bucket.reviewed,
+  }));
+  const dailyMap = new Map<string, number>();
+  for (const receipt of receipts) {
+    const d = new Date(receipt.timestamp);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    dailyMap.set(key, (dailyMap.get(key) ?? 0) + 1);
+  }
+  const daily_activity: GuardReceiptDailyActivity[] = [];
+  const oneDay = 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  for (let offset = 89; offset >= 0; offset -= 1) {
+    const d = new Date(nowMs - offset * oneDay);
+    const date_key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    daily_activity.push({ date_key, total: dailyMap.get(date_key) ?? 0 });
+  }
+  let active_day_streak = 0;
+  const streakEntries = [...daily_activity].reverse();
+  if (streakEntries[0]?.total === 0) {
+    streakEntries.shift();
+  }
+  for (const entry of streakEntries) {
+    if (entry.total > 0) active_day_streak += 1;
+    else break;
+  }
+  return {
+    total: receipts.length,
+    allowed,
+    blocked,
+    reviewed,
+    first_activity_at: timestamps[0] ?? null,
+    last_activity_at: timestamps[timestamps.length - 1] ?? null,
+    active_day_streak,
+    peak_day_total: Math.max(...daily_activity.map((entry) => entry.total), 0),
+    daily_activity,
+    trend_buckets,
+    by_harness: [],
+    top_artifacts: [],
+    loaded_sample_limit: receipts.length,
+  };
+}
+
+export async function fetchReceiptAnalytics(): Promise<GuardReceiptAnalytics> {
+  if (isGuardDemoMode()) {
+    return buildReceiptAnalyticsFromSample(getDemoReceipts());
+  }
+  const payload = await readJson<unknown>("/v1/receipts/analytics?activity_days=90&trend_days=7&top_limit=8");
+  const normalized = normalizeReceiptAnalytics(payload);
+  if (!normalized) {
+    throw new Error("Invalid receipt analytics payload");
+  }
+  return normalized;
 }
 
 export async function fetchLatestReceipt(

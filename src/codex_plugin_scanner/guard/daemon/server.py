@@ -970,6 +970,31 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/receipts":
             self._write_json({"items": store.list_receipts(limit=200)})
             return
+        if parsed.path == "/v1/receipts/analytics":
+            query = parse_qs(parsed.query)
+            activity_days_q = query.get("activity_days", ["90"])[-1]
+            trend_days_q = query.get("trend_days", ["7"])[-1]
+            top_limit_q = query.get("top_limit", ["10"])[-1]
+            try:
+                activity_days = min(max(int(activity_days_q), 1), 366)
+            except (ValueError, TypeError):
+                activity_days = 90
+            try:
+                trend_days = min(max(int(trend_days_q), 1), activity_days)
+            except (ValueError, TypeError):
+                trend_days = 7
+            try:
+                top_limit = min(max(int(top_limit_q), 1), 50)
+            except (ValueError, TypeError):
+                top_limit = 10
+            self._write_json(
+                store.receipt_analytics(
+                    activity_days=activity_days,
+                    trend_days=trend_days,
+                    top_limit=top_limit,
+                )
+            )
+            return
         if parsed.path == "/v1/receipts/latest":
             query = parse_qs(parsed.query)
             harness = query.get("harness", [None])[-1]
@@ -3275,6 +3300,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/events/stream",
             "/v1/requests",
             "/v1/receipts",
+            "/v1/receipts/analytics",
             "/v1/receipts/latest",
             "/v1/policy",
             "/v1/evidence",
@@ -3478,6 +3504,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/clear",
             "/v1/policy/sync",
             "/v1/receipts",
+            "/v1/receipts/analytics",
             "/v1/receipts/latest",
             "/v1/requests",
             "/v1/requests/clear",
