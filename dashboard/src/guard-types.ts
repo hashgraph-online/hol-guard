@@ -291,6 +291,54 @@ export type PackageManagerProtection = {
   unprotected_managers: string[];
 };
 
+export type SupplyChainBundleAdvisory = {
+  advisoryId: string;
+  aliases: string[];
+  confidence: number;
+  exploitLevel: string;
+  knownExploited: boolean;
+  malwareState: string;
+  normalizedSeverity: string;
+  recommendedFixVersion: string | null;
+  sourceKey: string;
+  summary: string;
+  title: string;
+};
+
+export type SupplyChainBundlePackage = {
+  confidence: number;
+  defaultAction: string;
+  ecosystem: string;
+  exploitLevel: string;
+  knownExploited: boolean;
+  malwareState: string;
+  name: string;
+  namespace: string | null;
+  normalizedSeverity: string;
+  packageAgeState: string;
+  purl: string;
+  reachability: string;
+  recommendedFixVersion: string | null;
+  relatedAdvisoryIds: string[];
+  riskScore: number;
+  sourceIntegrityState: string;
+  version: string;
+};
+
+export type SupplyChainBundle = {
+  bundleVersion: string;
+  expiresAt: string;
+  feedSnapshotHash: string;
+  generatedAt: string;
+  keyId: string;
+  policyHash: string;
+  scoringVersion: string;
+  advisories: SupplyChainBundleAdvisory[];
+  packages: SupplyChainBundlePackage[];
+  policyRules: unknown[];
+  cached_at?: string;
+};
+
 export type SupplyChainSnapshot = {
   package_manager_protection: PackageManagerProtection;
 };

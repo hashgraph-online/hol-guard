@@ -870,6 +870,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/supply-chain/entitlement":
             self._write_json(self._supply_chain_entitlement())
             return
+        if parsed.path == "/v1/supply-chain/bundle":
+            self._handle_get_supply_chain_bundle()
+            return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
             self._handle_cloud_app_handoff(path_parts[2], parsed.query)
             return
@@ -2023,6 +2026,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _supply_chain_entitlement(self) -> dict[str, object]:
         return resolve_package_firewall_entitlement_with_refresh(self.server.store)  # type: ignore[attr-defined]
+
+    def _handle_get_supply_chain_bundle(self) -> None:
+        store = self.server.store  # type: ignore[attr-defined]
+        workspace_id = store.get_cloud_workspace_id()
+        wrapper = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id is not None else None
+        bundle = wrapper.get("bundle") if isinstance(wrapper, dict) else None
+        self._write_json({"bundle": bundle})
 
     def _supply_chain_connect_flow(self, entitlement: dict[str, object]) -> dict[str, object] | None:
         return _resolve_package_firewall_connect_flow(server=self.server, entitlement=entitlement)  # type: ignore[arg-type]
@@ -3405,7 +3415,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if supply_chain_action != action_path and supply_chain_action not in allowed_actions:
             return False
         if payload is None:
-            return supply_chain_action == "package_shims_status"
+            return supply_chain_action in {"package_shims_status", "supply_chain_bundle"}
         workspace_id = self._optional_string(claims.get("workspace_id")) or ""
         payload_workspace_id = self._optional_string(payload.get("workspace_id")) or ""
         if workspace_id and payload_workspace_id != workspace_id:
@@ -3427,6 +3437,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return "package_shims_status"
         if path == "/v1/supply-chain/entitlement":
             return "supply_chain_entitlement"
+        if path == "/v1/supply-chain/bundle":
+            return "supply_chain_bundle"
         if len(path_parts) == 4 and path_parts[:3] == ["v1", "supply-chain", "package-shims"]:
             action = "remove" if path_parts[3] == "uninstall" else path_parts[3]
             if action in {"install", "repair", "test", "remove", "open-shell"}:
