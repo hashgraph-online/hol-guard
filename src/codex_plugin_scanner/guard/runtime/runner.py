@@ -3358,7 +3358,7 @@ def _cloud_sync_receipt_payload(
         "capabilities": capabilities,
         "capturedAt": _optional_string(receipt.get("timestamp")) or _now(),
         "changedSinceLastApproval": bool(changed_capabilities)
-        or policy_decision in {"require-reapproval", "sandbox-required"},
+        or policy_decision in {"review", "require-reapproval", "sandbox-required"},
         "deviceId": device_id,
         "deviceName": device_name,
         "harness": _optional_string(receipt.get("harness")) or "unknown",
