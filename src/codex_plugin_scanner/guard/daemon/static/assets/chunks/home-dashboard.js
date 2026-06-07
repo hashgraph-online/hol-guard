@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, E as EvidenceInsightsHeadlineBento, i as fetchReceiptAnalytics, k as harnessDisplayName, l as isDisplayableHarness, m as EmptyState, n as EvidenceInsightsShareModal, G as GuardHero, P as ProofStrip, o as formatNumber, p as HiMiniSparkles, q as HiMiniXMark, s as HiMiniCloud, t as HiMiniQuestionMarkCircle, u as HiMiniBolt, B as Badge, v as HiMiniChevronRight, w as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, E as EvidenceInsightsHeadlineBento, i as formatNumber, k as fetchReceiptAnalytics, l as harnessDisplayName, m as isDisplayableHarness, n as EmptyState, o as EvidenceInsightsShareModal, G as GuardHero, p as HiMiniSparkles, q as HiMiniXMark, s as HiMiniCloud, t as HiMiniQuestionMarkCircle, u as HiMiniBolt, B as Badge, v as HiMiniChevronRight, w as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 import { D as DeviceProofCard, r as resolveCloudIntelCopy } from "./runtime-overview.js";
 function resolveHomeProtectionStatus(snapshot) {
@@ -208,26 +208,64 @@ function HomeProtectionModule({
     }
   );
 }
+function overviewToneClass(tone) {
+  if (tone === "blue") return "text-brand-blue";
+  if (tone === "green") return "text-emerald-600";
+  if (tone === "purple") return "text-brand-purple";
+  return "text-brand-dark";
+}
+function HomeGuardOverviewRow(props) {
+  const items = [
+    {
+      label: "Pending",
+      value: formatNumber(props.overview.pending),
+      tone: props.overview.pending > 0 ? "blue" : "slate"
+    },
+    {
+      label: "Apps",
+      value: formatNumber(props.overview.apps),
+      tone: props.overview.apps > 0 ? "green" : "slate"
+    },
+    {
+      label: "History",
+      value: formatNumber(props.overview.history),
+      tone: "purple"
+    }
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "grid grid-cols-3 gap-px border-b border-slate-100 bg-slate-100",
+      "aria-label": "Guard overview",
+      children: items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-white px-4 py-3.5 sm:py-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500", children: item.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 text-lg font-semibold tabular-nums tracking-tight ${overviewToneClass(item.tone)}`, children: item.value })
+      ] }, item.label))
+    }
+  );
+}
 function EvidenceInsightsHomePreview({
+  overview,
   analytics,
+  insightsLoading = false,
   runtime,
   onOpenInsights,
   onShare
 }) {
-  if (analytics.total <= 0) {
-    return null;
-  }
   const cloudConnected = runtime?.cloud_state === "paired_active";
+  const showInsights = analytics !== null && analytics.total > 0;
+  const showInsightsLink = showInsights && onOpenInsights;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Your Guard stats" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Full-store insights from this machine." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: showInsights ? "Live counts and full-store insights from this machine." : "Live counts from this machine." })
       ] }),
-      cloudConnected && onShare ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onShare, children: "Share stats" }) : null
+      cloudConnected && onShare && showInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onShare, children: "Share stats" }) : null
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics, variant: "compact" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HomeGuardOverviewRow, { overview }),
+    insightsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-5 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-16 w-full rounded-xl" }) }) : showInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics, variant: "compact" }) : null,
+    showInsightsLink ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
       {
         type: "button",
@@ -235,7 +273,7 @@ function EvidenceInsightsHomePreview({
         className: "text-sm font-semibold text-brand-blue hover:text-brand-blue/80",
         children: "See all insights →"
       }
-    ) })
+    ) }) : null
   ] });
 }
 const ANALYTICS_CACHE_TTL_MS = 6e4;
@@ -477,24 +515,20 @@ function HomeWorkspace(props) {
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ProofStrip,
-      {
-        items: [
-          { label: "Pending", value: formatNumber(queuedCount), tone: queuedCount > 0 ? "blue" : "slate" },
-          { label: "Apps", value: formatNumber(watchedAppsCount), tone: watchedAppsCount > 0 ? "green" : "slate" },
-          { label: "History", value: formatNumber(snapshot?.receipt_count ?? 0), tone: "purple" }
-        ]
-      }
-    ),
-    analyticsState.kind === "loading" && analyticsEnabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-40 w-full rounded-2xl" }) : analyticsState.kind === "ready" && props.onOpenInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceInsightsHomePreview,
       {
-        analytics: analyticsState.data,
+        overview: {
+          pending: queuedCount,
+          apps: watchedAppsCount,
+          history: snapshot.receipt_count ?? 0
+        },
+        analytics: analyticsState.kind === "ready" ? analyticsState.data : null,
+        insightsLoading: analyticsEnabled && analyticsState.kind === "loading",
         runtime: snapshot,
         onOpenInsights: props.onOpenInsights,
         onShare: () => setShareOpen(true)
       }
-    ) : null,
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(StreakMilestoneBanner, { streak }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       NewAppDiscoveryBanner,

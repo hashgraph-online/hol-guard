@@ -15662,6 +15662,17 @@ async function startPackageFirewallConnect() {
     })
   );
 }
+async function fetchSupplyChainBundle() {
+  const wrapper = await readJson("/v1/supply-chain/bundle");
+  if (!wrapper || typeof wrapper !== "object") {
+    return null;
+  }
+  const bundle = wrapper.bundle;
+  if (bundle === null || bundle === void 0) {
+    return null;
+  }
+  return bundle;
+}
 async function runPackageFirewallAction(action, manager, credentials) {
   const payload = {
     ...manager !== null ? { managers: [manager] } : {},
@@ -24702,12 +24713,13 @@ export {
   fetchPolicy as a9,
   IconActionButton as aA,
   HiMiniBeaker as aB,
-  runAuditRemediation as aC,
-  guardAwareHref as aD,
-  HiMiniBarsArrowUp as aE,
-  HiMiniBarsArrowDown as aF,
-  HiMiniSignal as aG,
-  HiMiniClock as aH,
+  fetchSupplyChainBundle as aC,
+  runAuditRemediation as aD,
+  guardAwareHref as aE,
+  HiMiniBarsArrowUp as aF,
+  HiMiniBarsArrowDown as aG,
+  HiMiniSignal as aH,
+  HiMiniClock as aI,
   HiMiniArrowLeft as aa,
   HiMiniHome as ab,
   detectCategory as ac,
@@ -24741,13 +24753,13 @@ export {
   formatRelativeTime as f,
   HiMiniCheckCircle as g,
   HiMiniXCircle as h,
-  fetchReceiptAnalytics as i,
+  formatNumber as i,
   jsxRuntimeExports as j,
-  harnessDisplayName as k,
-  isDisplayableHarness as l,
-  EmptyState as m,
-  EvidenceInsightsShareModal as n,
-  formatNumber as o,
+  fetchReceiptAnalytics as k,
+  harnessDisplayName as l,
+  isDisplayableHarness as m,
+  EmptyState as n,
+  EvidenceInsightsShareModal as o,
   HiMiniSparkles as p,
   HiMiniXMark as q,
   reactExports as r,
