@@ -74,8 +74,7 @@ export function EvidenceInsightsHomePreview({
   onShare,
 }: EvidenceInsightsHomePreviewProps) {
   const cloudConnected = runtime?.cloud_state === "paired_active";
-  const showInsights = analytics !== null && analytics.total > 0;
-  const showInsightsLink = showInsights && onOpenInsights;
+  const hasInsights = analytics !== null && analytics.total > 0;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
@@ -83,12 +82,12 @@ export function EvidenceInsightsHomePreview({
         <div>
           <SectionLabel>Your Guard stats</SectionLabel>
           <p className="mt-1 text-sm text-slate-500">
-            {showInsights
+            {hasInsights
               ? "Live counts and full-store insights from this machine."
               : "Live counts from this machine."}
           </p>
         </div>
-        {cloudConnected && onShare && showInsights ? (
+        {cloudConnected && onShare && hasInsights ? (
           <ActionButton variant="outline" onClick={onShare}>
             Share stats
           </ActionButton>
@@ -101,11 +100,11 @@ export function EvidenceInsightsHomePreview({
         <div className="border-b border-slate-100 px-5 py-5">
           <div className="guard-skeleton h-16 w-full rounded-xl" />
         </div>
-      ) : showInsights ? (
+      ) : analytics !== null && analytics.total > 0 ? (
         <EvidenceInsightsHeadlineBento analytics={analytics} variant="compact" />
       ) : null}
 
-      {showInsightsLink ? (
+      {analytics !== null && analytics.total > 0 && onOpenInsights ? (
         <div className="border-t border-slate-100 px-5 py-4">
           <button
             type="button"

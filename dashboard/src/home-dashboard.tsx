@@ -309,7 +309,7 @@ export function HomeWorkspace(props: {
         overview={{
           pending: queuedCount,
           apps: watchedAppsCount,
-          history: snapshot.receipt_count ?? 0,
+          history: snapshot.receipt_count,
         }}
         analytics={analyticsState.kind === "ready" ? analyticsState.data : null}
         insightsLoading={analyticsEnabled && analyticsState.kind === "loading"}

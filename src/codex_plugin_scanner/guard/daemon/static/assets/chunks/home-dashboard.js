@@ -253,19 +253,18 @@ function EvidenceInsightsHomePreview({
   onShare
 }) {
   const cloudConnected = runtime?.cloud_state === "paired_active";
-  const showInsights = analytics !== null && analytics.total > 0;
-  const showInsightsLink = showInsights && onOpenInsights;
+  const hasInsights = analytics !== null && analytics.total > 0;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Your Guard stats" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: showInsights ? "Live counts and full-store insights from this machine." : "Live counts from this machine." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: hasInsights ? "Live counts and full-store insights from this machine." : "Live counts from this machine." })
       ] }),
-      cloudConnected && onShare && showInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onShare, children: "Share stats" }) : null
+      cloudConnected && onShare && hasInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onShare, children: "Share stats" }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(HomeGuardOverviewRow, { overview }),
-    insightsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-5 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-16 w-full rounded-xl" }) }) : showInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics, variant: "compact" }) : null,
-    showInsightsLink ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+    insightsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-5 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-16 w-full rounded-xl" }) }) : analytics !== null && analytics.total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics, variant: "compact" }) : null,
+    analytics !== null && analytics.total > 0 && onOpenInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
       {
         type: "button",
@@ -520,7 +519,7 @@ function HomeWorkspace(props) {
         overview: {
           pending: queuedCount,
           apps: watchedAppsCount,
-          history: snapshot.receipt_count ?? 0
+          history: snapshot.receipt_count
         },
         analytics: analyticsState.kind === "ready" ? analyticsState.data : null,
         insightsLoading: analyticsEnabled && analyticsState.kind === "loading",
