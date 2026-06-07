@@ -4759,6 +4759,7 @@ def _record_cursor_pending_shell_permission(
         compute_cursor_after_shell_proof,
         ensure_cursor_approval_binding,
         ensure_cursor_hook_attestation_secret,
+        remove_cursor_shell_binding_file,
         write_cursor_shell_binding_file,
     )
 
@@ -4772,12 +4773,6 @@ def _record_cursor_pending_shell_permission(
         secret = ensure_cursor_hook_attestation_secret(guard_home)
         after_shell_proof = compute_cursor_after_shell_proof(
             secret=secret,
-            conversation_id=conversation_id,
-            command=command,
-            approval_binding=approval_binding,
-        )
-        write_cursor_shell_binding_file(
-            guard_home,
             conversation_id=conversation_id,
             command=command,
             approval_binding=approval_binding,
@@ -4809,7 +4804,18 @@ def _record_cursor_pending_shell_permission(
             pending_key=pending_key,
             now=saved_at,
         )
+        write_cursor_shell_binding_file(
+            guard_home,
+            conversation_id=conversation_id,
+            command=command,
+            approval_binding=approval_binding,
+        )
     except (OSError, sqlite3.Error):
+        remove_cursor_shell_binding_file(
+            guard_home,
+            conversation_id=conversation_id,
+            command=command,
+        )
         return
 
 

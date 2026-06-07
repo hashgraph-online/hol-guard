@@ -15,6 +15,36 @@ _CURSOR_SHELL_BINDINGS_DIR = Path("cursor-shell-bindings")
 _MANAGED_HOOK_ENV = "HOL_GUARD_MANAGED_CURSOR_HOOK"
 _AFTER_SHELL_PROOF_ENV = "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"
 _APPROVAL_BINDING_ENV = "HOL_GUARD_CURSOR_APPROVAL_BINDING"
+_AFTER_SHELL_PROOF_EVENT = "afterShellExecution"
+
+
+def _cursor_shell_binding_segment(conversation_id: str) -> str:
+    cleaned = conversation_id.strip()
+    if not cleaned:
+        return "missing-conversation"
+    if "/" in cleaned or "\\" in cleaned or cleaned in {".", ".."}:
+        return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:32]
+    return cleaned
+
+
+def cursor_after_shell_proof_message(
+    *,
+    conversation_id: str,
+    command: str,
+    approval_binding: str,
+) -> bytes:
+    return (
+        chr(0)
+        .join(
+            (
+                conversation_id.strip(),
+                command.strip(),
+                approval_binding.strip(),
+                _AFTER_SHELL_PROOF_EVENT,
+            )
+        )
+        .encode("utf-8")
+    )
 
 
 def cursor_hook_attestation_secret_path(guard_home: Path) -> Path:
@@ -23,7 +53,7 @@ def cursor_hook_attestation_secret_path(guard_home: Path) -> Path:
 
 def cursor_shell_binding_path(guard_home: Path, conversation_id: str, command: str) -> Path:
     fingerprint = hashlib.sha256(command.strip().encode("utf-8")).hexdigest()[:24]
-    return guard_home / _CURSOR_SHELL_BINDINGS_DIR / conversation_id / fingerprint
+    return guard_home / _CURSOR_SHELL_BINDINGS_DIR / _cursor_shell_binding_segment(conversation_id) / fingerprint
 
 
 def write_cursor_shell_binding_file(
@@ -143,14 +173,11 @@ def compute_cursor_after_shell_proof(
     command: str,
     approval_binding: str,
 ) -> str:
-    message = "\0".join(
-        (
-            conversation_id.strip(),
-            command.strip(),
-            approval_binding.strip(),
-            "afterShellExecution",
-        )
-    ).encode("utf-8")
+    message = cursor_after_shell_proof_message(
+        conversation_id=conversation_id,
+        command=command,
+        approval_binding=approval_binding,
+    )
     digest = hmac.new(secret, message, hashlib.sha256).hexdigest()
     return digest
 
@@ -231,6 +258,7 @@ def cursor_after_shell_trusted(
 __all__ = [
     "after_shell_proof_from_env",
     "compute_cursor_after_shell_proof",
+    "cursor_after_shell_proof_message",
     "cursor_after_shell_trusted",
     "cursor_generation_id",
     "cursor_hook_attestation_secret_path",

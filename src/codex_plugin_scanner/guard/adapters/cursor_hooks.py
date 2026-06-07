@@ -769,8 +769,13 @@ def _cursor_shell_command(payload: Mapping[str, object]) -> str | None:
 
 
 def _cursor_shell_binding_path(conversation_id: str, command: str) -> Path:
+    cleaned = conversation_id.strip()
+    if not cleaned or "/" in cleaned or "\\\\" in cleaned or cleaned in {".", ".."}:
+        segment = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:32] if cleaned else "missing-conversation"
+    else:
+        segment = cleaned
     fingerprint = hashlib.sha256(command.strip().encode("utf-8")).hexdigest()[:24]
-    return Path(GUARD_HOME) / "cursor-shell-bindings" / conversation_id / fingerprint
+    return Path(GUARD_HOME) / "cursor-shell-bindings" / segment / fingerprint
 
 
 def _read_cursor_shell_binding_file(conversation_id: str, command: str) -> str | None:
@@ -802,14 +807,19 @@ def _load_cursor_hook_attestation_secret() -> bytes | None:
     return secret or None
 
 
-def _compute_cursor_after_shell_proof(payload: Mapping[str, object]) -> str | None:
+def _compute_cursor_after_shell_proof(
+    payload: Mapping[str, object],
+    approval_binding: str | None = None,
+) -> str | None:
     conversation_id = _cursor_conversation_id(payload)
     command = _cursor_shell_command(payload)
-    approval_binding = _resolve_approval_binding(payload)
+    resolved_binding = approval_binding or _resolve_approval_binding(payload)
     secret = _load_cursor_hook_attestation_secret()
-    if conversation_id is None or command is None or approval_binding is None or secret is None:
+    if conversation_id is None or command is None or resolved_binding is None or secret is None:
         return None
-    message = "\\0".join((conversation_id, command, approval_binding, "afterShellExecution")).encode("utf-8")
+    message = chr(0).join(
+        (conversation_id, command, resolved_binding, "afterShellExecution")
+    ).encode("utf-8")
     return hmac.new(secret, message, hashlib.sha256).hexdigest()
 
 
@@ -842,7 +852,7 @@ def main() -> int:
     guard_env["HOL_GUARD_MANAGED_CURSOR_HOOK"] = "1"
     if hook_event_name.strip().lower() == "aftershellexecution":
         approval_binding = _resolve_approval_binding(prepared)
-        proof = _compute_cursor_after_shell_proof(prepared)
+        proof = _compute_cursor_after_shell_proof(prepared, approval_binding)
         if approval_binding:
             guard_env["HOL_GUARD_CURSOR_APPROVAL_BINDING"] = approval_binding
         if proof:

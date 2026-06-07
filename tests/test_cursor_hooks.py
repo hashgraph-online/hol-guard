@@ -566,6 +566,19 @@ def test_cursor_session_allow_without_generation_id_uses_binding_file(tmp_path: 
     )
 
 
+def test_cursor_after_shell_proof_message_uses_null_separator() -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_native_approval import cursor_after_shell_proof_message
+
+    message = cursor_after_shell_proof_message(
+        conversation_id="conv-test",
+        command="echo hello",
+        approval_binding="hol-guard:test-binding",
+    )
+    assert message == (
+        b"conv-test\x00echo hello\x00hol-guard:test-binding\x00afterShellExecution"
+    )
+
+
 def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
     from codex_plugin_scanner.guard.cli import commands as guard_commands_module
