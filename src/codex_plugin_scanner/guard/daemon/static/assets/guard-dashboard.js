@@ -12835,6 +12835,9 @@ function HiMiniCheck(props) {
 function HiMiniCheckCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniCheckBadge(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M16.403 12.652a3 3 0 0 0 0-5.304 3 3 0 0 0-3.75-3.751 3 3 0 0 0-5.305 0 3 3 0 0 0-3.751 3.75 3 3 0 0 0 0 5.305 3 3 0 0 0 3.75 3.751 3 3 0 0 0 5.305 0 3 3 0 0 0 3.751-3.75Zm-2.546-4.46a.75.75 0 0 0-1.214-.883l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniChartBar(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.5 2A1.5 1.5 0 0 0 14 3.5v13a1.5 1.5 0 0 0 1.5 1.5h1a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-1ZM9.5 6A1.5 1.5 0 0 0 8 7.5v9A1.5 1.5 0 0 0 9.5 18h1a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 10.5 6h-1ZM3.5 10A1.5 1.5 0 0 0 2 11.5v5A1.5 1.5 0 0 0 3.5 18h1A1.5 1.5 0 0 0 6 16.5v-5A1.5 1.5 0 0 0 4.5 10h-1Z" }, "child": [] }] })(props);
 }
@@ -13938,6 +13941,11 @@ function getDemoDiff(artifactId, harness) {
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
 const GUARD_SURFACE_PROTOCOL_VERSIONS = ["1.1", "1.0"];
+const DEFAULT_GUARD_DAEMON_PORT = 4781;
+const GUARD_DAEMON_PORT_RANGE = 1e3;
+const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
+const GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE = 5;
+const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
 let guardTokenOverride = null;
 let guardTokenLocationKey = null;
 async function readJson(input, init) {
@@ -14006,6 +14014,152 @@ function readGuardToken() {
 function saveGuardToken(guardToken) {
   guardTokenOverride = guardToken;
   window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+}
+function saveGuardDaemonOrigin(daemonOrigin) {
+  window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+}
+function preferredGuardDaemonPort() {
+  const fromOrigin = readGuardDaemonOrigin();
+  if (fromOrigin) {
+    try {
+      const port2 = Number(new URL(fromOrigin).port);
+      if (Number.isInteger(port2) && port2 > 0) {
+        return port2;
+      }
+    } catch {
+    }
+  }
+  const port = Number(window.location.port);
+  if (Number.isInteger(port) && port > 0) {
+    return port;
+  }
+  return DEFAULT_GUARD_DAEMON_PORT;
+}
+function buildGuardDaemonCandidatePorts(preferredPort) {
+  const ports = [];
+  const inStandardRange = preferredPort >= DEFAULT_GUARD_DAEMON_PORT && preferredPort < DEFAULT_GUARD_DAEMON_PORT + GUARD_DAEMON_PORT_RANGE;
+  for (let step = 0; step < GUARD_DAEMON_DISCOVERY_PROBE_COUNT; step += 1) {
+    if (inStandardRange) {
+      const offset = preferredPort - DEFAULT_GUARD_DAEMON_PORT;
+      const candidateOffset = ((offset + step) % GUARD_DAEMON_PORT_RANGE + GUARD_DAEMON_PORT_RANGE) % GUARD_DAEMON_PORT_RANGE;
+      ports.push(DEFAULT_GUARD_DAEMON_PORT + candidateOffset);
+    } else {
+      ports.push(preferredPort + step);
+    }
+  }
+  return ports;
+}
+async function probeGuardDaemonHealth(origin) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${origin}/healthz`, { signal: controller.signal });
+    if (!response.ok) {
+      return false;
+    }
+    const payload = await response.json();
+    if (!isRecord(payload)) {
+      return false;
+    }
+    return payload.ok === true && payload.compatibility_version === 2;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+function updateReconnectSucceeded(status, options) {
+  if (!options.expectedPreviousVersion) {
+    return true;
+  }
+  if (status.update_available !== true) {
+    return true;
+  }
+  if (options.expectedLatestVersion && status.current_version === options.expectedLatestVersion) {
+    return true;
+  }
+  return status.current_version !== options.expectedPreviousVersion;
+}
+async function initializeGuardDashboardSessionAtOrigin(origin, guardToken) {
+  try {
+    const response = await fetch(`${origin}/v1/initialize`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {}
+      },
+      body: JSON.stringify({
+        client_name: "guard-dashboard-web",
+        surface: "dashboard",
+        supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS]
+      })
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return parseDashboardSessionToken(await response.json());
+  } catch {
+    return null;
+  }
+}
+async function fetchGuardUpdateStatusAtOrigin(origin, guardToken) {
+  const response = await fetch(`${origin}/v1/update/status`, {
+    headers: guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {}
+  });
+  if (!response.ok) {
+    throw new Error(`Update status failed with ${response.status}`);
+  }
+  return normalizeGuardUpdateStatus(await response.json());
+}
+function redirectToGuardDaemonOrigin(origin, guardToken) {
+  const url = new URL(origin);
+  url.pathname = window.location.pathname;
+  url.search = window.location.search;
+  const fragmentPairs = [];
+  if (guardToken) {
+    fragmentPairs.push(`${GUARD_TOKEN_PARAM}=${encodeURIComponent(guardToken)}`);
+  }
+  fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(origin)}`);
+  url.hash = fragmentPairs.join("&");
+  window.location.replace(url.toString());
+}
+async function reconnectGuardDaemonAfterUpdate(options) {
+  const guardToken = readGuardToken();
+  const reconnectOptions = options ?? {};
+  const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
+  const ports = buildGuardDaemonCandidatePorts(preferredGuardDaemonPort());
+  for (let index = 0; index < ports.length; index += GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE) {
+    const batch = ports.slice(index, index + GUARD_DAEMON_DISCOVERY_PROBE_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (port) => {
+        const origin2 = `http://127.0.0.1:${port}`;
+        if (!await probeGuardDaemonHealth(origin2)) {
+          return null;
+        }
+        try {
+          const status = await fetchGuardUpdateStatusAtOrigin(origin2, guardToken);
+          if (awaitingVersionChange && !updateReconnectSucceeded(status, reconnectOptions)) {
+            return null;
+          }
+          return { origin: origin2, status };
+        } catch {
+          return null;
+        }
+      })
+    );
+    const active = results.find((result) => result !== null);
+    if (!active) {
+      continue;
+    }
+    const { origin } = active;
+    saveGuardDaemonOrigin(origin);
+    const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
+    if (refreshedToken) {
+      saveGuardToken(refreshedToken);
+    }
+    return origin;
+  }
+  return null;
 }
 function readGuardDaemonOrigin() {
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
@@ -14826,10 +14980,23 @@ function buildReceiptAnalyticsFromSample(receipts) {
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     dailyMap.set(key, (dailyMap.get(key) ?? 0) + 1);
   }
-  const daily_activity = Array.from(dailyMap.entries()).map(([date_key, total]) => ({
-    date_key,
-    total
-  }));
+  const daily_activity = [];
+  const oneDay = 24 * 60 * 60 * 1e3;
+  const nowMs = Date.now();
+  for (let offset = 89; offset >= 0; offset -= 1) {
+    const d = new Date(nowMs - offset * oneDay);
+    const date_key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    daily_activity.push({ date_key, total: dailyMap.get(date_key) ?? 0 });
+  }
+  let active_day_streak = 0;
+  const streakEntries = [...daily_activity].reverse();
+  if (streakEntries[0]?.total === 0) {
+    streakEntries.shift();
+  }
+  for (const entry of streakEntries) {
+    if (entry.total > 0) active_day_streak += 1;
+    else break;
+  }
   return {
     total: receipts.length,
     allowed,
@@ -14837,7 +15004,7 @@ function buildReceiptAnalyticsFromSample(receipts) {
     reviewed,
     first_activity_at: timestamps[0] ?? null,
     last_activity_at: timestamps[timestamps.length - 1] ?? null,
-    active_day_streak: daily_activity.length > 0 ? 1 : 0,
+    active_day_streak,
     peak_day_total: Math.max(...daily_activity.map((entry) => entry.total), 0),
     daily_activity,
     trend_buckets,
@@ -15170,7 +15337,8 @@ function normalizeGuardUpdateStatus(raw) {
     version_check: versionCheck,
     auto_updatable: booleanValue(value.auto_updatable),
     update_available: booleanValue(value.update_available),
-    blocked_reason: stringValue(value.blocked_reason)
+    blocked_reason: stringValue(value.blocked_reason),
+    update_in_progress: typeof value.update_in_progress === "boolean" ? value.update_in_progress : void 0
   };
 }
 async function fetchGuardUpdateStatus() {
@@ -15566,7 +15734,7 @@ async function runPackageSync() {
 }
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
-const RECONNECT_TIMEOUT_MS = 12e4;
+const RECONNECT_TIMEOUT_MS = 18e4;
 function updateStatusLabel(status) {
   if (!status) {
     return "Checking version…";
@@ -15668,32 +15836,61 @@ function useGuardUpdate(options) {
       window.clearInterval(pollId);
     };
   }, [refreshUpdateStatus]);
-  const waitForReconnect = reactExports.useCallback(async () => {
-    reconnectStartedAt.current = Date.now();
-    while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
-      try {
-        await repairApprovalCenter();
-        await fetchGuardUpdateStatus();
-        setUpdatePhase("idle");
-        options?.onReconnected?.();
-        return;
-      } catch {
-        await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
+  const waitForReconnect = reactExports.useCallback(
+    async (expectedPreviousVersion, expectedLatestVersion) => {
+      reconnectStartedAt.current = Date.now();
+      while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
+        try {
+          const origin = await reconnectGuardDaemonAfterUpdate({
+            expectedPreviousVersion,
+            expectedLatestVersion
+          });
+          if (!origin) {
+            throw new Error("Guard daemon not found");
+          }
+          if (origin !== window.location.origin) {
+            redirectToGuardDaemonOrigin(origin, readGuardToken());
+            return true;
+          }
+          const status = await fetchGuardUpdateStatus();
+          setUpdateStatus(status);
+          setUpdatePhase("idle");
+          options?.onReconnected?.();
+          return false;
+        } catch {
+          await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
+        }
       }
-    }
-    setUpdatePhase("error");
-    throw new Error("Guard did not reconnect after the update.");
-  }, [options]);
+      setUpdatePhase("error");
+      throw new Error("Guard did not reconnect after the update.");
+    },
+    [options]
+  );
   const onUpdateGuard = reactExports.useCallback(async () => {
     if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
       return;
     }
+    const expectedPreviousVersion = updateStatus.current_version;
+    const expectedLatestVersion = updateStatus.latest_version;
     setUpdatePhase("updating");
     try {
-      await scheduleGuardUpdate();
+      const scheduleResult = await scheduleGuardUpdate();
+      if (scheduleResult.scheduled === false && scheduleResult.error === "update_in_progress") {
+        setUpdatePhase("reconnecting");
+        const redirected2 = await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
+        if (!redirected2) {
+          window.location.reload();
+        }
+        return;
+      }
+      if (scheduleResult.scheduled !== true) {
+        throw new Error(scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled.");
+      }
       setUpdatePhase("reconnecting");
-      await waitForReconnect();
-      window.location.reload();
+      const redirected = await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
+      if (!redirected) {
+        window.location.reload();
+      }
     } catch {
       setUpdatePhase("error");
     }
@@ -15860,7 +16057,6 @@ function ShellSidebar(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue", children: props.queuedCount > 0 ? "Review" : "Clear" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] leading-relaxed text-brand-dark/70", children: props.queuedCount > 0 ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.` : "No local approvals are waiting." }),
-        props.activeHarness ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex rounded-full bg-white/70 px-2 py-1 font-mono text-[10px] font-semibold text-slate-500", children: props.activeHarness }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           GuardUpdatePanel,
           {
@@ -21654,7 +21850,6 @@ function ApprovalCenterLayout(props) {
     }
   });
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
-  const activeHarness = props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
   const handleOpenMobileQueue = reactExports.useCallback(() => setMobileQueueOpen(true), []);
   const handleCloseMobileQueue = reactExports.useCallback(() => setMobileQueueOpen(false), []);
   const handleToggleSidebar = reactExports.useCallback(() => {
@@ -21678,7 +21873,6 @@ function ApprovalCenterLayout(props) {
       ShellHeader,
       {
         queuedCount: queuedItems.length,
-        activeHarness,
         view: props.view,
         onNavigate: props.onNavigate,
         onOpenMobileQueue: handleOpenMobileQueue,
@@ -21692,7 +21886,6 @@ function ApprovalCenterLayout(props) {
       ShellSidebar,
       {
         queuedCount: queuedItems.length,
-        activeHarness,
         view: props.view,
         collapsed: sidebarCollapsed,
         onToggleCollapse: handleToggleSidebar,
@@ -24063,10 +24256,11 @@ export {
   HiMiniArrowLeft as a7,
   HiMiniHome as a8,
   detectCategory as a9,
-  HiMiniBarsArrowUp as aA,
-  HiMiniBarsArrowDown as aB,
-  HiMiniSignal as aC,
-  HiMiniClock as aD,
+  guardAwareHref as aA,
+  HiMiniBarsArrowUp as aB,
+  HiMiniBarsArrowDown as aC,
+  HiMiniSignal as aD,
+  HiMiniClock as aE,
   CATEGORIES as aa,
   policyIdentityKey as ab,
   HiMiniChartBar as ac,
@@ -24082,17 +24276,17 @@ export {
   __vitePreload as am,
   HiMiniDocumentText as an,
   HiMiniArrowTopRightOnSquare as ao,
-  fetchPackageFirewallStatus as ap,
-  runPackageFirewallAction as aq,
-  runPackageAudit as ar,
-  runPackageSync as as,
-  startPackageFirewallConnect as at,
-  openPackageFirewallShell as au,
-  HiMiniBugAnt as av,
-  IconActionButton as aw,
-  HiMiniBeaker as ax,
-  runAuditRemediation as ay,
-  guardAwareHref as az,
+  HiMiniCheckBadge as ap,
+  fetchPackageFirewallStatus as aq,
+  runPackageFirewallAction as ar,
+  runPackageAudit as as,
+  runPackageSync as at,
+  startPackageFirewallConnect as au,
+  openPackageFirewallShell as av,
+  HiMiniBugAnt as aw,
+  IconActionButton as ax,
+  HiMiniBeaker as ay,
+  runAuditRemediation as az,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,

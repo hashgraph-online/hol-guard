@@ -68,7 +68,6 @@ const footerSections = [
 
 export function ShellHeader(props: {
   queuedCount: number;
-  activeHarness: string | null;
   view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
   onNavigate: (pathname: string) => void;
   onOpenMobileQueue?: () => void;
@@ -176,7 +175,6 @@ const sidebarLinks = [
 
 export function ShellSidebar(props: {
   queuedCount: number;
-  activeHarness: string | null;
   view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail" | "supply-chain" | "audit" | "policy" | "feed-health" | "about";
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -272,11 +270,6 @@ export function ShellSidebar(props: {
                     ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.`
                     : "No local approvals are waiting."}
                 </p>
-                {props.activeHarness ? (
-                  <span className="inline-flex rounded-full bg-white/70 px-2 py-1 font-mono text-[10px] font-semibold text-slate-500">
-                    {props.activeHarness}
-                  </span>
-                ) : null}
                 <GuardUpdatePanel
                   guardVersion={props.guardVersion}
                   updateStatus={props.updateStatus}
