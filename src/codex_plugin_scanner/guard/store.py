@@ -766,9 +766,11 @@ def _should_warn_on_slow_store_transactions() -> bool:
 _SLOW_QUERY_THRESHOLD_MS: int = 200
 _OAUTH_HEALTH_CACHE_TTL_SECONDS = 60.0
 _OAUTH_HEALTH_DEGRADED_CACHE_TTL_SECONDS = 15.0
+_OAUTH_STORAGE_REPAIR_MIN_INTERVAL_SECONDS = 3600.0
 _store_logger = logging.getLogger(__name__)
 _OAUTH_SECRET_PAYLOAD_PROCESS_CACHE: dict[tuple[str, str, str], str] = {}
 _OAUTH_HEALTH_RESULT_PROCESS_CACHE: dict[tuple[str, str], tuple[float, dict[str, object]]] = {}
+_OAUTH_STORAGE_REPAIR_ATTEMPTS: dict[str, float] = {}
 
 
 class GuardStore:
@@ -3708,6 +3710,8 @@ class GuardStore:
             health.update(cached_health)
             return health
         secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
+        if secret_payload is None and self._maybe_repair_oauth_local_credential_storage(payload):
+            secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
         if secret_payload is None:
             health["state"] = "degraded"
             self._remember_oauth_health_result(secret_hash, health)
@@ -3786,6 +3790,37 @@ class GuardStore:
         if isinstance(supply_chain_firewall, bool):
             result["supply_chain_firewall"] = supply_chain_firewall
         return result
+
+    def _oauth_primary_repair_available(self) -> bool:
+        secret_store = self._oauth_secret_store
+        return isinstance(secret_store, FallbackSecretStore) and isinstance(
+            secret_store.primary,
+            SystemKeyringSecretStore,
+        )
+
+    def _should_attempt_oauth_storage_repair(self) -> bool:
+        if not self._oauth_primary_repair_available():
+            return False
+        scope = self._oauth_process_cache_scope()
+        last_attempt = _OAUTH_STORAGE_REPAIR_ATTEMPTS.get(scope)
+        if last_attempt is None:
+            return True
+        return (time.monotonic() - last_attempt) >= _OAUTH_STORAGE_REPAIR_MIN_INTERVAL_SECONDS
+
+    def _mark_oauth_storage_repair_attempt(self) -> None:
+        _OAUTH_STORAGE_REPAIR_ATTEMPTS[self._oauth_process_cache_scope()] = time.monotonic()
+
+    def _maybe_repair_oauth_local_credential_storage(self, payload: dict[str, object]) -> bool:
+        if not self._should_attempt_oauth_storage_repair():
+            return False
+        self._mark_oauth_storage_repair_attempt()
+        repaired_payload = self._load_oauth_secret_payload(payload, promote=True, allow_primary=True)
+        if repaired_payload is None:
+            return False
+        cache_key = self._oauth_health_process_cache_key(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY))
+        if cache_key is not None:
+            _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
+        return True
 
     def _load_oauth_secret_payload(
         self,
