@@ -43,6 +43,7 @@ from ..policy_bundle_parser import (
     POLICY_BUNDLE_DEFAULT_ENVIRONMENTS,
     POLICY_BUNDLE_RULE_ACTIONS,
     POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
+    computed_policy_bundle_hash,
     non_empty_string,
 )
 from ..policy_bundle_parser import (
@@ -63,6 +64,11 @@ from .supply_chain_bundle import (
     verify_supply_chain_bundle_response,
 )
 from .supply_chain_support import ecosystem_support_matrix
+
+
+def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
+    return computed_policy_bundle_hash(policy_bundle)
+
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
