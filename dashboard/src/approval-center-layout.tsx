@@ -270,7 +270,12 @@ export function ApprovalCenterLayout(props: LayoutProps) {
             {props.view === "home" ? (
               props.homeContent
             ) : props.view === "evidence" ? (
-              <ReceiptsWorkspace receipts={props.receipts} onClearEvidence={props.onClearEvidence} />
+              <ReceiptsWorkspace
+                receipts={props.receipts}
+                runtime={props.runtime}
+                onClearEvidence={props.onClearEvidence}
+                onNavigate={props.onNavigate}
+              />
             ) : props.view === "fleet" ? (
               props.fleetContent
             ) : props.view === "app-detail" ? (

@@ -494,7 +494,7 @@ function requireReact_production() {
   react_production.useTransition = function() {
     return ReactSharedInternals.H.useTransition();
   };
-  react_production.version = "19.2.7";
+  react_production.version = "19.2.5";
   return react_production;
 }
 var hasRequiredReact;
@@ -922,7 +922,7 @@ function requireReactDom_production() {
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
   };
-  reactDom_production.version = "19.2.7";
+  reactDom_production.version = "19.2.5";
   return reactDom_production;
 }
 var hasRequiredReactDom;
@@ -12366,12 +12366,12 @@ function requireReactDomClient_production() {
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
-  if ("19.2.7" !== isomorphicReactPackageVersion$jscomp$inline_1840)
+  if ("19.2.5" !== isomorphicReactPackageVersion$jscomp$inline_1840)
     throw Error(
       formatProdErrorMessage(
         527,
         isomorphicReactPackageVersion$jscomp$inline_1840,
-        "19.2.7"
+        "19.2.5"
       )
     );
   ReactDOMSharedInternals.findDOMNode = function(componentOrElement) {
@@ -12389,10 +12389,10 @@ function requireReactDomClient_production() {
   };
   var internals$jscomp$inline_2347 = {
     bundleType: 0,
-    version: "19.2.7",
+    version: "19.2.5",
     rendererPackageName: "react-dom",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.2.7"
+    reconcilerVersion: "19.2.5"
   };
   if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
     var hook$jscomp$inline_2348 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -12459,7 +12459,7 @@ function requireReactDomClient_production() {
     listenToAllSupportedEvents(container2);
     return new ReactDOMHydrationRoot(initialChildren);
   };
-  reactDomClient_production.version = "19.2.7";
+  reactDomClient_production.version = "19.2.5";
   return reactDomClient_production;
 }
 var hasRequiredClient;
@@ -12571,6 +12571,1240 @@ const GUARD_RISK_SIGNAL_V2_CATEGORIES = [
 const GUARD_RISK_SIGNAL_V2_SEVERITIES = ["info", "low", "medium", "high", "critical"];
 const GUARD_RISK_SIGNAL_V2_REDACTION_LEVELS = ["none", "summary", "redacted"];
 const CODEX_RESUME_STATUSES = ["pending", "in_progress", "sent", "already_sent", "failed", "skipped"];
+var DefaultContext = {
+  color: void 0,
+  size: void 0,
+  className: void 0,
+  style: void 0,
+  attr: void 0
+};
+var IconContext = React.createContext && /* @__PURE__ */ React.createContext(DefaultContext);
+var _excluded = ["attr", "size", "title"];
+function _objectWithoutProperties(e, t) {
+  if (null == e) return {};
+  var o, r, i = _objectWithoutPropertiesLoose(e, t);
+  if (Object.getOwnPropertySymbols) {
+    var n = Object.getOwnPropertySymbols(e);
+    for (r = 0; r < n.length; r++) o = n[r], -1 === t.indexOf(o) && {}.propertyIsEnumerable.call(e, o) && (i[o] = e[o]);
+  }
+  return i;
+}
+function _objectWithoutPropertiesLoose(r, e) {
+  if (null == r) return {};
+  var t = {};
+  for (var n in r) if ({}.hasOwnProperty.call(r, n)) {
+    if (-1 !== e.indexOf(n)) continue;
+    t[n] = r[n];
+  }
+  return t;
+}
+function _extends() {
+  return _extends = Object.assign ? Object.assign.bind() : function(n) {
+    for (var e = 1; e < arguments.length; e++) {
+      var t = arguments[e];
+      for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]);
+    }
+    return n;
+  }, _extends.apply(null, arguments);
+}
+function ownKeys(e, r) {
+  var t = Object.keys(e);
+  if (Object.getOwnPropertySymbols) {
+    var o = Object.getOwnPropertySymbols(e);
+    r && (o = o.filter(function(r2) {
+      return Object.getOwnPropertyDescriptor(e, r2).enumerable;
+    })), t.push.apply(t, o);
+  }
+  return t;
+}
+function _objectSpread(e) {
+  for (var r = 1; r < arguments.length; r++) {
+    var t = null != arguments[r] ? arguments[r] : {};
+    r % 2 ? ownKeys(Object(t), true).forEach(function(r2) {
+      _defineProperty(e, r2, t[r2]);
+    }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function(r2) {
+      Object.defineProperty(e, r2, Object.getOwnPropertyDescriptor(t, r2));
+    });
+  }
+  return e;
+}
+function _defineProperty(e, r, t) {
+  return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: true, configurable: true, writable: true }) : e[r] = t, e;
+}
+function _toPropertyKey(t) {
+  var i = _toPrimitive(t, "string");
+  return "symbol" == typeof i ? i : i + "";
+}
+function _toPrimitive(t, r) {
+  if ("object" != typeof t || !t) return t;
+  var e = t[Symbol.toPrimitive];
+  if (void 0 !== e) {
+    var i = e.call(t, r);
+    if ("object" != typeof i) return i;
+    throw new TypeError("@@toPrimitive must return a primitive value.");
+  }
+  return ("string" === r ? String : Number)(t);
+}
+function Tree2Element(tree) {
+  return tree && tree.map((node, i) => /* @__PURE__ */ React.createElement(node.tag, _objectSpread({
+    key: i
+  }, node.attr), Tree2Element(node.child)));
+}
+function GenIcon(data) {
+  return (props) => /* @__PURE__ */ React.createElement(IconBase, _extends({
+    attr: _objectSpread({}, data.attr)
+  }, props), Tree2Element(data.child));
+}
+function IconBase(props) {
+  var elem = (conf) => {
+    var {
+      attr,
+      size,
+      title
+    } = props, svgProps = _objectWithoutProperties(props, _excluded);
+    var computedSize = size || conf.size || "1em";
+    var className;
+    if (conf.className) className = conf.className;
+    if (props.className) className = (className ? className + " " : "") + props.className;
+    return /* @__PURE__ */ React.createElement("svg", _extends({
+      stroke: "currentColor",
+      fill: "currentColor",
+      strokeWidth: "0"
+    }, conf.attr, attr, svgProps, {
+      className,
+      style: _objectSpread(_objectSpread({
+        color: props.color || conf.color
+      }, conf.style), props.style),
+      height: computedSize,
+      width: computedSize,
+      xmlns: "http://www.w3.org/2000/svg"
+    }), title && /* @__PURE__ */ React.createElement("title", null, title), props.children);
+  };
+  return IconContext !== void 0 ? /* @__PURE__ */ React.createElement(IconContext.Consumer, null, (conf) => elem(conf)) : elem(DefaultContext);
+}
+function HiFunnel(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiBars3(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiOutlineShieldCheck(props) {
+  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" }, "child": [] }] })(props);
+}
+function HiMiniXMark(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" }, "child": [] }] })(props);
+}
+function HiMiniXCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniWrenchScrewdriver(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M14.5 10a4.5 4.5 0 0 0 4.284-5.882c-.105-.324-.51-.391-.752-.15L15.34 6.66a.454.454 0 0 1-.493.11 3.01 3.01 0 0 1-1.618-1.616.455.455 0 0 1 .11-.494l2.694-2.692c.24-.241.174-.647-.15-.752a4.5 4.5 0 0 0-5.873 4.575c.055.873-.128 1.808-.8 2.368l-7.23 6.024a2.724 2.724 0 1 0 3.837 3.837l6.024-7.23c.56-.672 1.495-.855 2.368-.8.096.007.193.01.291.01ZM5 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M14.5 11.5c.173 0 .345-.007.514-.022l3.754 3.754a2.5 2.5 0 0 1-3.536 3.536l-4.41-4.41 2.172-2.607c.052-.063.147-.138.342-.196.202-.06.469-.087.777-.067.128.008.257.012.387.012ZM6 4.586l2.33 2.33a.452.452 0 0 1-.08.09L6.8 8.214 4.586 6H3.309a.5.5 0 0 1-.447-.276l-1.7-3.402a.5.5 0 0 1 .093-.577l.49-.49a.5.5 0 0 1 .577-.094l3.402 1.7A.5.5 0 0 1 6 3.31v1.277Z" }, "child": [] }] })(props);
+}
+function HiMiniTrash(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniTableCells(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M.99 5.24A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25l.01 9.5A2.25 2.25 0 0 1 16.76 17H3.26A2.267 2.267 0 0 1 1 14.74l-.01-9.5Zm8.26 9.52v-.625a.75.75 0 0 0-.75-.75H3.25a.75.75 0 0 0-.75.75v.615c0 .414.336.75.75.75h5.373a.75.75 0 0 0 .627-.74Zm1.5 0a.75.75 0 0 0 .627.74h5.373a.75.75 0 0 0 .75-.75v-.615a.75.75 0 0 0-.75-.75H11.5a.75.75 0 0 0-.75.75v.625Zm6.75-3.63v-.625a.75.75 0 0 0-.75-.75H11.5a.75.75 0 0 0-.75.75v.625c0 .414.336.75.75.75h5.25a.75.75 0 0 0 .75-.75Zm-8.25 0v-.625a.75.75 0 0 0-.75-.75H3.25a.75.75 0 0 0-.75.75v.625c0 .414.336.75.75.75H8.5a.75.75 0 0 0 .75-.75ZM17.5 7.5v-.625a.75.75 0 0 0-.75-.75H11.5a.75.75 0 0 0-.75.75V7.5c0 .414.336.75.75.75h5.25a.75.75 0 0 0 .75-.75Zm-8.25 0v-.625a.75.75 0 0 0-.75-.75H3.25a.75.75 0 0 0-.75.75V7.5c0 .414.336.75.75.75H8.5a.75.75 0 0 0 .75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniSquares2X2(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 2A2.25 2.25 0 0 0 2 4.25v2.5A2.25 2.25 0 0 0 4.25 9h2.5A2.25 2.25 0 0 0 9 6.75v-2.5A2.25 2.25 0 0 0 6.75 2h-2.5Zm0 9A2.25 2.25 0 0 0 2 13.25v2.5A2.25 2.25 0 0 0 4.25 18h2.5A2.25 2.25 0 0 0 9 15.75v-2.5A2.25 2.25 0 0 0 6.75 11h-2.5Zm9-9A2.25 2.25 0 0 0 11 4.25v2.5A2.25 2.25 0 0 0 13.25 9h2.5A2.25 2.25 0 0 0 18 6.75v-2.5A2.25 2.25 0 0 0 15.75 2h-2.5Zm0 9A2.25 2.25 0 0 0 11 13.25v2.5A2.25 2.25 0 0 0 13.25 18h2.5A2.25 2.25 0 0 0 18 15.75v-2.5A2.25 2.25 0 0 0 15.75 11h-2.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniSparkles(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" }, "child": [] }] })(props);
+}
+function HiMiniSignal(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M16.364 3.636a.75.75 0 0 0-1.06 1.06 7.5 7.5 0 0 1 0 10.607.75.75 0 0 0 1.06 1.061 9 9 0 0 0 0-12.728ZM4.697 4.697a.75.75 0 0 0-1.061-1.061 9 9 0 0 0 0 12.728.75.75 0 1 0 1.06-1.06 7.5 7.5 0 0 1 0-10.607Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M12.475 6.464a.75.75 0 0 1 1.06 0 5 5 0 0 1 0 7.072.75.75 0 0 1-1.06-1.061 3.5 3.5 0 0 0 0-4.95.75.75 0 0 1 0-1.06ZM7.525 6.464a.75.75 0 0 1 0 1.061 3.5 3.5 0 0 0 0 4.95.75.75 0 0 1-1.06 1.06 5 5 0 0 1 0-7.07.75.75 0 0 1 1.06 0ZM11 10a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" }, "child": [] }] })(props);
+}
+function HiMiniShieldCheck(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Zm4.196 5.954a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniServerStack(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.464 3.162A2 2 0 0 1 6.28 2h7.44a2 2 0 0 1 1.816 1.162l1.154 2.5c.067.145.115.291.145.438A3.508 3.508 0 0 0 16 6H4c-.288 0-.568.035-.835.1.03-.147.078-.293.145-.438l1.154-2.5Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 9.5a2 2 0 0 1 2-2h12a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2Zm13.24 0a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75h-.01a.75.75 0 0 1-.75-.75V9.5Zm-2.25-.75a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H13a.75.75 0 0 0 .75-.75V9.5a.75.75 0 0 0-.75-.75h-.01ZM2 15a2 2 0 0 1 2-2h12a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2Zm13.24 0a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75h-.01a.75.75 0 0 1-.75-.75V15Zm-2.25-.75a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H13a.75.75 0 0 0 .75-.75V15a.75.75 0 0 0-.75-.75h-.01Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniRocketLaunch(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.606 12.97a.75.75 0 0 1-.134 1.051 2.494 2.494 0 0 0-.93 2.437 2.494 2.494 0 0 0 2.437-.93.75.75 0 1 1 1.186.918 3.995 3.995 0 0 1-4.482 1.332.75.75 0 0 1-.461-.461 3.994 3.994 0 0 1 1.332-4.482.75.75 0 0 1 1.052.134Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.752 12A13.07 13.07 0 0 0 8 14.248v4.002c0 .414.336.75.75.75a5 5 0 0 0 4.797-6.414 12.984 12.984 0 0 0 5.45-10.848.75.75 0 0 0-.735-.735 12.984 12.984 0 0 0-10.849 5.45A5 5 0 0 0 1 11.25c.001.414.337.75.751.75h4.002ZM13 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniQuestionMarkCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 3 3 0 1 1 2.871 5.026v.345a.75.75 0 0 1-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 1 0 8.94 6.94ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniPencilSquare(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" }, "child": [] }] })(props);
+}
+function HiMiniNoSymbol(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniMinusCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM6.75 9.25a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniMagnifyingGlass(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniLockClosed(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniKey(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniInformationCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniInbox(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M1 11.27c0-.246.033-.492.099-.73l1.523-5.521A2.75 2.75 0 0 1 5.273 3h9.454a2.75 2.75 0 0 1 2.651 2.019l1.523 5.52c.066.239.099.485.099.732V15a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-3.73Zm3.068-5.852A1.25 1.25 0 0 1 5.273 4.5h9.454a1.25 1.25 0 0 1 1.205.918l1.523 5.52c.006.02.01.041.015.062H14a1 1 0 0 0-.86.49l-.606 1.02a1 1 0 0 1-.86.49H8.236a1 1 0 0 1-.894-.553l-.448-.894A1 1 0 0 0 6 11H2.53l.015-.062 1.523-5.52Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniHome(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniGlobeAlt(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M16.555 5.412a8.028 8.028 0 0 0-3.503-2.81 14.899 14.899 0 0 1 1.663 4.472 8.547 8.547 0 0 0 1.84-1.662ZM13.326 7.825a13.43 13.43 0 0 0-2.413-5.773 8.087 8.087 0 0 0-1.826 0 13.43 13.43 0 0 0-2.413 5.773A8.473 8.473 0 0 0 10 8.5c1.18 0 2.304-.24 3.326-.675ZM6.514 9.376A9.98 9.98 0 0 0 10 10c1.226 0 2.4-.22 3.486-.624a13.54 13.54 0 0 1-.351 3.759A13.54 13.54 0 0 1 10 13.5c-1.079 0-2.128-.127-3.134-.366a13.538 13.538 0 0 1-.352-3.758ZM5.285 7.074a14.9 14.9 0 0 1 1.663-4.471 8.028 8.028 0 0 0-3.503 2.81c.529.638 1.149 1.199 1.84 1.66ZM17.334 6.798a7.973 7.973 0 0 1 .614 4.115 13.47 13.47 0 0 1-3.178 1.72 15.093 15.093 0 0 0 .174-3.939 10.043 10.043 0 0 0 2.39-1.896ZM2.666 6.798a10.042 10.042 0 0 0 2.39 1.896 15.196 15.196 0 0 0 .174 3.94 13.472 13.472 0 0 1-3.178-1.72 7.973 7.973 0 0 1 .615-4.115ZM10 15c.898 0 1.778-.079 2.633-.23a13.473 13.473 0 0 1-1.72 3.178 8.099 8.099 0 0 1-1.826 0 13.47 13.47 0 0 1-1.72-3.178c.855.151 1.735.23 2.633.23ZM14.357 14.357a14.912 14.912 0 0 1-1.305 3.04 8.027 8.027 0 0 0 4.345-4.345c-.953.542-1.971.981-3.04 1.305ZM6.948 17.397a8.027 8.027 0 0 1-4.345-4.345c.953.542 1.971.981 3.04 1.305a14.912 14.912 0 0 0 1.305 3.04Z" }, "child": [] }] })(props);
+}
+function HiMiniFunnel(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 8 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L2.659 6.22A2.25 2.25 0 0 1 2 4.629V2.34a.75.75 0 0 1 .628-.74Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniEye(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniEyeSlash(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.28 2.22a.75.75 0 0 0-1.06 1.06l14.5 14.5a.75.75 0 1 0 1.06-1.06l-1.745-1.745a10.029 10.029 0 0 0 3.3-4.38 1.651 1.651 0 0 0 0-1.185A10.004 10.004 0 0 0 9.999 3a9.956 9.956 0 0 0-4.744 1.194L3.28 2.22ZM7.752 6.69l1.092 1.092a2.5 2.5 0 0 1 3.374 3.373l1.091 1.092a4 4 0 0 0-5.557-5.557Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "m10.748 13.93 2.523 2.523a9.987 9.987 0 0 1-3.27.547c-4.258 0-7.894-2.66-9.337-6.41a1.651 1.651 0 0 1 0-1.186A10.007 10.007 0 0 1 2.839 6.02L6.07 9.252a4 4 0 0 0 4.678 4.678Z" }, "child": [] }] })(props);
+}
+function HiMiniExclamationTriangle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniExclamationCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniDocumentText(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniDocumentPlus(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5ZM10 8a.75.75 0 0 1 .75.75v1.5h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5h-1.5a.75.75 0 0 1 0-1.5h1.5v-1.5A.75.75 0 0 1 10 8Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniDocumentMagnifyingGlass(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M8 10a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm5 5a3 3 0 1 0 1.524 5.585l1.196 1.195a.75.75 0 1 0 1.06-1.06l-1.195-1.196A3 3 0 0 0 9.5 7Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCube(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.362 1.093a.75.75 0 0 0-.724 0L2.523 5.018 10 9.143l7.477-4.125-7.115-3.925ZM18 6.443l-7.25 4v8.25l6.862-3.786A.75.75 0 0 0 18 14.25V6.443ZM9.25 18.693v-8.25l-7.25-4v7.807a.75.75 0 0 0 .388.657l6.862 3.786Z" }, "child": [] }] })(props);
+}
+function HiMiniCpuChip(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M14 6H6v8h8V6Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.25 3V1.75a.75.75 0 0 1 1.5 0V3h1.5V1.75a.75.75 0 0 1 1.5 0V3h.5A2.75 2.75 0 0 1 17 5.75v.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v.5A2.75 2.75 0 0 1 14.25 17h-.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-.5A2.75 2.75 0 0 1 3 14.25v-.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-.5A2.75 2.75 0 0 1 5.75 3h.5V1.75a.75.75 0 0 1 1.5 0V3h1.5ZM4.5 5.75c0-.69.56-1.25 1.25-1.25h8.5c.69 0 1.25.56 1.25 1.25v8.5c0 .69-.56 1.25-1.25 1.25h-8.5c-.69 0-1.25-.56-1.25-1.25v-8.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCommandLine(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.25 3A2.25 2.25 0 0 0 1 5.25v9.5A2.25 2.25 0 0 0 3.25 17h13.5A2.25 2.25 0 0 0 19 14.75v-9.5A2.25 2.25 0 0 0 16.75 3H3.25Zm.943 8.752a.75.75 0 0 1 .055-1.06L6.128 9l-1.88-1.693a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 0 1-1.06-.055ZM9.75 10.25a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCog6Tooth(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.992 6.992 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCodeBracket(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.28 5.22a.75.75 0 0 1 0 1.06L2.56 10l3.72 3.72a.75.75 0 0 1-1.06 1.06L.97 10.53a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Zm7.44 0a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 0 1 0-1.06ZM11.377 2.011a.75.75 0 0 1 .612.867l-2.5 14.5a.75.75 0 0 1-1.478-.255l2.5-14.5a.75.75 0 0 1 .866-.612Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCloud(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M1 12.5A4.5 4.5 0 0 0 5.5 17H15a4 4 0 0 0 1.866-7.539 3.504 3.504 0 0 0-4.504-4.272A4.5 4.5 0 0 0 4.06 8.235 4.502 4.502 0 0 0 1 12.5Z" }, "child": [] }] })(props);
+}
+function HiMiniCloudArrowUp(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.5 17a4.5 4.5 0 0 1-1.44-8.765 4.5 4.5 0 0 1 8.302-3.046 3.5 3.5 0 0 1 4.504 4.272A4 4 0 0 1 15 17H5.5Zm3.75-2.75a.75.75 0 0 0 1.5 0V9.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0l-3.25 3.5a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniClock(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniClipboard(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M13.887 3.182c.396.037.79.08 1.183.128C16.194 3.45 17 4.414 17 5.517V16.75A2.25 2.25 0 0 1 14.75 19h-9.5A2.25 2.25 0 0 1 3 16.75V5.517c0-1.103.806-2.068 1.93-2.207.393-.048.787-.09 1.183-.128A3.001 3.001 0 0 1 9 1h2c1.373 0 2.531.923 2.887 2.182ZM7.5 4A1.5 1.5 0 0 1 9 2.5h2A1.5 1.5 0 0 1 12.5 4v.5h-5V4Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniClipboardDocument(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.988 3.012A2.25 2.25 0 0 1 18 5.25v6.5A2.25 2.25 0 0 1 15.75 14H13.5v-3.379a3 3 0 0 0-.879-2.121l-3.12-3.121a3 3 0 0 0-1.402-.791 2.252 2.252 0 0 1 1.913-1.576A2.25 2.25 0 0 1 12.25 1h1.5a2.25 2.25 0 0 1 2.238 2.012ZM11.5 3.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.25h-3v-.25Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 6A1.5 1.5 0 0 0 2 7.5v9A1.5 1.5 0 0 0 3.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L8.44 6.439A1.5 1.5 0 0 0 7.378 6H3.5Z" }, "child": [] }] })(props);
+}
+function HiMiniClipboardDocumentCheck(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 5.25a2.25 2.25 0 0 0-2.012-2.238A2.25 2.25 0 0 0 13.75 1h-1.5a2.25 2.25 0 0 0-2.238 2.012c-.875.092-1.6.686-1.884 1.488H11A2.5 2.5 0 0 1 13.5 7v7h2.25A2.25 2.25 0 0 0 18 11.75v-6.5ZM12.25 2.5a.75.75 0 0 0-.75.75v.25h3v-.25a.75.75 0 0 0-.75-.75h-1.5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H3Zm6.874 4.166a.75.75 0 1 0-1.248-.832l-2.493 3.739-.853-.853a.75.75 0 0 0-1.06 1.06l1.5 1.5a.75.75 0 0 0 1.154-.114l3-4.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCircleStack(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1c3.866 0 7 1.79 7 4s-3.134 4-7 4-7-1.79-7-4 3.134-4 7-4Zm5.694 8.13c.464-.264.91-.583 1.306-.952V10c0 2.21-3.134 4-7 4s-7-1.79-7-4V8.178c.396.37.842.688 1.306.953C5.838 10.006 7.854 10.5 10 10.5s4.162-.494 5.694-1.37ZM3 13.179V15c0 2.21 3.134 4 7 4s7-1.79 7-4v-1.822c-.396.37-.842.688-1.306.953-1.532.875-3.548 1.369-5.694 1.369s-4.162-.494-5.694-1.37A7.009 7.009 0 0 1 3 13.179Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniChevronUp(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniChevronRight(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniChevronLeft(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniChevronDown(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCheck(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniCheckCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniChartBar(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.5 2A1.5 1.5 0 0 0 14 3.5v13a1.5 1.5 0 0 0 1.5 1.5h1a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-1ZM9.5 6A1.5 1.5 0 0 0 8 7.5v9A1.5 1.5 0 0 0 9.5 18h1a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 10.5 6h-1ZM3.5 10A1.5 1.5 0 0 0 2 11.5v5A1.5 1.5 0 0 0 3.5 18h1A1.5 1.5 0 0 0 6 16.5v-5A1.5 1.5 0 0 0 4.5 10h-1Z" }, "child": [] }] })(props);
+}
+function HiMiniBugAnt(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.56 1.14a.75.75 0 0 1 .177 1.045 3.989 3.989 0 0 0-.464.86c.185.17.382.329.59.473A3.993 3.993 0 0 1 10 2c1.272 0 2.405.594 3.137 1.518.208-.144.405-.302.59-.473a3.989 3.989 0 0 0-.464-.86.75.75 0 0 1 1.222-.869c.369.519.65 1.105.822 1.736a.75.75 0 0 1-.174.707 7.03 7.03 0 0 1-1.299 1.098A4 4 0 0 1 14 6c0 .52-.301.963-.723 1.187a6.961 6.961 0 0 1-1.158.486c.13.208.231.436.296.679 1.413-.174 2.779-.5 4.081-.96a19.655 19.655 0 0 0-.09-2.319.75.75 0 1 1 1.493-.146 21.239 21.239 0 0 1 .08 3.028.75.75 0 0 1-.482.667 20.873 20.873 0 0 1-5.153 1.249 2.521 2.521 0 0 1-.107.247 20.945 20.945 0 0 1 5.252 1.257.75.75 0 0 1 .482.74 20.945 20.945 0 0 1-.908 5.107.75.75 0 0 1-1.433-.444c.415-1.34.69-2.743.806-4.191-.495-.173-1-.327-1.512-.46.05.284.076.575.076.873 0 1.814-.517 3.312-1.426 4.37A4.639 4.639 0 0 1 10 19a4.639 4.639 0 0 1-3.574-1.63C5.516 16.311 5 14.813 5 13c0-.298.026-.59.076-.873-.513.133-1.017.287-1.512.46.116 1.448.39 2.85.806 4.191a.75.75 0 1 1-1.433.444 20.94 20.94 0 0 1-.908-5.107.75.75 0 0 1 .482-.74 20.838 20.838 0 0 1 5.252-1.257 2.493 2.493 0 0 1-.107-.247 20.874 20.874 0 0 1-5.153-1.249.75.75 0 0 1-.482-.667 21.342 21.342 0 0 1 .08-3.028.75.75 0 1 1 1.493.146 19.745 19.745 0 0 0-.09 2.319c1.302.46 2.668.786 4.08.96.066-.243.166-.471.297-.679a6.962 6.962 0 0 1-1.158-.486A1.348 1.348 0 0 1 6 6a4 4 0 0 1 .166-1.143 7.032 7.032 0 0 1-1.3-1.098.75.75 0 0 1-.173-.707 5.48 5.48 0 0 1 .822-1.736.75.75 0 0 1 1.046-.177Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniBolt(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M11.983 1.907a.75.75 0 0 0-1.292-.657l-8.5 9.5A.75.75 0 0 0 2.75 12h6.572l-1.305 6.093a.75.75 0 0 0 1.292.657l8.5-9.5A.75.75 0 0 0 17.25 8h-6.572l1.305-6.093Z" }, "child": [] }] })(props);
+}
+function HiMiniBellAlert(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.214 3.227a.75.75 0 0 0-1.156-.955 8.97 8.97 0 0 0-1.856 3.825.75.75 0 0 0 1.466.316 7.47 7.47 0 0 1 1.546-3.186ZM16.942 2.272a.75.75 0 0 0-1.157.955 7.47 7.47 0 0 1 1.547 3.186.75.75 0 0 0 1.466-.316 8.971 8.971 0 0 0-1.856-3.825Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.91 32.91 0 0 0 3.256.508 3.5 3.5 0 0 0 6.972 0 32.903 32.903 0 0 0 3.256-.508.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6Zm0 14.5a2 2 0 0 1-1.95-1.557 33.54 33.54 0 0 0 3.9 0A2 2 0 0 1 10 16.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniBeaker(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.5 3.528v4.644c0 .729-.29 1.428-.805 1.944l-1.217 1.216a8.75 8.75 0 0 1 3.55.621l.502.201a7.25 7.25 0 0 0 4.178.365l-2.403-2.403a2.75 2.75 0 0 1-.805-1.944V3.528a40.205 40.205 0 0 0-3 0Zm4.5.084.19.015a.75.75 0 1 0 .12-1.495 41.364 41.364 0 0 0-6.62 0 .75.75 0 0 0 .12 1.495L7 3.612v4.56c0 .331-.132.649-.366.883L2.6 13.09c-1.496 1.496-.817 4.15 1.403 4.475C5.961 17.852 7.963 18 10 18s4.039-.148 5.997-.436c2.22-.325 2.9-2.979 1.403-4.475l-4.034-4.034A1.25 1.25 0 0 1 13 8.172v-4.56Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniBarsArrowUp(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h6.365a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .55.24l3.25 3.5a.75.75 0 1 1-1.1 1.02l-1.95-2.1v6.59a.75.75 0 0 1-1.5 0V9.66l-1.95 2.1a.75.75 0 1 1-1.1-1.02l3.25-3.5A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75H7A.75.75 0 0 1 7 12H2.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniBarsArrowDown(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h7.508a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .75.75v6.59l1.95-2.1a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0l-3.25-3.5a.75.75 0 1 1 1.1-1.02l1.95 2.1V7.75A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75h4.562a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowTopRightOnSquare(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowRight(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowPath(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowLeft(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowDownTray(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" }, "child": [] }] })(props);
+}
+function HiMiniArchiveBox(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M2 3a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H2Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 7.5h16l-.811 7.71a2 2 0 0 1-1.99 1.79H4.802a2 2 0 0 1-1.99-1.79L2 7.5ZM7 11a1 1 0 0 1 1-1h4a1 1 0 1 1 0 2H8a1 1 0 0 1-1-1Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniAdjustmentsHorizontal(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 3.75a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM17.25 4.5a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM5 3.75a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5a.75.75 0 0 1 .75.75ZM4.25 17a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM17.25 17a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM9 10a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1 0-1.5h5.5A.75.75 0 0 1 9 10ZM17.25 10.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM14 10a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM10 16.25a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" }, "child": [] }] })(props);
+}
+const CATEGORIES = [
+  {
+    key: "secret",
+    label: "Secret read",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-attention",
+    description: "Reading files that contain passwords or keys"
+  },
+  {
+    key: "network",
+    label: "Network",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniGlobeAlt, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-blue",
+    description: "Connecting to websites or external services"
+  },
+  {
+    key: "destructive",
+    label: "Destructive",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-purple",
+    description: "Commands that delete or overwrite files"
+  },
+  {
+    key: "hidden",
+    label: "Hidden script",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEyeSlash, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-attention",
+    description: "Encoded or obfuscated code"
+  },
+  {
+    key: "file-write",
+    label: "File write",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-green",
+    description: "Writing or modifying files"
+  },
+  {
+    key: "mcp",
+    label: "MCP tool",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCpuChip, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-blue",
+    description: "Using a Model Context Protocol tool server"
+  },
+  {
+    key: "skill",
+    label: "Skill / plugin",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBolt, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-purple",
+    description: "Running an AI skill or browser extension"
+  },
+  {
+    key: "supply-chain",
+    label: "Supply chain",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArchiveBox, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-attention",
+    description: "Installing or running a package or script"
+  },
+  {
+    key: "data",
+    label: "Data access",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTableCells, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-blue",
+    description: "Reading from or writing to a database"
+  },
+  {
+    key: "tool-call",
+    label: "Tool call",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-brand-blue",
+    description: "Using external tools or MCP servers"
+  },
+  {
+    key: "other",
+    label: "Other",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-5 w-5", "aria-hidden": "true" }),
+    color: "text-slate-500",
+    description: "Other actions"
+  }
+];
+const SECRET_PATTERNS = [
+  /\.env/i,
+  /\.env\.local/i,
+  /\.env\.production/i,
+  /\.npmrc/i,
+  /\.netrc/i,
+  /id_rsa/i,
+  /id_ed25519/i,
+  /\.aws\/credentials/i,
+  /\.docker\/config\.json/i,
+  /secret/i,
+  /password/i,
+  /token/i,
+  /key/i,
+  /credential/i,
+  /private/i
+];
+const NETWORK_PATTERNS = [
+  /curl\s/i,
+  /wget\s/i,
+  /fetch\s/i,
+  /http/i,
+  /api\./i,
+  /\.com/i,
+  /\.org/i,
+  /\.net/i
+];
+const DESTRUCTIVE_PATTERNS = [
+  /rm\s+-rf/i,
+  /rm\s+-r/i,
+  /rmdir/i,
+  /truncate/i,
+  /dd\s+if=/i,
+  />\s*\//i,
+  /mv\s+.*\s+.*\/dev\/null/i
+];
+const HIDDEN_PATTERNS = [
+  /base64/i,
+  /eval\s*\(/i,
+  /decode/i,
+  /encoded/i,
+  /obfusc/i,
+  /encrypted.*script/i
+];
+const MCP_PATTERNS = [
+  /mcp_tool/i,
+  /mcp[._-]/i,
+  /\bmcp\b/i
+];
+const SKILL_PATTERNS = [
+  /\bskill\b/i,
+  /\bplugin\b/i,
+  /\bextension\b/i
+];
+const SUPPLY_CHAIN_PATTERNS = [
+  /package_script/i,
+  /\bnpm\s/i,
+  /\bpip\s/i,
+  /supply.?chain/i,
+  /requirements\.txt/i,
+  /pyproject\.toml/i
+];
+const TOOL_PATTERNS = [
+  /tool_call/i,
+  /tool\./i
+];
+const DATA_PATTERNS = [
+  /\bdatabase\b/i,
+  /\bsqlite\b/i,
+  /\bpostgres\b/i,
+  /\bmysql\b/i,
+  /\bmongo\b/i,
+  /\bquery\b/i
+];
+const FILE_WRITE_PATTERNS = [
+  /write.*file/i,
+  /file.*write/i,
+  /writes.*to.*disk/i,
+  /\bwrite_file\b/i,
+  /\bfile_write\b/i,
+  /\bcreate_file\b/i,
+  /saves.*to.*disk/i
+];
+function detectCategory(receipt) {
+  const name = (receipt.artifact_name ?? receipt.artifact_id ?? "").toLowerCase();
+  const summary = (receipt.capabilities_summary ?? "").toLowerCase();
+  const artifactType = (receipt.artifact_type ?? "").toLowerCase();
+  const text = `${name} ${summary} ${artifactType}`;
+  if (SECRET_PATTERNS.some((p) => p.test(text))) return "secret";
+  if (DESTRUCTIVE_PATTERNS.some((p) => p.test(text))) return "destructive";
+  if (HIDDEN_PATTERNS.some((p) => p.test(text))) return "hidden";
+  if (artifactType === "mcp_tool" || MCP_PATTERNS.some((p) => p.test(text))) return "mcp";
+  if (SKILL_PATTERNS.some((p) => p.test(text))) return "skill";
+  if (artifactType === "package_script" || SUPPLY_CHAIN_PATTERNS.some((p) => p.test(text))) return "supply-chain";
+  if (NETWORK_PATTERNS.some((p) => p.test(text))) return "network";
+  if (TOOL_PATTERNS.some((p) => p.test(text))) return "tool-call";
+  if (artifactType.includes("file_write") || artifactType.includes("write") || FILE_WRITE_PATTERNS.some((p) => p.test(text))) return "file-write";
+  if (DATA_PATTERNS.some((p) => p.test(text))) return "data";
+  if (artifactType.includes("file_read") || artifactType.includes("read")) return "other";
+  return "other";
+}
+function getCategoryInfo(key) {
+  return CATEGORIES.find((c) => c.key === key) ?? CATEGORIES[CATEGORIES.length - 1];
+}
+function groupByCategory(receipts) {
+  const map = /* @__PURE__ */ new Map();
+  for (const receipt of receipts) {
+    const cat = detectCategory(receipt);
+    if (!map.has(cat)) map.set(cat, []);
+    map.get(cat).push(receipt);
+  }
+  return map;
+}
+const EMPTY_QUEUE_TITLE = "No blocked actions";
+const STALE_REQUEST_COPY = "This request was already decided.";
+const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
+const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
+function deriveDataFlowEvidence(item) {
+  const signals = item.decision_v2_json?.signals ?? [];
+  const dataFlowSignals = signals.filter(
+    (s) => s.detector === "data_flow.exfiltration" || s.signal_id.startsWith("data-flow:")
+  );
+  if (dataFlowSignals.length === 0) {
+    return null;
+  }
+  const primary = dataFlowSignals[0];
+  return {
+    signalTitle: primary.title,
+    sourceLabel: "Local secret",
+    sinkLabel: resolveDataFlowSinkLabel(primary),
+    signalId: primary.signal_id,
+    count: dataFlowSignals.length
+  };
+}
+function deriveSkillRiskSignals(item) {
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "skill.content");
+}
+function deriveSupplyChainRiskSignals(item) {
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "supply-chain.content");
+}
+function deriveEncodedLayerSignals(item) {
+  return (item.decision_v2_json?.signals ?? []).filter(
+    (s) => s.detector === "safe-decode.content" || s.signal_id.startsWith("encoded.")
+  );
+}
+function resolveDataFlowSinkLabel(signal) {
+  if (signal.category === "network") {
+    return "Network host";
+  }
+  if (signal.signal_id === "data-flow:clipboard-secret") {
+    return "Clipboard";
+  }
+  if (signal.signal_id === "data-flow:world-readable-temp-secret") {
+    return "World-readable temp file";
+  }
+  if (signal.signal_id === "data-flow:git-remote-token") {
+    return "Git remote config";
+  }
+  return "External sink";
+}
+function buildRetryAfterApprovalCopy(item, action) {
+  const harness = harnessDisplayName(item.harness);
+  if (action === "allow") {
+    return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;
+  }
+  return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
+}
+function resolveEnvelopeDisplayText(envelope) {
+  if (envelope.action_type === "shell_command" && envelope.command !== null) {
+    return envelope.command;
+  }
+  if (envelope.action_type === "prompt" && (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)) {
+    return envelope.prompt_text ?? envelope.prompt_excerpt;
+  }
+  if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
+    return `${envelope.mcp_server} / ${envelope.mcp_tool}`;
+  }
+  if (envelope.tool_name !== null) {
+    return envelope.tool_name;
+  }
+  if (envelope.target_paths.length > 0) {
+    return envelope.target_paths[0];
+  }
+  return envelope.action_type === "harness_start" ? null : envelope.action_type;
+}
+function humanizeList(values) {
+  if (values.length === 0) {
+    return "nothing tracked yet";
+  }
+  if (values.length === 1) {
+    return values[0];
+  }
+  if (values.length === 2) {
+    return `${values[0]} and ${values[1]}`;
+  }
+  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
+}
+function humanizeChangedFields(values) {
+  const translated = values.map((value) => {
+    if (value === "first_seen") {
+      return "this action";
+    }
+    if (value === "args") {
+      return "the command details";
+    }
+    if (value === "command") {
+      return "the command";
+    }
+    if (value === "headers") {
+      return "network details";
+    }
+    if (value === "tool_action_request") {
+      return "the requested action";
+    }
+    return value.replaceAll("_", " ");
+  });
+  return humanizeList(translated);
+}
+function buildPauseLine(item) {
+  if (item.policy_action === "block") {
+    return `${harnessDisplayName(item.harness)} kept this blocked because you already saved a block decision for it.`;
+  }
+  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
+    return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;
+  }
+  return `${harnessDisplayName(item.harness)} wants to run something that changed since your last saved decision: ${humanizeChangedFields(item.changed_fields)}.`;
+}
+function buildRecommendation(item) {
+  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
+    return "If this is what you expected, approve this retry. Project approval remembers this same action here without trusting new sensitive actions.";
+  }
+  if (item.policy_action === "block") {
+    return "Keep it blocked unless you are sure this action is safe and expected.";
+  }
+  return "Approve the smallest choice that matches what you meant to do. Different commands, prompts, paths, hosts, or tools should ask again.";
+}
+function buildQueueSummary(item) {
+  if (item.policy_action === "block") {
+    return "You already chose to block this action.";
+  }
+  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
+    return "First time HOL Guard has seen this here.";
+  }
+  return `Changed since your last decision: ${humanizeChangedFields(item.changed_fields)}.`;
+}
+function buildMemorySummary(item, receipt) {
+  if (receipt === null) {
+    return `HOL Guard has not saved an earlier approval for ${item.artifact_name}.`;
+  }
+  return `The last saved decision for ${item.artifact_name} was ${receipt.policy_decision}.`;
+}
+function policyActionLabel(action) {
+  switch (action) {
+    case "require-reapproval":
+      return "Needs review";
+    case "block":
+      return "Blocked";
+    case "allow":
+      return "Allowed";
+    default:
+      return action;
+  }
+}
+function artifactTypeLabel(artifactType) {
+  switch (artifactType) {
+    case "mcp_server":
+      return "MCP server";
+    case "extension":
+      return "Extension";
+    case "hook":
+      return "Hook";
+    case "agent":
+      return "Agent";
+    case "command":
+      return "Command";
+    case "tool_action_request":
+      return "Tool action";
+    default:
+      return artifactType.replaceAll("_", " ");
+  }
+}
+function buildStoppedReason(item, receipt) {
+  if (item.policy_action === "block") {
+    const changed = item.changed_fields.length > 0 ? ` ${humanizeChangedFields(item.changed_fields)} also changed.` : "";
+    return `A saved block decision already covers this action, so HOL Guard kept it paused.${changed}`;
+  }
+  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
+    return "HOL Guard has never seen this action in this project folder before, so there is no saved approval for it yet.";
+  }
+  if (receipt !== null) {
+    return `HOL Guard found an earlier ${receipt.policy_decision} decision, but ${humanizeChangedFields(item.changed_fields)} no longer matches what you approved before.`;
+  }
+  return "This action changed after the last known state, so HOL Guard needs a new decision before it can run.";
+}
+function shortConfigPath(path) {
+  const sanitizedPath = path.replace(/\/Users\/[^/\s]+/g, "~");
+  const marker = "/.codex/";
+  const index = sanitizedPath.lastIndexOf(marker);
+  if (index >= 0) {
+    return `...${sanitizedPath.slice(index)}`;
+  }
+  return sanitizedPath;
+}
+function buildTechnicalSummary(_diff, item) {
+  return [["Approval command", item.review_command]];
+}
+function capitalizeHarness(harness) {
+  if (harness.length === 0) {
+    return harness;
+  }
+  return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
+}
+const HARNESS_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
+const HEX_TOKEN_HARNESS_PATTERN = /^[a-f0-9]{16,64}$/;
+const UUID_HARNESS_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
+const NON_APP_HARNESS_SLUGS = /* @__PURE__ */ new Set(["*", "all", "any", "global"]);
+function normalizeHarnessSlug(harness) {
+  const slug = typeof harness === "string" ? harness.trim().toLowerCase() : "";
+  if (slug.length === 0 || NON_APP_HARNESS_SLUGS.has(slug) || HEX_TOKEN_HARNESS_PATTERN.test(slug) || UUID_HARNESS_PATTERN.test(slug) || !HARNESS_SLUG_PATTERN.test(slug)) {
+    return null;
+  }
+  return slug;
+}
+function isDisplayableHarness(harness) {
+  return normalizeHarnessSlug(harness) !== null;
+}
+function resolveDecisionV2Title(item) {
+  const title = item.decision_v2_json?.user_title;
+  return title !== void 0 && title.trim().length > 0 ? title : null;
+}
+function resolveDecisionV2Detail(item) {
+  const detail = item.decision_v2_json?.dashboard_primary_detail;
+  return detail !== void 0 && detail.trim().length > 0 ? detail : null;
+}
+const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
+const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
+const DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS = [
+  /\b(api[-_\s]?keys?|credentials?|secrets?|tokens?|passwords?|sensitive|malicious|destructive|unauthorized)\b/i,
+  /\b(expose|exposes|exposed|leak|leaks|leaked|exfiltrate|exfiltrates|exfiltration)\b/i,
+  /\b(may|could|can|would|will)\s+(expose|leak|send|upload|exfiltrate|delete|remove|modify|overwrite|execute|run)\b/i,
+  /\bruns?\s+as\s+(root|admin|administrator)\b/i,
+  /\bsends?\s+(data|contents|files?|credentials?|secrets?|tokens?)\s+to\b/i,
+  /\b(third[-\s]?party|remote|external)\s+host\b/i
+];
+function buildPrimaryReviewAction(item) {
+  return {
+    label: resolveTerminalLabel(item),
+    text: resolvePrimaryReviewText(item),
+    detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null
+  };
+}
+function resolveSecondaryRiskSummary(item) {
+  const summary = item.risk_summary?.trim();
+  if (!summary) {
+    return null;
+  }
+  if (duplicatesStoppedActionText(item, summary)) {
+    return null;
+  }
+  return summary;
+}
+function hasReviewEvidence(item) {
+  return (item.risk_signals?.length ?? 0) > 0 || hasRenderableDecisionEvidence(item) || resolveSecondaryRiskSummary(item) !== null || !!item.why_now;
+}
+function hasRenderableDecisionEvidence(item) {
+  const signals = item.decision_v2_json?.signals ?? [];
+  return signals.some((signal) => signal.category === "skill" || signal.category === "mcp") || deriveDataFlowEvidence(item) !== null || deriveSkillRiskSignals(item).length > 0 || deriveSupplyChainRiskSignals(item).length > 0 || deriveEncodedLayerSignals(item).length > 0 || hasSupplyChainArtifactEvidence(item);
+}
+function hasSupplyChainArtifactEvidence(item) {
+  return item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package");
+}
+function duplicatesStoppedActionText(item, value) {
+  const stoppedActionText = resolveStoppedCommandText(item);
+  const canUseLongPromptPrefix = item.action_envelope_json?.action_type === "prompt" || item.artifact_type === "prompt_request";
+  const stoppedText = normalizeDuplicateReviewText(stoppedActionText);
+  const candidateText = normalizeDuplicateReviewText(value);
+  const contextStrippedValue = stripDuplicateReviewContextPrefix(value);
+  const candidateWithoutContext = contextStrippedValue === null ? "" : normalizeDuplicateReviewText(contextStrippedValue);
+  const candidateRemainder = contextStrippedValue === null ? "" : extractDuplicateReviewRemainder(contextStrippedValue, stoppedActionText);
+  if (stoppedText.length === 0 || candidateText.length === 0) {
+    return false;
+  }
+  if (stoppedText === candidateText || stoppedText === candidateWithoutContext) {
+    return true;
+  }
+  if (stoppedText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH || candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH) {
+    return false;
+  }
+  if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && stoppedText.includes(candidateWithoutContext)) {
+    return true;
+  }
+  if (canUseLongPromptPrefix && stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH && candidateWithoutContext.startsWith(stoppedText) && !hasDuplicateReviewSafetyContextRemainder(candidateRemainder)) {
+    return true;
+  }
+  return false;
+}
+function extractDuplicateReviewRemainder(candidateText, stoppedText) {
+  const candidate = candidateText.trim();
+  const stopped = normalizeDuplicateReviewText(stoppedText);
+  if (stopped.length === 0) {
+    return "";
+  }
+  let normalizedPrefix = "";
+  for (let index = 0; index < candidate.length; index += 1) {
+    normalizedPrefix += normalizeDuplicateReviewText(candidate[index]);
+    if (normalizedPrefix.length >= stopped.length) {
+      return normalizedPrefix.startsWith(stopped) ? candidate.slice(index + 1).trim() : "";
+    }
+  }
+  return "";
+}
+function hasDuplicateReviewSafetyContextRemainder(remainder) {
+  return DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS.some((pattern) => pattern.test(remainder));
+}
+function normalizeDuplicateReviewText(value) {
+  return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_\-…]+/g, "").trim();
+}
+function stripDuplicateReviewContextPrefix(value) {
+  const stripped = value.replace(
+    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
+    ""
+  );
+  return stripped === value ? null : stripped;
+}
+function primaryReviewActionToggleLabel(isVisible) {
+  return isVisible ? "Hide" : "Show";
+}
+function resolveStoppedCommandText(item) {
+  if (item.action_envelope_json) {
+    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
+    if (envelopeText !== null) {
+      return envelopeText;
+    }
+  }
+  if (item.launch_target?.trim()) {
+    return item.launch_target;
+  }
+  if (item.launch_summary?.trim()) {
+    const commandMatch = item.launch_summary.match(/`([^`]+)`/);
+    if (commandMatch?.[1]) {
+      return commandMatch[1];
+    }
+    return item.launch_summary;
+  }
+  return item.artifact_name.trim() || item.artifact_id;
+}
+function resolvePrimaryReviewText(item) {
+  const baseText = resolveStoppedCommandText(item);
+  const envelope = item.action_envelope_json;
+  if (envelope?.action_type !== "mcp_tool") {
+    return baseText;
+  }
+  const inputSummary = serializeMcpInput(envelope.raw_payload_redacted);
+  if (inputSummary === null) {
+    return baseText;
+  }
+  return `${baseText}
+
+Input:
+${inputSummary}`;
+}
+function serializeMcpInput(payload) {
+  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
+  if (input === null || input === void 0) {
+    return null;
+  }
+  try {
+    const serialized = typeof input === "string" ? input : JSON.stringify(input, null, 2);
+    if (serialized === void 0 || serialized.trim().length === 0 || serialized === "{}") {
+      return null;
+    }
+    return serialized.length > 4e3 ? `${serialized.slice(0, 4e3)}...` : serialized;
+  } catch {
+    return null;
+  }
+}
+function harnessDisplayName(harness) {
+  if (typeof harness !== "string") {
+    return "Unknown app";
+  }
+  const normalized = normalizeHarnessSlug(harness);
+  if (normalized === null) {
+    switch (harness.trim().toLowerCase()) {
+      case "*":
+      case "all":
+      case "any":
+      case "global":
+        return "All apps";
+      default:
+        return "Unknown app";
+    }
+  }
+  switch (normalized) {
+    case "claude-code":
+      return "Claude Code";
+    case "copilot":
+      return "Copilot";
+    case "codex":
+      return "Codex";
+    case "opencode":
+      return "OpenCode";
+    case "gemini":
+      return "Gemini";
+    case "cursor":
+      return "Cursor";
+    case "hermes":
+      return "Hermes";
+    case "openclaw":
+      return "OpenClaw";
+    default:
+      return capitalizeHarness(normalized);
+  }
+}
+function displayArtifactName(item) {
+  return item.artifact_name || item.artifact_id || "this action";
+}
+function formatNumber(n) {
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(n);
+}
+function formatRelativeTime(timestamp) {
+  try {
+    const date = new Date(timestamp);
+    const now2 = /* @__PURE__ */ new Date();
+    const diffMs = now2.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 6e4);
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) {
+      return `Yesterday at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    }
+    if (diffDays < 7) {
+      return `${date.toLocaleDateString([], { weekday: "long" })} at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    }
+    return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  } catch {
+    return timestamp;
+  }
+}
+function resolveFileReadPath(item) {
+  const actionType = item.action_envelope_json?.action_type;
+  const isFileRead = actionType === "file_read" || actionType === "file_write" || item.artifact_type === "file_read_request";
+  if (!isFileRead) return null;
+  const paths = item.action_envelope_json?.target_paths ?? [];
+  if (paths.length > 0) return paths[0];
+  return item.launch_target ?? null;
+}
+function buildApprovalSharePath(item) {
+  const requestId = item.request_id?.trim();
+  if (requestId) {
+    return `/requests/${requestId}`;
+  }
+  const stored = item.approval_url?.trim();
+  if (!stored) {
+    return null;
+  }
+  try {
+    const parsed = new URL(stored, "http://guard.local");
+    parsed.pathname = parsed.pathname.replace("/approvals/", "/requests/");
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return stored.replace("/approvals/", "/requests/");
+  }
+}
+function resolveApprovalShareUrl(item) {
+  const requestId = item.request_id?.trim();
+  const stored = item.approval_url?.trim();
+  let absolute = null;
+  if (stored) {
+    absolute = stored.replace("/approvals/", "/requests/");
+    if (requestId) {
+      absolute = absolute.replace(/\/(?:approvals|requests)\/[^/?#]+/, `/requests/${requestId}`);
+    }
+  } else if (requestId && typeof window !== "undefined") {
+    absolute = `${window.location.origin}/requests/${requestId}`;
+  }
+  if (absolute === null) {
+    const path = buildApprovalSharePath(item);
+    if (path === null) {
+      return null;
+    }
+    if (typeof window === "undefined") {
+      return path;
+    }
+    absolute = `${window.location.origin}${path}`;
+  }
+  if (typeof window === "undefined") {
+    return absolute;
+  }
+  return guardAwareHref(absolute);
+}
+function resolveTerminalLabel(item) {
+  const actionType = item.action_envelope_json?.action_type;
+  if (actionType === "shell_command") return "Command";
+  if (actionType === "prompt") return "Prompt excerpt";
+  if (actionType === "file_read" || actionType === "file_write") return "File path";
+  if (actionType === "mcp_tool") return "MCP server / tool";
+  if (actionType === "package_script") return "Package";
+  if (actionType === "network_request") return "Network destination";
+  if (item.artifact_type === "file_read_request") return "File path";
+  if (item.artifact_type === "prompt_request") return "Prompt excerpt";
+  if (item.artifact_type === "tool_action_request") return "Tool action";
+  return "Stopped command";
+}
+function isCodexHarness(harness) {
+  return normalizeHarnessSlug(harness) === "codex";
+}
+function buildCodexResumeUx(resume) {
+  if (resume.status === "pending" || resume.status === "in_progress") {
+    return {
+      headline: "Codex is continuing.",
+      body: resume.message ?? "HOL Guard saved your choice and the original Codex action is still waiting for it.",
+      showRetry: false
+    };
+  }
+  if (resume.status === "sent" || resume.status === "already_sent") {
+    if (resume.strategy === "codex-headless-exec" || resume.reason === "headless_resume_started") {
+      return {
+        headline: "Codex resumed in background.",
+        body: resume.message ?? "HOL Guard started a background Codex resume. This open Codex App chat may not visibly continue until Codex remote control is enabled.",
+        showRetry: false
+      };
+    }
+    return {
+      headline: "Codex chat notified.",
+      body: resume.message ?? "HOL Guard sent Codex a continuation message in the original chat.",
+      showRetry: false
+    };
+  }
+  if (resume.status === "failed") {
+    return {
+      headline: "Guard could not message the Codex chat.",
+      body: resume.message ?? resume.last_error ?? resume.reason ?? "Continuation message failed.",
+      showRetry: true
+    };
+  }
+  return {
+    headline: "Guard could not locate the Codex chat.",
+    body: resume.message ?? "Return to Codex and retry the same request.",
+    showRetry: false
+  };
+}
+function formatDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function shortDateLabel(date) {
+  return date.toLocaleDateString(void 0, { month: "short", day: "numeric" });
+}
+function computeTrendBuckets(receipts, days, now2) {
+  const base = /* @__PURE__ */ new Date();
+  const startOfToday = new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate()
+  );
+  const buckets = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(startOfToday);
+    d.setDate(d.getDate() - i);
+    buckets.push({
+      label: shortDateLabel(d),
+      dateKey: formatDateKey(d),
+      allowed: 0,
+      blocked: 0,
+      reviewed: 0
+    });
+  }
+  const bucketMap = new Map(buckets.map((b) => [b.dateKey, b]));
+  for (const r of receipts) {
+    try {
+      const d = new Date(r.timestamp);
+      const key = formatDateKey(d);
+      const bucket = bucketMap.get(key);
+      if (!bucket) continue;
+      if (r.policy_decision === "allow") bucket.allowed++;
+      else if (r.policy_decision === "block") bucket.blocked++;
+      else bucket.reviewed++;
+    } catch {
+    }
+  }
+  return buckets;
+}
+function computeMetrics(receipts, now2) {
+  let allowed = 0;
+  let blocked = 0;
+  let reviewed = 0;
+  let lastActivityAt = null;
+  const byHarness = /* @__PURE__ */ new Map();
+  const byCategory = /* @__PURE__ */ new Map();
+  const recurringMap = /* @__PURE__ */ new Map();
+  for (const r of receipts) {
+    try {
+      new Date(r.timestamp).toISOString();
+    } catch {
+      continue;
+    }
+    if (r.policy_decision === "allow") allowed++;
+    else if (r.policy_decision === "block") blocked++;
+    else reviewed++;
+    if (!lastActivityAt || r.timestamp > lastActivityAt) {
+      lastActivityAt = r.timestamp;
+    }
+    const harness = r.harness;
+    const hEntry = byHarness.get(harness) ?? {
+      total: 0,
+      blocked: 0,
+      allowed: 0
+    };
+    hEntry.total++;
+    if (r.policy_decision === "block") hEntry.blocked++;
+    if (r.policy_decision === "allow") hEntry.allowed++;
+    byHarness.set(harness, hEntry);
+    const cat = detectCategory(r);
+    const cEntry = byCategory.get(cat) ?? { total: 0, blocked: 0 };
+    cEntry.total++;
+    if (r.policy_decision === "block") cEntry.blocked++;
+    byCategory.set(cat, cEntry);
+    const name = r.artifact_name ?? r.artifact_id;
+    const rEntry = recurringMap.get(name) ?? {
+      total: 0,
+      blocked: 0,
+      allowed: 0
+    };
+    rEntry.total++;
+    if (r.policy_decision === "block") rEntry.blocked++;
+    if (r.policy_decision === "allow") rEntry.allowed++;
+    recurringMap.set(name, rEntry);
+  }
+  const total = allowed + blocked + reviewed;
+  const topRecurring = Array.from(recurringMap.entries()).map(([name, counts]) => ({ name, ...counts })).sort((a, b) => b.total - a.total).slice(0, 10);
+  const trendBuckets = computeTrendBuckets(receipts, 7);
+  const insights = buildInsights(
+    total,
+    allowed,
+    blocked,
+    byHarness,
+    byCategory
+  );
+  const periodComparison7d = computePeriodComparison(receipts, 7);
+  const periodComparison30d = computePeriodComparison(receipts, 30);
+  return {
+    total,
+    allowed,
+    blocked,
+    reviewed,
+    byHarness,
+    byCategory,
+    trendBuckets,
+    topRecurring,
+    insights,
+    lastActivityAt,
+    periodComparison7d,
+    periodComparison30d
+  };
+}
+function buildInsights(total, allowed, blocked, byHarness, byCategory) {
+  const insights = [];
+  insights.push({
+    id: "total",
+    label: "Total actions",
+    value: String(total),
+    tone: "blue"
+  });
+  if (blocked > 0) {
+    insights.push({
+      id: "blocked",
+      label: "Stopped",
+      value: String(blocked),
+      tone: "attention",
+      filterKey: "decision",
+      filterValue: "block"
+    });
+  }
+  if (allowed > 0) {
+    insights.push({
+      id: "allowed",
+      label: "Allowed",
+      value: String(allowed),
+      tone: "green",
+      filterKey: "decision",
+      filterValue: "allow"
+    });
+  }
+  const topHarness = Array.from(byHarness.entries()).sort(
+    (a, b) => b[1].total - a[1].total
+  )[0];
+  if (topHarness) {
+    insights.push({
+      id: "top-app",
+      label: "Most active app",
+      value: harnessDisplayName(topHarness[0]),
+      tone: "purple",
+      filterKey: "harness",
+      filterValue: topHarness[0]
+    });
+  }
+  const topCat = Array.from(byCategory.entries()).sort(
+    (a, b) => b[1].total - a[1].total
+  )[0];
+  if (topCat) {
+    insights.push({
+      id: "top-category",
+      label: "Top category",
+      value: topCat[0],
+      tone: "blue",
+      filterKey: "category",
+      filterValue: topCat[0]
+    });
+  }
+  return insights;
+}
+function computePeriodComparison(receipts, days, now2) {
+  const base = /* @__PURE__ */ new Date();
+  const periodMs = days * 24 * 60 * 60 * 1e3;
+  const currentStart = new Date(base.getTime() - periodMs);
+  const previousStart = new Date(base.getTime() - 2 * periodMs);
+  let currentTotal = 0;
+  let currentBlocked = 0;
+  let previousTotal = 0;
+  let previousBlocked = 0;
+  for (const r of receipts) {
+    try {
+      const ts = new Date(r.timestamp).getTime();
+      if (isNaN(ts)) continue;
+      if (ts >= currentStart.getTime() && ts <= base.getTime()) {
+        currentTotal++;
+        if (r.policy_decision === "block") currentBlocked++;
+      } else if (ts >= previousStart.getTime() && ts < currentStart.getTime()) {
+        previousTotal++;
+        if (r.policy_decision === "block") previousBlocked++;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return {
+    periodDays: days,
+    currentTotal,
+    previousTotal,
+    currentBlocked,
+    previousBlocked,
+    blockedDelta: currentBlocked - previousBlocked,
+    totalDelta: currentTotal - previousTotal
+  };
+}
 const now = "2026-04-11T12:00:00Z";
 const demoRequests = [
   {
@@ -13513,6 +14747,116 @@ async function fetchReceipts() {
   const payload = await readJson("/v1/receipts");
   return normalizeReceipts(payload.items);
 }
+function normalizeReceiptAnalyticsBucket(raw) {
+  if (!isRecord(raw)) return null;
+  const dateKey = raw["date_key"];
+  const label = raw["label"];
+  if (typeof dateKey !== "string" || typeof label !== "string") return null;
+  return {
+    date_key: dateKey,
+    label,
+    allowed: isNonNegativeNumber(raw["allowed"]) ? raw["allowed"] : 0,
+    blocked: isNonNegativeNumber(raw["blocked"]) ? raw["blocked"] : 0,
+    reviewed: isNonNegativeNumber(raw["reviewed"]) ? raw["reviewed"] : 0
+  };
+}
+function normalizeReceiptAnalytics(raw) {
+  if (!isRecord(raw)) return null;
+  const dailyRaw = raw["daily_activity"];
+  const trendRaw = raw["trend_buckets"];
+  const harnessRaw = raw["by_harness"];
+  const artifactRaw = raw["top_artifacts"];
+  const daily_activity = Array.isArray(dailyRaw) ? dailyRaw.map((entry) => {
+    if (!isRecord(entry) || typeof entry["date_key"] !== "string") return null;
+    return {
+      date_key: entry["date_key"],
+      total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0
+    };
+  }).filter((entry) => entry !== null) : [];
+  const trend_buckets = Array.isArray(trendRaw) ? trendRaw.map(normalizeReceiptAnalyticsBucket).filter((entry) => entry !== null) : [];
+  const by_harness = Array.isArray(harnessRaw) ? harnessRaw.map((entry) => {
+    if (!isRecord(entry) || typeof entry["harness"] !== "string") return null;
+    return {
+      harness: entry["harness"],
+      total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
+      allowed: isNonNegativeNumber(entry["allowed"]) ? entry["allowed"] : 0,
+      blocked: isNonNegativeNumber(entry["blocked"]) ? entry["blocked"] : 0
+    };
+  }).filter((entry) => entry !== null) : [];
+  const top_artifacts = Array.isArray(artifactRaw) ? artifactRaw.map((entry) => {
+    if (!isRecord(entry) || typeof entry["name"] !== "string") return null;
+    return {
+      name: entry["name"],
+      total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
+      allowed: isNonNegativeNumber(entry["allowed"]) ? entry["allowed"] : 0,
+      blocked: isNonNegativeNumber(entry["blocked"]) ? entry["blocked"] : 0
+    };
+  }).filter((entry) => entry !== null) : [];
+  return {
+    total: isNonNegativeNumber(raw["total"]) ? raw["total"] : 0,
+    allowed: isNonNegativeNumber(raw["allowed"]) ? raw["allowed"] : 0,
+    blocked: isNonNegativeNumber(raw["blocked"]) ? raw["blocked"] : 0,
+    reviewed: isNonNegativeNumber(raw["reviewed"]) ? raw["reviewed"] : 0,
+    first_activity_at: isStringOrNull(raw["first_activity_at"]) ? raw["first_activity_at"] : null,
+    last_activity_at: isStringOrNull(raw["last_activity_at"]) ? raw["last_activity_at"] : null,
+    active_day_streak: isNonNegativeNumber(raw["active_day_streak"]) ? raw["active_day_streak"] : 0,
+    peak_day_total: isNonNegativeNumber(raw["peak_day_total"]) ? raw["peak_day_total"] : 0,
+    daily_activity,
+    trend_buckets,
+    by_harness,
+    top_artifacts,
+    loaded_sample_limit: isNonNegativeNumber(raw["loaded_sample_limit"]) ? raw["loaded_sample_limit"] : 200
+  };
+}
+function buildReceiptAnalyticsFromSample(receipts) {
+  const allowed = receipts.filter((r) => r.policy_decision === "allow").length;
+  const blocked = receipts.filter((r) => r.policy_decision === "block").length;
+  const reviewed = receipts.length - allowed - blocked;
+  const timestamps = receipts.map((r) => r.timestamp).sort();
+  const trend_buckets = computeTrendBuckets(receipts, 7).map((bucket) => ({
+    date_key: bucket.dateKey,
+    label: bucket.label,
+    allowed: bucket.allowed,
+    blocked: bucket.blocked,
+    reviewed: bucket.reviewed
+  }));
+  const dailyMap = /* @__PURE__ */ new Map();
+  for (const receipt of receipts) {
+    const d = new Date(receipt.timestamp);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    dailyMap.set(key, (dailyMap.get(key) ?? 0) + 1);
+  }
+  const daily_activity = Array.from(dailyMap.entries()).map(([date_key, total]) => ({
+    date_key,
+    total
+  }));
+  return {
+    total: receipts.length,
+    allowed,
+    blocked,
+    reviewed,
+    first_activity_at: timestamps[0] ?? null,
+    last_activity_at: timestamps[timestamps.length - 1] ?? null,
+    active_day_streak: daily_activity.length > 0 ? 1 : 0,
+    peak_day_total: Math.max(...daily_activity.map((entry) => entry.total), 0),
+    daily_activity,
+    trend_buckets,
+    by_harness: [],
+    top_artifacts: [],
+    loaded_sample_limit: receipts.length
+  };
+}
+async function fetchReceiptAnalytics() {
+  if (isGuardDemoMode()) {
+    return buildReceiptAnalyticsFromSample(getDemoReceipts());
+  }
+  const payload = await readJson("/v1/receipts/analytics?activity_days=90&trend_days=7&top_limit=8");
+  const normalized = normalizeReceiptAnalytics(payload);
+  if (!normalized) {
+    throw new Error("Invalid receipt analytics payload");
+  }
+  return normalized;
+}
 async function fetchLatestReceipt(artifactId, harness) {
   if (isGuardDemoMode()) {
     return getDemoReceipts().find((entry) => entry.artifact_id === artifactId) ?? null;
@@ -14220,839 +15564,6 @@ async function runPackageSync() {
   });
   return normalizePackageFirewallAction(response);
 }
-var DefaultContext = {
-  color: void 0,
-  size: void 0,
-  className: void 0,
-  style: void 0,
-  attr: void 0
-};
-var IconContext = React.createContext && /* @__PURE__ */ React.createContext(DefaultContext);
-var _excluded = ["attr", "size", "title"];
-function _objectWithoutProperties(e, t) {
-  if (null == e) return {};
-  var o, r, i = _objectWithoutPropertiesLoose(e, t);
-  if (Object.getOwnPropertySymbols) {
-    var n = Object.getOwnPropertySymbols(e);
-    for (r = 0; r < n.length; r++) o = n[r], -1 === t.indexOf(o) && {}.propertyIsEnumerable.call(e, o) && (i[o] = e[o]);
-  }
-  return i;
-}
-function _objectWithoutPropertiesLoose(r, e) {
-  if (null == r) return {};
-  var t = {};
-  for (var n in r) if ({}.hasOwnProperty.call(r, n)) {
-    if (-1 !== e.indexOf(n)) continue;
-    t[n] = r[n];
-  }
-  return t;
-}
-function _extends() {
-  return _extends = Object.assign ? Object.assign.bind() : function(n) {
-    for (var e = 1; e < arguments.length; e++) {
-      var t = arguments[e];
-      for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]);
-    }
-    return n;
-  }, _extends.apply(null, arguments);
-}
-function ownKeys(e, r) {
-  var t = Object.keys(e);
-  if (Object.getOwnPropertySymbols) {
-    var o = Object.getOwnPropertySymbols(e);
-    r && (o = o.filter(function(r2) {
-      return Object.getOwnPropertyDescriptor(e, r2).enumerable;
-    })), t.push.apply(t, o);
-  }
-  return t;
-}
-function _objectSpread(e) {
-  for (var r = 1; r < arguments.length; r++) {
-    var t = null != arguments[r] ? arguments[r] : {};
-    r % 2 ? ownKeys(Object(t), true).forEach(function(r2) {
-      _defineProperty(e, r2, t[r2]);
-    }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function(r2) {
-      Object.defineProperty(e, r2, Object.getOwnPropertyDescriptor(t, r2));
-    });
-  }
-  return e;
-}
-function _defineProperty(e, r, t) {
-  return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: true, configurable: true, writable: true }) : e[r] = t, e;
-}
-function _toPropertyKey(t) {
-  var i = _toPrimitive(t, "string");
-  return "symbol" == typeof i ? i : i + "";
-}
-function _toPrimitive(t, r) {
-  if ("object" != typeof t || !t) return t;
-  var e = t[Symbol.toPrimitive];
-  if (void 0 !== e) {
-    var i = e.call(t, r);
-    if ("object" != typeof i) return i;
-    throw new TypeError("@@toPrimitive must return a primitive value.");
-  }
-  return ("string" === r ? String : Number)(t);
-}
-function Tree2Element(tree) {
-  return tree && tree.map((node, i) => /* @__PURE__ */ React.createElement(node.tag, _objectSpread({
-    key: i
-  }, node.attr), Tree2Element(node.child)));
-}
-function GenIcon(data) {
-  return (props) => /* @__PURE__ */ React.createElement(IconBase, _extends({
-    attr: _objectSpread({}, data.attr)
-  }, props), Tree2Element(data.child));
-}
-function IconBase(props) {
-  var elem = (conf) => {
-    var {
-      attr,
-      size,
-      title
-    } = props, svgProps = _objectWithoutProperties(props, _excluded);
-    var computedSize = size || conf.size || "1em";
-    var className;
-    if (conf.className) className = conf.className;
-    if (props.className) className = (className ? className + " " : "") + props.className;
-    return /* @__PURE__ */ React.createElement("svg", _extends({
-      stroke: "currentColor",
-      fill: "currentColor",
-      strokeWidth: "0"
-    }, conf.attr, attr, svgProps, {
-      className,
-      style: _objectSpread(_objectSpread({
-        color: props.color || conf.color
-      }, conf.style), props.style),
-      height: computedSize,
-      width: computedSize,
-      xmlns: "http://www.w3.org/2000/svg"
-    }), title && /* @__PURE__ */ React.createElement("title", null, title), props.children);
-  };
-  return IconContext !== void 0 ? /* @__PURE__ */ React.createElement(IconContext.Consumer, null, (conf) => elem(conf)) : elem(DefaultContext);
-}
-function HiFunnel(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiBars3(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniXMark(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" }, "child": [] }] })(props);
-}
-function HiMiniXCircle(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniWrenchScrewdriver(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M14.5 10a4.5 4.5 0 0 0 4.284-5.882c-.105-.324-.51-.391-.752-.15L15.34 6.66a.454.454 0 0 1-.493.11 3.01 3.01 0 0 1-1.618-1.616.455.455 0 0 1 .11-.494l2.694-2.692c.24-.241.174-.647-.15-.752a4.5 4.5 0 0 0-5.873 4.575c.055.873-.128 1.808-.8 2.368l-7.23 6.024a2.724 2.724 0 1 0 3.837 3.837l6.024-7.23c.56-.672 1.495-.855 2.368-.8.096.007.193.01.291.01ZM5 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M14.5 11.5c.173 0 .345-.007.514-.022l3.754 3.754a2.5 2.5 0 0 1-3.536 3.536l-4.41-4.41 2.172-2.607c.052-.063.147-.138.342-.196.202-.06.469-.087.777-.067.128.008.257.012.387.012ZM6 4.586l2.33 2.33a.452.452 0 0 1-.08.09L6.8 8.214 4.586 6H3.309a.5.5 0 0 1-.447-.276l-1.7-3.402a.5.5 0 0 1 .093-.577l.49-.49a.5.5 0 0 1 .577-.094l3.402 1.7A.5.5 0 0 1 6 3.31v1.277Z" }, "child": [] }] })(props);
-}
-function HiMiniTrash(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniTableCells(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M.99 5.24A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25l.01 9.5A2.25 2.25 0 0 1 16.76 17H3.26A2.267 2.267 0 0 1 1 14.74l-.01-9.5Zm8.26 9.52v-.625a.75.75 0 0 0-.75-.75H3.25a.75.75 0 0 0-.75.75v.615c0 .414.336.75.75.75h5.373a.75.75 0 0 0 .627-.74Zm1.5 0a.75.75 0 0 0 .627.74h5.373a.75.75 0 0 0 .75-.75v-.615a.75.75 0 0 0-.75-.75H11.5a.75.75 0 0 0-.75.75v.625Zm6.75-3.63v-.625a.75.75 0 0 0-.75-.75H11.5a.75.75 0 0 0-.75.75v.625c0 .414.336.75.75.75h5.25a.75.75 0 0 0 .75-.75Zm-8.25 0v-.625a.75.75 0 0 0-.75-.75H3.25a.75.75 0 0 0-.75.75v.625c0 .414.336.75.75.75H8.5a.75.75 0 0 0 .75-.75ZM17.5 7.5v-.625a.75.75 0 0 0-.75-.75H11.5a.75.75 0 0 0-.75.75V7.5c0 .414.336.75.75.75h5.25a.75.75 0 0 0 .75-.75Zm-8.25 0v-.625a.75.75 0 0 0-.75-.75H3.25a.75.75 0 0 0-.75.75V7.5c0 .414.336.75.75.75H8.5a.75.75 0 0 0 .75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniSquares2X2(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 2A2.25 2.25 0 0 0 2 4.25v2.5A2.25 2.25 0 0 0 4.25 9h2.5A2.25 2.25 0 0 0 9 6.75v-2.5A2.25 2.25 0 0 0 6.75 2h-2.5Zm0 9A2.25 2.25 0 0 0 2 13.25v2.5A2.25 2.25 0 0 0 4.25 18h2.5A2.25 2.25 0 0 0 9 15.75v-2.5A2.25 2.25 0 0 0 6.75 11h-2.5Zm9-9A2.25 2.25 0 0 0 11 4.25v2.5A2.25 2.25 0 0 0 13.25 9h2.5A2.25 2.25 0 0 0 18 6.75v-2.5A2.25 2.25 0 0 0 15.75 2h-2.5Zm0 9A2.25 2.25 0 0 0 11 13.25v2.5A2.25 2.25 0 0 0 13.25 18h2.5A2.25 2.25 0 0 0 18 15.75v-2.5A2.25 2.25 0 0 0 15.75 11h-2.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniSparkles(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" }, "child": [] }] })(props);
-}
-function HiMiniSignal(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M16.364 3.636a.75.75 0 0 0-1.06 1.06 7.5 7.5 0 0 1 0 10.607.75.75 0 0 0 1.06 1.061 9 9 0 0 0 0-12.728ZM4.697 4.697a.75.75 0 0 0-1.061-1.061 9 9 0 0 0 0 12.728.75.75 0 1 0 1.06-1.06 7.5 7.5 0 0 1 0-10.607Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M12.475 6.464a.75.75 0 0 1 1.06 0 5 5 0 0 1 0 7.072.75.75 0 0 1-1.06-1.061 3.5 3.5 0 0 0 0-4.95.75.75 0 0 1 0-1.06ZM7.525 6.464a.75.75 0 0 1 0 1.061 3.5 3.5 0 0 0 0 4.95.75.75 0 0 1-1.06 1.06 5 5 0 0 1 0-7.07.75.75 0 0 1 1.06 0ZM11 10a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" }, "child": [] }] })(props);
-}
-function HiMiniShieldCheck(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Zm4.196 5.954a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniServerStack(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.464 3.162A2 2 0 0 1 6.28 2h7.44a2 2 0 0 1 1.816 1.162l1.154 2.5c.067.145.115.291.145.438A3.508 3.508 0 0 0 16 6H4c-.288 0-.568.035-.835.1.03-.147.078-.293.145-.438l1.154-2.5Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 9.5a2 2 0 0 1 2-2h12a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2Zm13.24 0a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75h-.01a.75.75 0 0 1-.75-.75V9.5Zm-2.25-.75a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H13a.75.75 0 0 0 .75-.75V9.5a.75.75 0 0 0-.75-.75h-.01ZM2 15a2 2 0 0 1 2-2h12a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2Zm13.24 0a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75h-.01a.75.75 0 0 1-.75-.75V15Zm-2.25-.75a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H13a.75.75 0 0 0 .75-.75V15a.75.75 0 0 0-.75-.75h-.01Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniRocketLaunch(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.606 12.97a.75.75 0 0 1-.134 1.051 2.494 2.494 0 0 0-.93 2.437 2.494 2.494 0 0 0 2.437-.93.75.75 0 1 1 1.186.918 3.995 3.995 0 0 1-4.482 1.332.75.75 0 0 1-.461-.461 3.994 3.994 0 0 1 1.332-4.482.75.75 0 0 1 1.052.134Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.752 12A13.07 13.07 0 0 0 8 14.248v4.002c0 .414.336.75.75.75a5 5 0 0 0 4.797-6.414 12.984 12.984 0 0 0 5.45-10.848.75.75 0 0 0-.735-.735 12.984 12.984 0 0 0-10.849 5.45A5 5 0 0 0 1 11.25c.001.414.337.75.751.75h4.002ZM13 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniQuestionMarkCircle(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 3 3 0 1 1 2.871 5.026v.345a.75.75 0 0 1-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 1 0 8.94 6.94ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniPencilSquare(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" }, "child": [] }] })(props);
-}
-function HiMiniNoSymbol(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniMinusCircle(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM6.75 9.25a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniMagnifyingGlass(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniLockClosed(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniKey(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniInformationCircle(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniInbox(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M1 11.27c0-.246.033-.492.099-.73l1.523-5.521A2.75 2.75 0 0 1 5.273 3h9.454a2.75 2.75 0 0 1 2.651 2.019l1.523 5.52c.066.239.099.485.099.732V15a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-3.73Zm3.068-5.852A1.25 1.25 0 0 1 5.273 4.5h9.454a1.25 1.25 0 0 1 1.205.918l1.523 5.52c.006.02.01.041.015.062H14a1 1 0 0 0-.86.49l-.606 1.02a1 1 0 0 1-.86.49H8.236a1 1 0 0 1-.894-.553l-.448-.894A1 1 0 0 0 6 11H2.53l.015-.062 1.523-5.52Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniHome(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniGlobeAlt(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M16.555 5.412a8.028 8.028 0 0 0-3.503-2.81 14.899 14.899 0 0 1 1.663 4.472 8.547 8.547 0 0 0 1.84-1.662ZM13.326 7.825a13.43 13.43 0 0 0-2.413-5.773 8.087 8.087 0 0 0-1.826 0 13.43 13.43 0 0 0-2.413 5.773A8.473 8.473 0 0 0 10 8.5c1.18 0 2.304-.24 3.326-.675ZM6.514 9.376A9.98 9.98 0 0 0 10 10c1.226 0 2.4-.22 3.486-.624a13.54 13.54 0 0 1-.351 3.759A13.54 13.54 0 0 1 10 13.5c-1.079 0-2.128-.127-3.134-.366a13.538 13.538 0 0 1-.352-3.758ZM5.285 7.074a14.9 14.9 0 0 1 1.663-4.471 8.028 8.028 0 0 0-3.503 2.81c.529.638 1.149 1.199 1.84 1.66ZM17.334 6.798a7.973 7.973 0 0 1 .614 4.115 13.47 13.47 0 0 1-3.178 1.72 15.093 15.093 0 0 0 .174-3.939 10.043 10.043 0 0 0 2.39-1.896ZM2.666 6.798a10.042 10.042 0 0 0 2.39 1.896 15.196 15.196 0 0 0 .174 3.94 13.472 13.472 0 0 1-3.178-1.72 7.973 7.973 0 0 1 .615-4.115ZM10 15c.898 0 1.778-.079 2.633-.23a13.473 13.473 0 0 1-1.72 3.178 8.099 8.099 0 0 1-1.826 0 13.47 13.47 0 0 1-1.72-3.178c.855.151 1.735.23 2.633.23ZM14.357 14.357a14.912 14.912 0 0 1-1.305 3.04 8.027 8.027 0 0 0 4.345-4.345c-.953.542-1.971.981-3.04 1.305ZM6.948 17.397a8.027 8.027 0 0 1-4.345-4.345c.953.542 1.971.981 3.04 1.305a14.912 14.912 0 0 0 1.305 3.04Z" }, "child": [] }] })(props);
-}
-function HiMiniFunnel(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 8 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L2.659 6.22A2.25 2.25 0 0 1 2 4.629V2.34a.75.75 0 0 1 .628-.74Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniEye(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniEyeSlash(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.28 2.22a.75.75 0 0 0-1.06 1.06l14.5 14.5a.75.75 0 1 0 1.06-1.06l-1.745-1.745a10.029 10.029 0 0 0 3.3-4.38 1.651 1.651 0 0 0 0-1.185A10.004 10.004 0 0 0 9.999 3a9.956 9.956 0 0 0-4.744 1.194L3.28 2.22ZM7.752 6.69l1.092 1.092a2.5 2.5 0 0 1 3.374 3.373l1.091 1.092a4 4 0 0 0-5.557-5.557Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "m10.748 13.93 2.523 2.523a9.987 9.987 0 0 1-3.27.547c-4.258 0-7.894-2.66-9.337-6.41a1.651 1.651 0 0 1 0-1.186A10.007 10.007 0 0 1 2.839 6.02L6.07 9.252a4 4 0 0 0 4.678 4.678Z" }, "child": [] }] })(props);
-}
-function HiMiniExclamationTriangle(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniExclamationCircle(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniDocumentText(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniDocumentPlus(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5ZM10 8a.75.75 0 0 1 .75.75v1.5h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5h-1.5a.75.75 0 0 1 0-1.5h1.5v-1.5A.75.75 0 0 1 10 8Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniDocumentMagnifyingGlass(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M8 10a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm5 5a3 3 0 1 0 1.524 5.585l1.196 1.195a.75.75 0 1 0 1.06-1.06l-1.195-1.196A3 3 0 0 0 9.5 7Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCube(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.362 1.093a.75.75 0 0 0-.724 0L2.523 5.018 10 9.143l7.477-4.125-7.115-3.925ZM18 6.443l-7.25 4v8.25l6.862-3.786A.75.75 0 0 0 18 14.25V6.443ZM9.25 18.693v-8.25l-7.25-4v7.807a.75.75 0 0 0 .388.657l6.862 3.786Z" }, "child": [] }] })(props);
-}
-function HiMiniCpuChip(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M14 6H6v8h8V6Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.25 3V1.75a.75.75 0 0 1 1.5 0V3h1.5V1.75a.75.75 0 0 1 1.5 0V3h.5A2.75 2.75 0 0 1 17 5.75v.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v.5A2.75 2.75 0 0 1 14.25 17h-.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-.5A2.75 2.75 0 0 1 3 14.25v-.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-.5A2.75 2.75 0 0 1 5.75 3h.5V1.75a.75.75 0 0 1 1.5 0V3h1.5ZM4.5 5.75c0-.69.56-1.25 1.25-1.25h8.5c.69 0 1.25.56 1.25 1.25v8.5c0 .69-.56 1.25-1.25 1.25h-8.5c-.69 0-1.25-.56-1.25-1.25v-8.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCommandLine(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.25 3A2.25 2.25 0 0 0 1 5.25v9.5A2.25 2.25 0 0 0 3.25 17h13.5A2.25 2.25 0 0 0 19 14.75v-9.5A2.25 2.25 0 0 0 16.75 3H3.25Zm.943 8.752a.75.75 0 0 1 .055-1.06L6.128 9l-1.88-1.693a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 0 1-1.06-.055ZM9.75 10.25a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCog6Tooth(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.992 6.992 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCodeBracket(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.28 5.22a.75.75 0 0 1 0 1.06L2.56 10l3.72 3.72a.75.75 0 0 1-1.06 1.06L.97 10.53a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Zm7.44 0a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 0 1 0-1.06ZM11.377 2.011a.75.75 0 0 1 .612.867l-2.5 14.5a.75.75 0 0 1-1.478-.255l2.5-14.5a.75.75 0 0 1 .866-.612Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCloud(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M1 12.5A4.5 4.5 0 0 0 5.5 17H15a4 4 0 0 0 1.866-7.539 3.504 3.504 0 0 0-4.504-4.272A4.5 4.5 0 0 0 4.06 8.235 4.502 4.502 0 0 0 1 12.5Z" }, "child": [] }] })(props);
-}
-function HiMiniClock(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniClipboard(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M13.887 3.182c.396.037.79.08 1.183.128C16.194 3.45 17 4.414 17 5.517V16.75A2.25 2.25 0 0 1 14.75 19h-9.5A2.25 2.25 0 0 1 3 16.75V5.517c0-1.103.806-2.068 1.93-2.207.393-.048.787-.09 1.183-.128A3.001 3.001 0 0 1 9 1h2c1.373 0 2.531.923 2.887 2.182ZM7.5 4A1.5 1.5 0 0 1 9 2.5h2A1.5 1.5 0 0 1 12.5 4v.5h-5V4Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniClipboardDocument(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.988 3.012A2.25 2.25 0 0 1 18 5.25v6.5A2.25 2.25 0 0 1 15.75 14H13.5v-3.379a3 3 0 0 0-.879-2.121l-3.12-3.121a3 3 0 0 0-1.402-.791 2.252 2.252 0 0 1 1.913-1.576A2.25 2.25 0 0 1 12.25 1h1.5a2.25 2.25 0 0 1 2.238 2.012ZM11.5 3.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.25h-3v-.25Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 6A1.5 1.5 0 0 0 2 7.5v9A1.5 1.5 0 0 0 3.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L8.44 6.439A1.5 1.5 0 0 0 7.378 6H3.5Z" }, "child": [] }] })(props);
-}
-function HiMiniClipboardDocumentCheck(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 5.25a2.25 2.25 0 0 0-2.012-2.238A2.25 2.25 0 0 0 13.75 1h-1.5a2.25 2.25 0 0 0-2.238 2.012c-.875.092-1.6.686-1.884 1.488H11A2.5 2.5 0 0 1 13.5 7v7h2.25A2.25 2.25 0 0 0 18 11.75v-6.5ZM12.25 2.5a.75.75 0 0 0-.75.75v.25h3v-.25a.75.75 0 0 0-.75-.75h-1.5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H3Zm6.874 4.166a.75.75 0 1 0-1.248-.832l-2.493 3.739-.853-.853a.75.75 0 0 0-1.06 1.06l1.5 1.5a.75.75 0 0 0 1.154-.114l3-4.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCircleStack(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1c3.866 0 7 1.79 7 4s-3.134 4-7 4-7-1.79-7-4 3.134-4 7-4Zm5.694 8.13c.464-.264.91-.583 1.306-.952V10c0 2.21-3.134 4-7 4s-7-1.79-7-4V8.178c.396.37.842.688 1.306.953C5.838 10.006 7.854 10.5 10 10.5s4.162-.494 5.694-1.37ZM3 13.179V15c0 2.21 3.134 4 7 4s7-1.79 7-4v-1.822c-.396.37-.842.688-1.306.953-1.532.875-3.548 1.369-5.694 1.369s-4.162-.494-5.694-1.37A7.009 7.009 0 0 1 3 13.179Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniChevronUp(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniChevronRight(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniChevronLeft(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniChevronDown(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCheck(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCheckCircle(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniChartBar(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.5 2A1.5 1.5 0 0 0 14 3.5v13a1.5 1.5 0 0 0 1.5 1.5h1a1.5 1.5 0 0 0 1.5-1.5v-13A1.5 1.5 0 0 0 16.5 2h-1ZM9.5 6A1.5 1.5 0 0 0 8 7.5v9A1.5 1.5 0 0 0 9.5 18h1a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 10.5 6h-1ZM3.5 10A1.5 1.5 0 0 0 2 11.5v5A1.5 1.5 0 0 0 3.5 18h1A1.5 1.5 0 0 0 6 16.5v-5A1.5 1.5 0 0 0 4.5 10h-1Z" }, "child": [] }] })(props);
-}
-function HiMiniBugAnt(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.56 1.14a.75.75 0 0 1 .177 1.045 3.989 3.989 0 0 0-.464.86c.185.17.382.329.59.473A3.993 3.993 0 0 1 10 2c1.272 0 2.405.594 3.137 1.518.208-.144.405-.302.59-.473a3.989 3.989 0 0 0-.464-.86.75.75 0 0 1 1.222-.869c.369.519.65 1.105.822 1.736a.75.75 0 0 1-.174.707 7.03 7.03 0 0 1-1.299 1.098A4 4 0 0 1 14 6c0 .52-.301.963-.723 1.187a6.961 6.961 0 0 1-1.158.486c.13.208.231.436.296.679 1.413-.174 2.779-.5 4.081-.96a19.655 19.655 0 0 0-.09-2.319.75.75 0 1 1 1.493-.146 21.239 21.239 0 0 1 .08 3.028.75.75 0 0 1-.482.667 20.873 20.873 0 0 1-5.153 1.249 2.521 2.521 0 0 1-.107.247 20.945 20.945 0 0 1 5.252 1.257.75.75 0 0 1 .482.74 20.945 20.945 0 0 1-.908 5.107.75.75 0 0 1-1.433-.444c.415-1.34.69-2.743.806-4.191-.495-.173-1-.327-1.512-.46.05.284.076.575.076.873 0 1.814-.517 3.312-1.426 4.37A4.639 4.639 0 0 1 10 19a4.639 4.639 0 0 1-3.574-1.63C5.516 16.311 5 14.813 5 13c0-.298.026-.59.076-.873-.513.133-1.017.287-1.512.46.116 1.448.39 2.85.806 4.191a.75.75 0 1 1-1.433.444 20.94 20.94 0 0 1-.908-5.107.75.75 0 0 1 .482-.74 20.838 20.838 0 0 1 5.252-1.257 2.493 2.493 0 0 1-.107-.247 20.874 20.874 0 0 1-5.153-1.249.75.75 0 0 1-.482-.667 21.342 21.342 0 0 1 .08-3.028.75.75 0 1 1 1.493.146 19.745 19.745 0 0 0-.09 2.319c1.302.46 2.668.786 4.08.96.066-.243.166-.471.297-.679a6.962 6.962 0 0 1-1.158-.486A1.348 1.348 0 0 1 6 6a4 4 0 0 1 .166-1.143 7.032 7.032 0 0 1-1.3-1.098.75.75 0 0 1-.173-.707 5.48 5.48 0 0 1 .822-1.736.75.75 0 0 1 1.046-.177Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniBolt(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M11.983 1.907a.75.75 0 0 0-1.292-.657l-8.5 9.5A.75.75 0 0 0 2.75 12h6.572l-1.305 6.093a.75.75 0 0 0 1.292.657l8.5-9.5A.75.75 0 0 0 17.25 8h-6.572l1.305-6.093Z" }, "child": [] }] })(props);
-}
-function HiMiniBellAlert(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.214 3.227a.75.75 0 0 0-1.156-.955 8.97 8.97 0 0 0-1.856 3.825.75.75 0 0 0 1.466.316 7.47 7.47 0 0 1 1.546-3.186ZM16.942 2.272a.75.75 0 0 0-1.157.955 7.47 7.47 0 0 1 1.547 3.186.75.75 0 0 0 1.466-.316 8.971 8.971 0 0 0-1.856-3.825Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 2a6 6 0 0 0-6 6c0 1.887-.454 3.665-1.257 5.234a.75.75 0 0 0 .515 1.076 32.91 32.91 0 0 0 3.256.508 3.5 3.5 0 0 0 6.972 0 32.903 32.903 0 0 0 3.256-.508.75.75 0 0 0 .515-1.076A11.448 11.448 0 0 1 16 8a6 6 0 0 0-6-6Zm0 14.5a2 2 0 0 1-1.95-1.557 33.54 33.54 0 0 0 3.9 0A2 2 0 0 1 10 16.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniBeaker(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.5 3.528v4.644c0 .729-.29 1.428-.805 1.944l-1.217 1.216a8.75 8.75 0 0 1 3.55.621l.502.201a7.25 7.25 0 0 0 4.178.365l-2.403-2.403a2.75 2.75 0 0 1-.805-1.944V3.528a40.205 40.205 0 0 0-3 0Zm4.5.084.19.015a.75.75 0 1 0 .12-1.495 41.364 41.364 0 0 0-6.62 0 .75.75 0 0 0 .12 1.495L7 3.612v4.56c0 .331-.132.649-.366.883L2.6 13.09c-1.496 1.496-.817 4.15 1.403 4.475C5.961 17.852 7.963 18 10 18s4.039-.148 5.997-.436c2.22-.325 2.9-2.979 1.403-4.475l-4.034-4.034A1.25 1.25 0 0 1 13 8.172v-4.56Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniBarsArrowUp(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h6.365a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .55.24l3.25 3.5a.75.75 0 1 1-1.1 1.02l-1.95-2.1v6.59a.75.75 0 0 1-1.5 0V9.66l-1.95 2.1a.75.75 0 1 1-1.1-1.02l3.25-3.5A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75H7A.75.75 0 0 1 7 12H2.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniBarsArrowDown(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h7.508a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .75.75v6.59l1.95-2.1a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0l-3.25-3.5a.75.75 0 1 1 1.1-1.02l1.95 2.1V7.75A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75h4.562a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniArrowTopRightOnSquare(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniArrowRight(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniArrowPath(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniArrowLeft(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniArrowDownTray(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" }, "child": [] }] })(props);
-}
-function HiMiniArchiveBox(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M2 3a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H2Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 7.5h16l-.811 7.71a2 2 0 0 1-1.99 1.79H4.802a2 2 0 0 1-1.99-1.79L2 7.5ZM7 11a1 1 0 0 1 1-1h4a1 1 0 1 1 0 2H8a1 1 0 0 1-1-1Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniAdjustmentsHorizontal(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 3.75a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM17.25 4.5a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM5 3.75a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5a.75.75 0 0 1 .75.75ZM4.25 17a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM17.25 17a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM9 10a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1 0-1.5h5.5A.75.75 0 0 1 9 10ZM17.25 10.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM14 10a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM10 16.25a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" }, "child": [] }] })(props);
-}
-const EMPTY_QUEUE_TITLE = "No blocked actions";
-const STALE_REQUEST_COPY = "This request was already decided.";
-const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
-const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
-function deriveDataFlowEvidence(item) {
-  const signals = item.decision_v2_json?.signals ?? [];
-  const dataFlowSignals = signals.filter(
-    (s) => s.detector === "data_flow.exfiltration" || s.signal_id.startsWith("data-flow:")
-  );
-  if (dataFlowSignals.length === 0) {
-    return null;
-  }
-  const primary = dataFlowSignals[0];
-  return {
-    signalTitle: primary.title,
-    sourceLabel: "Local secret",
-    sinkLabel: resolveDataFlowSinkLabel(primary),
-    signalId: primary.signal_id,
-    count: dataFlowSignals.length
-  };
-}
-function deriveSkillRiskSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "skill.content");
-}
-function deriveSupplyChainRiskSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "supply-chain.content");
-}
-function deriveEncodedLayerSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter(
-    (s) => s.detector === "safe-decode.content" || s.signal_id.startsWith("encoded.")
-  );
-}
-function resolveDataFlowSinkLabel(signal) {
-  if (signal.category === "network") {
-    return "Network host";
-  }
-  if (signal.signal_id === "data-flow:clipboard-secret") {
-    return "Clipboard";
-  }
-  if (signal.signal_id === "data-flow:world-readable-temp-secret") {
-    return "World-readable temp file";
-  }
-  if (signal.signal_id === "data-flow:git-remote-token") {
-    return "Git remote config";
-  }
-  return "External sink";
-}
-function buildRetryAfterApprovalCopy(item, action) {
-  const harness = harnessDisplayName(item.harness);
-  if (action === "allow") {
-    return `Approved. Return to ${harness} to resume, or it will continue automatically if still running.`;
-  }
-  return `Blocked. Return to ${harness} to continue with a different action, or ask it to try something else.`;
-}
-function resolveEnvelopeDisplayText(envelope) {
-  if (envelope.action_type === "shell_command" && envelope.command !== null) {
-    return envelope.command;
-  }
-  if (envelope.action_type === "prompt" && (envelope.prompt_excerpt !== null || (envelope.prompt_text ?? null) !== null)) {
-    return envelope.prompt_text ?? envelope.prompt_excerpt;
-  }
-  if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
-    return `${envelope.mcp_server} / ${envelope.mcp_tool}`;
-  }
-  if (envelope.tool_name !== null) {
-    return envelope.tool_name;
-  }
-  if (envelope.target_paths.length > 0) {
-    return envelope.target_paths[0];
-  }
-  return envelope.action_type === "harness_start" ? null : envelope.action_type;
-}
-function humanizeList(values) {
-  if (values.length === 0) {
-    return "nothing tracked yet";
-  }
-  if (values.length === 1) {
-    return values[0];
-  }
-  if (values.length === 2) {
-    return `${values[0]} and ${values[1]}`;
-  }
-  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
-}
-function humanizeChangedFields(values) {
-  const translated = values.map((value) => {
-    if (value === "first_seen") {
-      return "this action";
-    }
-    if (value === "args") {
-      return "the command details";
-    }
-    if (value === "command") {
-      return "the command";
-    }
-    if (value === "headers") {
-      return "network details";
-    }
-    if (value === "tool_action_request") {
-      return "the requested action";
-    }
-    return value.replaceAll("_", " ");
-  });
-  return humanizeList(translated);
-}
-function buildPauseLine(item) {
-  if (item.policy_action === "block") {
-    return `${harnessDisplayName(item.harness)} kept this blocked because you already saved a block decision for it.`;
-  }
-  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;
-  }
-  return `${harnessDisplayName(item.harness)} wants to run something that changed since your last saved decision: ${humanizeChangedFields(item.changed_fields)}.`;
-}
-function buildRecommendation(item) {
-  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return "If this is what you expected, approve this retry. Project approval remembers this same action here without trusting new sensitive actions.";
-  }
-  if (item.policy_action === "block") {
-    return "Keep it blocked unless you are sure this action is safe and expected.";
-  }
-  return "Approve the smallest choice that matches what you meant to do. Different commands, prompts, paths, hosts, or tools should ask again.";
-}
-function buildQueueSummary(item) {
-  if (item.policy_action === "block") {
-    return "You already chose to block this action.";
-  }
-  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return "First time HOL Guard has seen this here.";
-  }
-  return `Changed since your last decision: ${humanizeChangedFields(item.changed_fields)}.`;
-}
-function buildMemorySummary(item, receipt) {
-  if (receipt === null) {
-    return `HOL Guard has not saved an earlier approval for ${item.artifact_name}.`;
-  }
-  return `The last saved decision for ${item.artifact_name} was ${receipt.policy_decision}.`;
-}
-function policyActionLabel(action) {
-  switch (action) {
-    case "require-reapproval":
-      return "Needs review";
-    case "block":
-      return "Blocked";
-    case "allow":
-      return "Allowed";
-    default:
-      return action;
-  }
-}
-function artifactTypeLabel(artifactType) {
-  switch (artifactType) {
-    case "mcp_server":
-      return "MCP server";
-    case "extension":
-      return "Extension";
-    case "hook":
-      return "Hook";
-    case "agent":
-      return "Agent";
-    case "command":
-      return "Command";
-    case "tool_action_request":
-      return "Tool action";
-    default:
-      return artifactType.replaceAll("_", " ");
-  }
-}
-function buildStoppedReason(item, receipt) {
-  if (item.policy_action === "block") {
-    const changed = item.changed_fields.length > 0 ? ` ${humanizeChangedFields(item.changed_fields)} also changed.` : "";
-    return `A saved block decision already covers this action, so HOL Guard kept it paused.${changed}`;
-  }
-  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return "HOL Guard has never seen this action in this project folder before, so there is no saved approval for it yet.";
-  }
-  if (receipt !== null) {
-    return `HOL Guard found an earlier ${receipt.policy_decision} decision, but ${humanizeChangedFields(item.changed_fields)} no longer matches what you approved before.`;
-  }
-  return "This action changed after the last known state, so HOL Guard needs a new decision before it can run.";
-}
-function shortConfigPath(path) {
-  const sanitizedPath = path.replace(/\/Users\/[^/\s]+/g, "~");
-  const marker = "/.codex/";
-  const index = sanitizedPath.lastIndexOf(marker);
-  if (index >= 0) {
-    return `...${sanitizedPath.slice(index)}`;
-  }
-  return sanitizedPath;
-}
-function buildTechnicalSummary(_diff, item) {
-  return [["Approval command", item.review_command]];
-}
-function capitalizeHarness(harness) {
-  if (harness.length === 0) {
-    return harness;
-  }
-  return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
-}
-const HARNESS_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
-const HEX_TOKEN_HARNESS_PATTERN = /^[a-f0-9]{16,64}$/;
-const UUID_HARNESS_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
-const NON_APP_HARNESS_SLUGS = /* @__PURE__ */ new Set(["*", "all", "any", "global"]);
-function normalizeHarnessSlug(harness) {
-  const slug = typeof harness === "string" ? harness.trim().toLowerCase() : "";
-  if (slug.length === 0 || NON_APP_HARNESS_SLUGS.has(slug) || HEX_TOKEN_HARNESS_PATTERN.test(slug) || UUID_HARNESS_PATTERN.test(slug) || !HARNESS_SLUG_PATTERN.test(slug)) {
-    return null;
-  }
-  return slug;
-}
-function isDisplayableHarness(harness) {
-  return normalizeHarnessSlug(harness) !== null;
-}
-function resolveDecisionV2Title(item) {
-  const title = item.decision_v2_json?.user_title;
-  return title !== void 0 && title.trim().length > 0 ? title : null;
-}
-function resolveDecisionV2Detail(item) {
-  const detail = item.decision_v2_json?.dashboard_primary_detail;
-  return detail !== void 0 && detail.trim().length > 0 ? detail : null;
-}
-const DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH = 24;
-const DUPLICATE_REVIEW_PREFIX_MIN_LENGTH = 80;
-const DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS = [
-  /\b(api[-_\s]?keys?|credentials?|secrets?|tokens?|passwords?|sensitive|malicious|destructive|unauthorized)\b/i,
-  /\b(expose|exposes|exposed|leak|leaks|leaked|exfiltrate|exfiltrates|exfiltration)\b/i,
-  /\b(may|could|can|would|will)\s+(expose|leak|send|upload|exfiltrate|delete|remove|modify|overwrite|execute|run)\b/i,
-  /\bruns?\s+as\s+(root|admin|administrator)\b/i,
-  /\bsends?\s+(data|contents|files?|credentials?|secrets?|tokens?)\s+to\b/i,
-  /\b(third[-\s]?party|remote|external)\s+host\b/i
-];
-function buildPrimaryReviewAction(item) {
-  return {
-    label: resolveTerminalLabel(item),
-    text: resolvePrimaryReviewText(item),
-    detail: resolveDecisionV2Detail(item) ?? item.trigger_summary ?? null
-  };
-}
-function resolveSecondaryRiskSummary(item) {
-  const summary = item.risk_summary?.trim();
-  if (!summary) {
-    return null;
-  }
-  if (duplicatesStoppedActionText(item, summary)) {
-    return null;
-  }
-  return summary;
-}
-function hasReviewEvidence(item) {
-  return (item.risk_signals?.length ?? 0) > 0 || hasRenderableDecisionEvidence(item) || resolveSecondaryRiskSummary(item) !== null || !!item.why_now;
-}
-function hasRenderableDecisionEvidence(item) {
-  const signals = item.decision_v2_json?.signals ?? [];
-  return signals.some((signal) => signal.category === "skill" || signal.category === "mcp") || deriveDataFlowEvidence(item) !== null || deriveSkillRiskSignals(item).length > 0 || deriveSupplyChainRiskSignals(item).length > 0 || deriveEncodedLayerSignals(item).length > 0 || hasSupplyChainArtifactEvidence(item);
-}
-function hasSupplyChainArtifactEvidence(item) {
-  return item.artifact_type === "supply_chain" || item.artifact_type === "package_request" || typeof item.artifact_type === "string" && item.artifact_type.endsWith("_package");
-}
-function duplicatesStoppedActionText(item, value) {
-  const stoppedActionText = resolveStoppedCommandText(item);
-  const canUseLongPromptPrefix = item.action_envelope_json?.action_type === "prompt" || item.artifact_type === "prompt_request";
-  const stoppedText = normalizeDuplicateReviewText(stoppedActionText);
-  const candidateText = normalizeDuplicateReviewText(value);
-  const contextStrippedValue = stripDuplicateReviewContextPrefix(value);
-  const candidateWithoutContext = contextStrippedValue === null ? "" : normalizeDuplicateReviewText(contextStrippedValue);
-  const candidateRemainder = contextStrippedValue === null ? "" : extractDuplicateReviewRemainder(contextStrippedValue, stoppedActionText);
-  if (stoppedText.length === 0 || candidateText.length === 0) {
-    return false;
-  }
-  if (stoppedText === candidateText || stoppedText === candidateWithoutContext) {
-    return true;
-  }
-  if (stoppedText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH || candidateText.length < DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH) {
-    return false;
-  }
-  if (candidateWithoutContext.length >= DUPLICATE_REVIEW_SUBSTRING_MIN_LENGTH && stoppedText.includes(candidateWithoutContext)) {
-    return true;
-  }
-  if (canUseLongPromptPrefix && stoppedText.length >= DUPLICATE_REVIEW_PREFIX_MIN_LENGTH && candidateWithoutContext.startsWith(stoppedText) && !hasDuplicateReviewSafetyContextRemainder(candidateRemainder)) {
-    return true;
-  }
-  return false;
-}
-function extractDuplicateReviewRemainder(candidateText, stoppedText) {
-  const candidate = candidateText.trim();
-  const stopped = normalizeDuplicateReviewText(stoppedText);
-  if (stopped.length === 0) {
-    return "";
-  }
-  let normalizedPrefix = "";
-  for (let index = 0; index < candidate.length; index += 1) {
-    normalizedPrefix += normalizeDuplicateReviewText(candidate[index]);
-    if (normalizedPrefix.length >= stopped.length) {
-      return normalizedPrefix.startsWith(stopped) ? candidate.slice(index + 1).trim() : "";
-    }
-  }
-  return "";
-}
-function hasDuplicateReviewSafetyContextRemainder(remainder) {
-  return DUPLICATE_REVIEW_SAFETY_CONTEXT_PATTERNS.some((pattern) => pattern.test(remainder));
-}
-function normalizeDuplicateReviewText(value) {
-  return value.toLowerCase().replace(/[`"'\s:.,;!?()[\]{}_\-…]+/g, "").trim();
-}
-function stripDuplicateReviewContextPrefix(value) {
-  const stripped = value.replace(
-    /^\s*(codex|claude|claude code|claudecode|copilot|opencode|gemini)?\s*(prompt|command|tool)\s+for\s+[`"']?[^:`"']+[`"']?\s*:\s*/i,
-    ""
-  );
-  return stripped === value ? null : stripped;
-}
-function primaryReviewActionToggleLabel(isVisible) {
-  return isVisible ? "Hide" : "Show";
-}
-function resolveStoppedCommandText(item) {
-  if (item.action_envelope_json) {
-    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
-    if (envelopeText !== null) {
-      return envelopeText;
-    }
-  }
-  if (item.launch_target?.trim()) {
-    return item.launch_target;
-  }
-  if (item.launch_summary?.trim()) {
-    const commandMatch = item.launch_summary.match(/`([^`]+)`/);
-    if (commandMatch?.[1]) {
-      return commandMatch[1];
-    }
-    return item.launch_summary;
-  }
-  return item.artifact_name.trim() || item.artifact_id;
-}
-function resolvePrimaryReviewText(item) {
-  const baseText = resolveStoppedCommandText(item);
-  const envelope = item.action_envelope_json;
-  if (envelope?.action_type !== "mcp_tool") {
-    return baseText;
-  }
-  const inputSummary = serializeMcpInput(envelope.raw_payload_redacted);
-  if (inputSummary === null) {
-    return baseText;
-  }
-  return `${baseText}
-
-Input:
-${inputSummary}`;
-}
-function serializeMcpInput(payload) {
-  const input = payload.arguments ?? payload.input ?? payload.params ?? null;
-  if (input === null || input === void 0) {
-    return null;
-  }
-  try {
-    const serialized = typeof input === "string" ? input : JSON.stringify(input, null, 2);
-    if (serialized === void 0 || serialized.trim().length === 0 || serialized === "{}") {
-      return null;
-    }
-    return serialized.length > 4e3 ? `${serialized.slice(0, 4e3)}...` : serialized;
-  } catch {
-    return null;
-  }
-}
-function harnessDisplayName(harness) {
-  if (typeof harness !== "string") {
-    return "Unknown app";
-  }
-  const normalized = normalizeHarnessSlug(harness);
-  if (normalized === null) {
-    switch (harness.trim().toLowerCase()) {
-      case "*":
-      case "all":
-      case "any":
-      case "global":
-        return "All apps";
-      default:
-        return "Unknown app";
-    }
-  }
-  switch (normalized) {
-    case "claude-code":
-      return "Claude Code";
-    case "copilot":
-      return "Copilot";
-    case "codex":
-      return "Codex";
-    case "opencode":
-      return "OpenCode";
-    case "gemini":
-      return "Gemini";
-    case "cursor":
-      return "Cursor";
-    case "hermes":
-      return "Hermes";
-    case "openclaw":
-      return "OpenClaw";
-    default:
-      return capitalizeHarness(normalized);
-  }
-}
-function displayArtifactName(item) {
-  return item.artifact_name || item.artifact_id || "this action";
-}
-function formatNumber(n) {
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K`;
-  return String(n);
-}
-function formatRelativeTime(timestamp) {
-  try {
-    const date = new Date(timestamp);
-    const now2 = /* @__PURE__ */ new Date();
-    const diffMs = now2.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 6e4);
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) {
-      return `Yesterday at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-    }
-    if (diffDays < 7) {
-      return `${date.toLocaleDateString([], { weekday: "long" })} at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-    }
-    return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-  } catch {
-    return timestamp;
-  }
-}
-function resolveFileReadPath(item) {
-  const actionType = item.action_envelope_json?.action_type;
-  const isFileRead = actionType === "file_read" || actionType === "file_write" || item.artifact_type === "file_read_request";
-  if (!isFileRead) return null;
-  const paths = item.action_envelope_json?.target_paths ?? [];
-  if (paths.length > 0) return paths[0];
-  return item.launch_target ?? null;
-}
-function buildApprovalSharePath(item) {
-  const requestId = item.request_id?.trim();
-  if (requestId) {
-    return `/requests/${requestId}`;
-  }
-  const stored = item.approval_url?.trim();
-  if (!stored) {
-    return null;
-  }
-  try {
-    const parsed = new URL(stored, "http://guard.local");
-    parsed.pathname = parsed.pathname.replace("/approvals/", "/requests/");
-    return `${parsed.pathname}${parsed.search}`;
-  } catch {
-    return stored.replace("/approvals/", "/requests/");
-  }
-}
-function resolveApprovalShareUrl(item) {
-  const requestId = item.request_id?.trim();
-  const stored = item.approval_url?.trim();
-  let absolute = null;
-  if (stored) {
-    absolute = stored.replace("/approvals/", "/requests/");
-    if (requestId) {
-      absolute = absolute.replace(/\/(?:approvals|requests)\/[^/?#]+/, `/requests/${requestId}`);
-    }
-  } else if (requestId && typeof window !== "undefined") {
-    absolute = `${window.location.origin}/requests/${requestId}`;
-  }
-  if (absolute === null) {
-    const path = buildApprovalSharePath(item);
-    if (path === null) {
-      return null;
-    }
-    if (typeof window === "undefined") {
-      return path;
-    }
-    absolute = `${window.location.origin}${path}`;
-  }
-  if (typeof window === "undefined") {
-    return absolute;
-  }
-  return guardAwareHref(absolute);
-}
-function resolveTerminalLabel(item) {
-  const actionType = item.action_envelope_json?.action_type;
-  if (actionType === "shell_command") return "Command";
-  if (actionType === "prompt") return "Prompt excerpt";
-  if (actionType === "file_read" || actionType === "file_write") return "File path";
-  if (actionType === "mcp_tool") return "MCP server / tool";
-  if (actionType === "package_script") return "Package";
-  if (actionType === "network_request") return "Network destination";
-  if (item.artifact_type === "file_read_request") return "File path";
-  if (item.artifact_type === "prompt_request") return "Prompt excerpt";
-  if (item.artifact_type === "tool_action_request") return "Tool action";
-  return "Stopped command";
-}
-function isCodexHarness(harness) {
-  return normalizeHarnessSlug(harness) === "codex";
-}
-function buildCodexResumeUx(resume) {
-  if (resume.status === "pending" || resume.status === "in_progress") {
-    return {
-      headline: "Codex is continuing.",
-      body: resume.message ?? "HOL Guard saved your choice and the original Codex action is still waiting for it.",
-      showRetry: false
-    };
-  }
-  if (resume.status === "sent" || resume.status === "already_sent") {
-    if (resume.strategy === "codex-headless-exec" || resume.reason === "headless_resume_started") {
-      return {
-        headline: "Codex resumed in background.",
-        body: resume.message ?? "HOL Guard started a background Codex resume. This open Codex App chat may not visibly continue until Codex remote control is enabled.",
-        showRetry: false
-      };
-    }
-    return {
-      headline: "Codex chat notified.",
-      body: resume.message ?? "HOL Guard sent Codex a continuation message in the original chat.",
-      showRetry: false
-    };
-  }
-  if (resume.status === "failed") {
-    return {
-      headline: "Guard could not message the Codex chat.",
-      body: resume.message ?? resume.last_error ?? resume.reason ?? "Continuation message failed.",
-      showRetry: true
-    };
-  }
-  return {
-    headline: "Guard could not locate the Codex chat.",
-    body: resume.message ?? "Return to Codex and retry the same request.",
-    showRetry: false
-  };
-}
 const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 12e4;
@@ -15750,198 +16261,6 @@ function DecodedLayerCard(props) {
     }
   );
 }
-const CATEGORIES = [
-  {
-    key: "secret",
-    label: "Secret read",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-attention",
-    description: "Reading files that contain passwords or keys"
-  },
-  {
-    key: "network",
-    label: "Network",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniGlobeAlt, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-blue",
-    description: "Connecting to websites or external services"
-  },
-  {
-    key: "destructive",
-    label: "Destructive",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-purple",
-    description: "Commands that delete or overwrite files"
-  },
-  {
-    key: "hidden",
-    label: "Hidden script",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEyeSlash, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-attention",
-    description: "Encoded or obfuscated code"
-  },
-  {
-    key: "file-write",
-    label: "File write",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-green",
-    description: "Writing or modifying files"
-  },
-  {
-    key: "mcp",
-    label: "MCP tool",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCpuChip, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-blue",
-    description: "Using a Model Context Protocol tool server"
-  },
-  {
-    key: "skill",
-    label: "Skill / plugin",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBolt, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-purple",
-    description: "Running an AI skill or browser extension"
-  },
-  {
-    key: "supply-chain",
-    label: "Supply chain",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArchiveBox, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-attention",
-    description: "Installing or running a package or script"
-  },
-  {
-    key: "data",
-    label: "Data access",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTableCells, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-blue",
-    description: "Reading from or writing to a database"
-  },
-  {
-    key: "tool-call",
-    label: "Tool call",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-brand-blue",
-    description: "Using external tools or MCP servers"
-  },
-  {
-    key: "other",
-    label: "Other",
-    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-5 w-5", "aria-hidden": "true" }),
-    color: "text-slate-500",
-    description: "Other actions"
-  }
-];
-const SECRET_PATTERNS = [
-  /\.env/i,
-  /\.env\.local/i,
-  /\.env\.production/i,
-  /\.npmrc/i,
-  /\.netrc/i,
-  /id_rsa/i,
-  /id_ed25519/i,
-  /\.aws\/credentials/i,
-  /\.docker\/config\.json/i,
-  /secret/i,
-  /password/i,
-  /token/i,
-  /key/i,
-  /credential/i,
-  /private/i
-];
-const NETWORK_PATTERNS = [
-  /curl\s/i,
-  /wget\s/i,
-  /fetch\s/i,
-  /http/i,
-  /api\./i,
-  /\.com/i,
-  /\.org/i,
-  /\.net/i
-];
-const DESTRUCTIVE_PATTERNS = [
-  /rm\s+-rf/i,
-  /rm\s+-r/i,
-  /rmdir/i,
-  /truncate/i,
-  /dd\s+if=/i,
-  />\s*\//i,
-  /mv\s+.*\s+.*\/dev\/null/i
-];
-const HIDDEN_PATTERNS = [
-  /base64/i,
-  /eval\s*\(/i,
-  /decode/i,
-  /encoded/i,
-  /obfusc/i,
-  /encrypted.*script/i
-];
-const MCP_PATTERNS = [
-  /mcp_tool/i,
-  /mcp[._-]/i,
-  /\bmcp\b/i
-];
-const SKILL_PATTERNS = [
-  /\bskill\b/i,
-  /\bplugin\b/i,
-  /\bextension\b/i
-];
-const SUPPLY_CHAIN_PATTERNS = [
-  /package_script/i,
-  /\bnpm\s/i,
-  /\bpip\s/i,
-  /supply.?chain/i,
-  /requirements\.txt/i,
-  /pyproject\.toml/i
-];
-const TOOL_PATTERNS = [
-  /tool_call/i,
-  /tool\./i
-];
-const DATA_PATTERNS = [
-  /\bdatabase\b/i,
-  /\bsqlite\b/i,
-  /\bpostgres\b/i,
-  /\bmysql\b/i,
-  /\bmongo\b/i,
-  /\bquery\b/i
-];
-const FILE_WRITE_PATTERNS = [
-  /write.*file/i,
-  /file.*write/i,
-  /writes.*to.*disk/i,
-  /\bwrite_file\b/i,
-  /\bfile_write\b/i,
-  /\bcreate_file\b/i,
-  /saves.*to.*disk/i
-];
-function detectCategory(receipt) {
-  const name = (receipt.artifact_name ?? receipt.artifact_id ?? "").toLowerCase();
-  const summary = (receipt.capabilities_summary ?? "").toLowerCase();
-  const artifactType = (receipt.artifact_type ?? "").toLowerCase();
-  const text = `${name} ${summary} ${artifactType}`;
-  if (SECRET_PATTERNS.some((p) => p.test(text))) return "secret";
-  if (DESTRUCTIVE_PATTERNS.some((p) => p.test(text))) return "destructive";
-  if (HIDDEN_PATTERNS.some((p) => p.test(text))) return "hidden";
-  if (artifactType === "mcp_tool" || MCP_PATTERNS.some((p) => p.test(text))) return "mcp";
-  if (SKILL_PATTERNS.some((p) => p.test(text))) return "skill";
-  if (artifactType === "package_script" || SUPPLY_CHAIN_PATTERNS.some((p) => p.test(text))) return "supply-chain";
-  if (NETWORK_PATTERNS.some((p) => p.test(text))) return "network";
-  if (TOOL_PATTERNS.some((p) => p.test(text))) return "tool-call";
-  if (artifactType.includes("file_write") || artifactType.includes("write") || FILE_WRITE_PATTERNS.some((p) => p.test(text))) return "file-write";
-  if (DATA_PATTERNS.some((p) => p.test(text))) return "data";
-  if (artifactType.includes("file_read") || artifactType.includes("read")) return "other";
-  return "other";
-}
-function getCategoryInfo(key) {
-  return CATEGORIES.find((c) => c.key === key) ?? CATEGORIES[CATEGORIES.length - 1];
-}
-function groupByCategory(receipts) {
-  const map = /* @__PURE__ */ new Map();
-  for (const receipt of receipts) {
-    const cat = detectCategory(receipt);
-    if (!map.has(cat)) map.set(cat, []);
-    map.get(cat).push(receipt);
-  }
-  return map;
-}
 function filterByTime(receipts, time, day, now2) {
   const base = /* @__PURE__ */ new Date();
   const startOfToday = new Date(base.getFullYear(), base.getMonth(), base.getDate());
@@ -16066,209 +16385,6 @@ function sortEvidence(receipts, key) {
     return copy;
   }
   return copy;
-}
-function formatDateKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-function shortDateLabel(date) {
-  return date.toLocaleDateString(void 0, { month: "short", day: "numeric" });
-}
-function computeTrendBuckets(receipts, days, now2) {
-  const base = /* @__PURE__ */ new Date();
-  const startOfToday = new Date(
-    base.getFullYear(),
-    base.getMonth(),
-    base.getDate()
-  );
-  const buckets = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(startOfToday);
-    d.setDate(d.getDate() - i);
-    buckets.push({
-      label: shortDateLabel(d),
-      dateKey: formatDateKey(d),
-      allowed: 0,
-      blocked: 0,
-      reviewed: 0
-    });
-  }
-  const bucketMap = new Map(buckets.map((b) => [b.dateKey, b]));
-  for (const r of receipts) {
-    try {
-      const d = new Date(r.timestamp);
-      const key = formatDateKey(d);
-      const bucket = bucketMap.get(key);
-      if (!bucket) continue;
-      if (r.policy_decision === "allow") bucket.allowed++;
-      else if (r.policy_decision === "block") bucket.blocked++;
-      else bucket.reviewed++;
-    } catch {
-    }
-  }
-  return buckets;
-}
-function computeMetrics(receipts, now2) {
-  let allowed = 0;
-  let blocked = 0;
-  let reviewed = 0;
-  let lastActivityAt = null;
-  const byHarness = /* @__PURE__ */ new Map();
-  const byCategory = /* @__PURE__ */ new Map();
-  const recurringMap = /* @__PURE__ */ new Map();
-  for (const r of receipts) {
-    try {
-      new Date(r.timestamp).toISOString();
-    } catch {
-      continue;
-    }
-    if (r.policy_decision === "allow") allowed++;
-    else if (r.policy_decision === "block") blocked++;
-    else reviewed++;
-    if (!lastActivityAt || r.timestamp > lastActivityAt) {
-      lastActivityAt = r.timestamp;
-    }
-    const harness = r.harness;
-    const hEntry = byHarness.get(harness) ?? {
-      total: 0,
-      blocked: 0,
-      allowed: 0
-    };
-    hEntry.total++;
-    if (r.policy_decision === "block") hEntry.blocked++;
-    if (r.policy_decision === "allow") hEntry.allowed++;
-    byHarness.set(harness, hEntry);
-    const cat = detectCategory(r);
-    const cEntry = byCategory.get(cat) ?? { total: 0, blocked: 0 };
-    cEntry.total++;
-    if (r.policy_decision === "block") cEntry.blocked++;
-    byCategory.set(cat, cEntry);
-    const name = r.artifact_name ?? r.artifact_id;
-    const rEntry = recurringMap.get(name) ?? {
-      total: 0,
-      blocked: 0,
-      allowed: 0
-    };
-    rEntry.total++;
-    if (r.policy_decision === "block") rEntry.blocked++;
-    if (r.policy_decision === "allow") rEntry.allowed++;
-    recurringMap.set(name, rEntry);
-  }
-  const total = allowed + blocked + reviewed;
-  const topRecurring = Array.from(recurringMap.entries()).map(([name, counts]) => ({ name, ...counts })).sort((a, b) => b.total - a.total).slice(0, 10);
-  const trendBuckets = computeTrendBuckets(receipts, 7);
-  const insights = buildInsights(
-    total,
-    allowed,
-    blocked,
-    byHarness,
-    byCategory
-  );
-  const periodComparison7d = computePeriodComparison(receipts, 7);
-  const periodComparison30d = computePeriodComparison(receipts, 30);
-  return {
-    total,
-    allowed,
-    blocked,
-    reviewed,
-    byHarness,
-    byCategory,
-    trendBuckets,
-    topRecurring,
-    insights,
-    lastActivityAt,
-    periodComparison7d,
-    periodComparison30d
-  };
-}
-function buildInsights(total, allowed, blocked, byHarness, byCategory) {
-  const insights = [];
-  insights.push({
-    id: "total",
-    label: "Total actions",
-    value: String(total),
-    tone: "blue"
-  });
-  if (blocked > 0) {
-    insights.push({
-      id: "blocked",
-      label: "Stopped",
-      value: String(blocked),
-      tone: "attention",
-      filterKey: "decision",
-      filterValue: "block"
-    });
-  }
-  if (allowed > 0) {
-    insights.push({
-      id: "allowed",
-      label: "Allowed",
-      value: String(allowed),
-      tone: "green",
-      filterKey: "decision",
-      filterValue: "allow"
-    });
-  }
-  const topHarness = Array.from(byHarness.entries()).sort(
-    (a, b) => b[1].total - a[1].total
-  )[0];
-  if (topHarness) {
-    insights.push({
-      id: "top-app",
-      label: "Most active app",
-      value: harnessDisplayName(topHarness[0]),
-      tone: "purple",
-      filterKey: "harness",
-      filterValue: topHarness[0]
-    });
-  }
-  const topCat = Array.from(byCategory.entries()).sort(
-    (a, b) => b[1].total - a[1].total
-  )[0];
-  if (topCat) {
-    insights.push({
-      id: "top-category",
-      label: "Top category",
-      value: topCat[0],
-      tone: "blue",
-      filterKey: "category",
-      filterValue: topCat[0]
-    });
-  }
-  return insights;
-}
-function computePeriodComparison(receipts, days, now2) {
-  const base = /* @__PURE__ */ new Date();
-  const periodMs = days * 24 * 60 * 60 * 1e3;
-  const currentStart = new Date(base.getTime() - periodMs);
-  const previousStart = new Date(base.getTime() - 2 * periodMs);
-  let currentTotal = 0;
-  let currentBlocked = 0;
-  let previousTotal = 0;
-  let previousBlocked = 0;
-  for (const r of receipts) {
-    try {
-      const ts = new Date(r.timestamp).getTime();
-      if (isNaN(ts)) continue;
-      if (ts >= currentStart.getTime() && ts <= base.getTime()) {
-        currentTotal++;
-        if (r.policy_decision === "block") currentBlocked++;
-      } else if (ts >= previousStart.getTime() && ts < currentStart.getTime()) {
-        previousTotal++;
-        if (r.policy_decision === "block") previousBlocked++;
-      }
-    } catch {
-      continue;
-    }
-  }
-  return {
-    periodDays: days,
-    currentTotal,
-    previousTotal,
-    currentBlocked,
-    previousBlocked,
-    blockedDelta: currentBlocked - previousBlocked,
-    totalDelta: currentTotal - previousTotal
-  };
 }
 const DEFAULT_FILTER_STATE = {
   search: "",
@@ -17566,170 +17682,188 @@ function EvidenceInsightStrip({ metrics }) {
     }
   );
 }
-function AppBreakdownCard({
-  harness,
-  total,
-  blocked,
-  allowed,
-  maxTotal,
-  onFilter
+function intensityClass(total, peak) {
+  if (total <= 0) return "bg-slate-100/80";
+  const ratio = peak > 0 ? total / peak : 0;
+  if (ratio >= 0.75) return "bg-amber-600 hover:bg-amber-700";
+  if (ratio >= 0.4) return "bg-amber-400 hover:bg-amber-500";
+  if (ratio >= 0.15) return "bg-amber-200 hover:bg-amber-300";
+  return "bg-amber-100 hover:bg-amber-200";
+}
+function buildWeekColumns(days) {
+  if (days.length === 0) return [];
+  const first = /* @__PURE__ */ new Date(`${days[0].date_key}T12:00:00`);
+  const startPad = first.getDay();
+  const cells = [
+    ...Array.from({ length: startPad }, () => null),
+    ...days.map((day) => ({ date_key: day.date_key, total: day.total }))
+  ];
+  const weeks = [];
+  for (let index = 0; index < cells.length; index += 7) {
+    const column = cells.slice(index, index + 7);
+    while (column.length < 7) {
+      column.push(null);
+    }
+    weeks.push(column);
+  }
+  return weeks;
+}
+function monthLabels(weeks) {
+  const labels = [];
+  let lastMonth = -1;
+  for (const week of weeks) {
+    const firstDay = week.find((cell) => cell !== null);
+    if (!firstDay) {
+      labels.push("");
+      continue;
+    }
+    const month = (/* @__PURE__ */ new Date(`${firstDay.date_key}T12:00:00`)).getMonth();
+    if (month !== lastMonth) {
+      labels.push((/* @__PURE__ */ new Date(`${firstDay.date_key}T12:00:00`)).toLocaleDateString(void 0, { month: "short" }));
+      lastMonth = month;
+    } else {
+      labels.push("");
+    }
+  }
+  return labels;
+}
+function EvidenceActivityHeatmap({
+  days,
+  onSelectDay
 }) {
-  const pct = maxTotal > 0 ? total / maxTotal * 100 : 0;
-  const handleClick = reactExports.useCallback(() => onFilter(harness), [harness, onFilter]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      onClick: handleClick,
-      className: "w-full rounded-2xl border border-slate-100 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-200",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: harnessDisplayName(harness) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
-            total,
-            " actions"
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+  const peak = reactExports.useMemo(() => Math.max(...days.map((day) => day.total), 0), [days]);
+  const weeks = reactExports.useMemo(() => buildWeekColumns(days), [days]);
+  const labels = reactExports.useMemo(() => monthLabels(weeks), [weeks]);
+  const weekDays = ["S", "M", "T", "W", "T", "F", "S"];
+  if (days.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400 py-8 text-center", children: "No activity in this period." });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto pb-1", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "inline-flex min-w-full flex-col gap-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 pl-7", children: labels.map((label, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-3 text-[10px] font-medium text-slate-400", children: label }, `label-${index}`)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-1 pt-0.5", children: weekDays.map((day, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           "div",
           {
-            className: "bg-brand-blue h-2 rounded-full transition-all",
-            style: { width: `${pct}%` }
+            className: "flex h-3 w-4 items-center justify-end text-[10px] text-slate-400",
+            "aria-hidden": index % 2 === 1,
+            children: index % 2 === 0 ? day : ""
+          },
+          day + index
+        )) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1", children: weeks.map((week, weekIndex) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-1", children: week.map((cell, dayIndex) => {
+          if (!cell) {
+            return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-3 w-3 rounded-sm" }, `empty-${weekIndex}-${dayIndex}`);
           }
-        ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 text-[11px] text-slate-500", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-emerald-600", children: [
-            allowed,
-            " allowed"
-          ] }),
-          blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-amber-600", children: [
-            blocked,
-            " stopped"
-          ] })
-        ] })
-      ]
-    }
-  );
-}
-function CategoryBreakdownCard({
-  categoryKey,
-  total,
-  blocked,
-  maxTotal,
-  onFilter
-}) {
-  const pct = maxTotal > 0 ? total / maxTotal * 100 : 0;
-  const catInfo = getCategoryInfo(categoryKey);
-  const handleClick = reactExports.useCallback(() => onFilter(categoryKey), [categoryKey, onFilter]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      onClick: handleClick,
-      className: "w-full rounded-2xl border border-slate-100 bg-white p-4 text-left transition-all hover:shadow-md hover:border-slate-200",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 mb-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: catInfo.label }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
-            total,
-            " actions"
-          ] }) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "div",
-          {
-            className: "bg-purple-500 h-2 rounded-full transition-all",
-            style: { width: `${pct}%` }
-          }
-        ) }),
-        blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-amber-600", children: [
-          blocked,
-          " stopped"
-        ] })
-      ]
-    }
-  );
-}
-function StatCard({
-  label,
-  value,
-  subtext,
-  tone
-}) {
-  const toneColor = tone === "blue" ? "text-brand-blue" : tone === "green" ? "text-emerald-600" : tone === "amber" ? "text-amber-600" : tone === "purple" ? "text-brand-purple" : "text-slate-600";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-3xl font-bold tabular-nums tracking-tight ${toneColor}`, children: value }),
-    subtext && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: subtext })
+          const label = (/* @__PURE__ */ new Date(`${cell.date_key}T12:00:00`)).toLocaleDateString(void 0, {
+            month: "short",
+            day: "numeric"
+          });
+          return /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: cell.total <= 0,
+              onClick: () => cell.total > 0 && onSelectDay?.(cell.date_key),
+              className: `h-3 w-3 rounded-sm transition-colors ${intensityClass(cell.total, peak)} ${cell.total > 0 ? "cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-blue" : "cursor-default"}`,
+              "aria-label": `${label}: ${cell.total} actions`,
+              title: `${label}: ${cell.total} actions`
+            },
+            cell.date_key
+          );
+        }) }, `week-${weekIndex}`)) })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3 text-[10px] text-slate-500", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Less" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-slate-100/80" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-amber-100" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-amber-200" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-amber-400" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-3 w-3 rounded-sm bg-amber-600" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "More" })
+    ] })
   ] });
 }
+function formatCount(value) {
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 1e4) return `${Math.round(value / 1e3)}K`;
+  if (value >= 1e3) return value.toLocaleString();
+  return String(value);
+}
+function formatDurationSince(iso) {
+  if (!iso) return "No activity yet";
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return "Recently";
+  const days = Math.max(0, Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1e3)));
+  if (days === 0) return "Today";
+  if (days === 1) return "1 day ago";
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? "1 month ago" : `${months} months ago`;
+}
+function SummaryRibbon({ analytics }) {
+  const stopRate = analytics.total > 0 ? Math.round(analytics.blocked / analytics.total * 100) : 0;
+  const items = [
+    { label: "Lifetime actions", value: formatCount(analytics.total) },
+    { label: "Stopped", value: formatCount(analytics.blocked), detail: `${stopRate}% of total` },
+    { label: "Allowed", value: formatCount(analytics.allowed) },
+    { label: "Current streak", value: `${analytics.active_day_streak} day${analytics.active_day_streak === 1 ? "" : "s"}` },
+    { label: "Peak day", value: formatCount(analytics.peak_day_total) }
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-100", children: items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-4 sm:py-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500", children: item.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-2xl font-semibold tabular-nums tracking-tight text-brand-dark", children: item.value }),
+    item.detail && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-500", children: item.detail })
+  ] }, item.label)) }) });
+}
 function TrendChart({ buckets }) {
-  const [hoveredBucket, setHoveredBucket] = reactExports.useState(null);
-  const maxTotal = Math.max(...buckets.map((b) => b.allowed + b.blocked + b.reviewed), 1);
-  const hasAnyData = buckets.some((b) => b.allowed + b.blocked + b.reviewed > 0);
+  const [hoveredKey, setHoveredKey] = reactExports.useState(null);
+  const maxTotal = Math.max(...buckets.map((bucket) => bucket.allowed + bucket.blocked + bucket.reviewed), 1);
+  const chartHeight = 160;
+  const hasAnyData = buckets.some((bucket) => bucket.allowed + bucket.blocked + bucket.reviewed > 0);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "7-Day Activity" }),
-    !hasAnyData ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col items-center justify-center h-40 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "No activity in the last 7 days" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 h-44 mt-4", children: buckets.map((bucket) => {
-        const total = bucket.allowed + bucket.blocked + bucket.reviewed;
-        const heightPct = maxTotal > 0 ? Math.max(total / maxTotal * 100, 6) : 0;
-        const blockedPct = total > 0 ? bucket.blocked / total * 100 : 0;
-        const allowedPct = total > 0 ? bucket.allowed / total * 100 : 0;
-        const reviewedPct = total > 0 ? bucket.reviewed / total * 100 : 0;
-        const isHovered = hoveredBucket === bucket.dateKey;
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "div",
-          {
-            className: "relative flex-1 flex flex-col justify-end gap-1 min-w-0",
-            onMouseEnter: () => setHoveredBucket(bucket.dateKey),
-            onMouseLeave: () => setHoveredBucket(null),
-            children: [
-              total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold text-brand-dark tabular-nums text-center", children: total }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "div",
-                {
-                  className: `relative w-full flex-1 flex items-end rounded-lg overflow-hidden ${total > 0 ? "bg-slate-100/60 ring-1 ring-inset ring-slate-200" : "bg-slate-50 ring-1 ring-inset ring-slate-200"}`,
-                  children: [
-                    total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full flex flex-col-reverse rounded-lg overflow-hidden", style: { height: `${heightPct}%` }, children: [
-                      bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                        "div",
-                        {
-                          className: "w-full bg-amber-500 transition-all",
-                          style: { height: `${Math.max(blockedPct, 4)}%` },
-                          "aria-label": `${bucket.blocked} stopped`
-                        }
-                      ),
-                      bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                        "div",
-                        {
-                          className: "w-full bg-emerald-500 transition-all",
-                          style: { height: `${Math.max(allowedPct, 4)}%` },
-                          "aria-label": `${bucket.allowed} allowed`
-                        }
-                      ),
-                      bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                        "div",
-                        {
-                          className: "w-full bg-brand-blue transition-all",
-                          style: { height: `${Math.max(reviewedPct, 4)}%` },
-                          "aria-label": `${bucket.reviewed} reviewed`
-                        }
-                      )
-                    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full h-full" }),
-                    isHovered && total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute inset-0 flex items-center justify-center bg-black/5" })
-                  ]
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] text-slate-500 truncate w-full text-center font-medium", children: bucket.label }),
-              isHovered && total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "div",
-                {
-                  className: "absolute z-10 bg-brand-dark text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap mb-2",
-                  style: { bottom: "100%", left: "50%", transform: "translateX(-50%)" },
-                  children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last 7 Days" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Stacked by decision: allowed, stopped, and reviewed." }),
+    !hasAnyData ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-40 items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "No activity in the last 7 days" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          className: "mt-5 flex items-end gap-2",
+          style: { height: chartHeight },
+          role: "img",
+          "aria-label": "Seven day activity chart",
+          children: buckets.map((bucket) => {
+            const total = bucket.allowed + bucket.blocked + bucket.reviewed;
+            const barHeight = total > 0 ? Math.max(Math.round(total / maxTotal * chartHeight), 6) : 0;
+            const blockedHeight = total > 0 ? Math.round(bucket.blocked / total * barHeight) : 0;
+            const allowedHeight = total > 0 ? Math.round(bucket.allowed / total * barHeight) : 0;
+            const reviewedHeight = Math.max(barHeight - blockedHeight - allowedHeight, 0);
+            const isHovered = hoveredKey === bucket.date_key;
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "div",
+              {
+                className: "relative flex min-w-0 flex-1 flex-col items-center justify-end",
+                onMouseEnter: () => setHoveredKey(bucket.date_key),
+                onMouseLeave: () => setHoveredKey(null),
+                children: [
+                  total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 text-[10px] font-semibold tabular-nums text-brand-dark", children: total }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex w-full flex-col justify-end", style: { height: chartHeight }, children: total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                    "div",
+                    {
+                      className: `flex w-full flex-col-reverse overflow-hidden rounded-md transition-opacity ${isHovered ? "opacity-100 ring-1 ring-inset ring-slate-200" : "opacity-95"}`,
+                      style: { height: barHeight },
+                      children: [
+                        bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-amber-500", style: { height: blockedHeight } }),
+                        bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-emerald-500", style: { height: allowedHeight } }),
+                        bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-brand-blue", style: { height: reviewedHeight } })
+                      ]
+                    }
+                  ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto h-1.5 w-1.5 rounded-full bg-slate-200", "aria-hidden": "true" }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-2 w-full truncate text-center text-[10px] font-medium text-slate-500", children: bucket.label }),
+                  isHovered && total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute bottom-full z-10 mb-2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg", children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-semibold", children: bucket.label }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3 mt-1", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex gap-3", children: [
                       bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-emerald-300", children: [
                         bucket.allowed,
                         " allowed"
@@ -17743,24 +17877,24 @@ function TrendChart({ buckets }) {
                         " reviewed"
                       ] })
                     ] })
-                  ]
-                }
-              )
-            ]
-          },
-          bucket.dateKey
-        );
-      }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-center gap-4 text-[11px] text-slate-500", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1.5", children: [
+                  ] })
+                ]
+              },
+              bucket.date_key
+            );
+          })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-4 text-[11px] text-slate-500", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500" }),
           "Allowed"
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm bg-amber-500" }),
           "Stopped"
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm bg-brand-blue" }),
           "Reviewed"
         ] })
@@ -17768,121 +17902,204 @@ function TrendChart({ buckets }) {
     ] })
   ] });
 }
-function PeriodComparisonCard({ comparison, label }) {
-  const blockedDeltaSign = comparison.blockedDelta > 0 ? "+" : "";
-  const totalDeltaSign = comparison.totalDelta > 0 ? "+" : "";
-  const blockedColor = comparison.blockedDelta > 0 ? "text-amber-600" : comparison.blockedDelta < 0 ? "text-emerald-600" : "text-slate-400";
-  const totalColor = comparison.totalDelta > 0 ? "text-brand-blue" : comparison.totalDelta < 0 ? "text-slate-400" : "text-slate-400";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-4 mt-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xl font-bold text-brand-dark tabular-nums tracking-tight", children: comparison.currentTotal }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 mt-0.5", children: "Total actions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `text-xs font-medium mt-1 ${totalColor}`, children: [
-          totalDeltaSign,
-          comparison.totalDelta,
-          " from prior period"
+function LocalDataCard(props) {
+  const beyondSample = props.analytics.total > props.sampleCount;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: props.onViewActions,
+      className: "group w-full rounded-xl border border-slate-200/80 bg-slate-50/60 px-4 py-3.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue sm:flex sm:items-center sm:justify-between sm:gap-4",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineShieldCheck, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Local evidence on this device" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: [
+            formatCount(props.analytics.total),
+            " actions stored locally",
+            beyondSample ? ` · list view shows the latest ${formatCount(props.sampleCount)}` : "",
+            props.analytics.last_activity_at ? ` · last activity ${formatDurationSince(props.analytics.last_activity_at)}` : ""
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-blue sm:mt-0", children: [
+          "Browse actions",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5", "aria-hidden": "true" })
         ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xl font-bold text-brand-dark tabular-nums tracking-tight", children: comparison.currentBlocked }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 mt-0.5", children: "Stopped" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: `text-xs font-medium mt-1 ${blockedColor}`, children: [
-          blockedDeltaSign,
-          comparison.blockedDelta,
-          " from prior period"
-        ] })
-      ] })
-    ] })
-  ] });
+      ]
+    }
+  );
 }
-function EvidenceAnalyticsPanel({
-  metrics,
-  onFilterHarness,
-  onFilterCategory
-}) {
-  const sortedHarnesses = Array.from(metrics.byHarness.entries()).sort(
-    (a, b) => b[1].total - a[1].total
-  );
-  const maxHarnessTotal = sortedHarnesses[0]?.[1].total ?? 1;
-  const sortedCategories = Array.from(metrics.byCategory.entries()).sort(
-    (a, b) => b[1].total - a[1].total
-  );
-  const maxCatTotal = sortedCategories[0]?.[1].total ?? 1;
-  const appCount = metrics.byHarness.size;
-  const catCount = metrics.byCategory.size;
-  const stopRate = metrics.total > 0 ? Math.round(metrics.blocked / metrics.total * 100) : 0;
-  if (metrics.total === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-16 text-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "No data yet" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Insights will appear once actions are recorded." })
+function CloudInsightsCard(props) {
+  const runtime = props.runtime;
+  if (!runtime) return null;
+  const isLocalOnly = runtime.cloud_state === "local_only";
+  if (isLocalOnly) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "a",
+      {
+        href: runtime.connect_url,
+        target: "_blank",
+        rel: "noreferrer",
+        className: "group flex w-full items-start justify-between gap-4 rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3.5 transition-colors hover:bg-brand-blue/[0.07] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Guard Cloud" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-slate-500", children: "Sync evidence across devices, share fleet visibility, and unlock cross-machine analytics with a Guard Cloud subscription." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" })
+        ]
+      }
+    );
+  }
+  if (runtime.cloud_state !== "paired_active") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/80 bg-white px-4 py-3.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: runtime.cloud_state_label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: runtime.cloud_state_detail })
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Total Actions", value: String(metrics.total), tone: "blue" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Stopped", value: String(metrics.blocked), tone: "amber", subtext: `${stopRate}% of total` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Allowed", value: String(metrics.allowed), tone: "green" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Apps Seen", value: String(appCount), tone: "purple" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Categories", value: String(catCount), tone: "slate" })
+  const sync = runtime.cloud_sync_health;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 sm:flex sm:items-center sm:justify-between sm:gap-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Guard Cloud connected" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
+        sync.label,
+        sync.last_synced_at ? ` · last sync ${formatDurationSince(sync.last_synced_at)}` : "",
+        sync.pending_events > 0 ? ` · ${sync.pending_events} pending` : ""
+      ] }),
+      runtime.cloud_policy_rollout_state && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
+        "Policy rollout: ",
+        runtime.cloud_policy_rollout_state,
+        runtime.cloud_policy_bundle_version ? ` · bundle ${runtime.cloud_policy_bundle_version}` : ""
+      ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(TrendChart, { buckets: metrics.trendBuckets }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(PeriodComparisonCard, { comparison: metrics.periodComparison7d, label: "vs. Prior 7 Days" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(PeriodComparisonCard, { comparison: metrics.periodComparison30d, label: "vs. Prior 30 Days" })
+    props.onOpenCloud && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        onClick: props.onOpenCloud,
+        className: "mt-3 inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 sm:mt-0",
+        children: [
+          "Open fleet",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+        ]
+      }
+    )
+  ] });
+}
+function InsightFact({ label, value }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-baseline justify-between gap-3 border-b border-slate-100 py-2.5 last:border-b-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-slate-500", children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark text-right", children: value })
+  ] });
+}
+function TopHarnessList(props) {
+  const maxTotal = props.items[0]?.total ?? 1;
+  if (props.items.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-400", children: "No app activity yet." });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-1", children: props.items.slice(0, 6).map((item) => {
+    const widthPct = Math.max(item.total / maxTotal * 100, 8);
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => props.onFilterHarness(item.harness),
+        className: "group flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm font-medium text-brand-dark", children: harnessDisplayName(item.harness) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs tabular-nums text-slate-500", children: formatCount(item.total) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full rounded-full bg-brand-blue/70 transition-all", style: { width: `${widthPct}%` } }) })
+        ] })
+      },
+      item.harness
+    );
+  }) });
+}
+function EvidenceAnalyticsPanel({
+  analytics,
+  runtime,
+  sampleCount,
+  onFilterHarness,
+  onFilterDay,
+  onViewActions,
+  onOpenCloud
+}) {
+  const insightFacts = reactExports.useMemo(() => {
+    return [
+      {
+        label: "Most active app",
+        value: analytics.by_harness[0] ? harnessDisplayName(analytics.by_harness[0].harness) : "None yet"
+      },
+      {
+        label: "Top recurring action",
+        value: analytics.top_artifacts[0]?.name ?? "None yet"
+      },
+      {
+        label: "Reviewed actions",
+        value: formatCount(analytics.reviewed)
+      },
+      {
+        label: "Apps seen",
+        value: String(analytics.by_harness.length)
+      },
+      {
+        label: "Tracking since",
+        value: analytics.first_activity_at ? new Date(analytics.first_activity_at).toLocaleDateString(void 0, {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        }) : "Not yet"
+      }
+    ];
+  }, [analytics]);
+  if (analytics.total === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-16 text-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "No data yet" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Insights will appear once Guard records actions on this machine." })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(LocalDataCard, { analytics, sampleCount, onViewActions }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CloudInsightsCard, { runtime, onOpenCloud }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SummaryRibbon, { analytics }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "90-Day Activity" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Daily action volume across your local evidence store." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceActivityHeatmap, { days: analytics.daily_activity, onSelectDay: onFilterDay }) })
     ] }),
-    sortedHarnesses.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-1 mb-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "By App" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3", children: sortedHarnesses.map(([harness, counts]) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        AppBreakdownCard,
-        {
-          harness,
-          total: counts.total,
-          blocked: counts.blocked,
-          allowed: counts.allowed,
-          maxTotal: maxHarnessTotal,
-          onFilter: onFilterHarness
-        },
-        harness
-      )) })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(TrendChart, { buckets: analytics.trend_buckets }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-4 lg:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Activity Insights" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: insightFacts.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsx(InsightFact, { label: fact.label, value: fact.value }, fact.label)) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Most Active Apps" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TopHarnessList, { items: analytics.by_harness, onFilterHarness }) })
+      ] })
     ] }),
-    sortedCategories.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-1 mb-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "By Category" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3", children: sortedCategories.map(([cat, counts]) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CategoryBreakdownCard,
-        {
-          categoryKey: cat,
-          total: counts.total,
-          blocked: counts.blocked,
-          maxTotal: maxCatTotal,
-          onFilter: (c) => onFilterCategory(c)
-        },
-        cat
-      )) })
-    ] }),
-    metrics.topRecurring.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
+    analytics.top_artifacts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5 shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Top Recurring Actions" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-100 mt-3", children: metrics.topRecurring.slice(0, 5).map((action) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "div",
-        {
-          className: "flex items-center justify-between py-2.5",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark truncate pr-4", children: action.name }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 shrink-0", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
-                action.total,
-                "×"
-              ] }),
-              action.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "attention", children: [
-                action.blocked,
-                " stopped"
-              ] })
-            ] })
-          ]
-        },
-        action.name
-      )) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 divide-y divide-slate-100", children: analytics.top_artifacts.slice(0, 6).map((action) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-4 py-2.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm text-brand-dark", children: action.name }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
+            formatCount(action.total),
+            "×"
+          ] }),
+          action.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "attention", children: [
+            formatCount(action.blocked),
+            " stopped"
+          ] })
+        ] })
+      ] }, action.name)) })
     ] })
   ] });
 }
@@ -18818,13 +19035,14 @@ const PAGE_SIZE = 50;
 function evidenceTitleForView(view) {
   return VIEW_TABS.find((tab) => tab.key === view)?.label ?? "Evidence";
 }
-function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
+function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate }) {
   const initial = reactExports.useMemo(() => readEvidenceUrlState(), []);
   const [filters, setFilters] = reactExports.useState(initial);
   const [debouncedSearch, setDebouncedSearch] = reactExports.useState(initial.search);
   const [page, setPage] = reactExports.useState(0);
   const [exportOpen, setExportOpen] = reactExports.useState(false);
   const [clearOpen, setClearOpen] = reactExports.useState(false);
+  const [analyticsState, setAnalyticsState] = reactExports.useState({ kind: "idle" });
   const urlSyncTimerRef = reactExports.useRef(null);
   const harnesses = reactExports.useMemo(
     () => Array.from(
@@ -18923,6 +19141,40 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
     setFilters(DEFAULT_FILTER_STATE);
     if (onClearEvidence) onClearEvidence();
   }, [onClearEvidence]);
+  reactExports.useEffect(() => {
+    if (filters.view !== "insights") {
+      return;
+    }
+    let cancelled = false;
+    setAnalyticsState({ kind: "loading" });
+    fetchReceiptAnalytics().then((data) => {
+      if (!cancelled) setAnalyticsState({ kind: "ready", data });
+    }).catch((error) => {
+      if (!cancelled) {
+        setAnalyticsState({
+          kind: "error",
+          message: error instanceof Error ? error.message : "Could not load analytics"
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.view, receiptItems.length]);
+  const handleFilterDay = reactExports.useCallback((dateKey) => {
+    setFilters((prev) => ({
+      ...prev,
+      view: "actions",
+      day: dateKey,
+      time: "all"
+    }));
+  }, []);
+  const handleViewActions = reactExports.useCallback(() => {
+    setFilters((prev) => ({ ...prev, view: "actions", day: "" }));
+  }, []);
+  const handleFilterHarnessFromInsights = reactExports.useCallback((harness) => {
+    setFilters((prev) => ({ ...prev, view: "actions", harness, day: "" }));
+  }, []);
   reactExports.useEffect(() => {
     function handlePopState() {
       const urlState = readEvidenceUrlState();
@@ -19036,12 +19288,16 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
           role: "tabpanel",
           "aria-labelledby": "tab-insights",
           className: "guard-fade-in",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          children: analyticsState.kind === "loading" || analyticsState.kind === "idle" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-center py-16 text-sm text-slate-500", children: "Loading insights…" }) : analyticsState.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", children: analyticsState.message }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
             EvidenceAnalyticsPanel,
             {
-              metrics,
-              onFilterHarness: handleFilterHarness,
-              onFilterCategory: handleFilterCategory
+              analytics: analyticsState.data,
+              runtime,
+              sampleCount: receiptItems.length,
+              onFilterHarness: handleFilterHarnessFromInsights,
+              onFilterDay: handleFilterDay,
+              onViewActions: handleViewActions,
+              onOpenCloud: onNavigate ? () => onNavigate("/fleet") : void 0
             }
           )
         }
@@ -19117,7 +19373,16 @@ function ReceiptsWorkspace(props) {
   if (props.receipts.kind === "error") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceErrorState, { message: props.receipts.message });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceWorkbench, { receiptItems: props.receipts.items, onClearEvidence: props.onClearEvidence });
+  const runtime = props.runtime?.kind === "ready" ? props.runtime.snapshot : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    EvidenceWorkbench,
+    {
+      receiptItems: props.receipts.items,
+      runtime,
+      onClearEvidence: props.onClearEvidence,
+      onNavigate: props.onNavigate
+    }
+  );
 }
 function ScannerEvidenceBadge(props) {
   const isScannerCategory = props.signal.category === "skill" || props.signal.category === "mcp";
@@ -21449,7 +21714,15 @@ function ApprovalCenterLayout(props) {
         onBulkBlock: props.onBulkBlock
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ReceiptsWorkspace,
+      {
+        receipts: props.receipts,
+        runtime: props.runtime,
+        onClearEvidence: props.onClearEvidence,
+        onNavigate: props.onNavigate
+      }
+    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewWorkspace,
       {
         requests: props.requests.kind === "ready" ? props.requests.items : [],

@@ -362,3 +362,44 @@ class TestInventoryForExplain:
         assert latest_receipt["receipt_id"] == "r-001"
         assert latest_diff is not None
         assert latest_diff["changed_fields"] == ["args"]
+
+
+class TestReceiptAnalytics:
+    def test_receipt_analytics_aggregates_across_all_rows(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        store.add_receipt(_make_receipt(
+            receipt_id="r1",
+            harness="codex",
+            policy_decision="allow",
+            timestamp="2026-06-01T10:00:00Z",
+            artifact_name="install npm",
+        ))
+        store.add_receipt(_make_receipt(
+            receipt_id="r2",
+            harness="codex",
+            policy_decision="block",
+            timestamp="2026-06-02T10:00:00Z",
+            artifact_name="curl outbound",
+        ))
+        store.add_receipt(_make_receipt(
+            receipt_id="r3",
+            harness="claude",
+            policy_decision="ask",
+            timestamp="2026-06-07T10:00:00Z",
+            artifact_name="read secrets",
+        ))
+
+        analytics = store.receipt_analytics(activity_days=7, trend_days=7, top_limit=5)
+
+        assert analytics["total"] == 3
+        assert analytics["allowed"] == 1
+        assert analytics["blocked"] == 1
+        assert analytics["reviewed"] == 1
+        assert len(analytics["trend_buckets"]) == 7
+        assert analytics["trend_buckets"][0]["date_key"] == "2026-06-01"
+        assert analytics["trend_buckets"][0]["allowed"] == 1
+        assert analytics["trend_buckets"][1]["blocked"] == 1
+        assert analytics["trend_buckets"][-1]["reviewed"] == 1
+        assert len(analytics["daily_activity"]) == 7
+        assert analytics["by_harness"][0]["harness"] == "codex"
+        assert analytics["top_artifacts"][0]["total"] >= 1

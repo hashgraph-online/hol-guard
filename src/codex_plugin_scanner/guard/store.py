@@ -2285,6 +2285,180 @@ class GuardStore:
             row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
 
+    def receipt_analytics(
+        self,
+        *,
+        activity_days: int = 90,
+        trend_days: int = 7,
+        top_limit: int = 10,
+    ) -> dict[str, object]:
+        """Aggregate receipt metrics without loading full receipt rows."""
+        from datetime import UTC, datetime, timedelta
+
+        activity_days = max(1, min(activity_days, 366))
+        trend_days = max(1, min(trend_days, activity_days))
+        top_limit = max(1, min(top_limit, 50))
+
+        now = datetime.now(tz=UTC)
+        start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        activity_start = start_of_today - timedelta(days=activity_days - 1)
+        trend_start = start_of_today - timedelta(days=trend_days - 1)
+        activity_start_iso = activity_start.isoformat().replace("+00:00", "Z")
+        trend_start_iso = trend_start.isoformat().replace("+00:00", "Z")
+
+        with self._connect() as connection:
+            totals_row = connection.execute(
+                """
+                select
+                  count(*) as total,
+                  sum(case when policy_decision = 'allow' then 1 else 0 end) as allowed,
+                  sum(case when policy_decision = 'block' then 1 else 0 end) as blocked,
+                  sum(case when policy_decision not in ('allow', 'block') then 1 else 0 end) as reviewed,
+                  min(timestamp) as first_activity_at,
+                  max(timestamp) as last_activity_at
+                from runtime_receipts
+                """
+            ).fetchone()
+
+            daily_rows = connection.execute(
+                """
+                select date(timestamp) as day_key, count(*) as total
+                from runtime_receipts
+                where timestamp >= ?
+                group by date(timestamp)
+                order by day_key asc
+                """,
+                (activity_start_iso,),
+            ).fetchall()
+
+            trend_rows = connection.execute(
+                """
+                select
+                  date(timestamp) as day_key,
+                  sum(case when policy_decision = 'allow' then 1 else 0 end) as allowed,
+                  sum(case when policy_decision = 'block' then 1 else 0 end) as blocked,
+                  sum(case when policy_decision not in ('allow', 'block') then 1 else 0 end) as reviewed
+                from runtime_receipts
+                where timestamp >= ?
+                group by date(timestamp)
+                order by day_key asc
+                """,
+                (trend_start_iso,),
+            ).fetchall()
+
+            harness_rows = connection.execute(
+                """
+                select
+                  harness,
+                  count(*) as total,
+                  sum(case when policy_decision = 'allow' then 1 else 0 end) as allowed,
+                  sum(case when policy_decision = 'block' then 1 else 0 end) as blocked
+                from runtime_receipts
+                group by harness
+                order by total desc
+                limit ?
+                """,
+                (top_limit,),
+            ).fetchall()
+
+            artifact_rows = connection.execute(
+                """
+                select
+                  coalesce(nullif(artifact_name, ''), artifact_id) as name,
+                  count(*) as total,
+                  sum(case when policy_decision = 'allow' then 1 else 0 end) as allowed,
+                  sum(case when policy_decision = 'block' then 1 else 0 end) as blocked
+                from runtime_receipts
+                group by coalesce(nullif(artifact_name, ''), artifact_id)
+                order by total desc
+                limit ?
+                """,
+                (top_limit,),
+            ).fetchall()
+
+        total = int(totals_row["total"]) if totals_row is not None else 0
+        allowed = int(totals_row["allowed"] or 0) if totals_row is not None else 0
+        blocked = int(totals_row["blocked"] or 0) if totals_row is not None else 0
+        reviewed = int(totals_row["reviewed"] or 0) if totals_row is not None else 0
+        first_activity_at = (
+            str(totals_row["first_activity_at"]) if totals_row and totals_row["first_activity_at"] else None
+        )
+        last_activity_at = (
+            str(totals_row["last_activity_at"]) if totals_row and totals_row["last_activity_at"] else None
+        )
+
+        daily_map = {str(row["day_key"]): int(row["total"]) for row in daily_rows}
+        trend_map = {
+            str(row["day_key"]): {
+                "allowed": int(row["allowed"] or 0),
+                "blocked": int(row["blocked"] or 0),
+                "reviewed": int(row["reviewed"] or 0),
+            }
+            for row in trend_rows
+        }
+
+        daily_activity: list[dict[str, object]] = []
+        for offset in range(activity_days):
+            day = activity_start + timedelta(days=offset)
+            day_key = day.strftime("%Y-%m-%d")
+            daily_activity.append({"date_key": day_key, "total": daily_map.get(day_key, 0)})
+
+        trend_buckets: list[dict[str, object]] = []
+        for offset in range(trend_days):
+            day = trend_start + timedelta(days=offset)
+            day_key = day.strftime("%Y-%m-%d")
+            counts = trend_map.get(day_key, {"allowed": 0, "blocked": 0, "reviewed": 0})
+            trend_buckets.append(
+                {
+                    "date_key": day_key,
+                    "label": f"{day.strftime('%b')} {day.day}",
+                    "allowed": counts["allowed"],
+                    "blocked": counts["blocked"],
+                    "reviewed": counts["reviewed"],
+                }
+            )
+
+        active_day_streak = 0
+        for entry in reversed(daily_activity):
+            if int(entry["total"]) > 0:
+                active_day_streak += 1
+            else:
+                break
+
+        peak_day_total = max((int(entry["total"]) for entry in daily_activity), default=0)
+
+        return {
+            "total": total,
+            "allowed": allowed,
+            "blocked": blocked,
+            "reviewed": reviewed,
+            "first_activity_at": first_activity_at,
+            "last_activity_at": last_activity_at,
+            "active_day_streak": active_day_streak,
+            "peak_day_total": peak_day_total,
+            "daily_activity": daily_activity,
+            "trend_buckets": trend_buckets,
+            "by_harness": [
+                {
+                    "harness": str(row["harness"]),
+                    "total": int(row["total"]),
+                    "allowed": int(row["allowed"] or 0),
+                    "blocked": int(row["blocked"] or 0),
+                }
+                for row in harness_rows
+            ],
+            "top_artifacts": [
+                {
+                    "name": str(row["name"]),
+                    "total": int(row["total"]),
+                    "allowed": int(row["allowed"] or 0),
+                    "blocked": int(row["blocked"] or 0),
+                }
+                for row in artifact_rows
+            ],
+            "loaded_sample_limit": 200,
+        }
+
     def receipt_decision_counts(self, harness: str, artifact_id: str) -> dict[str, int]:
         with self._connect() as connection:
             rows = connection.execute(
