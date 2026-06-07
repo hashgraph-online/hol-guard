@@ -7,6 +7,7 @@ import hmac
 import os
 import secrets
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 
 _CURSOR_HOOK_ATTESTATION_RELATIVE = Path("secrets") / "cursor-hook-attestation.key"
@@ -16,6 +17,24 @@ _AFTER_SHELL_PROOF_ENV = "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"
 
 def cursor_hook_attestation_secret_path(guard_home: Path) -> Path:
     return guard_home / _CURSOR_HOOK_ATTESTATION_RELATIVE
+
+
+def _write_attestation_secret(secret_path: Path, generated: bytes) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    try:
+        fd = os.open(secret_path, flags, 0o600)
+    except OSError:
+        secret_path.write_bytes(generated)
+        with suppress(OSError):
+            secret_path.chmod(0o600)
+        return
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(generated)
+    except OSError:
+        with suppress(OSError):
+            secret_path.unlink(missing_ok=True)
+        raise
 
 
 def ensure_cursor_hook_attestation_secret(guard_home: Path) -> bytes:
@@ -29,9 +48,7 @@ def ensure_cursor_hook_attestation_secret(guard_home: Path) -> bytes:
         if existing:
             return existing
     generated = secrets.token_bytes(32)
-    secret_path.write_bytes(generated)
-    with suppress_permission_error():
-        secret_path.chmod(0o600)
+    _write_attestation_secret(secret_path, generated)
     return generated
 
 
@@ -138,12 +155,6 @@ def cursor_after_shell_trusted(
         generation_id=payload_generation_id,
         proof=proof,
     )
-
-
-def suppress_permission_error() -> object:
-    from contextlib import suppress
-
-    return suppress(OSError)
 
 
 __all__ = [
