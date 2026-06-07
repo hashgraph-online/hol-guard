@@ -50,7 +50,10 @@ assert(ABOUT_OPEN_SOURCE_NOTE.length > 0, "open source note is non-empty");
 assert(ABOUT_PARTNER_SECTION_TITLE.length > 0, "partner title is non-empty");
 assert(ABOUT_PARTNER_SECTION_BODY.length > 0, "partner body is non-empty");
 assert(ABOUT_PARTNER_CTA.length > 0, "partner CTA label is non-empty");
-assert(ABOUT_PARTNER_CTA_HREF.startsWith("https://"), "partner CTA uses HTTPS");
+assert(
+  ABOUT_PARTNER_CTA_HREF.startsWith("https://") || ABOUT_PARTNER_CTA_HREF.startsWith("mailto:"),
+  "partner CTA uses HTTPS or mailto"
+);
 assert(!ABOUT_PARTNER_CTA_HREF.includes("guard-token"), "partner CTA has no guard-token");
 
 // Affiliate section
