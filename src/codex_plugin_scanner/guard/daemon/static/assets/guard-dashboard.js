@@ -15040,17 +15040,20 @@ async function publishInsightsShare(input) {
     throw new Error("Invalid insights share response");
   }
   const record = payload;
-  if (typeof record.message === "string" && record.message.trim()) {
-    throw new Error(record.message);
-  }
   const slug = record.slug;
   const publicUrl = record.publicUrl;
   const ogImageUrl = record.ogImageUrl;
   const expiresAt = record.expiresAt;
-  if (typeof slug !== "string" || typeof publicUrl !== "string" || typeof ogImageUrl !== "string" || typeof expiresAt !== "string") {
-    throw new Error("Invalid insights share response");
+  if (typeof slug === "string" && typeof publicUrl === "string" && typeof ogImageUrl === "string" && typeof expiresAt === "string") {
+    return { slug, publicUrl, ogImageUrl, expiresAt };
   }
-  return { slug, publicUrl, ogImageUrl, expiresAt };
+  if (typeof record.message === "string" && record.message.trim()) {
+    throw new Error(record.message);
+  }
+  if (typeof record.error === "string" && record.error.trim()) {
+    throw new Error(record.error);
+  }
+  throw new Error("Invalid insights share response");
 }
 async function fetchLatestReceipt(artifactId, harness) {
   if (isGuardDemoMode()) {
@@ -18409,13 +18412,7 @@ function EvidenceInsightsShareModal({
   const [error, setError] = reactExports.useState(null);
   const [shareResult, setShareResult] = reactExports.useState(null);
   const cloudConnected = runtime?.cloud_state === "paired_active";
-  const connectUrl = runtime?.cloud_connect_url ?? "https://hol.org/guard/connect";
-  const previewAnalytics = reactExports.useMemo(() => {
-    if (!includeTopArtifacts) {
-      return analytics;
-    }
-    return analytics;
-  }, [analytics, includeTopArtifacts]);
+  const connectUrl = runtime?.connect_url ?? "https://hol.org/guard/connect";
   const handlePublish = reactExports.useCallback(async () => {
     setPublishing(true);
     setError(null);
@@ -18465,7 +18462,7 @@ function EvidenceInsightsShareModal({
       )
     ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-5 py-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-2xl border border-slate-200", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics: previewAnalytics, variant: "compact" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-2xl border border-slate-200", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics, variant: "compact" }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-3 text-sm text-brand-dark", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",

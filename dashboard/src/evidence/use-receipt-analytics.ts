@@ -10,18 +10,31 @@ type AnalyticsCacheEntry = {
 };
 
 let analyticsCache: AnalyticsCacheEntry | null = null;
+let analyticsInflight: Promise<GuardReceiptAnalytics> | null = null;
 
 export async function loadReceiptAnalyticsCached(force = false): Promise<GuardReceiptAnalytics> {
   if (!force && analyticsCache && analyticsCache.expiresAt > Date.now()) {
     return analyticsCache.data;
   }
-  const data = await fetchReceiptAnalytics();
-  analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
-  return data;
+  if (!force && analyticsInflight) {
+    return analyticsInflight;
+  }
+
+  analyticsInflight = fetchReceiptAnalytics()
+    .then((data) => {
+      analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
+      return data;
+    })
+    .finally(() => {
+      analyticsInflight = null;
+    });
+
+  return analyticsInflight;
 }
 
 export function invalidateReceiptAnalyticsCache(): void {
   analyticsCache = null;
+  analyticsInflight = null;
 }
 
 export type ReceiptAnalyticsState =

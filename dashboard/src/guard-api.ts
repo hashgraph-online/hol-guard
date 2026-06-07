@@ -1461,22 +1461,25 @@ export async function publishInsightsShare(input: {
     throw new Error("Invalid insights share response");
   }
   const record = payload as Record<string, unknown>;
-  if (typeof record.message === "string" && record.message.trim()) {
-    throw new Error(record.message);
-  }
   const slug = record.slug;
   const publicUrl = record.publicUrl;
   const ogImageUrl = record.ogImageUrl;
   const expiresAt = record.expiresAt;
   if (
-    typeof slug !== "string" ||
-    typeof publicUrl !== "string" ||
-    typeof ogImageUrl !== "string" ||
-    typeof expiresAt !== "string"
+    typeof slug === "string" &&
+    typeof publicUrl === "string" &&
+    typeof ogImageUrl === "string" &&
+    typeof expiresAt === "string"
   ) {
-    throw new Error("Invalid insights share response");
+    return { slug, publicUrl, ogImageUrl, expiresAt };
   }
-  return { slug, publicUrl, ogImageUrl, expiresAt };
+  if (typeof record.message === "string" && record.message.trim()) {
+    throw new Error(record.message);
+  }
+  if (typeof record.error === "string" && record.error.trim()) {
+    throw new Error(record.error);
+  }
+  throw new Error("Invalid insights share response");
 }
 
 export async function fetchLatestReceipt(

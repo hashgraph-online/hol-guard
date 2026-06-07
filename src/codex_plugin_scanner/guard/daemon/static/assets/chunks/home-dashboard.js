@@ -240,13 +240,21 @@ function EvidenceInsightsHomePreview({
 }
 const ANALYTICS_CACHE_TTL_MS = 6e4;
 let analyticsCache = null;
+let analyticsInflight = null;
 async function loadReceiptAnalyticsCached(force = false) {
   if (!force && analyticsCache && analyticsCache.expiresAt > Date.now()) {
     return analyticsCache.data;
   }
-  const data = await fetchReceiptAnalytics();
-  analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
-  return data;
+  if (!force && analyticsInflight) {
+    return analyticsInflight;
+  }
+  analyticsInflight = fetchReceiptAnalytics().then((data) => {
+    analyticsCache = { data, expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS };
+    return data;
+  }).finally(() => {
+    analyticsInflight = null;
+  });
+  return analyticsInflight;
 }
 function useReceiptAnalytics(enabled) {
   const [state, setState] = reactExports.useState(

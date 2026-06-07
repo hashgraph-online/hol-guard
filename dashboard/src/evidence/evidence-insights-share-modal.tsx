@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
 import { ActionButton } from "../approval-center-primitives";
 import { publishInsightsShare, type GuardInsightsShareResult } from "../guard-api";
@@ -24,14 +24,7 @@ export function EvidenceInsightsShareModal({
   const [shareResult, setShareResult] = useState<GuardInsightsShareResult | null>(null);
 
   const cloudConnected = runtime?.cloud_state === "paired_active";
-  const connectUrl = runtime?.cloud_connect_url ?? "https://hol.org/guard/connect";
-
-  const previewAnalytics = useMemo(() => {
-    if (!includeTopArtifacts) {
-      return analytics;
-    }
-    return analytics;
-  }, [analytics, includeTopArtifacts]);
+  const connectUrl = runtime?.connect_url ?? "https://hol.org/guard/connect";
 
   const handlePublish = useCallback(async () => {
     setPublishing(true);
@@ -96,7 +89,7 @@ export function EvidenceInsightsShareModal({
           <>
             <div className="space-y-4 px-5 py-5">
               <div className="overflow-hidden rounded-2xl border border-slate-200">
-                <EvidenceInsightsHeadlineBento analytics={previewAnalytics} variant="compact" />
+                <EvidenceInsightsHeadlineBento analytics={analytics} variant="compact" />
               </div>
 
               <label className="flex items-center gap-3 text-sm text-brand-dark">
