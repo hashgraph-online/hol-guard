@@ -68,6 +68,7 @@ from ..cli.install_commands import (
     list_harness_setup_items,
     uninstall_confirmation_token,
 )
+from ..cli.update_commands import build_guard_update_status_payload
 from ..codex_resume import (
     defer_request_resume_to_live_hook,
     get_request_resume_status,
@@ -128,7 +129,6 @@ from ..store_evidence import (
     export_evidence_json,
     list_evidence,
 )
-from ..cli.update_commands import build_guard_update_status_payload
 from .dashboard_update import schedule_guard_dashboard_update
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
