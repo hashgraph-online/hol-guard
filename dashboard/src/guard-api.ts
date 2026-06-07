@@ -41,6 +41,7 @@ import type {
   GuardQueueSummary,
   GuardReceipt,
   GuardReceiptAnalytics,
+  GuardInsightsShareResult,
   GuardReceiptAnalyticsBucket,
   GuardReceiptArtifactStat,
   GuardReceiptDailyActivity,
@@ -1432,6 +1433,53 @@ export async function fetchReceiptAnalytics(): Promise<GuardReceiptAnalytics> {
     throw new Error("Invalid receipt analytics payload");
   }
   return normalized;
+}
+
+export async function publishInsightsShare(input: {
+  includeTopArtifacts?: boolean;
+  showDisplayName?: boolean;
+  displayName?: string;
+}): Promise<GuardInsightsShareResult> {
+  if (isGuardDemoMode()) {
+    return {
+      slug: "demo-share",
+      publicUrl: "https://hol.org/guard/insights/demo-share",
+      ogImageUrl: "https://hol.org/api/og/guard/insights/demo-share",
+      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
+  const payload = await readJson<unknown>("/v1/insights/share", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      includeTopArtifacts: input.includeTopArtifacts ?? false,
+      showDisplayName: input.showDisplayName ?? false,
+      displayName: input.displayName,
+    }),
+  });
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid insights share response");
+  }
+  const record = payload as Record<string, unknown>;
+  const slug = record.slug;
+  const publicUrl = record.publicUrl;
+  const ogImageUrl = record.ogImageUrl;
+  const expiresAt = record.expiresAt;
+  if (
+    typeof slug === "string" &&
+    typeof publicUrl === "string" &&
+    typeof ogImageUrl === "string" &&
+    typeof expiresAt === "string"
+  ) {
+    return { slug, publicUrl, ogImageUrl, expiresAt };
+  }
+  if (typeof record.message === "string" && record.message.trim()) {
+    throw new Error(record.message);
+  }
+  if (typeof record.error === "string" && record.error.trim()) {
+    throw new Error(record.error);
+  }
+  throw new Error("Invalid insights share response");
 }
 
 export async function fetchLatestReceipt(
