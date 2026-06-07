@@ -5,10 +5,9 @@ import {
   HiMiniDocumentText,
   HiMiniCloud,
   HiMiniArrowTopRightOnSquare,
-  HiMiniInformationCircle,
   HiMiniCheckBadge,
 } from "react-icons/hi2";
-import { SectionLabel, Badge } from "../approval-center-primitives";
+import { Badge } from "../approval-center-primitives";
 import { trackAboutEvent } from "./about-analytics";
 import { assertSafeAboutExternalUrl } from "./about-external-links";
 import {
@@ -34,6 +33,14 @@ import {
   ABOUT_PARTNER_LEVELS,
   ABOUT_AFFILIATE_TERMS,
 } from "./about-content";
+
+function AboutSectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block">
+      {children}
+    </span>
+  );
+}
 
 function useEditorialVisibility(threshold = 0.08) {
   const ref = useRef<HTMLElement>(null);
@@ -142,7 +149,7 @@ function AboutExternalLink({
   );
 }
 
-function TrustRow({
+function TrustPillar({
   title,
   desc,
   icon,
@@ -152,14 +159,14 @@ function TrustRow({
   icon: ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-4 py-5 border-b border-slate-100 last:border-b-0">
-      <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-lg bg-brand-blue/[0.06] text-brand-blue">
-        {icon}
+    <div className="border-l-4 border-brand-blue/60 pl-6 py-2">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="shrink-0 flex h-8 w-8 items-center justify-center rounded-lg bg-brand-blue/[0.06] text-brand-blue">
+          {icon}
+        </div>
+        <h3 className="text-base font-bold text-brand-dark">{title}</h3>
       </div>
-      <div>
-        <h3 className="text-sm font-semibold text-brand-dark">{title}</h3>
-        <p className="mt-0.5 text-sm leading-relaxed text-slate-500">{desc}</p>
-      </div>
+      <p className="text-sm leading-relaxed text-slate-500">{desc}</p>
     </div>
   );
 }
@@ -178,16 +185,16 @@ function PathStep({
   ctaHref: string;
 }) {
   return (
-    <div className="relative grid grid-cols-[40px_1fr] gap-4 sm:gap-5">
-      <div className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 border-brand-blue bg-white">
+    <div className="relative grid grid-cols-[48px_1fr] gap-4 sm:gap-6">
+      <div className="relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-2 border-brand-blue bg-white">
         <span className="font-mono text-sm font-black text-brand-blue">
           {String(index + 1).padStart(2, "0")}
         </span>
       </div>
-      <div className="pt-0.5">
-        <h4 className="text-sm font-bold text-brand-dark">{title}</h4>
-        <p className="mt-1 text-sm leading-relaxed text-slate-500">{desc}</p>
-        <div className="mt-2">
+      <div className="pt-1">
+        <h4 className="text-base font-bold text-brand-dark">{title}</h4>
+        <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{desc}</p>
+        <div className="mt-3">
           <AboutExternalLink
             href={ctaHref}
             className="text-sm font-semibold text-brand-blue hover:underline"
@@ -213,7 +220,7 @@ function PartnerLevelRow({
         <span className="font-mono text-xs font-black text-brand-blue/70">
           {String(index + 1).padStart(2, "0")}
         </span>
-        <h3 className="text-sm font-bold text-brand-dark">{level.name}</h3>
+        <h3 className="text-base font-bold text-brand-dark">{level.name}</h3>
       </div>
       <p className="mt-1 ml-7 text-sm leading-relaxed text-slate-500">
         {level.description}
@@ -224,17 +231,17 @@ function PartnerLevelRow({
 
 export function AboutWorkspace() {
   return (
-    <div className="space-y-16 pb-10">
+    <div className="space-y-20 pb-10">
       {/* Hero */}
-      <EditorialSection className="rounded-2xl border border-brand-blue/10 bg-gradient-to-br from-brand-blue/[0.04] to-brand-dark/[0.02] p-6 sm:p-8">
-        <div className="max-w-2xl">
-          <h1 className="mb-2 text-2xl font-bold tracking-tight text-brand-dark sm:text-3xl">
+      <EditorialSection>
+        <div className="max-w-3xl">
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-brand-dark leading-none mb-6">
             {ABOUT_HERO_TITLE}
           </h1>
-          <p className="mb-4 text-lg font-medium text-brand-blue">
+          <p className="text-xl sm:text-2xl font-medium text-brand-blue mb-6">
             {ABOUT_HERO_SUBTITLE}
           </p>
-          <p className="text-sm leading-relaxed text-brand-dark/75">
+          <p className="text-base leading-relaxed text-brand-dark/75 max-w-2xl">
             {ABOUT_HERO_BODY}
           </p>
         </div>
@@ -242,15 +249,15 @@ export function AboutWorkspace() {
 
       {/* Local-first promise */}
       <EditorialSection>
-        <div className="mb-6">
-          <SectionLabel>{ABOUT_LOCAL_SECTION_TITLE}</SectionLabel>
-          <p className="mt-1 text-sm leading-relaxed text-slate-500">
+        <div className="mb-8">
+          <AboutSectionLabel>{ABOUT_LOCAL_SECTION_TITLE}</AboutSectionLabel>
+          <p className="text-base leading-relaxed text-slate-500 max-w-2xl">
             {ABOUT_LOCAL_SECTION_BODY}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-100 bg-white px-5 py-1 shadow-sm">
+        <div className="grid sm:grid-cols-2 gap-x-12 gap-y-8">
           {ABOUT_TRUST_CARDS.map((card, i) => (
-            <TrustRow
+            <TrustPillar
               key={card.title}
               title={card.title}
               desc={card.description}
@@ -272,26 +279,26 @@ export function AboutWorkspace() {
 
       {/* Mission */}
       <EditorialSection>
-        <div className="rounded-2xl border border-slate-100 bg-white p-6 sm:p-8 shadow-sm">
-          <SectionLabel>{ABOUT_MISSION_SECTION_TITLE}</SectionLabel>
-          <p className="mt-2 text-sm leading-relaxed text-brand-dark/75">
+        <div className="max-w-3xl">
+          <AboutSectionLabel>{ABOUT_MISSION_SECTION_TITLE}</AboutSectionLabel>
+          <p className="text-lg leading-relaxed text-brand-dark/75">
             {ABOUT_MISSION_SECTION_BODY}
           </p>
-          <p className="mt-4 text-xs text-slate-400">{ABOUT_OPEN_SOURCE_NOTE}</p>
+          <p className="mt-4 text-sm text-slate-400">{ABOUT_OPEN_SOURCE_NOTE}</p>
         </div>
       </EditorialSection>
 
       {/* Choose-your-path timeline */}
       <EditorialSection threshold={0.15}>
-        <div className="mb-8">
-          <SectionLabel>Choose your path</SectionLabel>
-          <p className="mt-1 text-sm leading-relaxed text-slate-500">
+        <div className="mb-10">
+          <AboutSectionLabel>Choose your path</AboutSectionLabel>
+          <p className="text-base leading-relaxed text-slate-500 max-w-2xl">
             There are many ways to participate in the Guard ecosystem.
           </p>
         </div>
         <div className="relative">
-          <div className="absolute left-[19px] top-0 bottom-0 w-[2px] bg-slate-100 sm:left-[23px]" />
-          <div className="space-y-10">
+          <div className="absolute left-[23px] top-0 bottom-0 w-[2px] bg-slate-100" />
+          <div className="space-y-12">
             {ABOUT_PATH_CARDS.map((card, i) => (
               <PathStep
                 key={card.title}
@@ -308,12 +315,12 @@ export function AboutWorkspace() {
 
       {/* Partner program */}
       <EditorialSection>
-        <div className="rounded-2xl border border-slate-100 bg-white p-6 sm:p-8 shadow-sm">
-          <SectionLabel>{ABOUT_PARTNER_SECTION_TITLE}</SectionLabel>
-          <p className="mt-2 text-sm leading-relaxed text-brand-dark/75">
+        <div className="max-w-3xl">
+          <AboutSectionLabel>{ABOUT_PARTNER_SECTION_TITLE}</AboutSectionLabel>
+          <p className="text-base leading-relaxed text-brand-dark/75 mb-8">
             {ABOUT_PARTNER_SECTION_BODY}
           </p>
-          <div className="mt-6">
+          <div>
             {ABOUT_PARTNER_LEVELS.map((level, i) => (
               <PartnerLevelRow key={level.name} level={level} index={i} />
             ))}
@@ -332,12 +339,12 @@ export function AboutWorkspace() {
 
       {/* Affiliate starter kit */}
       <EditorialSection>
-        <div className="rounded-2xl border border-slate-100 bg-white p-6 sm:p-8 shadow-sm">
-          <SectionLabel>{ABOUT_AFFILIATE_SECTION_TITLE}</SectionLabel>
-          <p className="mt-2 mb-6 text-sm leading-relaxed text-brand-dark/75">
+        <div className="max-w-3xl">
+          <AboutSectionLabel>{ABOUT_AFFILIATE_SECTION_TITLE}</AboutSectionLabel>
+          <p className="text-base leading-relaxed text-brand-dark/75 mb-8">
             {ABOUT_AFFILIATE_SECTION_BODY}
           </p>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
             {[
               { label: "Commission", value: ABOUT_AFFILIATE_TERMS.commissionRate },
               { label: "Duration", value: ABOUT_AFFILIATE_TERMS.commissionDuration },
@@ -368,7 +375,7 @@ export function AboutWorkspace() {
 
       {/* Trust footer */}
       <EditorialSection>
-        <footer className="rounded-2xl border border-slate-100 bg-white p-6 sm:p-8 shadow-sm">
+        <footer className="border-t border-slate-100 pt-8">
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <HiMiniCheckBadge className="h-5 w-5 text-brand-blue" aria-hidden="true" />
