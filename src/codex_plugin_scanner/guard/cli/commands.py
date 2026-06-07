@@ -4759,7 +4759,6 @@ def _record_cursor_pending_shell_permission(
         compute_cursor_after_shell_proof,
         ensure_cursor_approval_binding,
         ensure_cursor_hook_attestation_secret,
-        remove_cursor_shell_binding_file,
         write_cursor_shell_binding_file,
     )
 
