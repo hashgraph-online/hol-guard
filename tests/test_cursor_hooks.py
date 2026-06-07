@@ -41,18 +41,20 @@ def _record_cursor_pending_for_test(
     conversation_id: str,
     command: str,
     workspace_dir: Path,
-    generation_id: str = "gen-cursor-test",
+    generation_id: str | None = "gen-cursor-test",
 ) -> None:
+    payload: dict[str, object] = {
+        "conversation_id": conversation_id,
+        "hook_event_name": "beforeShellExecution",
+        "command": command,
+        "cwd": str(workspace_dir),
+    }
+    if generation_id is not None:
+        payload["generation_id"] = generation_id
     guard_commands_module._record_cursor_pending_shell_permission(
         store=store,
         guard_home=guard_home,
-        payload={
-            "conversation_id": conversation_id,
-            "generation_id": generation_id,
-            "hook_event_name": "beforeShellExecution",
-            "command": command,
-            "cwd": str(workspace_dir),
-        },
+        payload=payload,
         reason="Requests a sensitive native tool action.",
         artifact=_cursor_shell_artifact(workspace_dir=workspace_dir, command=command),
         artifact_hash="hash-cursor-shell",
@@ -65,7 +67,7 @@ def _trusted_cursor_after_shell_env(
     conversation_id: str,
     command: str,
     workspace_dir: Path,
-    generation_id: str = "gen-cursor-test",
+    approval_binding: str = "gen-cursor-test",
 ) -> dict[str, str]:
     from codex_plugin_scanner.guard.adapters.cursor_native_approval import (
         compute_cursor_after_shell_proof,
@@ -77,11 +79,12 @@ def _trusted_cursor_after_shell_env(
         secret=secret,
         conversation_id=conversation_id,
         command=command,
-        generation_id=generation_id,
+        approval_binding=approval_binding,
     )
     return {
         "HOL_GUARD_MANAGED_CURSOR_HOOK": "1",
         "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF": proof,
+        "HOL_GUARD_CURSOR_APPROVAL_BINDING": approval_binding,
         "CURSOR_SESSION_ID": conversation_id,
         "CURSOR_PROJECT_DIR": str(workspace_dir),
         "CURSOR_VERSION": "test",
@@ -329,7 +332,7 @@ def test_cursor_after_shell_requires_observer_fields(tmp_path: Path) -> None:
             conversation_id=conversation_id,
             command=command,
             workspace_dir=workspace_dir,
-            generation_id=generation_id,
+            approval_binding=generation_id,
         ),
     )
     assert saved is False
@@ -416,7 +419,7 @@ def test_cursor_native_shell_session_allow_after_trusted_after_shell(tmp_path: P
             conversation_id=conversation_id,
             command=command,
             workspace_dir=workspace_dir,
-            generation_id=generation_id,
+            approval_binding=generation_id,
         ),
     )
     policies = store.list_policy_decisions("cursor")
@@ -498,6 +501,71 @@ def test_forged_after_shell_without_attestation_is_rejected(tmp_path: Path) -> N
     assert len(store.list_policy_decisions("cursor")) == 0
 
 
+def test_cursor_session_allow_without_generation_id_uses_binding_file(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.adapters.cursor_native_approval import read_cursor_shell_binding_file
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-no-generation-id"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    _record_cursor_pending_for_test(
+        store=store,
+        guard_home=home_dir,
+        guard_commands_module=guard_commands_module,
+        conversation_id=conversation_id,
+        command=command,
+        workspace_dir=workspace_dir,
+        generation_id=None,
+    )
+    approval_binding = read_cursor_shell_binding_file(
+        home_dir,
+        conversation_id=conversation_id,
+        command=command,
+    )
+    assert approval_binding is not None
+    assert approval_binding.startswith("hol-guard:")
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "hook_event_name": "afterShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+                "duration": 8,
+            }
+        ),
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        hook_env=_trusted_cursor_after_shell_env(
+            home_dir,
+            conversation_id=conversation_id,
+            command=command,
+            workspace_dir=workspace_dir,
+            approval_binding=approval_binding,
+        ),
+    )
+    assert saved is True
+    assert guard_commands_module._cursor_native_shell_is_approved(
+        store,
+        prepare_cursor_hook_payload(
+            {
+                "conversation_id": conversation_id,
+                "hook_event_name": "beforeShellExecution",
+                "command": command,
+                "cwd": str(workspace_dir),
+            }
+        ),
+    )
+
+
 def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
     from codex_plugin_scanner.guard.cli import commands as guard_commands_module
@@ -540,7 +608,7 @@ def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path
             conversation_id=conversation_id,
             command=command,
             workspace_dir=workspace_dir,
-            generation_id=generation_id,
+            approval_binding=generation_id,
         ),
     )
     assert saved is True
@@ -599,7 +667,7 @@ def test_cursor_after_shell_rejects_boolean_duration(tmp_path: Path) -> None:
             conversation_id=conversation_id,
             command=command,
             workspace_dir=workspace_dir,
-            generation_id=generation_id,
+            approval_binding=generation_id,
         ),
     )
     assert saved is False

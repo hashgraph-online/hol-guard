@@ -4757,15 +4757,17 @@ def _record_cursor_pending_shell_permission(
 ) -> None:
     from ..adapters.cursor_native_approval import (
         compute_cursor_after_shell_proof,
-        cursor_generation_id,
+        ensure_cursor_approval_binding,
         ensure_cursor_hook_attestation_secret,
+        remove_cursor_shell_binding_file,
+        write_cursor_shell_binding_file,
     )
 
     conversation_id = _cursor_conversation_id(payload)
     command = _cursor_shell_command_from_payload(payload)
-    generation_id = cursor_generation_id(payload)
-    if conversation_id is None or command is None or generation_id is None:
+    if conversation_id is None or command is None:
         return
+    approval_binding = ensure_cursor_approval_binding(payload)
     saved_at = _now()
     try:
         secret = ensure_cursor_hook_attestation_secret(guard_home)
@@ -4773,7 +4775,13 @@ def _record_cursor_pending_shell_permission(
             secret=secret,
             conversation_id=conversation_id,
             command=command,
-            generation_id=generation_id,
+            approval_binding=approval_binding,
+        )
+        write_cursor_shell_binding_file(
+            guard_home,
+            conversation_id=conversation_id,
+            command=command,
+            approval_binding=approval_binding,
         )
     except OSError:
         return
@@ -4788,7 +4796,8 @@ def _record_cursor_pending_shell_permission(
         "source_scope": artifact.source_scope,
         "command": command,
         "conversation_id": conversation_id,
-        "generation_id": generation_id,
+        "approval_binding": approval_binding,
+        "generation_id": approval_binding,
         "after_shell_proof": after_shell_proof,
         "native_source": "cursor-native",
     }
@@ -5044,6 +5053,13 @@ def _persist_cursor_native_permission_after_shell(
         store,
         conversation_id=conversation_id,
         pending_key=pending_key,
+    )
+    from ..adapters.cursor_native_approval import remove_cursor_shell_binding_file
+
+    remove_cursor_shell_binding_file(
+        guard_home,
+        conversation_id=conversation_id,
+        command=command,
     )
     return True
 
