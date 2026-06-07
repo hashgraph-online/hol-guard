@@ -9,9 +9,13 @@ import {
   HiMiniMagnifyingGlass,
   HiMiniPlus,
   HiMiniChevronRight,
+  HiMiniBarsArrowUp,
+  HiMiniBarsArrowDown,
+  HiMiniDocumentText,
 } from "react-icons/hi2";
 import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
+import { guardAwareHref } from "./guard-api";
 import type { GuardPolicyDecision, GuardRuntimeSnapshot } from "./guard-types";
 
 export type PolicyPageView = "rules" | "exceptions" | "strict";
@@ -21,6 +25,10 @@ export type PolicyFilterState = {
   harnessFilter: string;
   scopeFilter: string;
 };
+
+type PolicySortKey = "app" | "scope" | "action" | "target" | "updated";
+type PolicySortDirection = "asc" | "desc";
+type PolicySortState = { key: PolicySortKey; direction: PolicySortDirection } | null;
 
 export function groupPoliciesByHarness(
   policies: GuardPolicyDecision[],
@@ -90,6 +98,46 @@ export function resolveCloudPolicyBundleCopy(snapshot: GuardRuntimeSnapshot): {
   };
 }
 
+function policyTargetLabel(policy: GuardPolicyDecision): string {
+  return policy.artifact_id ?? policy.publisher ?? policy.workspace ?? "Global";
+}
+
+function policyEvidenceHref(policy: GuardPolicyDecision): string {
+  const params = new URLSearchParams();
+  params.set("harness", policy.harness || "global");
+  const target = policyTargetLabel(policy);
+  if (target && target !== "Global") {
+    params.set("search", target);
+  }
+  return `/evidence?${params.toString()}`;
+}
+
+function sortPolicies(
+  policies: GuardPolicyDecision[],
+  sort: PolicySortState,
+): GuardPolicyDecision[] {
+  if (sort === null) return policies;
+  const sorted = [...policies];
+  const dir = sort.direction === "asc" ? 1 : -1;
+  sorted.sort((a, b) => {
+    switch (sort.key) {
+      case "app":
+        return a.harness.localeCompare(b.harness) * dir;
+      case "scope":
+        return a.scope.localeCompare(b.scope) * dir;
+      case "action":
+        return a.action.localeCompare(b.action) * dir;
+      case "target":
+        return policyTargetLabel(a).localeCompare(policyTargetLabel(b)) * dir;
+      case "updated":
+        return (new Date(a.updated_at || 0).getTime() - new Date(b.updated_at || 0).getTime()) * dir;
+      default:
+        return 0;
+    }
+  });
+  return sorted;
+}
+
 type PolicyRowProps = {
   policy: GuardPolicyDecision;
   onClear?: (policy: GuardPolicyDecision) => void;
@@ -119,26 +167,77 @@ function PolicyRow({ policy, onClear }: PolicyRowProps) {
         <Badge tone={actionTone}>{policy.action}</Badge>
       </td>
       <td className="px-4 py-2.5 text-xs text-slate-500 max-w-[200px]">
-        <span className="truncate block" title={policy.artifact_id ?? undefined}>
-          {policy.artifact_id ?? policy.publisher ?? policy.workspace ?? "Global"}
+        <span className="truncate block" title={policyTargetLabel(policy)}>
+          {policyTargetLabel(policy)}
         </span>
       </td>
       <td className="px-4 py-2.5 text-xs text-slate-400 whitespace-nowrap">
         {policy.updated_at ? formatRelativeTime(policy.updated_at) : null}
       </td>
       <td className="px-4 py-2.5">
-        {onClear && (
-          <button
-            type="button"
-            onClick={handleClear}
-            aria-label={`Clear policy for ${harnessDisplayName(policy.harness)}`}
-            className="inline-flex items-center justify-center rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/50 transition-colors"
+        <div className="flex items-center gap-0.5">
+          <a
+            href={guardAwareHref(policyEvidenceHref(policy))}
+            className="inline-flex h-8 w-8 items-center justify-center rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors"
+            aria-label={`View evidence for ${harnessDisplayName(policy.harness)}`}
+            title="View evidence"
           >
-            <HiMiniTrash className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        )}
+            <HiMiniDocumentText className="h-4 w-4" aria-hidden="true" />
+          </a>
+          {onClear && (
+            <button
+              type="button"
+              onClick={handleClear}
+              aria-label={`Clear policy for ${harnessDisplayName(policy.harness)}`}
+              className="inline-flex h-8 w-8 items-center justify-center rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/50 transition-colors"
+              title="Clear policy"
+            >
+              <HiMiniTrash className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </td>
     </tr>
+  );
+}
+
+type SortHeaderProps = {
+  label: string;
+  sortKey: PolicySortKey;
+  activeSort: PolicySortState;
+  onSort: (key: PolicySortKey) => void;
+  className?: string;
+};
+
+function SortHeader({ label, sortKey, activeSort, onSort, className }: SortHeaderProps) {
+  const isActive = activeSort?.key === sortKey;
+  const ariaSort = isActive ? (activeSort.direction === "asc" ? "ascending" : "descending") : "none";
+  return (
+    <th
+      scope="col"
+      aria-sort={ariaSort}
+      className={`px-4 py-2.5 text-left ${className ?? ""}`}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="group inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 transition-colors hover:text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded px-1 -ml-1"
+        aria-label={`Sort by ${label}, ${isActive ? (activeSort.direction === "asc" ? "descending" : "ascending") : "ascending"}`}
+      >
+        {label}
+        <span className="inline-flex h-3.5 w-3.5 items-center justify-center" aria-hidden="true">
+          {isActive ? (
+            activeSort.direction === "asc" ? (
+              <HiMiniBarsArrowUp className="h-3 w-3 text-brand-blue" />
+            ) : (
+              <HiMiniBarsArrowDown className="h-3 w-3 text-brand-blue" />
+            )
+          ) : (
+            <HiMiniBarsArrowUp className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+          )}
+        </span>
+      </button>
+    </th>
   );
 }
 
@@ -161,6 +260,7 @@ export function PolicyWorkspace({
     harnessFilter: "",
     scopeFilter: "",
   });
+  const [sort, setSort] = useState<PolicySortState>({ key: "updated", direction: "desc" });
 
   const handleSearchChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setFilter((f) => ({ ...f, searchQuery: e.target.value }));
@@ -168,6 +268,18 @@ export function PolicyWorkspace({
 
   const handleViewChange = useCallback((v: PolicyPageView) => {
     setActiveView(v);
+  }, []);
+
+  const handleSort = useCallback((key: PolicySortKey) => {
+    setSort((current) => {
+      if (current?.key === key) {
+        if (current.direction === "asc") {
+          return { key, direction: "desc" };
+        }
+        return { key, direction: "asc" };
+      }
+      return { key, direction: "asc" };
+    });
   }, []);
 
   const securityLevel = snapshot.security_level;
@@ -181,22 +293,21 @@ export function PolicyWorkspace({
         p.harness.toLowerCase().includes(q) ||
         (p.artifact_id ?? "").toLowerCase().includes(q) ||
         (p.workspace ?? "").toLowerCase().includes(q) ||
-        (p.publisher ?? "").toLowerCase().includes(q)
+        (p.publisher ?? "").toLowerCase().includes(q) ||
+        p.scope.toLowerCase().includes(q) ||
+        p.action.toLowerCase().includes(q)
       );
     });
   }, [policies, filter.searchQuery]);
 
-  const allowPolicies = useMemo(
-    () => filteredPolicies.filter((p) => p.action === "allow"),
-    [filteredPolicies],
+  const sortedPolicies = useMemo(
+    () => sortPolicies(filteredPolicies, sort),
+    [filteredPolicies, sort],
   );
-  const blockPolicies = useMemo(
-    () => filteredPolicies.filter((p) => p.action === "block"),
-    [filteredPolicies],
-  );
+
   const exceptionPolicies = useMemo(
-    () => filteredPolicies.filter((p) => p.action !== "allow" && p.action !== "block"),
-    [filteredPolicies],
+    () => sortedPolicies.filter((p) => p.action !== "allow" && p.action !== "block"),
+    [sortedPolicies],
   );
 
   const policyByHarness = useMemo(() => groupPoliciesByHarness(policies), [policies]);
@@ -274,15 +385,16 @@ export function PolicyWorkspace({
             value={filter.searchQuery}
             onChange={handleSearchChange}
             aria-label="Search policies"
-            className="bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-36"
+            className="bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-36 sm:w-48"
           />
         </div>
       </div>
 
       {activeView === "rules" && (
         <PolicyTable
-          allowPolicies={allowPolicies}
-          blockPolicies={blockPolicies}
+          policies={sortedPolicies.filter((p) => p.action === "allow" || p.action === "block")}
+          sort={sort}
+          onSort={handleSort}
           onClearPolicy={onClearPolicy}
         />
       )}
@@ -297,13 +409,14 @@ export function PolicyWorkspace({
 }
 
 type PolicyTableProps = {
-  allowPolicies: GuardPolicyDecision[];
-  blockPolicies: GuardPolicyDecision[];
+  policies: GuardPolicyDecision[];
+  sort: PolicySortState;
+  onSort: (key: PolicySortKey) => void;
   onClearPolicy?: (policy: GuardPolicyDecision) => void;
 };
 
-function PolicyTable({ allowPolicies, blockPolicies, onClearPolicy }: PolicyTableProps) {
-  const allPolicies = [...allowPolicies, ...blockPolicies];
+function PolicyTable({ policies, sort, onSort, onClearPolicy }: PolicyTableProps) {
+  const allPolicies = policies;
 
   if (allPolicies.length === 0) {
     return (
@@ -318,24 +431,14 @@ function PolicyTable({ allowPolicies, blockPolicies, onClearPolicy }: PolicyTabl
   return (
     <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[600px] text-sm" aria-label="Policy rules">
+        <table className="w-full min-w-[640px] text-sm" aria-label="Policy rules">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              <th scope="col" className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                App
-              </th>
-              <th scope="col" className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Scope
-              </th>
-              <th scope="col" className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Action
-              </th>
-              <th scope="col" className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Target
-              </th>
-              <th scope="col" className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Updated
-              </th>
+              <SortHeader label="App" sortKey="app" activeSort={sort} onSort={onSort} />
+              <SortHeader label="Scope" sortKey="scope" activeSort={sort} onSort={onSort} />
+              <SortHeader label="Action" sortKey="action" activeSort={sort} onSort={onSort} />
+              <SortHeader label="Target" sortKey="target" activeSort={sort} onSort={onSort} />
+              <SortHeader label="Updated" sortKey="updated" activeSort={sort} onSort={onSort} />
               <th scope="col" className="px-4 py-2.5">
                 <span className="sr-only">Actions</span>
               </th>
@@ -344,7 +447,7 @@ function PolicyTable({ allowPolicies, blockPolicies, onClearPolicy }: PolicyTabl
           <tbody>
             {allPolicies.map((p) => (
               <PolicyRow
-                key={`${p.harness}-${p.scope}-${p.artifact_id ?? p.publisher ?? p.workspace ?? "global"}`}
+                key={`${p.harness}-${p.scope}-${policyTargetLabel(p)}-${p.updated_at ?? ""}`}
                 policy={p}
                 onClear={onClearPolicy}
               />
@@ -396,16 +499,27 @@ function ExceptionsView({
                   <span className="truncate block">{p.reason ?? "No reason recorded"}</span>
                 </td>
                 <td className="px-4 py-2.5">
-                  {onClearPolicy && (
-                    <button
-                      type="button"
-                      onClick={() => onClearPolicy(p)}
-                      aria-label={`Remove exception for ${harnessDisplayName(p.harness)}`}
-                      className="inline-flex items-center justify-center rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                  <div className="flex items-center gap-0.5">
+                    <a
+                      href={guardAwareHref(policyEvidenceHref(p))}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors"
+                      aria-label={`View evidence for ${harnessDisplayName(p.harness)}`}
+                      title="View evidence"
                     >
-                      <HiMiniTrash className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  )}
+                      <HiMiniDocumentText className="h-4 w-4" aria-hidden="true" />
+                    </a>
+                    {onClearPolicy && (
+                      <button
+                        type="button"
+                        onClick={() => onClearPolicy(p)}
+                        aria-label={`Remove exception for ${harnessDisplayName(p.harness)}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                        title="Remove exception"
+                      >
+                        <HiMiniTrash className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

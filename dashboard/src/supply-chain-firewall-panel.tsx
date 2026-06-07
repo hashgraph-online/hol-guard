@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import {
   HiMiniArrowPath,
   HiMiniBugAnt,
@@ -10,9 +10,10 @@ import {
   HiMiniTrash,
   HiMiniCheckCircle,
   HiMiniMagnifyingGlass,
+  HiMiniXCircle,
 } from "react-icons/hi2";
 import { ApprovalProofModal } from "./approval-proof-modal";
-import { SectionLabel, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
+import { SectionLabel, Tag, ActionButton, IconActionButton, EmptyState } from "./approval-center-primitives";
 import type {
   GuardApprovalGatePublicConfig,
   PackageFirewallStatusResponse,
@@ -163,42 +164,58 @@ function ManagerRow({
           <div className="shrink-0">
             {isConfirmingRemove ? (
               <div className="flex items-center gap-1.5">
-                <ActionButton variant="ghost" onClick={onRemoveCancel} disabled={anyPending}>
-                  Cancel
-                </ActionButton>
-                <ActionButton
+                <IconActionButton
+                  variant="ghost"
+                  label="Cancel"
+                  icon={<HiMiniXCircle className="h-4 w-4" />}
+                  onClick={onRemoveCancel}
+                  disabled={anyPending}
+                />
+                <IconActionButton
                   variant="danger"
+                  label="Confirm"
+                  icon={<HiMiniTrash className="h-4 w-4" />}
                   onClick={handleRemoveConfirm}
                   disabled={anyPending}
-                >
-                  Confirm
-                </ActionButton>
+                />
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-1.5">
                 {showInstall && (
-                  <ActionButton variant="primary" onClick={handleInstall} disabled={anyPending}>
-                    <HiMiniShieldCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                    Protect
-                  </ActionButton>
+                  <IconActionButton
+                    variant="primary"
+                    label="Protect"
+                    icon={<HiMiniShieldCheck className="h-4 w-4" />}
+                    onClick={handleInstall}
+                    disabled={anyPending}
+                  />
                 )}
                 {showRepair && (
-                  <ActionButton variant="primary" onClick={handleRepair} disabled={anyPending}>
-                    <HiMiniWrenchScrewdriver className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                    Fix PATH
-                  </ActionButton>
+                  <IconActionButton
+                    variant="primary"
+                    label="Fix PATH"
+                    icon={<HiMiniWrenchScrewdriver className="h-4 w-4" />}
+                    onClick={handleRepair}
+                    disabled={anyPending}
+                  />
                 )}
                 {showTest && (
-                  <ActionButton variant="outline" onClick={handleTest} disabled={anyPending}>
-                    <HiMiniBeaker className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                    Test
-                  </ActionButton>
+                  <IconActionButton
+                    variant="outline"
+                    label="Test"
+                    icon={<HiMiniBeaker className="h-4 w-4" />}
+                    onClick={handleTest}
+                    disabled={anyPending}
+                  />
                 )}
                 {showRemove && (
-                  <ActionButton variant="danger" onClick={handleRemoveRequest} disabled={anyPending}>
-                    <HiMiniTrash className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                    Remove
-                  </ActionButton>
+                  <IconActionButton
+                    variant="danger"
+                    label="Remove"
+                    icon={<HiMiniTrash className="h-4 w-4" />}
+                    onClick={handleRemoveRequest}
+                    disabled={anyPending}
+                  />
                 )}
               </div>
             )}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import {
   HiMiniExclamationTriangle,
   HiMiniCheckCircle,
@@ -11,11 +11,14 @@ import {
   HiMiniArrowUp,
   HiMiniChevronRight,
   HiMiniWrenchScrewdriver,
+  HiMiniShieldCheck,
+  HiMiniDocumentText,
+  HiMiniArrowPath,
 } from "react-icons/hi2";
-import { SectionLabel, Badge, Tag, ActionButton, EmptyState } from "./approval-center-primitives";
+import { SectionLabel, Badge, Tag, ActionButton, IconActionButton, EmptyState } from "./approval-center-primitives";
 import { ApprovalProofModal } from "./approval-proof-modal";
 import { formatRelativeTime, harnessDisplayName } from "./approval-center-utils";
-import { GuardHarnessActionError, runAuditRemediation } from "./guard-api";
+import { GuardHarnessActionError, runAuditRemediation, guardAwareHref } from "./guard-api";
 import type { AuditRemediationAction } from "./guard-api";
 import type { GuardApprovalGatePublicConfig, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
@@ -33,6 +36,7 @@ export type AuditResult = {
   remediation: string | null;
   remediationAction: AuditRemediationRequest | null;
   resolved: boolean;
+  evidenceHref: string | null;
 };
 
 export type AuditRemediationRequest = {
@@ -78,15 +82,23 @@ export function deriveFrontendAuditResults(
           : {
               action: "package_shim_path",
               manager: mgr,
-              label: `Install Guard for ${mgr}`,
+              label: "Install Guard",
             },
         resolved: false,
+        evidenceHref: restartRequired
+          ? null
+          : `/evidence?harness=global&search=${encodeURIComponent(mgr)}`,
       });
     }
   }
 
   const blockedReceipts = receipts.filter((r) => r.policy_decision === "block");
   for (const r of blockedReceipts.slice(0, 20)) {
+    const evidenceParams = new URLSearchParams();
+    evidenceParams.set("harness", r.harness || "global");
+    if (r.artifact_name) {
+      evidenceParams.set("search", r.artifact_name);
+    }
     results.push({
       id: `blocked-${r.receipt_id}`,
       severity: "medium",
@@ -98,6 +110,7 @@ export function deriveFrontendAuditResults(
       remediation: "Review the action in evidence and adjust policy if it was a false positive.",
       remediationAction: null,
       resolved: true,
+      evidenceHref: `/evidence?${evidenceParams.toString()}`,
     });
   }
 
@@ -113,6 +126,7 @@ export function deriveFrontendAuditResults(
       remediation: "Start Guard with hol-guard bootstrap or check system logs.",
       remediationAction: null,
       resolved: false,
+      evidenceHref: null,
     });
   }
 
@@ -224,21 +238,48 @@ function AuditRowActions(props: {
 
   if (result.remediationAction !== null) {
     return (
-      <div className="w-full sm:w-auto">
-        <ActionButton onClick={handleRunRemediation} disabled={running}>
-          <HiMiniWrenchScrewdriver className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          {running ? "Running..." : result.remediationAction.label}
-        </ActionButton>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {result.evidenceHref && (
+          <a
+            href={guardAwareHref(result.evidenceHref)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors"
+            aria-label={`View evidence for ${result.title}`}
+            title="View evidence"
+          >
+            <HiMiniDocumentText className="h-4 w-4" aria-hidden="true" />
+          </a>
+        )}
+        <IconActionButton
+          variant="primary"
+          label={result.remediationAction.label}
+          icon={running ? <HiMiniArrowPath className="h-4 w-4" /> : <HiMiniShieldCheck className="h-4 w-4" />}
+          onClick={handleRunRemediation}
+          disabled={running}
+          spinning={running}
+        />
       </div>
     );
   }
 
   if (onMarkResolved) {
     return (
-      <div className="w-full sm:w-auto">
-        <ActionButton variant="outline" onClick={handleMarkResolved}>
-          Resolve
-        </ActionButton>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {result.evidenceHref && (
+          <a
+            href={guardAwareHref(result.evidenceHref)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors"
+            aria-label={`View evidence for ${result.title}`}
+            title="View evidence"
+          >
+            <HiMiniDocumentText className="h-4 w-4" aria-hidden="true" />
+          </a>
+        )}
+        <IconActionButton
+          variant="outline"
+          label="Resolve"
+          icon={<HiMiniCheckCircle className="h-4 w-4" />}
+          onClick={handleMarkResolved}
+        />
       </div>
     );
   }
