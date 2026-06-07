@@ -2364,12 +2364,12 @@ class GuardStore:
             artifact_rows = connection.execute(
                 """
                 select
-                  coalesce(nullif(artifact_name, ''), artifact_id) as name,
+                  lower(coalesce(nullif(artifact_name, ''), artifact_id)) as name,
                   count(*) as total,
                   sum(case when policy_decision = 'allow' then 1 else 0 end) as allowed,
                   sum(case when policy_decision = 'block' then 1 else 0 end) as blocked
                 from runtime_receipts
-                group by coalesce(nullif(artifact_name, ''), artifact_id)
+                group by lower(coalesce(nullif(artifact_name, ''), artifact_id))
                 order by total desc
                 limit ?
                 """,

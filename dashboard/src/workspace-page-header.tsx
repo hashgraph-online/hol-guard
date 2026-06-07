@@ -5,6 +5,7 @@ import { TabBar } from "./approval-center-primitives";
 export interface WorkspacePageHeaderProps<T extends string> {
   eyebrow: string;
   title: string;
+  description?: string;
   tabs: Array<{ value: T; label: string; id?: string }>;
   activeTab: T;
   onTabChange: (value: T) => void;
@@ -14,6 +15,7 @@ export interface WorkspacePageHeaderProps<T extends string> {
 export function WorkspacePageHeader<T extends string>({
   eyebrow,
   title,
+  description,
   tabs,
   activeTab,
   onTabChange,
@@ -24,6 +26,7 @@ export function WorkspacePageHeader<T extends string>({
       <div className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{eyebrow}</p>
         <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{title}</h1>
+        {description ? <p className="text-sm text-slate-500">{description}</p> : null}
       </div>
       <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4">
         <div className="-mx-1 w-full overflow-x-auto px-1 pb-1 sm:mx-0 sm:w-auto sm:pb-0 [&>div]:!flex-nowrap">
