@@ -669,8 +669,9 @@ def main() -> int:
     if not isinstance(payload, dict):
         print(json.dumps({"permission": "deny", "user_message": "HOL Guard received invalid Cursor hook input."}))
         return 2
-    hook_event_name = str(payload.get("hook_event_name") or payload.get("hookEventName") or "preToolUse")
-    prepared = _prepare_cursor_hook_payload(payload)
+    inferred = _infer_cursor_hook_event_name(payload)
+    hook_event_name = str(inferred.get("hook_event_name") or inferred.get("hookEventName") or "preToolUse")
+    prepared = _prepare_cursor_hook_payload(inferred)
     workspace = _workspace_from_cursor_input(prepared)
     guard_argv = list(GUARD_HOOK_ARGV)
     if workspace:

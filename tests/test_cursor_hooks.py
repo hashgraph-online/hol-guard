@@ -12,8 +12,11 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
     _strip_managed_hook_entries,
+    cursor_hook_response_from_guard,
+    cursor_hook_should_block,
     install_cursor_hooks,
     prepare_cursor_hook_payload,
+    uninstall_cursor_hooks,
 )
 
 
@@ -143,3 +146,71 @@ def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, mon
     for event_name in _MANAGED_HOOK_EVENTS:
         entry = installed["hooks"][event_name][-1]
         assert entry["timeout"] == _MANAGED_HOOK_TIMEOUT_SECONDS
+
+
+def test_prepare_cursor_hook_payload_maps_before_mcp_execution() -> None:
+    payload = prepare_cursor_hook_payload(
+        {
+            "hook_event_name": "beforeMCPExecution",
+            "tool_name": "plugin-notion-workspace-notion",
+            "url": "https://example.com/mcp",
+        }
+    )
+    assert payload["tool_name"] == "plugin-notion-workspace-notion"
+    tool_input = payload["tool_input"]
+    assert isinstance(tool_input, dict)
+    assert tool_input["url"] == "https://example.com/mcp"
+
+
+def test_cursor_hook_response_from_guard_maps_read_ask_to_deny() -> None:
+    response = cursor_hook_response_from_guard(
+        policy_action="require-reapproval",
+        guard_payload={"review_hint": "Approve in Guard"},
+        hook_event_name="beforeReadFile",
+    )
+    assert response["permission"] == "deny"
+    assert response["user_message"] == "Approve in Guard"
+
+
+def test_cursor_hook_response_from_guard_allows_shell() -> None:
+    response = cursor_hook_response_from_guard(
+        policy_action="allow",
+        guard_payload={},
+        hook_event_name="beforeShellExecution",
+    )
+    assert response["permission"] == "allow"
+
+
+def test_cursor_hook_should_block() -> None:
+    assert cursor_hook_should_block(policy_action="block") is True
+    assert cursor_hook_should_block(policy_action="allow") is False
+
+
+def test_cursor_hook_script_source_infers_event_before_prepare(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
+    source = cursor_hook_script_source(context)
+    assert "inferred = _infer_cursor_hook_event_name(payload)" in source
+    assert "hook_event_name = str(inferred.get(\"hook_event_name\")" in source
+
+
+def test_uninstall_cursor_hooks_restores_backup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    guard_home = tmp_path / "guard"
+    workspace = tmp_path / "workspace"
+    home.mkdir()
+    guard_home.mkdir()
+    workspace.mkdir()
+    hooks_path = home / ".cursor" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text('{"version": 1, "hooks": {"preToolUse": []}}\n', encoding="utf-8")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: ["hol-guard"],
+    )
+    context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
+    install_cursor_hooks(context)
+    result = uninstall_cursor_hooks(context)
+    assert result["restored"] is True
+    assert json.loads(hooks_path.read_text(encoding="utf-8")) == {"version": 1, "hooks": {"preToolUse": []}}
