@@ -205,8 +205,6 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     }
   });
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
-  const activeHarness =
-    props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
 
   const handleOpenMobileQueue = useCallback(() => setMobileQueueOpen(true), []);
   const handleCloseMobileQueue = useCallback(() => setMobileQueueOpen(false), []);
@@ -233,7 +231,6 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     <div className="min-h-screen bg-white text-brand-dark">
       <ShellHeader
         queuedCount={queuedItems.length}
-        activeHarness={activeHarness}
         view={props.view}
         onNavigate={props.onNavigate}
         onOpenMobileQueue={handleOpenMobileQueue}
@@ -244,7 +241,6 @@ export function ApprovalCenterLayout(props: LayoutProps) {
       />
       <ShellSidebar
         queuedCount={queuedItems.length}
-        activeHarness={activeHarness}
         view={props.view}
         collapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
