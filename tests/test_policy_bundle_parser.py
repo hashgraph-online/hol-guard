@@ -181,3 +181,24 @@ def test_hgc075_updates_last_known_good_on_valid_replacement(tmp_path: Path) -> 
 
     assert store.get_sync_payload("policy_bundle") == replacement_validated
     assert store.get_sync_payload("policy_bundle_last_good") == replacement_validated
+
+
+def test_hgc076_policy_bundle_acknowledgement_payload() -> None:
+    from codex_plugin_scanner.guard.runtime.runner import _policy_bundle_acknowledgement_payload
+
+    bundle = _sample_policy_bundle()
+    payload = _policy_bundle_acknowledgement_payload(
+        device_id="device-alpha",
+        device_name="Test Device",
+        policy_bundle=bundle,
+        synced_at="2026-04-19T00:00:10+00:00",
+    )
+
+    assert payload == {
+        "appliedAt": "2026-04-19T00:00:10+00:00",
+        "bundleHash": bundle["bundleHash"],
+        "bundleVersion": bundle["bundleVersion"],
+        "deviceId": "device-alpha",
+        "deviceName": "Test Device",
+        "status": "synced",
+    }
