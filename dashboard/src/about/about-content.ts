@@ -22,11 +22,11 @@ export const ABOUT_PARTNER_SECTION_BODY =
   "Join teams building on HOL open standards. Partners get early access to protocol drafts, co-marketing, and direct engineering support.";
 
 export const ABOUT_PARTNER_CTA = "Become a partner";
-export const ABOUT_PARTNER_CTA_HREF = "https://hol.org/partners";
+export const ABOUT_PARTNER_CTA_HREF = "mailto:partners@hol.org";
 
 export const ABOUT_AFFILIATE_SECTION_TITLE = "Affiliate starter kit";
 export const ABOUT_AFFILIATE_SECTION_BODY =
-  "Share Guard with your community and earn a recurring commission on qualified referrals.";
+  "Share Guard with your community and score a recurring commission on qualified referrals.";
 export const ABOUT_AFFILIATE_CTA = "Learn about affiliates";
 export const ABOUT_AFFILIATE_CTA_HREF = "https://hol.org/guard/affiliates";
 
@@ -67,7 +67,7 @@ export const ABOUT_PATH_CARDS: PathCard[] = [
     title: "Sync with your team",
     description: "Connect to Guard Cloud for shared policy bundles and cross-device fleet visibility.",
     ctaLabel: "Guard Cloud",
-    ctaHref: "https://hol.org/guard/cloud",
+    ctaHref: "https://github.com/hashgraph-online/hol-guard",
   },
   {
     title: "Validate packages in CI",

@@ -44,6 +44,15 @@ export function assertSafeAboutExternalUrl(raw: string): {
     throw new AboutExternalLinkError(`Invalid URL: ${raw}`);
   }
 
+  if (parsed.protocol === "mailto:") {
+    return {
+      url: raw,
+      hostname: "",
+      rel: "",
+      target: "",
+    };
+  }
+
   if (parsed.protocol !== "https:") {
     throw new AboutExternalLinkError(`URL must use HTTPS: ${raw}`);
   }
