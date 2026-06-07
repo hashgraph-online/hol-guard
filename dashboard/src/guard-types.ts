@@ -441,6 +441,13 @@ export type GuardReceiptAnalytics = {
   loaded_sample_limit: number;
 };
 
+export type GuardInsightsShareResult = {
+  slug: string;
+  publicUrl: string;
+  ogImageUrl: string;
+  expiresAt: string;
+};
+
 export type GuardArtifactDiff = {
   artifact_id: string;
   harness: string;
