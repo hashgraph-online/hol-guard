@@ -22,7 +22,7 @@ export const ABOUT_PARTNER_SECTION_BODY =
   "Join teams building on HOL open standards. Partners get early access to protocol drafts, co-marketing, and direct engineering support.";
 
 export const ABOUT_PARTNER_CTA = "Become a partner";
-export const ABOUT_PARTNER_CTA_HREF = "https://hol.org";
+export const ABOUT_PARTNER_CTA_HREF = "https://hol.org/guard/partners";
 
 export const ABOUT_AFFILIATE_SECTION_TITLE = "Affiliate starter kit";
 export const ABOUT_AFFILIATE_SECTION_BODY =

@@ -34,6 +34,14 @@ import {
   ABOUT_AFFILIATE_TERMS,
 } from "./about-content";
 
+function AboutSectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block">
+      {children}
+    </span>
+  );
+}
+
 function useEditorialVisibility(threshold = 0.08) {
   const ref = useRef<HTMLElement>(null);
   const [state, setState] = useState<"idle" | "hidden" | "visible">("idle");
@@ -227,7 +235,7 @@ export function AboutWorkspace() {
       {/* Hero */}
       <EditorialSection>
         <div className="max-w-3xl">
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-brand-dark leading-[0.95] mb-6">
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-brand-dark leading-none mb-6">
             {ABOUT_HERO_TITLE}
           </h1>
           <p className="text-xl sm:text-2xl font-medium text-brand-blue mb-6">
@@ -242,9 +250,7 @@ export function AboutWorkspace() {
       {/* Local-first promise */}
       <EditorialSection>
         <div className="mb-8">
-          <span className="text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block">
-            {ABOUT_LOCAL_SECTION_TITLE}
-          </span>
+          <AboutSectionLabel>{ABOUT_LOCAL_SECTION_TITLE}</AboutSectionLabel>
           <p className="text-base leading-relaxed text-slate-500 max-w-2xl">
             {ABOUT_LOCAL_SECTION_BODY}
           </p>
@@ -274,9 +280,7 @@ export function AboutWorkspace() {
       {/* Mission */}
       <EditorialSection>
         <div className="max-w-3xl">
-          <span className="text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block">
-            {ABOUT_MISSION_SECTION_TITLE}
-          </span>
+          <AboutSectionLabel>{ABOUT_MISSION_SECTION_TITLE}</AboutSectionLabel>
           <p className="text-lg leading-relaxed text-brand-dark/75">
             {ABOUT_MISSION_SECTION_BODY}
           </p>
@@ -287,9 +291,7 @@ export function AboutWorkspace() {
       {/* Choose-your-path timeline */}
       <EditorialSection threshold={0.15}>
         <div className="mb-10">
-          <span className="text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block">
-            Choose your path
-          </span>
+          <AboutSectionLabel>Choose your path</AboutSectionLabel>
           <p className="text-base leading-relaxed text-slate-500 max-w-2xl">
             There are many ways to participate in the Guard ecosystem.
           </p>
@@ -314,9 +316,7 @@ export function AboutWorkspace() {
       {/* Partner program */}
       <EditorialSection>
         <div className="max-w-3xl">
-          <span className="text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block">
-            {ABOUT_PARTNER_SECTION_TITLE}
-          </span>
+          <AboutSectionLabel>{ABOUT_PARTNER_SECTION_TITLE}</AboutSectionLabel>
           <p className="text-base leading-relaxed text-brand-dark/75 mb-8">
             {ABOUT_PARTNER_SECTION_BODY}
           </p>
@@ -340,9 +340,7 @@ export function AboutWorkspace() {
       {/* Affiliate starter kit */}
       <EditorialSection>
         <div className="max-w-3xl">
-          <span className="text-sm font-bold tracking-widest uppercase text-brand-blue mb-3 block">
-            {ABOUT_AFFILIATE_SECTION_TITLE}
-          </span>
+          <AboutSectionLabel>{ABOUT_AFFILIATE_SECTION_TITLE}</AboutSectionLabel>
           <p className="text-base leading-relaxed text-brand-dark/75 mb-8">
             {ABOUT_AFFILIATE_SECTION_BODY}
           </p>
