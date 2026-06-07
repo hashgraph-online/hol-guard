@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HiMiniArrowPath } from "react-icons/hi2";
 
-import { fetchGuardUpdateStatus, repairApprovalCenter, scheduleGuardUpdate } from "./guard-api";
+import {
+  fetchGuardUpdateStatus,
+  reconnectGuardDaemonAfterUpdate,
+  scheduleGuardUpdate,
+} from "./guard-api";
 import type { GuardUpdatePhase, GuardUpdateStatus } from "./guard-types";
 
 const UPDATE_STATUS_POLL_MS = 60_000;
 const RECONNECT_POLL_MS = 1_500;
-const RECONNECT_TIMEOUT_MS = 120_000;
+const RECONNECT_TIMEOUT_MS = 180_000;
 
 export type GuardUpdatePanelProps = {
   guardVersion?: string | null;
@@ -138,32 +142,58 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
     };
   }, [refreshUpdateStatus]);
 
-  const waitForReconnect = useCallback(async () => {
-    reconnectStartedAt.current = Date.now();
-    while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
-      try {
-        await repairApprovalCenter();
-        await fetchGuardUpdateStatus();
-        setUpdatePhase("idle");
-        options?.onReconnected?.();
-        return;
-      } catch {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
+  const waitForReconnect = useCallback(
+    async (expectedPreviousVersion: string, expectedLatestVersion: string | null) => {
+      reconnectStartedAt.current = Date.now();
+      while (Date.now() - (reconnectStartedAt.current ?? Date.now()) < RECONNECT_TIMEOUT_MS) {
+        try {
+          const origin = await reconnectGuardDaemonAfterUpdate({
+            expectedPreviousVersion,
+            expectedLatestVersion,
+          });
+          if (!origin) {
+            throw new Error("Guard daemon not found");
+          }
+          if (origin !== window.location.origin) {
+            return;
+          }
+          const status = await fetchGuardUpdateStatus();
+          setUpdateStatus(status);
+          setUpdatePhase("idle");
+          options?.onReconnected?.();
+          return;
+        } catch {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, RECONNECT_POLL_MS));
+        }
       }
-    }
-    setUpdatePhase("error");
-    throw new Error("Guard did not reconnect after the update.");
-  }, [options]);
+      setUpdatePhase("error");
+      throw new Error("Guard did not reconnect after the update.");
+    },
+    [options],
+  );
 
   const onUpdateGuard = useCallback(async () => {
     if (!updateStatus?.update_available || !updateStatus.auto_updatable) {
       return;
     }
+    const expectedPreviousVersion = updateStatus.current_version;
+    const expectedLatestVersion = updateStatus.latest_version;
     setUpdatePhase("updating");
     try {
-      await scheduleGuardUpdate();
+      const scheduleResult = await scheduleGuardUpdate();
+      if (scheduleResult.scheduled === false && scheduleResult.error === "update_in_progress") {
+        setUpdatePhase("reconnecting");
+        await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
+        if (window.location.origin === (window.sessionStorage.getItem("guardDaemon") ?? window.location.origin)) {
+          window.location.reload();
+        }
+        return;
+      }
+      if (scheduleResult.scheduled !== true) {
+        throw new Error(scheduleResult.message ?? scheduleResult.error ?? "Guard update was not scheduled.");
+      }
       setUpdatePhase("reconnecting");
-      await waitForReconnect();
+      await waitForReconnect(expectedPreviousVersion, expectedLatestVersion);
       window.location.reload();
     } catch {
       setUpdatePhase("error");

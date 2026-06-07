@@ -45,6 +45,7 @@ import type {
   GuardSettingsExport,
   GuardSettings,
   GuardUpdateScheduleResult,
+  GuardUpdateReconnectOptions,
   GuardUpdateStatus,
   GuardUpdateVersionCheck,
   DecisionScope,
@@ -65,6 +66,10 @@ import {
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
 const GUARD_SURFACE_PROTOCOL_VERSIONS = ["1.1", "1.0"] as const;
+const DEFAULT_GUARD_DAEMON_PORT = 4781;
+const GUARD_DAEMON_PORT_RANGE = 1000;
+const GUARD_DAEMON_DISCOVERY_PROBE_COUNT = 25;
+const GUARD_DAEMON_PROBE_TIMEOUT_MS = 800;
 let guardTokenOverride: string | null = null;
 let guardTokenLocationKey: string | null = null;
 
@@ -179,6 +184,181 @@ function readGuardToken(): string | null {
 function saveGuardToken(guardToken: string): void {
   guardTokenOverride = guardToken;
   window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+}
+
+function saveGuardDaemonOrigin(daemonOrigin: string): void {
+  window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+}
+
+function preferredGuardDaemonPort(): number {
+  const fromOrigin = readGuardDaemonOrigin();
+  if (fromOrigin) {
+    try {
+      const port = Number(new URL(fromOrigin).port);
+      if (Number.isInteger(port) && port > 0) {
+        return port;
+      }
+    } catch {
+      // fall through
+    }
+  }
+  const port = Number(window.location.port);
+  if (Number.isInteger(port) && port > 0) {
+    return port;
+  }
+  return DEFAULT_GUARD_DAEMON_PORT;
+}
+
+export function buildGuardDaemonCandidatePorts(preferredPort: number): number[] {
+  const offset = preferredPort - DEFAULT_GUARD_DAEMON_PORT;
+  const ports: number[] = [];
+  for (let step = 0; step < GUARD_DAEMON_DISCOVERY_PROBE_COUNT; step += 1) {
+    const candidateOffset =
+      ((offset + step) % GUARD_DAEMON_PORT_RANGE + GUARD_DAEMON_PORT_RANGE) % GUARD_DAEMON_PORT_RANGE;
+    ports.push(DEFAULT_GUARD_DAEMON_PORT + candidateOffset);
+  }
+  return ports;
+}
+
+async function probeGuardDaemonHealth(origin: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${origin}/healthz`, { signal: controller.signal });
+    if (!response.ok) {
+      return false;
+    }
+    const payload = (await response.json()) as Record<string, unknown>;
+    return payload.ok === true && payload.compatibility_version === 2;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+export async function discoverGuardDaemonOrigin(preferredPort = preferredGuardDaemonPort()): Promise<string | null> {
+  for (const port of buildGuardDaemonCandidatePorts(preferredPort)) {
+    const origin = `http://127.0.0.1:${port}`;
+    if (await probeGuardDaemonHealth(origin)) {
+      return origin;
+    }
+  }
+  return null;
+}
+
+function updateReconnectSucceeded(
+  status: GuardUpdateStatus,
+  options: GuardUpdateReconnectOptions,
+): boolean {
+  if (!options.expectedPreviousVersion) {
+    return true;
+  }
+  if (status.update_available !== true) {
+    return true;
+  }
+  if (
+    options.expectedLatestVersion &&
+    status.current_version === options.expectedLatestVersion
+  ) {
+    return true;
+  }
+  return status.current_version !== options.expectedPreviousVersion;
+}
+
+async function initializeGuardDashboardSessionAtOrigin(
+  origin: string,
+  guardToken: string | null,
+): Promise<string | null> {
+  try {
+    const response = await fetch(`${origin}/v1/initialize`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {}),
+      },
+      body: JSON.stringify({
+        client_name: "guard-dashboard-web",
+        surface: "dashboard",
+        supported_protocol_versions: [...GUARD_SURFACE_PROTOCOL_VERSIONS],
+      }),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    return parseDashboardSessionToken(await response.json());
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchGuardUpdateStatusAtOrigin(
+  origin: string,
+  guardToken: string | null,
+): Promise<GuardUpdateStatus> {
+  const response = await fetch(`${origin}/v1/update/status`, {
+    headers: guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {},
+  });
+  if (!response.ok) {
+    throw new Error(`Update status failed with ${response.status}`);
+  }
+  return normalizeGuardUpdateStatus(await response.json());
+}
+
+function redirectToGuardDaemonOrigin(
+  origin: string,
+  guardToken: string | null,
+): void {
+  const url = new URL(origin);
+  url.pathname = window.location.pathname;
+  url.search = window.location.search;
+  const fragmentPairs: string[] = [];
+  if (guardToken) {
+    fragmentPairs.push(`${GUARD_TOKEN_PARAM}=${encodeURIComponent(guardToken)}`);
+  }
+  fragmentPairs.push(`${GUARD_DAEMON_PARAM}=${encodeURIComponent(origin)}`);
+  url.hash = fragmentPairs.join("&");
+  window.location.replace(url.toString());
+}
+
+export async function reconnectGuardDaemonAfterUpdate(
+  options?: GuardUpdateReconnectOptions,
+): Promise<string | null> {
+  const guardToken = readGuardToken();
+  const reconnectOptions = options ?? {};
+  const awaitingVersionChange = Boolean(reconnectOptions.expectedPreviousVersion);
+
+  for (const port of buildGuardDaemonCandidatePorts(preferredGuardDaemonPort())) {
+    const origin = `http://127.0.0.1:${port}`;
+    if (!(await probeGuardDaemonHealth(origin))) {
+      continue;
+    }
+
+    let status: GuardUpdateStatus;
+    try {
+      status = await fetchGuardUpdateStatusAtOrigin(origin, guardToken);
+    } catch {
+      continue;
+    }
+
+    if (awaitingVersionChange && !updateReconnectSucceeded(status, reconnectOptions)) {
+      continue;
+    }
+
+    saveGuardDaemonOrigin(origin);
+    const refreshedToken = await initializeGuardDashboardSessionAtOrigin(origin, guardToken);
+    if (refreshedToken) {
+      saveGuardToken(refreshedToken);
+    }
+
+    if (origin !== window.location.origin) {
+      redirectToGuardDaemonOrigin(origin, refreshedToken ?? guardToken);
+    }
+
+    return origin;
+  }
+
+  return null;
 }
 
 function readGuardDaemonOrigin(): string | null {
@@ -1482,6 +1662,8 @@ export function normalizeGuardUpdateStatus(raw: unknown): GuardUpdateStatus {
     auto_updatable: booleanValue(value.auto_updatable),
     update_available: booleanValue(value.update_available),
     blocked_reason: stringValue(value.blocked_reason),
+    update_in_progress:
+      typeof value.update_in_progress === "boolean" ? value.update_in_progress : undefined,
   };
 }
 

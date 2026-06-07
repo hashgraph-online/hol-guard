@@ -9,12 +9,21 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..cli.update_commands import build_guard_update_status_payload
+
 _DASHBOARD_UPDATE_LOCK = "dashboard-update.lock"
 _DASHBOARD_UPDATE_STALE_SECONDS = 15 * 60
 
 
 def dashboard_update_lock_path(guard_home: Path) -> Path:
     return guard_home / _DASHBOARD_UPDATE_LOCK
+
+
+def read_dashboard_update_lock(guard_home: Path) -> dict[str, object] | None:
+    lock_path = dashboard_update_lock_path(guard_home)
+    if not lock_path.is_file():
+        return None
+    return _read_update_lock(lock_path)
 
 
 def dashboard_update_in_progress(guard_home: Path) -> bool:
@@ -42,6 +51,23 @@ def dashboard_update_in_progress(guard_home: Path) -> bool:
         lock_path.unlink(missing_ok=True)
         return False
     return True
+
+
+def merge_dashboard_update_progress(
+    guard_home: Path,
+    status_payload: dict[str, object],
+) -> dict[str, object]:
+    payload = dict(status_payload)
+    lock_payload = read_dashboard_update_lock(guard_home)
+    if lock_payload is None:
+        payload["update_in_progress"] = False
+        return payload
+    payload["update_in_progress"] = True
+    for key in ("previous_version", "target_version", "daemon_port", "started_at"):
+        value = lock_payload.get(key)
+        if value is not None:
+            payload[key] = value
+    return payload
 
 
 def dashboard_update_runner_script() -> Path:
@@ -76,10 +102,13 @@ def build_dashboard_update_runner_command(
 
 def build_dashboard_update_runner_popen_kwargs(guard_home: Path) -> dict[str, object]:
     resolved_home = guard_home.expanduser().resolve()
+    resolved_home.mkdir(parents=True, exist_ok=True)
+    log_path = resolved_home / "dashboard-update.log"
+    log_handle = log_path.open("a", encoding="utf-8")
     return {
         "stdin": subprocess.DEVNULL,
         "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
+        "stderr": log_handle,
         "cwd": str(resolved_home),
         "env": _runner_env(),
     }
@@ -97,6 +126,7 @@ def schedule_guard_dashboard_update(
             "error": "update_in_progress",
             "message": "Guard is already updating on this machine.",
         }
+    status_payload = build_guard_update_status_payload()
     lock_path = dashboard_update_lock_path(guard_home)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     command = build_dashboard_update_runner_command(
@@ -117,6 +147,8 @@ def schedule_guard_dashboard_update(
             "daemon_pid": daemon_pid,
             "daemon_port": daemon_port,
             "runner_pid": process.pid,
+            "previous_version": status_payload.get("current_version"),
+            "target_version": status_payload.get("latest_version"),
             "started_at": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -124,6 +156,8 @@ def schedule_guard_dashboard_update(
         "scheduled": True,
         "message": "Guard will update, restart briefly, and reload this dashboard.",
         "runner_pid": process.pid,
+        "previous_version": status_payload.get("current_version"),
+        "target_version": status_payload.get("latest_version"),
     }
 
 

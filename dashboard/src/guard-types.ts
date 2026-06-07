@@ -617,6 +617,12 @@ export type GuardUpdateStatus = {
   auto_updatable: boolean;
   update_available: boolean;
   blocked_reason: string | null;
+  update_in_progress?: boolean;
+};
+
+export type GuardUpdateReconnectOptions = {
+  expectedPreviousVersion?: string | null;
+  expectedLatestVersion?: string | null;
 };
 
 export type GuardUpdateScheduleResult = {
