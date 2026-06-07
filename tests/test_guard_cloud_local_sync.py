@@ -394,6 +394,23 @@ def test_sync_guard_events_preserves_unavailable_summary_when_no_events_pending(
     assert stored == result
 
 
+def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    calls = 0
+    original = store.get_oauth_local_credential_health
+
+    def counted_health() -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return original()
+
+    monkeypatch.setattr(store, "get_oauth_local_credential_health", counted_health)
+
+    build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert calls == 1
+
+
 def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
