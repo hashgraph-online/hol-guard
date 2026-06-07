@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,7 +46,6 @@ def dashboard_update_in_progress(guard_home: Path) -> bool:
 
 def schedule_guard_dashboard_update(
     guard_home: Path,
-    *,
     daemon_pid: int,
     daemon_port: int,
 ) -> dict[str, object]:

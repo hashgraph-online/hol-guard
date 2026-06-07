@@ -158,7 +158,7 @@ export function useGuardUpdate(options?: { onReconnected?: () => void }) {
       await scheduleGuardUpdate();
       setUpdatePhase("reconnecting");
       await waitForReconnect();
-      await refreshUpdateStatus();
+      window.location.reload();
     } catch {
       setUpdatePhase("error");
     }
