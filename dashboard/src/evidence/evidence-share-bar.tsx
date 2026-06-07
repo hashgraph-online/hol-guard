@@ -10,6 +10,7 @@ export interface EvidenceShareBarProps {
 
 export function EvidenceShareBar({ label, count, shareOfTotal, onClick, animate = true }: EvidenceShareBarProps) {
   const widthPct = Math.max(Math.min(Math.round(shareOfTotal), 100), shareOfTotal > 0 ? 4 : 0);
+  const displayPct = Math.round(shareOfTotal);
   const Wrapper = onClick ? "button" : "div";
   const wrapperProps = onClick
     ? {
@@ -29,7 +30,7 @@ export function EvidenceShareBar({ label, count, shareOfTotal, onClick, animate 
           <span className="truncate text-sm font-medium text-brand-dark">{label}</span>
           <span className="shrink-0 text-xs tabular-nums text-slate-500">
             {formatEvidenceCount(count)}
-            {shareOfTotal > 0 ? ` · ${widthPct}%` : ""}
+            {shareOfTotal > 0 ? ` · ${displayPct}%` : ""}
           </span>
         </div>
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-2">

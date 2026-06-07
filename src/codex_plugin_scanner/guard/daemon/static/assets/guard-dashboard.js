@@ -18025,16 +18025,16 @@ function EvidenceActivityHeatmap({
     if (flatCells.length === 0) return;
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      moveActive(1);
+      moveActive(7);
     } else if (event.key === "ArrowLeft") {
       event.preventDefault();
-      moveActive(-1);
+      moveActive(-7);
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      moveActive(7);
+      moveActive(1);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      moveActive(-7);
+      moveActive(-1);
     } else if (event.key === "Enter" || event.key === " ") {
       const cell = flatCells[activeIndex];
       if (cell && cell.total > 0 && onSelectDay) {
@@ -18082,6 +18082,7 @@ function EvidenceActivityHeatmap({
         role: "grid",
         "aria-label": "90 day activity heatmap",
         "aria-describedby": displayCell ? "evidence-heatmap-tooltip" : void 0,
+        "aria-activedescendant": activeCell ? `heatmap-cell-${activeCell.date_key}` : void 0,
         tabIndex: 0,
         onKeyDown: handleGridKeyDown,
         onFocus: () => {
@@ -18181,7 +18182,7 @@ function EvidenceDataProvenanceStrip({
   onViewActions
 }) {
   const beyondSample = analytics.total > sampleCount;
-  const cloudNote = runtime?.cloud_state === "local_only" ? "Guard Cloud not connected." : runtime?.cloud_state === "paired_active" && runtime.cloud_sync_health.label !== "Synced" ? runtime.cloud_sync_health.label : null;
+  const cloudNote = runtime?.cloud_state === "local_only" ? "Guard Cloud not connected." : runtime?.cloud_state === "paired_active" && runtime?.cloud_sync_health?.label !== "Synced" ? runtime?.cloud_sync_health?.label : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 border-t border-slate-100 px-5 py-3 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
       formatEvidenceCount(analytics.total),
@@ -18206,6 +18207,7 @@ function EvidenceDataProvenanceStrip({
 }
 function EvidenceShareBar({ label, count, shareOfTotal, onClick, animate = true }) {
   const widthPct = Math.max(Math.min(Math.round(shareOfTotal), 100), shareOfTotal > 0 ? 4 : 0);
+  const displayPct = Math.round(shareOfTotal);
   const Wrapper = onClick ? "button" : "div";
   const wrapperProps = onClick ? {
     type: "button",
@@ -18219,7 +18221,7 @@ function EvidenceShareBar({ label, count, shareOfTotal, onClick, animate = true 
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm font-medium text-brand-dark", children: label }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shrink-0 text-xs tabular-nums text-slate-500", children: [
         formatEvidenceCount(count),
-        shareOfTotal > 0 ? ` · ${widthPct}%` : ""
+        shareOfTotal > 0 ? ` · ${displayPct}%` : ""
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 h-2 overflow-hidden rounded-full bg-surface-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -19565,8 +19567,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     if (filters.view !== "insights") return void 0;
     if (analyticsState.kind !== "ready") return "Loading analytics from your local evidence store.";
     const total = analyticsState.data.total;
-    const formatted = total >= 1e6 ? `${(total / 1e6).toFixed(1).replace(/\.0$/, "")}M` : total >= 1e4 ? `${Math.round(total / 1e3)}K` : total.toLocaleString();
-    return `${formatted} actions in your full local store.`;
+    return `${formatEvidenceCount(total)} actions in your full local store.`;
   }, [filters.view, analyticsState]);
   const headerActions = reactExports.useMemo(
     () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [

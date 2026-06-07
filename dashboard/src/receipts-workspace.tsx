@@ -25,6 +25,7 @@ import { EvidenceActionList } from "./evidence/evidence-action-list";
 import { EvidenceActionDetail } from "./evidence/evidence-action-detail";
 import { EvidenceInsightStrip } from "./evidence/evidence-insight-strip";
 import { EvidenceAnalyticsPanel } from "./evidence/evidence-analytics-panel";
+import { formatEvidenceCount } from "./evidence/evidence-format";
 import { EvidenceExportDrawer } from "./evidence/evidence-export-drawer";
 import { EvidenceClearModal } from "./evidence/evidence-clear-modal";
 import { AppTab } from "./evidence/app-tab";
@@ -251,13 +252,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     if (filters.view !== "insights") return undefined;
     if (analyticsState.kind !== "ready") return "Loading analytics from your local evidence store.";
     const total = analyticsState.data.total;
-    const formatted =
-      total >= 1_000_000
-        ? `${(total / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`
-        : total >= 10_000
-          ? `${Math.round(total / 1_000)}K`
-          : total.toLocaleString();
-    return `${formatted} actions in your full local store.`;
+    return `${formatEvidenceCount(total)} actions in your full local store.`;
   }, [filters.view, analyticsState]);
 
   const headerActions = useMemo(

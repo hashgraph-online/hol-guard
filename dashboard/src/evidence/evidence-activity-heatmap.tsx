@@ -161,16 +161,16 @@ export function EvidenceActivityHeatmap({
     if (flatCells.length === 0) return;
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      moveActive(1);
+      moveActive(7);
     } else if (event.key === "ArrowLeft") {
       event.preventDefault();
-      moveActive(-1);
+      moveActive(-7);
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      moveActive(7);
+      moveActive(1);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      moveActive(-7);
+      moveActive(-1);
     } else if (event.key === "Enter" || event.key === " ") {
       const cell = flatCells[activeIndex];
       if (cell && cell.total > 0 && onSelectDay) {
@@ -226,6 +226,7 @@ export function EvidenceActivityHeatmap({
         role="grid"
         aria-label="90 day activity heatmap"
         aria-describedby={displayCell ? "evidence-heatmap-tooltip" : undefined}
+        aria-activedescendant={activeCell ? `heatmap-cell-${activeCell.date_key}` : undefined}
         tabIndex={0}
         onKeyDown={handleGridKeyDown}
         onFocus={() => {

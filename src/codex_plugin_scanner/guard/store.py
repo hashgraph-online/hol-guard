@@ -2364,7 +2364,7 @@ class GuardStore:
             artifact_rows = connection.execute(
                 """
                 select
-                  min(coalesce(nullif(artifact_name, ''), artifact_id)) as name,
+                  lower(coalesce(nullif(artifact_name, ''), artifact_id)) as name,
                   count(*) as total,
                   sum(case when policy_decision = 'allow' then 1 else 0 end) as allowed,
                   sum(case when policy_decision = 'block' then 1 else 0 end) as blocked
