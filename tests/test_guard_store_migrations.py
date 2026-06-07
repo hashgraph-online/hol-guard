@@ -75,6 +75,15 @@ def _default_store_platform(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _clear_oauth_process_caches() -> None:
+    guard_store_module._OAUTH_SECRET_PAYLOAD_PROCESS_CACHE.clear()
+    guard_store_module._OAUTH_HEALTH_RESULT_PROCESS_CACHE.clear()
+    yield
+    guard_store_module._OAUTH_SECRET_PAYLOAD_PROCESS_CACHE.clear()
+    guard_store_module._OAUTH_HEALTH_RESULT_PROCESS_CACHE.clear()
+
+
 def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_missing(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
@@ -1477,3 +1486,74 @@ def test_device_identity_and_label_management_are_persistent(tmp_path):
     rotated = store.rotate_installation_id("2026-04-19T02:00:00+00:00")
     assert rotated["device_label"] == "VPS - Guard Runtime"
     assert rotated["installation_id"] != original["installation_id"]
+
+
+def test_get_oauth_local_credential_health_avoids_primary_keychain_reads(tmp_path, monkeypatch):
+    _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+    store._oauth_secret_store.fallback.delete_secret(store._oauth_local_credentials_ref)
+
+    primary_reads = 0
+
+    def count_primary_reads(_secret_id: str, *, timeout_seconds: float) -> str | None:
+        nonlocal primary_reads
+        primary_reads += 1
+        return store._oauth_secret_store.primary.get_secret(_secret_id)
+
+    monkeypatch.setattr(store._oauth_secret_store.primary, "get_secret_with_timeout", count_primary_reads)
+
+    for _ in range(10):
+        health = store.get_oauth_local_credential_health()
+        assert health["state"] == "degraded"
+
+    assert primary_reads == 0
+
+
+def test_oauth_secret_payload_process_cache_is_shared_across_store_instances(tmp_path, monkeypatch):
+    _install_fake_system_keyring(monkeypatch)
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_oauth_local_credentials(
+        issuer="https://hol.org",
+        client_id="guard-local-daemon",
+        refresh_token="refresh-secret-value",
+        dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n",
+        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value", "alg": "ES256", "use": "sig"},
+        dpop_public_jwk_thumbprint="thumbprint-123",
+        grant_id="grant-123",
+        machine_id="machine-123",
+        workspace_id="workspace-123",
+        now="2026-06-01T00:00:00+00:00",
+    )
+    assert isinstance(store._oauth_secret_store, FallbackSecretStore)
+    store._oauth_secret_store.fallback.delete_secret(store._oauth_local_credentials_ref)
+
+    primary_reads = 0
+
+    def count_primary_reads(_secret_id: str, *, timeout_seconds: float) -> str | None:
+        nonlocal primary_reads
+        primary_reads += 1
+        return store._oauth_secret_store.primary.get_secret(_secret_id)
+
+    monkeypatch.setattr(store._oauth_secret_store.primary, "get_secret_with_timeout", count_primary_reads)
+
+    assert store.get_oauth_local_credentials() is not None
+    assert primary_reads == 1
+
+    second_store = GuardStore(guard_home)
+    assert second_store.get_oauth_local_credentials() is not None
+    assert primary_reads == 1

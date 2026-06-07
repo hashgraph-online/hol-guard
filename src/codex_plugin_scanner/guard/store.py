@@ -764,7 +764,11 @@ def _should_warn_on_slow_store_transactions() -> bool:
 
 
 _SLOW_QUERY_THRESHOLD_MS: int = 200
+_OAUTH_HEALTH_CACHE_TTL_SECONDS = 60.0
+_OAUTH_HEALTH_DEGRADED_CACHE_TTL_SECONDS = 15.0
 _store_logger = logging.getLogger(__name__)
+_OAUTH_SECRET_PAYLOAD_PROCESS_CACHE: dict[tuple[str, str, str], str] = {}
+_OAUTH_HEALTH_RESULT_PROCESS_CACHE: dict[tuple[str, str], tuple[float, dict[str, object]]] = {}
 
 
 class GuardStore:
@@ -3635,6 +3639,8 @@ class GuardStore:
         secret_material_changed = (
             existing_secret_ref != self._oauth_local_credentials_ref or existing_secret_hash != secret_hash
         )
+        if secret_material_changed:
+            self._clear_oauth_secret_payload_cache()
         # Metadata-only updates can skip the primary rewrite because the encrypted
         # fallback remains current and continues to backstop headless recovery.
         skip_primary_secret_rewrite = (
@@ -3696,18 +3702,26 @@ class GuardStore:
         if metadata is None:
             health["state"] = "degraded"
             return health
-        secret_payload = self._load_oauth_secret_payload(payload, promote=False)
+        secret_hash = payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
+        cached_health = self._get_cached_oauth_health_result(secret_hash)
+        if cached_health is not None:
+            health.update(cached_health)
+            return health
+        secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
         if secret_payload is None:
             health["state"] = "degraded"
+            self._remember_oauth_health_result(secret_hash, health)
             return health
         if self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload) is None:
             health["state"] = "degraded"
+            self._remember_oauth_health_result(secret_hash, health)
             return health
         health["state"] = "healthy"
         for key in ("issuer", "client_id", "grant_id", "machine_id", "workspace_id"):
             value = payload.get(key)
             if isinstance(value, str) and value:
                 health[key] = value
+        self._remember_oauth_health_result(secret_hash, health)
         return health
 
     def get_sync_credential_health(self) -> dict[str, object]:
@@ -3778,6 +3792,7 @@ class GuardStore:
         payload: dict[str, object],
         *,
         promote: bool = True,
+        allow_primary: bool = True,
     ) -> dict[str, object] | None:
         secret_ref = payload.get(_OAUTH_LOCAL_CREDENTIALS_REF_KEY)
         secret_hash = payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY)
@@ -3793,6 +3808,8 @@ class GuardStore:
         if fallback_secret_payload is not None:
             self._remember_oauth_secret_payload(secret_ref, secret_hash, fallback_secret_json)
             return fallback_secret_payload
+        if not allow_primary:
+            return None
         for candidate in self._get_secret_candidates(
             self._oauth_secret_store,
             secret_ref,
@@ -3826,19 +3843,78 @@ class GuardStore:
         secret_json = self._get_secret_from_store(fallback_store, secret_ref)
         return secret_json if isinstance(secret_json, str) and secret_json else None
 
+    def _oauth_process_cache_scope(self) -> str:
+        return str(self.guard_home.expanduser().resolve())
+
+    def _oauth_secret_process_cache_key(self, secret_ref: str, secret_hash: str) -> tuple[str, str, str]:
+        return (self._oauth_process_cache_scope(), secret_ref, secret_hash)
+
+    def _oauth_health_process_cache_key(self, secret_hash: str | None) -> tuple[str, str] | None:
+        if not isinstance(secret_hash, str) or not secret_hash:
+            return None
+        return (self._oauth_process_cache_scope(), secret_hash)
+
     def _get_cached_oauth_secret_payload(self, secret_ref: str, secret_hash: str) -> dict[str, object] | None:
         cached = self._cached_oauth_secret_payload
-        if cached is None or cached[0] != secret_ref or cached[1] != secret_hash:
+        if cached is not None and cached[0] == secret_ref and cached[1] == secret_hash:
+            parsed = self._parse_oauth_secret_payload(cached[2])
+            if parsed is not None:
+                return parsed
+        process_cached = _OAUTH_SECRET_PAYLOAD_PROCESS_CACHE.get(
+            self._oauth_secret_process_cache_key(secret_ref, secret_hash)
+        )
+        if process_cached is None:
             return None
-        return self._parse_oauth_secret_payload(cached[2])
+        parsed = self._parse_oauth_secret_payload(process_cached)
+        if parsed is None:
+            return None
+        self._cached_oauth_secret_payload = (secret_ref, secret_hash, process_cached)
+        return parsed
 
     def _remember_oauth_secret_payload(self, secret_ref: str, secret_hash: str, secret_json: str | None) -> None:
         if not isinstance(secret_json, str) or not secret_json:
             return
         self._cached_oauth_secret_payload = (secret_ref, secret_hash, secret_json)
+        cache_key = self._oauth_secret_process_cache_key(secret_ref, secret_hash)
+        scope = cache_key[0]
+        for existing_key in list(_OAUTH_SECRET_PAYLOAD_PROCESS_CACHE):
+            if existing_key[0] == scope and existing_key[1] == secret_ref and existing_key != cache_key:
+                _OAUTH_SECRET_PAYLOAD_PROCESS_CACHE.pop(existing_key, None)
+        _OAUTH_SECRET_PAYLOAD_PROCESS_CACHE[cache_key] = secret_json
+
+    def _get_cached_oauth_health_result(self, secret_hash: object) -> dict[str, object] | None:
+        cache_key = self._oauth_health_process_cache_key(secret_hash if isinstance(secret_hash, str) else None)
+        if cache_key is None:
+            return None
+        cached = _OAUTH_HEALTH_RESULT_PROCESS_CACHE.get(cache_key)
+        if cached is None:
+            return None
+        cached_at, cached_health = cached
+        state = cached_health.get("state")
+        ttl = _OAUTH_HEALTH_CACHE_TTL_SECONDS if state == "healthy" else _OAUTH_HEALTH_DEGRADED_CACHE_TTL_SECONDS
+        if (time.monotonic() - cached_at) >= ttl:
+            _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
+            return None
+        return dict(cached_health)
+
+    def _remember_oauth_health_result(self, secret_hash: object, health: dict[str, object]) -> None:
+        cache_key = self._oauth_health_process_cache_key(secret_hash if isinstance(secret_hash, str) else None)
+        if cache_key is None:
+            return
+        state = health.get("state")
+        if state not in {"healthy", "degraded"}:
+            return
+        _OAUTH_HEALTH_RESULT_PROCESS_CACHE[cache_key] = (time.monotonic(), dict(health))
 
     def _clear_oauth_secret_payload_cache(self) -> None:
         self._cached_oauth_secret_payload = None
+        scope = self._oauth_process_cache_scope()
+        for cache_key in list(_OAUTH_SECRET_PAYLOAD_PROCESS_CACHE):
+            if cache_key[0] == scope:
+                _OAUTH_SECRET_PAYLOAD_PROCESS_CACHE.pop(cache_key, None)
+        for cache_key in list(_OAUTH_HEALTH_RESULT_PROCESS_CACHE):
+            if cache_key[0] == scope:
+                _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
 
     @staticmethod
     def _parse_oauth_secret_payload(secret_json: str) -> dict[str, object] | None:
