@@ -129,7 +129,7 @@ export type SettingSearchMatch = {
   key: string;
   label: string;
   description: string;
-  section: "risk" | "advanced" | "protection" | "diagnostics";
+  section: "risk" | "defaults" | "protection" | "diagnostics";
 };
 
 const SETTINGS_SEARCH_INDEX: SettingSearchMatch[] = [
@@ -140,19 +140,19 @@ const SETTINGS_SEARCH_INDEX: SettingSearchMatch[] = [
   { key: "encoded_execution", label: "Hidden scripts", description: "Encoded, encrypted, or decoded-and-run command payloads.", section: "risk" },
   { key: "network_egress", label: "New network destinations", description: "Outbound connections Guard has not seen in this context.", section: "risk" },
   { key: "prompt_injection", label: "Prompt injection", description: "Instructions that try to override Guard or leak private data.", section: "risk" },
-  { key: "mcp_dangerous_tool", label: "MCP tools", description: "MCP server and tool calls with filesystem, shell, or network power.", section: "risk" },
+  { key: "mcp_dangerous_tool", label: "Connected tools", description: "Tool calls that can read files, run commands, or reach the network.", section: "risk" },
   { key: "malicious_skill", label: "Skills", description: "Agent skills from unknown or risky sources.", section: "risk" },
   { key: "package_script", label: "Package scripts", description: "Lifecycle scripts such as postinstall, prepare, and prepublish.", section: "risk" },
   { key: "persistence", label: "Persistence", description: "Startup files, launch agents, scheduled jobs, and recurring hooks.", section: "risk" },
   { key: "guard_bypass", label: "Guard bypass", description: "Attempts to disable Guard hooks, policies, or approval flow.", section: "risk" },
   { key: "cloud_advisory", label: "Cloud advisories", description: "Team and Cloud guidance for known risky patterns.", section: "risk" },
   { key: "encoded_exfiltration", label: "Encoded exfiltration", description: "Encoded payloads that hide secret extraction and network transfer.", section: "risk" },
-  { key: "default_action", label: "New action", description: "Default action for actions Guard has not seen before.", section: "advanced" },
-  { key: "unknown_publisher_action", label: "Unknown source", description: "Action to take when the publisher of a tool or command is not known.", section: "advanced" },
-  { key: "changed_hash_action", label: "Changed command", description: "Action when a previously approved command changes its content.", section: "advanced" },
-  { key: "new_network_domain_action", label: "New network domain", description: "Action when an app contacts a network host Guard has not seen.", section: "advanced" },
-  { key: "subprocess_action", label: "Subprocess action", description: "Action for commands that launch child processes.", section: "advanced" },
-  { key: "approval_surface_policy", label: "Approval surface", description: "How Guard surfaces approval requests to you.", section: "advanced" },
+  { key: "default_action", label: "First-time action", description: "What Guard does the first time it sees a new action.", section: "defaults" },
+  { key: "unknown_publisher_action", label: "Unknown source", description: "What Guard does when it cannot verify who published a tool or command.", section: "defaults" },
+  { key: "changed_hash_action", label: "Changed command", description: "What Guard does when an approved command changes.", section: "defaults" },
+  { key: "new_network_domain_action", label: "New website or host", description: "What Guard does when an app contacts a host it has not seen before.", section: "defaults" },
+  { key: "subprocess_action", label: "Nested commands", description: "What Guard does when a command starts another command.", section: "defaults" },
+  { key: "approval_surface_policy", label: "Where to ask", description: "Where Guard shows approval prompts.", section: "defaults" },
   { key: "security_level", label: "Security level", description: "Overall protection preset: Relaxed, Balanced, Strict, or Custom.", section: "protection" },
   { key: "mode", label: "Protection mode", description: "Prompt, Enforce, or Observe. Controls whether Guard pauses actions.", section: "protection" },
   { key: "approval_wait_timeout", label: "Approval wait timeout", description: "How long Guard waits for you to respond before resuming.", section: "protection" },

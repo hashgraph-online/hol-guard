@@ -94,18 +94,24 @@ type SettingsState =
   | { kind: "ready"; payload: GuardSettingsPayload };
 
 const actionOptions = [
-  { value: "allow", label: "Allow" },
-  { value: "warn", label: "Warn" },
-  { value: "review", label: "Review" },
-  { value: "require-reapproval", label: "Ask again" },
-  { value: "sandbox-required", label: "Require sandbox" },
-  { value: "block", label: "Block" }
+  { value: "allow", label: "Allow without asking" },
+  { value: "warn", label: "Warn only" },
+  { value: "review", label: "Ask me first" },
+  { value: "require-reapproval", label: "Ask every time" },
+  { value: "sandbox-required", label: "Run in sandbox" },
+  { value: "block", label: "Block" },
 ];
 
 const surfacePolicyOptions = [
-  { value: "auto-open-once", label: "Open approval center once" },
-  { value: "approval-center", label: "Approval center only" },
-  { value: "native-only", label: "Harness prompt only" }
+  { value: "auto-open-once", label: "Open this dashboard once" },
+  { value: "approval-center", label: "Show in this dashboard" },
+  { value: "native-only", label: "Show in my AI app only" },
+];
+
+const protectionModeChoices = [
+  { value: "prompt" as const, label: "Ask first" },
+  { value: "enforce" as const, label: "Block until approved" },
+  { value: "observe" as const, label: "Watch only" },
 ];
 
 const securityLevels = [
@@ -151,7 +157,7 @@ const riskControls = [
   { key: "encoded_execution", label: "Hidden scripts", description: "Encoded, encrypted, or decoded-and-run command payloads.", consequence: RISK_CONTROL_CONSEQUENCES["encoded_execution"] },
   { key: "network_egress", label: "New network destinations", description: "Outbound connections Guard has not seen in this context.", consequence: RISK_CONTROL_CONSEQUENCES["network_egress"] },
   { key: "prompt_injection", label: "Prompt injection", description: "Prompts that try to override Guard, leak secrets, or weaken review.", consequence: RISK_CONTROL_CONSEQUENCES["prompt_injection"] },
-  { key: "mcp_dangerous_tool", label: "MCP tools", description: "MCP server and tool calls that can touch files, shell, or network.", consequence: RISK_CONTROL_CONSEQUENCES["mcp_dangerous_tool"] },
+  { key: "mcp_dangerous_tool", label: "Connected tools", description: "Tool calls that can read files, run commands, or reach the network.", consequence: RISK_CONTROL_CONSEQUENCES["mcp_dangerous_tool"] },
   { key: "malicious_skill", label: "Skills", description: "Agent skills from unknown or risky sources.", consequence: RISK_CONTROL_CONSEQUENCES["malicious_skill"] },
   { key: "package_script", label: "Package scripts", description: "Lifecycle scripts such as postinstall, prepare, and prepublish.", consequence: RISK_CONTROL_CONSEQUENCES["package_script"] },
   { key: "persistence", label: "Persistence", description: "Startup files, launch agents, scheduled jobs, and recurring hooks.", consequence: RISK_CONTROL_CONSEQUENCES["persistence"] },
@@ -323,12 +329,17 @@ export function applyApprovalGateDraft(
 
 function protectionModeHelp(mode: GuardSettings["mode"]): string {
   if (mode === "enforce") {
-    return "Guard blocks risky actions until a saved decision allows them.";
+    return "Guard keeps risky actions stopped until you allow them.";
   }
   if (mode === "observe") {
-    return "Guard records what it sees without pausing actions.";
+    return "Guard logs what it sees without pausing anything.";
   }
-  return "Guard asks before risky actions continue.";
+  return "Guard pauses risky actions and asks what to do.";
+}
+
+function protectionModeLabel(mode: GuardSettings["mode"]): string {
+  const match = protectionModeChoices.find((choice) => choice.value === mode);
+  return match?.label ?? mode;
 }
 
 function saveStatusText(saveSuccess: boolean, saveError: string | null): string {
@@ -996,11 +1007,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         setActionMessage("Desktop notification setup is not available on this OS.");
         setActionMessageKind("error");
       } else if (result.settings_opened) {
-        setActionMessage("Notification settings opened. Enable terminal-notifier alerts, banners, and sounds.");
+        setActionMessage("Notification settings opened. Turn on alerts and sounds for Guard.");
         setActionMessageKind("success");
       } else {
         setActionMessage(
-          "Notification setup ran, but macOS did not open Settings. Open System Settings > Notifications and choose terminal-notifier."
+          "We could not open Settings automatically. Open System Settings > Notifications and allow alerts for Guard."
         );
         setActionMessageKind("success");
       }
@@ -1034,12 +1045,12 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     : riskControls;
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-6">
       <GuardHero
         status="clear"
         headline="Choose how protective Guard should be"
-        subheadline="Start with a simple security level, then tune exact risk types when a trusted app needs more room to work."
-        cta={<Tag tone="blue">{draft.mode}</Tag>}
+        subheadline="Pick a security level that matches your vibe. You can fine-tune individual rules later."
+        cta={<Tag tone="blue">{protectionModeLabel(draft.mode)}</Tag>}
       />
 
       <div className="relative">
@@ -1062,7 +1073,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
 
       {hasSearch && riskSearchMatches.length > 0 && (
         <div className="rounded-xl border border-slate-100 p-4">
-          <SectionLabel>Risk controls matching search</SectionLabel>
+          <SectionLabel>Matching fine-tuning rules</SectionLabel>
           <div className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
             {visibleRiskControls.map((risk) => (
               <RiskControlRow
@@ -1078,6 +1089,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         </div>
       )}
 
+      <div className="flex min-h-0 flex-1 flex-col">
       <SettingsSectionShell
         activeTab={activeTab}
         onTabChange={handleTabChange}
@@ -1096,10 +1108,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         }
       >
         {activeTab === "protection" && (
-          <div className="space-y-6">
+          <div className="flex min-h-0 flex-1 flex-col space-y-6">
             <SettingsFormSection
               title="Protection level"
-              description={`${securityLevelLabel(draft.security_level)} · ${draft.mode} mode`}
+              description={`${securityLevelLabel(draft.security_level)} · ${protectionModeLabel(draft.mode)}`}
             >
               <fieldset className="space-y-6 border-0 p-0">
                 <legend className="sr-only">Security level</legend>
@@ -1120,11 +1132,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               <fieldset className="border-0 p-0">
                 <legend className="sr-only">Protection mode</legend>
                 <div className="grid gap-2 py-3 sm:grid-cols-3">
-                  {(["prompt", "enforce", "observe"] as const).map((mode) => (
+                  {protectionModeChoices.map((modeChoice) => (
                     <label
-                      key={mode}
+                      key={modeChoice.value}
                       className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg border px-3 py-2 transition-colors ${
-                        draft.mode === mode
+                        draft.mode === modeChoice.value
                           ? "border-brand-blue/25 bg-brand-blue/[0.04]"
                           : "border-transparent bg-slate-50/80 hover:bg-white"
                       }`}
@@ -1132,12 +1144,12 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                       <input
                         type="radio"
                         name="mode"
-                        value={mode}
-                        checked={draft.mode === mode}
+                        value={modeChoice.value}
+                        checked={draft.mode === modeChoice.value}
                         onChange={handleModeChange}
                         className="sr-only"
                       />
-                      <span className="text-sm font-semibold capitalize text-brand-dark">{mode}</span>
+                      <span className="text-sm font-semibold text-brand-dark">{modeChoice.label}</span>
                     </label>
                   ))}
                 </div>
@@ -1148,10 +1160,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               <div className="space-y-4 py-3">
                 <div>
                   <label htmlFor="approval-wait" className="guard-settings-body font-medium text-brand-dark">
-                    Approval wait timeout
+                    How long to wait for your answer
                   </label>
                   <p className="guard-settings-caption text-slate-500">
-                    Seconds to wait before returning to the app
+                    Seconds before Guard returns control to your AI app
                   </p>
                   <input
                     id="approval-wait"
@@ -1192,11 +1204,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         )}
 
         {activeTab === "approval" && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col space-y-4">
             {!approvalGateEnabled ? (
               <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
                 <p className="text-sm text-brand-dark">
-                  Add a password or authenticator so allow and trust changes need proof before they apply.
+                  Add a password or phone app code before allow or trust changes stick.
                 </p>
               </div>
             ) : null}
@@ -1237,7 +1249,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         )}
 
         {activeTab === "notifications" && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col space-y-4">
             <NotificationSetupCard
               result={notificationSetup}
               settingUp={settingUpNotifications}
@@ -1247,14 +1259,14 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           </div>
         )}
 
-        {activeTab === "advanced" && (
-          <div className="space-y-6">
+        {activeTab === "risk" && (
+          <div className="flex min-h-0 flex-1 flex-col space-y-6">
             <SettingsFormSection
-              title="Risk choices"
+              title="Risky action types"
               description={
                 draft.security_level !== "custom"
-                  ? `Managed by ${securityLevelLabel(draft.security_level)}. Select Custom on the Protection tab to override.`
-                  : "Custom overrides active for this machine."
+                  ? `Follows ${securityLevelLabel(draft.security_level)}. Choose Custom on Protection to edit each type.`
+                  : "You are overriding the preset for this machine."
               }
             >
               <div className={`space-y-1 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
@@ -1270,9 +1282,9 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 ))}
                 <div className="grid gap-2 border-t border-slate-100 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
                   <div>
-                    <p className="text-sm font-medium text-brand-dark">Codex reading local secret files</p>
+                    <p className="text-sm font-medium text-brand-dark">Codex reading secret files</p>
                     <p className="text-xs text-slate-500">
-                      Use only for trusted projects where Codex should read .env or .npmrc without Guard asking.
+                      Only for trusted projects where Codex may read .env or .npmrc without an extra prompt.
                     </p>
                   </div>
                   <SettingSelect
@@ -1289,19 +1301,30 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 </div>
               </div>
             </SettingsFormSection>
+          </div>
+        )}
 
-            <SettingsFormSection title="Advanced defaults">
+        {activeTab === "defaults" && (
+          <div className="flex min-h-0 flex-1 flex-col space-y-6">
+            <SettingsFormSection
+              title="When Guard is unsure"
+              description="These rules apply before Guard has enough history to decide on its own."
+            >
               <div className="grid gap-3 py-3 sm:grid-cols-2">
-                <SettingSelect label="New action" value={draft.default_action} options={actionOptions} onChange={handleStringChange("default_action")} />
+                <SettingSelect label="First-time action" value={draft.default_action} options={actionOptions} onChange={handleStringChange("default_action")} />
                 <SettingSelect label="Unknown source" value={draft.unknown_publisher_action} options={actionOptions} onChange={handleStringChange("unknown_publisher_action")} />
                 <SettingSelect label="Changed command" value={draft.changed_hash_action} options={actionOptions} onChange={handleStringChange("changed_hash_action")} />
-                <SettingSelect label="New network domain" value={draft.new_network_domain_action} options={actionOptions} onChange={handleStringChange("new_network_domain_action")} />
-                <SettingSelect label="Subprocess action" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
-                <SettingSelect label="Approval surface" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
+                <SettingSelect label="New website or host" value={draft.new_network_domain_action} options={actionOptions} onChange={handleStringChange("new_network_domain_action")} />
+                <SettingSelect label="Nested commands" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
+                <SettingSelect label="Where to ask" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
               </div>
             </SettingsFormSection>
+          </div>
+        )}
 
-            <SettingsFormSection title="Diagnostics and data" description="Maintenance, exports, and local cleanup.">
+        {activeTab === "maintenance" && (
+          <div className="flex min-h-0 flex-1 flex-col space-y-6">
+            <SettingsFormSection title="Keep this machine tidy" description="Export, reset, clear history, or fix a broken approval link.">
               <div className="space-y-4 py-3">
                 {perfSnapshot !== null ? <DiagnosticsPerfCard snapshot={perfSnapshot} /> : null}
                 <input
@@ -1316,18 +1339,18 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 <div className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-brand-dark">Approval gate proof</p>
+                      <p className="text-sm font-semibold text-brand-dark">Proof before cleanup</p>
                       <p className="mt-1 max-w-2xl text-xs text-slate-500">
-                        Enter proof here before clearing approvals or the review queue.
+                        Enter your password or app code before clearing saved decisions or the review list.
                       </p>
                     </div>
                     {draft.approval_gate?.totp_enabled === true ? (
-                      <Badge tone="blue">Authenticator required</Badge>
+                      <Badge tone="blue">App code required</Badge>
                     ) : null}
                   </div>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Password</span>
                       <input
                         type="password"
                         autoComplete="current-password"
@@ -1337,7 +1360,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                       />
                     </label>
                     <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Authenticator code</span>
+                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">App code</span>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -1434,9 +1457,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           </div>
         )}
       </SettingsSectionShell>
+      </div>
 
       <div
-        className="sticky bottom-4 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur"
+        className="sticky bottom-4 mt-auto rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur"
         role="region"
         aria-label="Save settings"
       >
@@ -1478,12 +1502,12 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 <HiMiniExclamationTriangle className="h-5 w-5 text-brand-attention" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-base font-semibold text-brand-dark">Switch to Observe mode?</h3>
-                <p className="mt-2 text-sm text-slate-500">In Observe mode, Guard records what your AI apps do but does not pause any actions. This reduces your protection. Only use this when debugging or in trusted environments.</p>
+                <h3 className="text-base font-semibold text-brand-dark">Switch to Watch only?</h3>
+                <p className="mt-2 text-sm text-slate-500">In Watch only mode, Guard records what your AI apps do but does not pause anything. Use this only when debugging or in a fully trusted environment.</p>
               </div>
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
-              <button onClick={confirmModeChange} className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90">Switch to Observe</button>
+              <button onClick={confirmModeChange} className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90">Switch to Watch only</button>
               <button onClick={cancelModeChange} className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50">Keep current mode</button>
             </div>
           </div>
@@ -1517,11 +1541,11 @@ function DiagnosticsPerfCard(props: { snapshot: GuardRuntimeSnapshot }) {
   const startedAt = props.snapshot.runtime_state?.started_at ?? null;
   return (
     <div className="rounded-lg bg-slate-50/80 px-3 py-2">
-      <p className="text-xs font-semibold text-brand-dark">Runtime</p>
+      <p className="text-xs font-semibold text-brand-dark">Background service</p>
       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-        {threadCount !== undefined && <span>{threadCount} threads</span>}
-        {daemonPort !== null && <span>Port {daemonPort}</span>}
-        {startedAt !== null && <span>Started {new Date(startedAt).toLocaleTimeString()}</span>}
+        {threadCount !== undefined && <span>{threadCount} worker threads</span>}
+        {daemonPort !== null && <span>Local port {daemonPort}</span>}
+        {startedAt !== null && <span>Running since {new Date(startedAt).toLocaleTimeString()}</span>}
       </div>
     </div>
   );
@@ -1533,48 +1557,55 @@ function NotificationSetupCard(props: {
   onSetup: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] p-4">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
-            <HiMiniBellAlert className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-brand-dark">Desktop notifications</p>
-            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
-              Guard pauses risky AI actions. Enable local alerts so approvals do not hide behind the dashboard.
+    <div className="rounded-xl border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] p-5">
+      <div className="flex gap-4">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue">
+          <HiMiniBellAlert className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-brand-dark">Desktop alerts</p>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500">
+              When Guard pauses something, a banner helps you respond without hunting for this tab.
             </p>
-            <ol className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
-              <li className="rounded-lg bg-white/80 p-3 ring-1 ring-slate-100">1. Open notification settings.</li>
-              <li className="rounded-lg bg-white/80 p-3 ring-1 ring-slate-100">2. Choose terminal-notifier on macOS.</li>
-              <li className="rounded-lg bg-white/80 p-3 ring-1 ring-slate-100">3. Enable banners or alerts plus sounds.</li>
-            </ol>
           </div>
+          <ol className="grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+            <li className="rounded-lg bg-white/90 px-3 py-2 ring-1 ring-slate-100">1. Open notification settings.</li>
+            <li className="rounded-lg bg-white/90 px-3 py-2 ring-1 ring-slate-100">2. Allow alerts for Guard.</li>
+            <li className="rounded-lg bg-white/90 px-3 py-2 ring-1 ring-slate-100">3. Turn on banners and sound.</li>
+          </ol>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <div className="flex flex-wrap gap-2">
+              {props.result ? (
+                <>
+                  <Tag tone={props.result.supported ? "blue" : "slate"}>
+                    {props.result.supported ? "Supported on this Mac" : "Not supported here"}
+                  </Tag>
+                  <Tag tone={props.result.preview_sent ? "blue" : "slate"}>
+                    {props.result.preview_sent ? "Test alert sent" : "No test alert yet"}
+                  </Tag>
+                  <Tag tone={props.result.settings_opened ? "blue" : "slate"}>
+                    {props.result.settings_opened ? "Settings opened" : "Settings not opened"}
+                  </Tag>
+                </>
+              ) : (
+                <Tag tone="slate">Not set up yet</Tag>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={props.onSetup}
+              disabled={props.settingUp}
+              className="inline-flex min-h-9 shrink-0 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-brand-dark transition-colors hover:border-brand-blue/30 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+            >
+              {props.settingUp ? "Opening…" : "Set up alerts"}
+            </button>
+          </div>
+          {props.result?.guidance ? (
+            <p className="text-xs leading-relaxed text-slate-500">{props.result.guidance}</p>
+          ) : null}
         </div>
-        <ActionButton onClick={props.onSetup} disabled={props.settingUp}>
-          {props.settingUp ? "Opening..." : "Open notification settings"}
-        </ActionButton>
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {props.result ? (
-          <>
-            <Tag tone={props.result.supported ? "blue" : "slate"}>
-              {props.result.supported ? "Supported" : "Unsupported"}
-            </Tag>
-            <Tag tone={props.result.preview_sent ? "blue" : "slate"}>
-              {props.result.preview_sent ? "Preview sent" : "Preview not sent"}
-            </Tag>
-            <Tag tone={props.result.settings_opened ? "blue" : "slate"}>
-              {props.result.settings_opened ? "Settings opened" : "Settings not opened"}
-            </Tag>
-          </>
-        ) : (
-          <Tag tone="slate">Not configured from this dashboard session</Tag>
-        )}
-      </div>
-      {props.result?.guidance ? (
-        <p className="mt-3 text-xs leading-relaxed text-slate-500">{props.result.guidance}</p>
-      ) : null}
     </div>
   );
 }
@@ -1749,12 +1780,12 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
         <div>
           <SettingToggle
             id="settings-approval-gate"
-            label="Require password for approvals"
+            label="Ask for proof on allow decisions"
             checked={props.enabled}
             onChange={props.onToggle}
           />
           <p className="mt-1 text-xs text-slate-500">
-            Password proof protects allow decisions and broad trust changes. Enable strict mode to also require proof for block decisions.
+            Use a password before allow or trust changes stick. Turn on strict mode to require proof for block decisions too.
           </p>
         </div>
       </div>
@@ -1762,7 +1793,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
       {failClosed && props.enabled && (
         <div className="rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2">
           <p className="text-xs text-brand-purple">
-            Guard is in fail-closed mode. Fix approval gate state before making trust or policy changes.
+            Guard needs your approval setup fixed before trust or policy changes can continue.
           </p>
         </div>
       )}
@@ -1771,7 +1802,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
         <div className="space-y-3">
           {/* Gate credentials */}
           <div className="rounded-xl border border-slate-100 bg-white p-4">
-            <SectionLabel>Gate credentials</SectionLabel>
+            <SectionLabel>Sign-in details</SectionLabel>
             <p className="mt-1 text-xs text-slate-500">
               {wasConfigured
                 ? "Enter current password to verify changes. Leave new password empty to keep the existing one."
@@ -1815,11 +1846,11 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
 
           {/* Gate rules */}
           <div className="rounded-xl border border-slate-100 bg-white p-4">
-            <SectionLabel>Gate rules</SectionLabel>
+            <SectionLabel>Extra checks</SectionLabel>
             <div className="mt-3 space-y-3">
               <SettingToggle
                 id="settings-approval-gate-strict"
-                label="Require password for block decisions too"
+                label="Also ask before block decisions"
                 checked={props.strictAllDecisions}
                 onChange={props.onStrictAllDecisionsChange}
               />

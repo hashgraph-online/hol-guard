@@ -2,6 +2,7 @@ import { useCallback, type ReactNode } from "react";
 import { HiMiniChevronRight } from "react-icons/hi2";
 import { TabBar } from "../approval-center-primitives";
 import {
+  localSettingsMobileTabLabels,
   localSettingsNavGroups,
   localSettingsNavItems,
   type LocalSettingsNavItem,
@@ -75,16 +76,16 @@ export function SettingsSectionShell({
 
   const mobileTabs = localSettingsNavItems.map((item) => ({
     value: item.key,
-    label: item.label,
+    label: localSettingsMobileTabLabels[item.key],
     id: `settings-tab-${item.key}`,
   }));
 
   const activeItem = localSettingsNavItems.find((item) => item.key === activeTab);
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
       {intro}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch">
         <nav
           aria-label="Settings section navigation"
           data-testid="settings-section-nav"
@@ -113,25 +114,25 @@ export function SettingsSectionShell({
           </ul>
         </nav>
 
-        <div className="min-w-0 flex-1 space-y-4">
-          <div className="lg:hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+          <div className="-mx-1 overflow-x-auto px-1 lg:hidden">
             <TabBar tabs={mobileTabs} active={activeTab} onChange={onTabChange} />
           </div>
           <div
             role="tabpanel"
             id={`settings-panel-${activeTab}`}
             aria-label={activeItem ? `${activeItem.label} settings` : undefined}
-            className="guard-tab-enter rounded-2xl border border-slate-100 bg-white p-4 sm:p-6"
+            className="guard-tab-enter flex min-h-[min(28rem,calc(100dvh-18rem))] flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-4 sm:p-6"
           >
             {activeItem ? (
-              <header className="mb-5 border-b border-slate-100 pb-4 lg:hidden">
+              <header className="mb-5 shrink-0 border-b border-slate-100 pb-4 lg:hidden">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                   {activeItem.label}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">{activeItem.summary}</p>
               </header>
             ) : null}
-            {children}
+            <div className="flex min-h-0 flex-1 flex-col">{children}</div>
           </div>
         </div>
       </div>
