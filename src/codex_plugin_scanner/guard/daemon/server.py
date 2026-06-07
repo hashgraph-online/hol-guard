@@ -3977,6 +3977,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/policy",
             "/feed-health",
             "/settings",
+            "/about",
             "/requests",
             "/approvals",
         }:
