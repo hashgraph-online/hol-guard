@@ -29,6 +29,7 @@ GUARD_DAEMON_PORT_RANGE = 1000
 REQUIRED_DAEMON_TABLES = frozenset({"guard_connect_states"})
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_START_TIMEOUT_SECONDS = 5.0
+GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
 _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
@@ -68,7 +69,8 @@ def _daemon_launcher_env() -> dict[str, str]:
     return env
 
 
-def ensure_guard_daemon(guard_home: Path) -> str:
+def ensure_guard_daemon(guard_home: Path, *, start_timeout: float | None = None) -> str:
+    timeout = GUARD_DAEMON_START_TIMEOUT_SECONDS if start_timeout is None else start_timeout
     _reap_stale_ephemeral_guard_daemons(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
     existing_url = load_guard_daemon_url(guard_home)
@@ -88,7 +90,7 @@ def ensure_guard_daemon(guard_home: Path) -> str:
         if isinstance(stale_state, dict) and not _guard_daemon_state_matches_current_runtime(stale_state):
             _retire_guard_daemon_process({**stale_state, "guard_home": str(guard_home)})
         if _guard_daemon_start_in_progress(guard_home):
-            inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS)
+            inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=timeout)
             if inflight_url is not None:
                 _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(inflight_url))
                 return inflight_url
@@ -119,13 +121,36 @@ def ensure_guard_daemon(guard_home: Path) -> str:
             process = subprocess.Popen(command, **kwargs)
             url = _wait_for_guard_daemon_url(
                 guard_home,
-                timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS,
+                timeout=timeout,
                 process=process,
             )
             if url is not None:
                 _retire_duplicate_guard_daemons(guard_home, keep_port=_guard_daemon_url_port(url))
                 return url
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
+
+
+def ensure_guard_daemon_after_update(guard_home: Path) -> str:
+    """Restart the local daemon after a package update with a longer startup window."""
+    return ensure_guard_daemon(
+        guard_home,
+        start_timeout=GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+    )
+
+
+def retire_all_guard_daemons_for_home(
+    guard_home: Path,
+    *,
+    keep_port: int | None = None,
+) -> list[int]:
+    """Stop Guard daemon processes for one guard home, optionally keeping one port alive."""
+    retired: list[int] = []
+    for pid, port in _running_guard_daemon_processes_for_guard_home(guard_home):
+        if keep_port is not None and port == keep_port:
+            continue
+        if _retire_guard_daemon_pid(pid, expected_guard_home=guard_home):
+            retired.append(pid)
+    return retired
 
 
 def guard_daemon_url_for_home(guard_home: Path) -> str:

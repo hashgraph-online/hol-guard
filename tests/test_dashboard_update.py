@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
     build_dashboard_update_runner_command,
     build_dashboard_update_runner_popen_kwargs,
     dashboard_update_runner_script,
+    merge_dashboard_update_progress,
     schedule_guard_dashboard_update,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -277,3 +278,120 @@ def test_runner_env_ignores_inherited_pythonpath(tmp_path: Path, monkeypatch: py
     assert str(dashboard_update_runner_script().resolve().parents[3]) in pythonpath
     if sys.version_info >= (3, 11):
         assert env.get("PYTHONSAFEPATH") == "1"
+
+
+def test_merge_dashboard_update_progress_includes_lock_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProcess:
+        def __init__(self, command: list[str], **kwargs: object) -> None:
+            self.pid = 5151
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update.subprocess.Popen",
+        FakeProcess,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update._pid_is_running",
+        lambda pid: pid == 5151,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update.build_guard_update_status_payload",
+        lambda: {
+            "current_version": "2.0.508",
+            "latest_version": "2.0.509",
+            "installer": "pipx",
+            "version_check": {
+                "source": "pypi",
+                "status": "stale",
+                "current_version": "2.0.508",
+                "latest_version": "2.0.509",
+                "update_available": True,
+            },
+            "auto_updatable": True,
+            "update_available": True,
+            "blocked_reason": None,
+        },
+    )
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    schedule_guard_dashboard_update(guard_home, daemon_pid=5150, daemon_port=5474)
+    payload = merge_dashboard_update_progress(
+        guard_home,
+        {"current_version": "2.0.508", "update_available": True},
+    )
+
+    assert payload["update_in_progress"] is True
+    assert payload["previous_version"] == "2.0.508"
+    assert payload["target_version"] == "2.0.509"
+    assert payload["daemon_port"] == 5474
+
+
+def test_dashboard_update_runner_retires_all_daemons_before_upgrade(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner.time.sleep",
+        lambda _seconds: None,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner.retire_all_guard_daemons_for_home",
+        lambda _home, **kwargs: calls.append("retire") or [],
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner._retire_guard_daemon_pid",
+        lambda pid, **kwargs: calls.append(f"retire_pid:{pid}"),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner.clear_guard_daemon_state",
+        lambda _home: calls.append("clear_state"),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner.repair_approval_center_locator",
+        lambda _home: calls.append("repair_locator") or {"repaired": True, "cleared": []},
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner.run_guard_update",
+        lambda **kwargs: ({"status": "updated"}, 0),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner.ensure_guard_daemon_after_update",
+        lambda _home: calls.append("ensure") or "http://127.0.0.1:5474",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.dashboard_update_runner.clear_dashboard_update_lock",
+        lambda _home: calls.append("clear_lock"),
+    )
+
+    from codex_plugin_scanner.guard.daemon.dashboard_update_runner import main
+
+    exit_code = main(
+        [
+            "--guard-home",
+            str(guard_home),
+            "--daemon-pid",
+            "5150",
+            "--daemon-port",
+            "5474",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [
+        "retire",
+        "retire_pid:5150",
+        "clear_state",
+        "repair_locator",
+        "retire",
+        "retire_pid:5150",
+        "clear_state",
+        "ensure",
+        "clear_lock",
+    ]

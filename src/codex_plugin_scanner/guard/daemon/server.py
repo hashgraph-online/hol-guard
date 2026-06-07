@@ -129,7 +129,7 @@ from ..store_evidence import (
     export_evidence_json,
     list_evidence,
 )
-from .dashboard_update import schedule_guard_dashboard_update
+from .dashboard_update import merge_dashboard_update_progress, schedule_guard_dashboard_update
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state,
@@ -913,7 +913,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(_settings_response_payload(store.guard_home, editable_guard_settings(config)))
             return
         if parsed.path == "/v1/update/status":
-            self._write_json(build_guard_update_status_payload())
+            self._write_json(
+                merge_dashboard_update_progress(
+                    store.guard_home,
+                    build_guard_update_status_payload(),
+                )
+            )
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
             self._handle_session_resume(path_parts[2])
