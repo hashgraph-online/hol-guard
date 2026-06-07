@@ -2851,6 +2851,30 @@ def run_guard_command(
                 current_workspace = Path.cwd().resolve()
                 if current_workspace.is_dir():
                     runtime_workspace = current_workspace
+        if (
+            _canonical_harness_name(args.harness) == "cursor"
+            and _hook_event_name(payload) == "afterShellExecution"
+        ):
+            if runtime_workspace is None:
+                runtime_workspace = _workspace_from_cursor_project_dir()
+            saved = _persist_cursor_native_permission_after_shell(
+                store=store,
+                payload=payload,
+                harness=args.harness,
+                home_dir=context.home_dir,
+                guard_home=context.guard_home,
+                workspace=runtime_workspace,
+            )
+            _emit(
+                "hook",
+                {
+                    "recorded": saved,
+                    "harness": "cursor",
+                    "policy_action": "allow",
+                },
+                getattr(args, "json", False),
+            )
+            return 0
         if args.harness == "copilot":
             runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
         action_envelope = _hook_action_envelope(
@@ -3498,6 +3522,18 @@ def run_guard_command(
                         artifact=runtime_artifact,
                         artifact_hash=runtime_artifact_hash,
                     )
+                if (
+                    _canonical_harness_name(args.harness) == "cursor"
+                    and event_name == "PreToolUse"
+                    and policy_action == "require-reapproval"
+                ):
+                    _record_cursor_pending_shell_permission(
+                        store=store,
+                        payload=payload,
+                        reason=native_reason,
+                        artifact=runtime_artifact,
+                        artifact_hash=runtime_artifact_hash,
+                    )
                 if _should_emit_copilot_hook_response(args):
                     _record_harness_usage_for_hook(
                         store=store,
@@ -3646,6 +3682,16 @@ def run_guard_command(
                         harness=_optional_string(args.harness) or args.harness,
                         approval_center_url=approval_center_url,
                     )
+                    if (
+                        _canonical_harness_name(args.harness) == "cursor"
+                        and event_name == "PreToolUse"
+                        and policy_action == "require-reapproval"
+                    ):
+                        _attach_cursor_pending_approval_request_ids(
+                            store=store,
+                            payload=payload,
+                            response_payload=response_payload,
+                        )
                     response_payload["approval_center_url"] = approval_center_url
                     response_payload["review_hint"] = approval_center_hint(
                         context=context,
@@ -4521,6 +4567,329 @@ def _remove_claude_pending_permission(
                 connection.execute("delete from sync_state where state_key = ?", (index_key,))
     except (OSError, sqlite3.Error):
         return
+
+
+def _cursor_conversation_id(payload: dict[str, object]) -> str | None:
+    for key in ("conversation_id", "conversationId", "session_id", "sessionId"):
+        value = _optional_string(payload.get(key))
+        if value is not None:
+            return value
+    return _optional_string(os.environ.get("CURSOR_SESSION_ID"))
+
+
+def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | None:
+    command = _optional_string(payload.get("command"))
+    if command is not None:
+        return command
+    return _hook_command_text(payload)
+
+
+def _cursor_shell_command_fingerprint(command: str) -> str:
+    return hashlib.sha256(command.strip().encode("utf-8")).hexdigest()[:24]
+
+
+def _cursor_pending_shell_index_key(conversation_id: str) -> str:
+    return f"cursor_pending_shells:{conversation_id}"
+
+
+def _cursor_pending_shell_state_key(conversation_id: str, command: str) -> str:
+    return f"cursor_pending_shell:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
+
+
+def _append_cursor_pending_shell_key(
+    store: GuardStore,
+    *,
+    conversation_id: str,
+    pending_key: str,
+    now: str,
+) -> None:
+    index_key = _cursor_pending_shell_index_key(conversation_id)
+    try:
+        index_payload = store.get_sync_payload(index_key)
+    except (OSError, sqlite3.Error):
+        index_payload = None
+    pending_keys = [str(item) for item in index_payload] if isinstance(index_payload, list) else []
+    if pending_key not in pending_keys:
+        pending_keys.append(pending_key)
+    try:
+        store.set_sync_payload(index_key, pending_keys, now)
+    except (OSError, sqlite3.Error):
+        return
+
+
+def _record_cursor_pending_shell_permission(
+    *,
+    store: GuardStore,
+    payload: dict[str, object],
+    reason: str,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+) -> None:
+    conversation_id = _cursor_conversation_id(payload)
+    command = _cursor_shell_command_from_payload(payload)
+    if conversation_id is None or command is None:
+        return
+    saved_at = _now()
+    notice_payload: dict[str, object] = {
+        "saved_at": saved_at,
+        "reason": reason,
+        "artifact_id": artifact.artifact_id,
+        "artifact_hash": artifact_hash,
+        "artifact_name": artifact.name,
+        "artifact_type": artifact.artifact_type,
+        "config_path": artifact.config_path,
+        "source_scope": artifact.source_scope,
+        "command": command,
+        "native_source": "cursor-native",
+    }
+    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
+    try:
+        store.set_sync_payload(pending_key, notice_payload, saved_at)
+        _append_cursor_pending_shell_key(
+            store,
+            conversation_id=conversation_id,
+            pending_key=pending_key,
+            now=saved_at,
+        )
+    except (OSError, sqlite3.Error):
+        return
+
+
+def _attach_cursor_pending_approval_request_ids(
+    *,
+    store: GuardStore,
+    payload: dict[str, object],
+    response_payload: dict[str, object],
+) -> None:
+    conversation_id = _cursor_conversation_id(payload)
+    command = _cursor_shell_command_from_payload(payload)
+    if conversation_id is None or command is None:
+        return
+    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
+    try:
+        pending = store.get_sync_payload(pending_key)
+    except (OSError, sqlite3.Error):
+        return
+    if not isinstance(pending, dict):
+        return
+    request_ids: list[str] = []
+    approval_requests = response_payload.get("approval_requests")
+    if isinstance(approval_requests, list):
+        for item in approval_requests:
+            if isinstance(item, dict):
+                request_id = _optional_string(item.get("request_id"))
+                if request_id is not None:
+                    request_ids.append(request_id)
+    for request_id in _string_list(response_payload.get("approval_request_ids")):
+        if request_id not in request_ids:
+            request_ids.append(request_id)
+    if not request_ids:
+        return
+    updated = dict(pending)
+    updated["approval_request_ids"] = request_ids
+    try:
+        store.set_sync_payload(pending_key, updated, _now())
+    except (OSError, sqlite3.Error):
+        return
+
+
+def _load_cursor_pending_shell_permission(
+    store: GuardStore,
+    *,
+    conversation_id: str,
+    command: str,
+) -> dict[str, object] | None:
+    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
+    try:
+        pending = store.get_sync_payload(pending_key)
+    except (OSError, sqlite3.Error):
+        return None
+    return pending if isinstance(pending, dict) else None
+
+
+def _remove_cursor_pending_shell_permission(
+    store: GuardStore,
+    *,
+    conversation_id: str,
+    pending_key: str,
+) -> None:
+    try:
+        index_key = _cursor_pending_shell_index_key(conversation_id)
+        with store._connect() as connection:
+            connection.execute("begin immediate")
+            connection.execute("delete from sync_state where state_key = ?", (pending_key,))
+            row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                (index_key,),
+            ).fetchone()
+            remaining = [key for key in _sync_payload_list_from_row(row) if key != pending_key]
+            if remaining:
+                connection.execute(
+                    """
+                    insert into sync_state (state_key, payload_json, updated_at)
+                    values (?, ?, ?)
+                    on conflict(state_key) do update set
+                      payload_json = excluded.payload_json,
+                      updated_at = excluded.updated_at
+                    """,
+                    (index_key, json.dumps(remaining), _now()),
+                )
+            else:
+                connection.execute("delete from sync_state where state_key = ?", (index_key,))
+    except (OSError, sqlite3.Error):
+        return
+
+
+def _persist_cursor_native_permission_policy(
+    *,
+    store: GuardStore,
+    artifact_id: str,
+    artifact_hash: str,
+    action: str,
+    reason: str,
+    now: str,
+    source: str = "cursor-native-approval",
+) -> bool:
+    try:
+        store.upsert_policy(
+            PolicyDecision(
+                harness="cursor",
+                scope="artifact",
+                action="allow" if action == "allow" else "block",
+                artifact_id=artifact_id,
+                artifact_hash=artifact_hash,
+                reason=reason,
+                source=source,
+            ),
+            now,
+        )
+        store.add_event(
+            "cursor/native_permission_saved",
+            {
+                "artifact_id": artifact_id,
+                "artifact_hash": artifact_hash,
+                "action": action,
+                "reason": reason,
+            },
+            now,
+        )
+    except (ApprovalGateError, OSError, sqlite3.Error):
+        return False
+    return True
+
+
+def _resolve_cursor_pending_approval_requests(
+    *,
+    store: GuardStore,
+    pending: Mapping[str, object],
+    reason: str,
+    now: str,
+) -> None:
+    request_ids = pending.get("approval_request_ids")
+    if not isinstance(request_ids, list):
+        return
+    for request_id in request_ids:
+        if not isinstance(request_id, str) or not request_id.strip():
+            continue
+        with suppress(ApprovalGateError, OSError, sqlite3.Error):
+            store.resolve_approval_request(
+                request_id.strip(),
+                resolution_action="allow",
+                resolution_scope="artifact",
+                reason=reason,
+                resolved_at=now,
+            )
+
+
+def _persist_cursor_native_permission_after_shell(
+    *,
+    store: GuardStore,
+    payload: dict[str, object],
+    harness: str,
+    home_dir: Path,
+    guard_home: Path,
+    workspace: Path | None,
+) -> bool:
+    from ..adapters.cursor_hooks import prepare_cursor_hook_payload
+
+    prepared = _normalize_hook_payload(prepare_cursor_hook_payload(payload))
+    conversation_id = _cursor_conversation_id(prepared)
+    command = _cursor_shell_command_from_payload(prepared)
+    if conversation_id is None or command is None:
+        return False
+    pending = _load_cursor_pending_shell_permission(
+        store,
+        conversation_id=conversation_id,
+        command=command,
+    )
+    if pending is None:
+        return False
+    action_envelope = _hook_action_envelope(
+        harness=harness,
+        payload=prepared,
+        home_dir=home_dir,
+        workspace=workspace,
+    )
+    runtime_artifact = _hook_runtime_artifact(
+        harness=harness,
+        payload=prepared,
+        action_envelope=action_envelope,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        workspace=workspace,
+    )
+    if runtime_artifact is None:
+        return False
+    runtime_artifact_hash = artifact_hash(runtime_artifact)
+    now = _now()
+    saved_policy = _persist_cursor_native_permission_policy(
+        store=store,
+        artifact_id=runtime_artifact.artifact_id,
+        artifact_hash=runtime_artifact_hash,
+        action="allow",
+        reason="Approved in Cursor native shell approval prompt.",
+        now=now,
+    )
+    if not saved_policy:
+        return False
+    try:
+        store.record_inventory_artifact(
+            artifact=runtime_artifact,
+            artifact_hash=runtime_artifact_hash,
+            policy_action="allow",
+            changed=False,
+            now=now,
+            approved=True,
+        )
+    except (OSError, sqlite3.Error):
+        return False
+    _resolve_cursor_pending_approval_requests(
+        store=store,
+        pending=pending,
+        reason="Approved in Cursor native shell approval prompt.",
+        now=now,
+    )
+    receipt = build_receipt(
+        harness="cursor",
+        artifact_id=runtime_artifact.artifact_id,
+        artifact_hash=runtime_artifact_hash,
+        policy_decision="allow",
+        capabilities_summary=_runtime_capabilities_summary(runtime_artifact),
+        changed_capabilities=[runtime_artifact.artifact_type, "cursor-native-approved"],
+        provenance_summary=f"runtime shell command approved from {runtime_artifact.config_path}",
+        artifact_name=runtime_artifact.name,
+        source_scope=runtime_artifact.source_scope,
+        user_override="cursor-native-approve",
+        approval_source="inline",
+    )
+    store.add_receipt(receipt)
+    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
+    _remove_cursor_pending_shell_permission(
+        store,
+        conversation_id=conversation_id,
+        pending_key=pending_key,
+    )
+    return True
 
 
 def _persist_claude_native_permission_policy(

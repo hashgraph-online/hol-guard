@@ -14,11 +14,13 @@ from pathlib import Path
 from .base import HarnessContext
 
 HOOK_SCRIPT_NAME = "hol-guard-cursor-hook.py"
-_MANAGED_HOOK_EVENTS = (
+_BLOCKING_MANAGED_HOOK_EVENTS = (
     "beforeShellExecution",
     "beforeMCPExecution",
     "beforeReadFile",
 )
+_OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution",)
+_MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
 _MANAGED_HOOK_TIMEOUT_SECONDS = 45
 _LEGACY_MANAGED_COMMAND_MARKERS = (
     "hol-guard-cursor-hook.py",
@@ -50,6 +52,18 @@ def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, obje
 
     normalized = _infer_cursor_hook_event_name(payload)
     raw_event = _raw_hook_event_name(normalized)
+    if raw_event == "aftershellexecution":
+        normalized["hook_event_name"] = "afterShellExecution"
+        normalized.setdefault("tool_name", "Shell")
+        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        command = normalized.get("command")
+        if isinstance(command, str) and command.strip():
+            tool_input.setdefault("command", command.strip())
+        cwd = normalized.get("cwd")
+        if isinstance(cwd, str) and cwd.strip():
+            tool_input.setdefault("working_directory", cwd.strip())
+        normalized["tool_input"] = tool_input
+        return normalized
     if raw_event == "beforeshellexecution":
         normalized["hook_event_name"] = "PreToolUse"
         normalized.setdefault("tool_name", "Shell")
@@ -528,6 +542,18 @@ def _infer_cursor_hook_event_name(payload: dict[str, object]) -> dict[str, objec
 def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     normalized = _infer_cursor_hook_event_name(payload)
     raw_event = _raw_hook_event_name(normalized)
+    if raw_event == "aftershellexecution":
+        normalized["hook_event_name"] = "afterShellExecution"
+        normalized.setdefault("tool_name", "Shell")
+        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        command = normalized.get("command")
+        if isinstance(command, str) and command.strip():
+            tool_input.setdefault("command", command.strip())
+        cwd = normalized.get("cwd")
+        if isinstance(cwd, str) and cwd.strip():
+            tool_input.setdefault("working_directory", cwd.strip())
+        normalized["tool_input"] = tool_input
+        return normalized
     if raw_event == "beforeshellexecution":
         normalized["hook_event_name"] = "PreToolUse"
         normalized.setdefault("tool_name", "Shell")
@@ -723,6 +749,9 @@ def main() -> int:
         except json.JSONDecodeError:
             guard_payload = {}
     policy_action = str(guard_payload.get("policy_action") or "allow")
+    if hook_event_name.strip().lower() == "aftershellexecution":
+        print("{}")
+        return 0
     if proc.returncode != 0 and not guard_payload:
         print(
             json.dumps(
@@ -758,7 +787,7 @@ def _managed_hook_entry(
     entry: dict[str, object] = {
         "command": str(script_path.resolve()),
         "timeout": _MANAGED_HOOK_TIMEOUT_SECONDS,
-        "failClosed": event_name in _MANAGED_HOOK_EVENTS,
+        "failClosed": event_name in _BLOCKING_MANAGED_HOOK_EVENTS,
     }
     return entry
 
