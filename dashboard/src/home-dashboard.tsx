@@ -25,6 +25,9 @@ import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarn
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, resolveCloudIntelCopy } from "./runtime-overview";
 import { HomeProtectionModule } from "./home-protection-module";
+import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
+import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
+import { useReceiptAnalytics } from "./evidence/use-receipt-analytics";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -128,6 +131,7 @@ export function HomeWorkspace(props: {
   onOpenInbox: () => void;
   onOpenFleet: () => void;
   onOpenEvidence: () => void;
+  onOpenInsights?: () => void;
   onOpenSettings: () => void;
   onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
@@ -143,7 +147,10 @@ export function HomeWorkspace(props: {
   const [clearTotpCode, setClearTotpCode] = useState("");
   const [clearError, setClearError] = useState<string | null>(null);
   const [clearSubmitting, setClearSubmitting] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analyticsEnabled = props.runtime.kind === "ready" && (props.runtime.snapshot?.receipt_count ?? 0) > 0;
+  const analyticsState = useReceiptAnalytics(analyticsEnabled);
 
   useEffect(() => {
     return () => {
@@ -226,7 +233,12 @@ export function HomeWorkspace(props: {
     () => (snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null),
     [snapshot, queuedCount]
   );
-  const streak = useMemo(() => (snapshot ? computeStreak(snapshot.latest_receipts) : 0), [snapshot]);
+  const streak = useMemo(() => {
+    if (analyticsState.kind === "ready") {
+      return analyticsState.data.active_day_streak;
+    }
+    return snapshot ? computeStreak(snapshot.latest_receipts) : 0;
+  }, [analyticsState, snapshot]);
   const cloudUpsellVisible = useMemo(
     () => (snapshot ? resolveCloudUpsellVisible(queuedCount, snapshot.cloud_state) : false),
     [snapshot, queuedCount]
@@ -269,6 +281,13 @@ export function HomeWorkspace(props: {
 
   return (
     <div className="space-y-6">
+      {shareOpen && analyticsState.kind === "ready" ? (
+        <EvidenceInsightsShareModal
+          analytics={analyticsState.data}
+          runtime={snapshot}
+          onClose={() => setShareOpen(false)}
+        />
+      ) : null}
       {toastMessage && (
         <div className="guard-fade-in fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/90 px-4 py-3 shadow-lg backdrop-blur">
           <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
@@ -294,6 +313,17 @@ export function HomeWorkspace(props: {
           { label: "History", value: formatNumber(snapshot?.receipt_count ?? 0), tone: "purple" },
         ]}
       />
+
+      {analyticsState.kind === "loading" && analyticsEnabled ? (
+        <div className="guard-skeleton h-40 w-full rounded-2xl" />
+      ) : analyticsState.kind === "ready" && props.onOpenInsights ? (
+        <EvidenceInsightsHomePreview
+          analytics={analyticsState.data}
+          runtime={snapshot}
+          onOpenInsights={props.onOpenInsights}
+          onShare={() => setShareOpen(true)}
+        />
+      ) : null}
 
       <StreakMilestoneBanner streak={streak} />
 

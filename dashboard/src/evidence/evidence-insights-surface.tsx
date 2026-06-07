@@ -7,11 +7,12 @@ import type {
   GuardRuntimeSnapshot,
 } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
-import { SectionLabel } from "../approval-center-primitives";
+import { ActionButton, SectionLabel } from "../approval-center-primitives";
 import { EvidenceActivityHeatmap } from "./evidence-activity-heatmap";
 import { EvidenceDataProvenanceStrip } from "./evidence-data-provenance-strip";
+import { EvidenceInsightsHeadlineBento } from "./evidence-insights-headline-bento";
+import { EvidenceInsightsShareModal } from "./evidence-insights-share-modal";
 import { EvidenceShareBar } from "./evidence-share-bar";
-import { formatEvidenceCount } from "./evidence-format";
 
 interface EvidenceInsightsSurfaceProps {
   analytics: GuardReceiptAnalytics;
@@ -20,73 +21,6 @@ interface EvidenceInsightsSurfaceProps {
   onFilterHarness: (harness: string) => void;
   onFilterDay?: (dateKey: string) => void;
   onViewActions: () => void;
-}
-
-function HeadlineMetrics({ analytics }: { analytics: GuardReceiptAnalytics }) {
-  const stopRate = analytics.total > 0 ? Math.round((analytics.blocked / analytics.total) * 100) : 0;
-  const dominantApp = analytics.by_harness[0]
-    ? harnessDisplayName(analytics.by_harness[0].harness)
-    : "None yet";
-
-  const items = [
-    {
-      label: "Current streak",
-      value: `${analytics.active_day_streak}`,
-      unit: analytics.active_day_streak === 1 ? "day" : "days",
-      emphasis: "hero" as const,
-    },
-    {
-      label: "Peak day",
-      value: formatEvidenceCount(analytics.peak_day_total),
-      unit: "actions",
-      emphasis: "hero" as const,
-    },
-    {
-      label: "Lifetime actions",
-      value: formatEvidenceCount(analytics.total),
-      unit: null,
-      emphasis: "medium" as const,
-    },
-    {
-      label: "Stopped",
-      value: formatEvidenceCount(analytics.blocked),
-      unit: `${stopRate}% of total`,
-      emphasis: "medium" as const,
-    },
-    {
-      label: "Top app",
-      value: dominantApp,
-      unit: null,
-      emphasis: "quiet" as const,
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3 lg:grid-cols-5">
-      {items.map((item, index) => (
-        <div
-          key={item.label}
-          className={`bg-white px-4 py-4 sm:py-5 evidence-metric-enter ${item.emphasis === "hero" ? "sm:py-6" : ""}`}
-          style={{ animationDelay: `${index * 60}ms` }}
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{item.label}</p>
-          <p
-            className={`mt-1 font-semibold tabular-nums tracking-tight text-brand-dark ${
-              item.emphasis === "hero" ? "text-3xl" : item.emphasis === "medium" ? "text-xl" : "text-base truncate"
-            }`}
-          >
-            {item.value}
-            {item.emphasis === "hero" && item.unit ? (
-              <span className="ml-1 text-sm font-medium text-slate-500">{item.unit}</span>
-            ) : null}
-          </p>
-          {item.emphasis !== "hero" && item.unit ? (
-            <p className="mt-0.5 text-xs text-slate-500">{item.unit}</p>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function TrendChart({ buckets }: { buckets: GuardReceiptAnalyticsBucket[] }) {
@@ -232,6 +166,7 @@ export function EvidenceInsightsSurface({
   onViewActions,
 }: EvidenceInsightsSurfaceProps) {
   const [mounted, setMounted] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -251,8 +186,25 @@ export function EvidenceInsightsSurface({
   }
 
   return (
-    <div className={`overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ${mounted ? "evidence-insights-mounted" : ""}`}>
-      <HeadlineMetrics analytics={analytics} />
+    <>
+      {shareOpen ? (
+        <EvidenceInsightsShareModal
+          analytics={analytics}
+          runtime={runtime}
+          onClose={() => setShareOpen(false)}
+        />
+      ) : null}
+      <div className={`overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ${mounted ? "evidence-insights-mounted" : ""}`}>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <SectionLabel>Your Guard stats</SectionLabel>
+            <p className="mt-1 text-sm text-slate-500">All-time local store</p>
+          </div>
+          <ActionButton variant="outline" onClick={() => setShareOpen(true)}>
+            Share stats
+          </ActionButton>
+        </div>
+        <EvidenceInsightsHeadlineBento analytics={analytics} variant="full" />
 
       <div className="border-t border-slate-100 px-5 py-5">
         <SectionLabel>90-Day Activity</SectionLabel>
@@ -293,6 +245,7 @@ export function EvidenceInsightsSurface({
         runtime={runtime}
         onViewActions={onViewActions}
       />
-    </div>
+      </div>
+    </>
   );
 }
