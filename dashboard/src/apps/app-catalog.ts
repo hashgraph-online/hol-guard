@@ -129,7 +129,7 @@ export type SettingSearchMatch = {
   key: string;
   label: string;
   description: string;
-  section: "risk" | "defaults" | "protection" | "diagnostics";
+  section: "risk" | "defaults" | "protection" | "maintenance";
 };
 
 const SETTINGS_SEARCH_INDEX: SettingSearchMatch[] = [
@@ -159,10 +159,10 @@ const SETTINGS_SEARCH_INDEX: SettingSearchMatch[] = [
   { key: "telemetry", label: "Telemetry", description: "Send anonymized usage data to improve Guard.", section: "protection" },
   { key: "sync", label: "Cloud sync", description: "Sync decisions and rules with Guard Cloud.", section: "protection" },
   { key: "billing", label: "Billing features", description: "Enable billing and subscription features.", section: "protection" },
-  { key: "clear_approvals", label: "Clear saved approvals", description: "Remove all stored allow or block decisions. Guard will ask again.", section: "diagnostics" },
-  { key: "clear_evidence", label: "Clear evidence log", description: "Permanently remove all recorded evidence. Cannot be undone.", section: "diagnostics" },
-  { key: "export_diagnostics", label: "Export diagnostics", description: "Download a JSON file with local Guard evidence for debugging.", section: "diagnostics" },
-  { key: "repair_approval_center", label: "Repair approval center", description: "Reset the approval center locator when the link returns an error.", section: "diagnostics" },
+  { key: "clear_approvals", label: "Clear saved approvals", description: "Remove all stored allow or block decisions. Guard will ask again.", section: "maintenance" },
+  { key: "clear_evidence", label: "Clear evidence log", description: "Permanently remove all recorded evidence. Cannot be undone.", section: "maintenance" },
+  { key: "export_diagnostics", label: "Export diagnostics", description: "Download a JSON file with local Guard evidence for debugging.", section: "maintenance" },
+  { key: "repair_approval_center", label: "Repair approval center", description: "Reset the approval center locator when the link returns an error.", section: "maintenance" },
 ];
 
 export function filterSettingsBySearch(query: string): SettingSearchMatch[] {

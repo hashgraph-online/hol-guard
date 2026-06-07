@@ -1048,8 +1048,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     <div className="flex min-h-[calc(100dvh-11rem)] flex-col gap-6">
       <GuardHero
         status="clear"
-        headline="Choose how protective Guard should be"
-        subheadline="Pick a security level that matches your vibe. You can fine-tune individual rules later."
+        headline="Set how hard Guard should push back"
+        subheadline="Pick a security level, then fine-tune individual rules whenever you need more control."
         cta={<Tag tone="blue">{protectionModeLabel(draft.mode)}</Tag>}
       />
 
