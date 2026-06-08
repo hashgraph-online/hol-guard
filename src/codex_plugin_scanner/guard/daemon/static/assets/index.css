@@ -1554,6 +1554,10 @@
     margin-block-end: calc(calc(var(--spacing) * 20) * calc(1 - var(--tw-space-y-reverse)));
   }
 
+  .gap-x-3 {
+    column-gap: calc(var(--spacing) * 3);
+  }
+
   .gap-x-4 {
     column-gap: calc(var(--spacing) * 4);
   }
@@ -1648,6 +1652,10 @@
 
   .rounded-\[3px\] {
     border-radius: 3px;
+  }
+
+  .rounded-\[4px\] {
+    border-radius: 4px;
   }
 
   .rounded-\[18px\] {
@@ -3590,6 +3598,11 @@
   .tracking-\[-0\.02em\] {
     --tw-tracking: -.02em;
     letter-spacing: -.02em;
+  }
+
+  .tracking-\[0\.02em\] {
+    --tw-tracking: .02em;
+    letter-spacing: .02em;
   }
 
   .tracking-\[0\.2em\] {

@@ -18729,74 +18729,110 @@ function EvidenceShareBar({ label, count, shareOfTotal, onClick, animate = true 
     ) })
   ] }) });
 }
-function TrendChart({ buckets }) {
-  const [hoveredKey, setHoveredKey] = reactExports.useState(null);
-  const maxTotal = Math.max(...buckets.map((bucket) => bucket.allowed + bucket.blocked + bucket.reviewed), 1);
-  const chartHeight = 100;
-  const hasAnyData = buckets.some((bucket) => bucket.allowed + bucket.blocked + bucket.reviewed > 0);
-  if (!hasAnyData) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "px-5 py-6 text-sm text-slate-400", children: "No activity in the last 7 days." });
+function selectRecentTrendBuckets(buckets, dayCount) {
+  if (dayCount <= 0) {
+    return [];
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-5 py-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        className: "flex items-end gap-2",
-        style: { minHeight: chartHeight },
-        role: "img",
-        "aria-label": "Seven day activity chart",
-        children: buckets.map((bucket) => {
-          const total = bucket.allowed + bucket.blocked + bucket.reviewed;
-          const barHeight = total > 0 ? Math.max(Math.round(total / maxTotal * chartHeight), 6) : 0;
-          const blockedHeight = total > 0 ? Math.round(bucket.blocked / total * barHeight) : 0;
-          const allowedHeight = total > 0 ? Math.round(bucket.allowed / total * barHeight) : 0;
-          const reviewedHeight = Math.max(barHeight - blockedHeight - allowedHeight, 0);
-          const isHovered = hoveredKey === bucket.date_key;
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "div",
-            {
-              className: "relative flex min-w-0 flex-1 flex-col items-center justify-end",
-              onMouseEnter: () => setHoveredKey(bucket.date_key),
-              onMouseLeave: () => setHoveredKey(null),
-              children: [
-                total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 text-[10px] font-semibold tabular-nums text-brand-dark", children: total }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex w-full flex-col justify-end", style: { height: chartHeight }, children: total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                  "div",
-                  {
-                    className: `flex w-full flex-col-reverse overflow-hidden rounded-md transition-opacity ${isHovered ? "opacity-100 ring-1 ring-inset ring-slate-200" : "opacity-95"}`,
-                    style: { height: barHeight },
-                    children: [
-                      bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-stopped", style: { height: blockedHeight } }),
-                      bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-allowed", style: { height: allowedHeight } }),
-                      bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-reviewed", style: { height: reviewedHeight } })
-                    ]
-                  }
-                ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto h-1.5 w-1.5 rounded-full bg-slate-200", "aria-hidden": "true" }) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-2 w-full truncate text-center text-[10px] font-medium text-slate-500", children: bucket.label }),
-                isHovered && total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute bottom-full z-10 mb-2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-semibold", children: bucket.label }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex gap-3", children: [
-                    bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-emerald-300", children: [
-                      bucket.allowed,
-                      " allowed"
-                    ] }),
-                    bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-amber-300", children: [
-                      bucket.blocked,
-                      " stopped"
-                    ] }),
-                    bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-blue-300", children: [
-                      bucket.reviewed,
-                      " reviewed"
-                    ] })
+  return buckets.slice(-dayCount);
+}
+function bucketTotal(bucket) {
+  return bucket.allowed + bucket.blocked + bucket.reviewed;
+}
+function EvidenceTrendChart({
+  buckets,
+  variant = "full",
+  dayCount
+}) {
+  const [hoveredKey, setHoveredKey] = reactExports.useState(null);
+  const visibleBuckets = variant === "mini" ? selectRecentTrendBuckets(buckets, dayCount ?? 4) : buckets;
+  const maxTotal = Math.max(...visibleBuckets.map((bucket) => bucketTotal(bucket)), 1);
+  const chartHeight = variant === "mini" ? 52 : 100;
+  const hasAnyData = visibleBuckets.some((bucket) => bucketTotal(bucket) > 0);
+  if (!hasAnyData) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm text-slate-400 ${variant === "mini" ? "py-2" : "px-5 py-6"}`, children: "No activity in this period." });
+  }
+  const chart = /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: `flex items-end ${variant === "mini" ? "gap-1.5" : "gap-2"}`,
+      style: { minHeight: chartHeight },
+      role: "img",
+      "aria-label": variant === "mini" ? "Last four days of Guard activity" : "Seven day activity chart",
+      children: visibleBuckets.map((bucket) => {
+        const total = bucketTotal(bucket);
+        const barHeight = total > 0 ? Math.max(Math.round(total / maxTotal * chartHeight), variant === "mini" ? 4 : 6) : 0;
+        const blockedHeight = total > 0 ? Math.round(bucket.blocked / total * barHeight) : 0;
+        const allowedHeight = total > 0 ? Math.round(bucket.allowed / total * barHeight) : 0;
+        const reviewedHeight = Math.max(barHeight - blockedHeight - allowedHeight, 0);
+        const isHovered = hoveredKey === bucket.date_key;
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "relative flex min-w-0 flex-1 flex-col items-center justify-end",
+            onMouseEnter: () => setHoveredKey(bucket.date_key),
+            onMouseLeave: () => setHoveredKey(null),
+            children: [
+              variant === "full" && total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mb-1 text-[10px] font-semibold tabular-nums text-brand-dark", children: total }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex w-full flex-col justify-end", style: { height: chartHeight }, children: total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "div",
+                {
+                  className: `flex w-full flex-col-reverse overflow-hidden ${variant === "mini" ? "rounded-[4px]" : "rounded-md"} transition-opacity ${isHovered ? "opacity-100 ring-1 ring-inset ring-slate-200" : "opacity-95"}`,
+                  style: { height: barHeight },
+                  children: [
+                    bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-stopped", style: { height: blockedHeight } }),
+                    bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-allowed", style: { height: allowedHeight } }),
+                    bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full evidence-chart-reviewed", style: { height: reviewedHeight } })
+                  ]
+                }
+              ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto h-1.5 w-1.5 rounded-full bg-slate-200", "aria-hidden": "true" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: `mt-1.5 w-full truncate text-center font-medium text-slate-500 ${variant === "mini" ? "text-[9px] tracking-[0.02em]" : "mt-2 text-[10px]"}`,
+                  children: bucket.label
+                }
+              ),
+              isHovered && total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute bottom-full z-10 mb-2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-semibold", children: bucket.label }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex gap-3", children: [
+                  bucket.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-emerald-300", children: [
+                    bucket.allowed,
+                    " allowed"
+                  ] }),
+                  bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-amber-300", children: [
+                    bucket.blocked,
+                    " stopped"
+                  ] }),
+                  bucket.reviewed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-blue-300", children: [
+                    bucket.reviewed,
+                    " reviewed"
                   ] })
                 ] })
-              ]
-            },
-            bucket.date_key
-          );
-        })
-      }
-    ),
+              ] })
+            ]
+          },
+          bucket.date_key
+        );
+      })
+    }
+  );
+  if (variant === "mini") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+      chart,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2 w-2 rounded-sm evidence-chart-allowed" }),
+          "Allowed"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2 w-2 rounded-sm evidence-chart-stopped" }),
+          "Stopped"
+        ] })
+      ] })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-5 py-5", children: [
+    chart,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2.5 w-2.5 rounded-sm evidence-chart-allowed" }),
@@ -18906,7 +18942,7 @@ function EvidenceInsightsSurface({
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last 7 Days" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(TrendChart, { buckets: analytics.trend_buckets })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTrendChart, { buckets: analytics.trend_buckets })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         EvidenceDataProvenanceStrip,
@@ -24851,82 +24887,83 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  clearPolicy as $,
+  updateSettings as $,
   ActionButton as A,
   Badge as B,
-  HiMiniWrenchScrewdriver as C,
-  HiMiniExclamationCircle as D,
-  EmptyState as E,
-  HiMiniClipboardDocumentCheck as F,
+  HiMiniEye as C,
+  HiMiniWrenchScrewdriver as D,
+  EvidenceTrendChart as E,
+  HiMiniExclamationCircle as F,
   GuardStatMetric as G,
   HiMiniShieldCheck as H,
-  HiMiniClipboard as I,
-  requireReact as J,
-  getDefaultExportFromCjs as K,
-  HiMiniLockClosed as L,
-  HiMiniBellAlert as M,
-  HiMiniAdjustmentsHorizontal as N,
-  HiMiniCog6Tooth as O,
+  HiMiniClipboardDocumentCheck as I,
+  HiMiniClipboard as J,
+  requireReact as K,
+  getDefaultExportFromCjs as L,
+  HiMiniLockClosed as M,
+  HiMiniBellAlert as N,
+  HiMiniAdjustmentsHorizontal as O,
   ProofStrip as P,
-  HiMiniCircleStack as Q,
-  TabBar as R,
+  HiMiniCog6Tooth as Q,
+  HiMiniCircleStack as R,
   SectionLabel as S,
   Tag as T,
-  fetchSettings as U,
-  fetchRuntimeSnapshot as V,
-  revokeApprovalGateCooldown as W,
-  enrollApprovalGateTotp as X,
-  verifyApprovalGateTotp as Y,
-  disableApprovalGateTotp as Z,
-  updateSettings as _,
+  TabBar as U,
+  fetchSettings as V,
+  fetchRuntimeSnapshot as W,
+  revokeApprovalGateCooldown as X,
+  enrollApprovalGateTotp as Y,
+  verifyApprovalGateTotp as Z,
+  disableApprovalGateTotp as _,
   HiMiniInformationCircle as a,
-  clearReviewQueue as a0,
-  clearEvidence as a1,
-  exportDiagnostics as a2,
-  repairApprovalCenter as a3,
-  exportSettings as a4,
-  importSettings as a5,
-  resetSettings as a6,
-  setupDesktopNotifications as a7,
-  HiMiniMagnifyingGlass as a8,
-  approvalGateCooldownLabel as a9,
-  openPackageFirewallShell as aA,
-  HiMiniBugAnt as aB,
-  IconActionButton as aC,
-  HiMiniBeaker as aD,
-  fetchSupplyChainBundle as aE,
-  runAuditRemediation as aF,
-  guardAwareHref as aG,
-  HiMiniBarsArrowUp as aH,
-  HiMiniBarsArrowDown as aI,
-  HiMiniSignal as aJ,
-  HiMiniClock as aK,
-  fetchApprovalPage as aa,
-  fetchPolicy as ab,
-  HiMiniArrowLeft as ac,
-  HiMiniHome as ad,
-  detectCategory as ae,
-  CATEGORIES as af,
-  policyIdentityKey as ag,
-  HiMiniChartBar as ah,
-  runHarnessAction as ai,
-  GuardHarnessActionError as aj,
-  HiMiniRocketLaunch as ak,
-  HiMiniArrowPath as al,
-  HiMiniTrash as am,
-  clearLabelForScope as an,
-  formatHarnessCommand as ao,
-  HiMiniCommandLine as ap,
-  WorkspacePageHeader as aq,
-  __vitePreload as ar,
-  HiMiniDocumentText as as,
-  HiMiniArrowTopRightOnSquare as at,
-  HiMiniCheckBadge as au,
-  fetchPackageFirewallStatus as av,
-  runPackageFirewallAction as aw,
-  runPackageAudit as ax,
-  runPackageSync as ay,
-  startPackageFirewallConnect as az,
+  clearPolicy as a0,
+  clearReviewQueue as a1,
+  clearEvidence as a2,
+  exportDiagnostics as a3,
+  repairApprovalCenter as a4,
+  exportSettings as a5,
+  importSettings as a6,
+  resetSettings as a7,
+  setupDesktopNotifications as a8,
+  HiMiniMagnifyingGlass as a9,
+  startPackageFirewallConnect as aA,
+  openPackageFirewallShell as aB,
+  HiMiniBugAnt as aC,
+  IconActionButton as aD,
+  HiMiniBeaker as aE,
+  fetchSupplyChainBundle as aF,
+  runAuditRemediation as aG,
+  guardAwareHref as aH,
+  HiMiniBarsArrowUp as aI,
+  HiMiniBarsArrowDown as aJ,
+  HiMiniSignal as aK,
+  HiMiniClock as aL,
+  approvalGateCooldownLabel as aa,
+  fetchApprovalPage as ab,
+  fetchPolicy as ac,
+  HiMiniArrowLeft as ad,
+  HiMiniHome as ae,
+  detectCategory as af,
+  CATEGORIES as ag,
+  policyIdentityKey as ah,
+  HiMiniChartBar as ai,
+  runHarnessAction as aj,
+  GuardHarnessActionError as ak,
+  HiMiniRocketLaunch as al,
+  HiMiniArrowPath as am,
+  HiMiniTrash as an,
+  clearLabelForScope as ao,
+  formatHarnessCommand as ap,
+  HiMiniCommandLine as aq,
+  WorkspacePageHeader as ar,
+  __vitePreload as as,
+  HiMiniDocumentText as at,
+  HiMiniArrowTopRightOnSquare as au,
+  HiMiniCheckBadge as av,
+  fetchPackageFirewallStatus as aw,
+  runPackageFirewallAction as ax,
+  runPackageAudit as ay,
+  runPackageSync as az,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,
@@ -24939,17 +24976,17 @@ export {
   fetchReceiptAnalytics as k,
   harnessDisplayName as l,
   isDisplayableHarness as m,
-  EvidenceInsightsShareModal as n,
-  GuardHero as o,
-  formatNumber as p,
-  HiMiniSparkles as q,
+  EmptyState as n,
+  EvidenceInsightsShareModal as o,
+  GuardHero as p,
+  formatNumber as q,
   reactExports as r,
-  HiMiniXMark as s,
-  HiMiniCloud as t,
-  HiMiniQuestionMarkCircle as u,
-  useFocusTrap as v,
-  HiMiniBolt as w,
-  HiMiniChevronRight as x,
-  HiMiniMinusCircle as y,
-  HiMiniEye as z
+  HiMiniSparkles as s,
+  HiMiniXMark as t,
+  HiMiniCloud as u,
+  HiMiniQuestionMarkCircle as v,
+  useFocusTrap as w,
+  HiMiniBolt as x,
+  HiMiniChevronRight as y,
+  HiMiniMinusCircle as z
 };

@@ -2,6 +2,7 @@ import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types
 import { ActionButton, SectionLabel } from "../approval-center-primitives";
 import { GuardStatMetric, type GuardStatMetricTone } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
+import { EvidenceTrendChart } from "./evidence-trend-chart";
 
 export type HomeOverviewStatTone = GuardStatMetricTone;
 
@@ -22,14 +23,20 @@ interface EvidenceInsightsHomePreviewProps {
 
 function HomeInsightsSkeleton() {
   return (
-    <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4">
-      {Array.from({ length: 4 }, (_, index) => (
-        <div key={index} className="space-y-2 bg-white px-4 py-3.5 sm:py-4">
-          <div className="guard-skeleton h-3 w-16 rounded" />
-          <div className="guard-skeleton h-6 w-20 rounded" />
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="space-y-2 bg-white px-4 py-3.5 sm:py-4">
+            <div className="guard-skeleton h-3 w-16 rounded" />
+            <div className="guard-skeleton h-6 w-20 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-slate-100 px-5 py-4">
+        <div className="guard-skeleton mb-2 h-3 w-24 rounded" />
+        <div className="guard-skeleton h-14 w-full rounded-lg" />
+      </div>
+    </>
   );
 }
 
@@ -79,7 +86,17 @@ export function EvidenceInsightsHomePreview({
         analyticsLoading ? (
           <HomeInsightsSkeleton />
         ) : analytics !== null && analytics.total > 0 ? (
-          <HomeInsightsMetrics analytics={analytics} />
+          <>
+            <HomeInsightsMetrics analytics={analytics} />
+            <div className="border-t border-slate-100 px-5 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                Last 4 days
+              </p>
+              <div className="mt-3">
+                <EvidenceTrendChart buckets={analytics.trend_buckets} variant="mini" dayCount={4} />
+              </div>
+            </div>
+          </>
         ) : null
       ) : null}
 
