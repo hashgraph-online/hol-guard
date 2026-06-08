@@ -22,9 +22,12 @@ class CursorCliLaunchEntry:
     launch_mode: str = "cursor-agent"
 
     def launch_argv(self, passthrough_args: list[str]) -> list[str]:
-        if self.prefix_args and passthrough_args and passthrough_args[0] == self.prefix_args[0]:
-            return [self.executable, *passthrough_args]
-        return [self.executable, *self.prefix_args, *passthrough_args]
+        args = list(passthrough_args)
+        if not self.prefix_args and args and args[0] == CURSOR_AGENT_SUBCOMMAND:
+            args = args[1:]
+        if self.prefix_args and args and args[0] == self.prefix_args[0]:
+            return [self.executable, *args]
+        return [self.executable, *self.prefix_args, *args]
 
 
 @lru_cache(maxsize=8)

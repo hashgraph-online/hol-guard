@@ -55,6 +55,13 @@ def _write_fake_cursor_with_agent_subcommand(bin_dir: Path) -> Path:
     return script
 
 
+def test_launch_argv_strips_agent_prefix_for_cursor_agent_binary() -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
+
+    entry = CursorCliLaunchEntry(executable="/bin/cursor-agent", launch_mode="cursor-agent")
+    assert entry.launch_argv(["agent", "--print", "hello"]) == ["/bin/cursor-agent", "--print", "hello"]
+
+
 def test_resolve_cursor_cli_entry_prefers_cursor_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bin_dir = tmp_path / "bin"
     _write_fake_cursor_agent(bin_dir)
