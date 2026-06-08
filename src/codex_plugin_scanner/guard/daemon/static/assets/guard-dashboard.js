@@ -15662,6 +15662,17 @@ async function startPackageFirewallConnect() {
     })
   );
 }
+async function fetchSupplyChainBundle() {
+  const wrapper = await readJson("/v1/supply-chain/bundle");
+  if (!wrapper || typeof wrapper !== "object") {
+    return null;
+  }
+  const bundle = wrapper.bundle;
+  if (bundle === null || bundle === void 0) {
+    return null;
+  }
+  return bundle;
+}
 async function runPackageFirewallAction(action, manager, credentials) {
   const payload = {
     ...manager !== null ? { managers: [manager] } : {},
@@ -18315,6 +18326,47 @@ function EvidenceInsightsHeadlineBento({
     item.label
   )) });
 }
+function GuardModalLayer({
+  ariaLabel,
+  children,
+  onClose,
+  panelClassName = "w-full max-w-2xl"
+}) {
+  const [mounted, setMounted] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    setMounted(true);
+  }, []);
+  reactExports.useEffect(() => {
+    if (!mounted) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mounted]);
+  const handleBackdropClick = (event) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+  if (!mounted) {
+    return null;
+  }
+  return reactDomExports.createPortal(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/40 p-4 sm:items-center",
+        onClick: handleBackdropClick,
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": ariaLabel,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `relative ${panelClassName}`, onClick: (event) => event.stopPropagation(), children })
+      }
+    ),
+    document.body
+  );
+}
 function FiShare2(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "circle", "attr": { "cx": "18", "cy": "5", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "6", "cy": "12", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "18", "cy": "19", "r": "3" }, "child": [] }, { "tag": "line", "attr": { "x1": "8.59", "y1": "13.51", "x2": "15.42", "y2": "17.49" }, "child": [] }, { "tag": "line", "attr": { "x1": "15.41", "y1": "6.51", "x2": "8.59", "y2": "10.49" }, "child": [] }] })(props);
 }
@@ -18353,7 +18405,7 @@ function EvidenceInsightsShareSheet({ publicUrl, onClose }) {
     await handleCopy();
   }, [handleCopy, publicUrl]);
   const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent("My HOL Guard protection stats")}&url=${encodeURIComponent(publicUrl)}`;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 sm:items-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Share link ready", onClose, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Share link ready" }),
@@ -18441,7 +18493,7 @@ function EvidenceInsightsShareModal({
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 sm:items-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Share your Guard stats", onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Share your Guard stats" }),
@@ -24702,12 +24754,13 @@ export {
   fetchPolicy as a9,
   IconActionButton as aA,
   HiMiniBeaker as aB,
-  runAuditRemediation as aC,
-  guardAwareHref as aD,
-  HiMiniBarsArrowUp as aE,
-  HiMiniBarsArrowDown as aF,
-  HiMiniSignal as aG,
-  HiMiniClock as aH,
+  fetchSupplyChainBundle as aC,
+  runAuditRemediation as aD,
+  guardAwareHref as aE,
+  HiMiniBarsArrowUp as aF,
+  HiMiniBarsArrowDown as aG,
+  HiMiniSignal as aH,
+  HiMiniClock as aI,
   HiMiniArrowLeft as aa,
   HiMiniHome as ab,
   detectCategory as ac,

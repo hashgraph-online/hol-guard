@@ -1,0 +1,56 @@
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+
+interface GuardModalLayerProps {
+  ariaLabel: string;
+  children: ReactNode;
+  onClose: () => void;
+  panelClassName?: string;
+}
+
+export function GuardModalLayer({
+  ariaLabel,
+  children,
+  onClose,
+  panelClassName = "w-full max-w-2xl",
+}: GuardModalLayerProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mounted]);
+
+  const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+
+  if (!mounted) {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/40 p-4 sm:items-center"
+      onClick={handleBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      aria-label={ariaLabel}
+    >
+      <div className={`relative ${panelClassName}`} onClick={(event) => event.stopPropagation()}>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}

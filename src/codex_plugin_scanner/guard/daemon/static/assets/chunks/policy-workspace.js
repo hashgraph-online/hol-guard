@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, T as Tag, a6 as HiMiniMagnifyingGlass, m as EmptyState, k as harnessDisplayName, B as Badge, aq as HiMiniDocumentText, aD as guardAwareHref, ak as HiMiniTrash, g as HiMiniCheckCircle, aE as HiMiniBarsArrowUp, aF as HiMiniBarsArrowDown, f as formatRelativeTime } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, T as Tag, a6 as HiMiniMagnifyingGlass, m as EmptyState, k as harnessDisplayName, B as Badge, aq as HiMiniDocumentText, aE as guardAwareHref, ak as HiMiniTrash, A as ActionButton, g as HiMiniCheckCircle, aF as HiMiniBarsArrowUp, aG as HiMiniBarsArrowDown, f as formatRelativeTime } from "../guard-dashboard.js";
 function groupPoliciesByHarness(policies) {
   const map = /* @__PURE__ */ new Map();
   for (const p of policies) {
@@ -59,12 +59,20 @@ function resolveCloudPolicyBundleCopy(snapshot) {
 function policyTargetLabel(policy) {
   return policy.artifact_id ?? policy.publisher ?? policy.workspace ?? "Global";
 }
+function extractEvidenceSearchTerm(policy) {
+  const target = policyTargetLabel(policy);
+  if (!target || target === "Global") return null;
+  if (target.startsWith("family:")) {
+    return target.slice("family:".length);
+  }
+  return target;
+}
 function policyEvidenceHref(policy) {
   const params = new URLSearchParams();
   params.set("harness", policy.harness || "global");
-  const target = policyTargetLabel(policy);
-  if (target && target !== "Global") {
-    params.set("search", target);
+  const searchTerm = extractEvidenceSearchTerm(policy);
+  if (searchTerm) {
+    params.set("search", searchTerm);
   }
   return `/evidence?${params.toString()}`;
 }
@@ -201,7 +209,16 @@ function PolicyWorkspace({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Local remembered decisions and synced Guard Cloud bundle posture." }) }),
-      onOpenSettings && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onOpenSettings, children: "Open Guard Cloud Controls" })
+      snapshot.dashboard_url && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "a",
+        {
+          href: snapshot.dashboard_url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          className: "inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors",
+          children: "Open Guard Cloud Controls"
+        }
+      )
     ] }),
     cloudBundleCopy && /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
@@ -222,7 +239,16 @@ function PolicyWorkspace({
         /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: modeCopy.tone, children: modeCopy.label })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/75", children: modeCopy.description }),
-      onOpenSettings && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onOpenSettings, children: "Review rollout in Guard Cloud Controls" }) })
+      snapshot.dashboard_url && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "a",
+        {
+          href: snapshot.dashboard_url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          className: "inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-brand-blue hover:bg-brand-blue/5 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 transition-colors",
+          children: "Review rollout in Guard Cloud Controls"
+        }
+      ) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2 border-b border-slate-100 pb-3", children: [
       ["rules", "exceptions", "strict"].map((v) => /* @__PURE__ */ jsxRuntimeExports.jsx(

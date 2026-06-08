@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { FiCheck, FiCopy, FiShare2 } from "react-icons/fi";
+import { GuardModalLayer } from "../guard-modal-layer";
 
 interface EvidenceInsightsShareSheetProps {
   publicUrl: string;
@@ -42,8 +43,8 @@ export function EvidenceInsightsShareSheet({ publicUrl, onClose }: EvidenceInsig
   const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent("My HOL Guard protection stats")}&url=${encodeURIComponent(publicUrl)}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 sm:items-center">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+    <GuardModalLayer ariaLabel="Share link ready" onClose={onClose} panelClassName="w-full max-w-md">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-brand-dark">Share link ready</h2>
@@ -85,6 +86,6 @@ export function EvidenceInsightsShareSheet({ publicUrl, onClose }: EvidenceInsig
           </a>
         </div>
       </div>
-    </div>
+    </GuardModalLayer>
   );
 }
