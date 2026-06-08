@@ -420,9 +420,13 @@ def _resolve_guard_cli_command() -> list[str]:
     return [sys.executable, "-m", "codex_plugin_scanner.cli"]
 
 
-def _uses_top_level_hook_command(_guard_cli: list[str]) -> bool:
-    # Installed hol-guard exposes hooks at `hol-guard guard hook`, not `hol-guard hook`.
-    return False
+def _uses_top_level_hook_command(guard_cli: list[str]) -> bool:
+    if not guard_cli:
+        return False
+    # hol-guard/plugin-guard entrypoints expose `hook` at the top level (combined-mode
+    # hol-guard rewrites `hook` to `guard hook` internally). Only module invocations
+    # need an explicit `guard` prefix.
+    return Path(guard_cli[0]).name in {"hol-guard", "plugin-guard"}
 
 
 def _embedded_guard_hook_argv(context: HarnessContext) -> list[str]:
