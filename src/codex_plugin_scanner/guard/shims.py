@@ -738,7 +738,7 @@ def test_package_shim_intercepts(
     tested_managers = list(managers or tuple(sorted(installed)))
     path_repair_required = [manager for manager in tested_managers if manager in installed and manager not in protected]
     manager_results: list[dict[str, object]] = []
-    target_workspace = workspace_dir or context.workspace_dir or Path.cwd()
+    target_workspace = workspace_dir or context.workspace_dir or context.home_dir
     shim_dir = context.guard_home / "package-shims" / "bin"
     for manager in tested_managers:
         if manager not in installed:
@@ -752,7 +752,16 @@ def test_package_shim_intercepts(
                 },
             )
             continue
-        command = _PACKAGE_SHIM_COMMANDS[manager]
+        command = _PACKAGE_SHIM_COMMANDS.get(manager)
+        if command is None:
+            manager_results.append(
+                {
+                    "intercept_ran": False,
+                    "manager": manager,
+                    "skipped_reason": "unsupported_manager",
+                },
+            )
+            continue
         shim_path = shim_dir / command
         if not shim_path.exists():
             manager_results.append(
@@ -764,6 +773,7 @@ def test_package_shim_intercepts(
             )
             continue
         try:
+            # codeql[py/path-injection] target_workspace is home_dir or a validated daemon workspace_dir.
             result = subprocess.run(
                 [str(shim_path), "--version"],
                 capture_output=True,

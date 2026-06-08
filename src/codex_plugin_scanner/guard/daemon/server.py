@@ -1980,15 +1980,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if operation == "remove":
             return uninstall_package_shims(context, managers=managers)
         if operation == "test":
-            workspace_dir = context.workspace_dir or Path.cwd()
             return test_package_shim_intercepts(
                 context,
                 managers=managers,
-                workspace_dir=workspace_dir,
+                workspace_dir=context.workspace_dir,
             )
         if operation == "audit":
+            if context.workspace_dir is None:
+                raise ValueError("workspace_dir_required")
             config = load_guard_config(store.guard_home)
-            workspace_dir = context.workspace_dir or Path.cwd()
             now = datetime.now(timezone.utc).isoformat()
             audit_payload, exit_code = build_workspace_audit_payload(
                 command_name="audit",
@@ -1996,7 +1996,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 now=now,
                 sbom_paths=(),
                 store=store,
-                workspace_dir=workspace_dir,
+                workspace_dir=context.workspace_dir,
             )
             audit_payload["exit_code"] = exit_code
             return audit_payload
@@ -2024,6 +2024,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         if not any(resolves_within_root(root, resolved, require_exists=True) for root in allowed_roots):
             return None
+        # codeql[py/path-injection] resolved must stay within home, process dir, or temp roots.
         return resolved
 
     def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
