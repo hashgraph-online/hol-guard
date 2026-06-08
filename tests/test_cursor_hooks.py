@@ -173,6 +173,20 @@ def test_cursor_hook_script_source_skips_missing_workspace(tmp_path: Path) -> No
     assert "Path(candidate).is_dir()" in source
 
 
+def test_cursor_hook_script_source_uses_guard_subcommand_for_hol_guard_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: ["hol-guard"],
+    )
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
+    source = cursor_hook_script_source(context)
+    assert 'GUARD_HOOK_ARGV = ["guard", "hook"' in source
+
+
 def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path) -> None:
     script_path = tmp_path / "hol-guard-cursor-hook.py"
     script_path.write_text("# Managed by HOL Guard\n", encoding="utf-8")

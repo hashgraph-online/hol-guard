@@ -421,7 +421,9 @@ def _resolve_guard_cli_command() -> list[str]:
 
 
 def _uses_top_level_hook_command(guard_cli: list[str]) -> bool:
-    return bool(guard_cli) and Path(guard_cli[0]).name == "hol-guard"
+    del guard_cli
+    # Installed hol-guard exposes hooks at `hol-guard guard hook`, not `hol-guard hook`.
+    return False
 
 
 def _embedded_guard_hook_argv(context: HarnessContext) -> list[str]:
