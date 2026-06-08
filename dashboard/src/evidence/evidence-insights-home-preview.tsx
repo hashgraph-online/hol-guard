@@ -1,8 +1,7 @@
 import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
-import { harnessDisplayName } from "../approval-center-utils";
 import { ActionButton, SectionLabel } from "../approval-center-primitives";
-import { formatBlockedShare, formatEvidenceCount } from "./evidence-format";
 import { GuardStatMetric, type GuardStatMetricTone } from "./guard-stat-metric";
+import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
 
 export type HomeOverviewStatTone = GuardStatMetricTone;
 
@@ -30,48 +29,6 @@ function HomeInsightsSkeleton() {
           <div className="guard-skeleton h-6 w-20 rounded" />
         </div>
       ))}
-    </div>
-  );
-}
-
-function HomeInsightsMetrics({ analytics }: { analytics: GuardReceiptAnalytics }) {
-  const topApp = analytics.by_harness[0] ? harnessDisplayName(analytics.by_harness[0].harness) : "None yet";
-  const streakUnit = analytics.active_day_streak === 1 ? "day" : "days";
-
-  return (
-    <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4">
-      <GuardStatMetric
-        label="Current streak"
-        value={
-          <>
-            {analytics.active_day_streak}
-            <span className="ml-1 text-sm font-medium text-slate-500">{streakUnit}</span>
-          </>
-        }
-        compact
-        animationDelayMs={120}
-      />
-      <GuardStatMetric
-        label="Peak day"
-        value={formatEvidenceCount(analytics.peak_day_total)}
-        detail="Most actions in one day"
-        compact
-        animationDelayMs={160}
-      />
-      <GuardStatMetric
-        label="Stopped"
-        value={formatEvidenceCount(analytics.blocked)}
-        detail={formatBlockedShare(analytics.blocked, analytics.total)}
-        compact
-        animationDelayMs={200}
-      />
-      <GuardStatMetric
-        label="Top app"
-        value={topApp}
-        detail="Most recorded actions"
-        compact
-        animationDelayMs={240}
-      />
     </div>
   );
 }
@@ -121,7 +78,7 @@ export function EvidenceInsightsHomePreview({
       {showInsightsSection ? (
         analyticsLoading ? (
           <HomeInsightsSkeleton />
-        ) : insightsAvailable ? (
+        ) : analytics !== null && analytics.total > 0 ? (
           <HomeInsightsMetrics analytics={analytics} />
         ) : null
       ) : null}

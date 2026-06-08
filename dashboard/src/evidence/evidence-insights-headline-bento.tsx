@@ -5,48 +5,68 @@ import { GuardStatMetric } from "./guard-stat-metric";
 
 type BentoEmphasis = "hero" | "medium" | "quiet";
 
-interface BentoItem {
+export interface GuardInsightMetric {
   label: string;
   value: string;
-  unit: string | null;
+  detail: string | null;
+  heroUnit: string | null;
   emphasis: BentoEmphasis;
 }
 
-export function buildBentoItems(analytics: GuardReceiptAnalytics, variant: "full" | "compact"): BentoItem[] {
-  const blockedShare = formatBlockedShare(analytics.blocked, analytics.total);
-  const dominantApp = analytics.by_harness[0]
-    ? harnessDisplayName(analytics.by_harness[0].harness)
-    : "None yet";
+function dominantHarnessName(analytics: GuardReceiptAnalytics): string {
+  const firstHarness = analytics.by_harness?.[0];
+  return firstHarness ? harnessDisplayName(firstHarness.harness) : "None yet";
+}
 
-  const fullItems: BentoItem[] = [
+function streakPresentation(streak: number): { value: string; heroUnit: string | null } {
+  if (streak <= 0) {
+    return { value: "—", heroUnit: "No active streak" };
+  }
+  return {
+    value: `${streak}`,
+    heroUnit: streak === 1 ? "day" : "days",
+  };
+}
+
+export function buildInsightMetrics(analytics: GuardReceiptAnalytics, variant: "full" | "compact"): GuardInsightMetric[] {
+  const blockedShare = formatBlockedShare(analytics.blocked, analytics.total);
+  const streak = streakPresentation(analytics.active_day_streak);
+  const dominantApp = dominantHarnessName(analytics);
+
+  const fullItems: GuardInsightMetric[] = [
     {
       label: "Current streak",
-      value: `${analytics.active_day_streak}`,
-      unit: analytics.active_day_streak === 1 ? "day" : "days",
+      value: streak.value,
+      detail: null,
+      heroUnit: streak.heroUnit,
       emphasis: "hero",
     },
     {
       label: "Peak day",
       value: formatEvidenceCount(analytics.peak_day_total),
-      unit: "actions",
+      detail: variant === "compact" ? "Most actions in one day" : "actions",
+      heroUnit: variant === "full" ? "actions" : null,
       emphasis: "hero",
     },
     {
       label: "Lifetime actions",
       value: formatEvidenceCount(analytics.total),
-      unit: null,
+      detail: null,
+      heroUnit: null,
       emphasis: "medium",
     },
     {
       label: "Stopped",
       value: formatEvidenceCount(analytics.blocked),
-      unit: blockedShare,
+      detail: blockedShare,
+      heroUnit: null,
       emphasis: "medium",
     },
     {
       label: "Top app",
       value: dominantApp,
-      unit: null,
+      detail: variant === "compact" ? "Most recorded actions" : null,
+      heroUnit: null,
       emphasis: "quiet",
     },
   ];
@@ -55,12 +75,41 @@ export function buildBentoItems(analytics: GuardReceiptAnalytics, variant: "full
     return fullItems;
   }
 
-  return [
-    fullItems[0],
-    fullItems[1],
-    fullItems[3],
-    fullItems[4],
-  ];
+  return [fullItems[0], fullItems[1], fullItems[3], fullItems[4]];
+}
+
+/** @deprecated Use buildInsightMetrics for new code paths. */
+export function buildBentoItems(analytics: GuardReceiptAnalytics, variant: "full" | "compact") {
+  return buildInsightMetrics(analytics, variant).map((item) => ({
+    label: item.label,
+    value: item.value,
+    unit: item.emphasis === "hero" ? item.heroUnit : item.detail,
+    emphasis: item.emphasis,
+  }));
+}
+
+function renderInsightMetric(item: GuardInsightMetric, index: number, compact: boolean) {
+  const showHeroUnitInline = item.emphasis === "hero" && item.heroUnit && item.value !== "—";
+
+  return (
+    <GuardStatMetric
+      key={item.label}
+      label={item.label}
+      value={
+        showHeroUnitInline ? (
+          <>
+            {item.value}
+            <span className="ml-1 text-sm font-medium text-slate-500">{item.heroUnit}</span>
+          </>
+        ) : (
+          item.value
+        )
+      }
+      detail={item.emphasis === "hero" && item.value === "—" ? item.heroUnit : item.detail}
+      compact={compact}
+      animationDelayMs={index * 60}
+    />
+  );
 }
 
 interface EvidenceInsightsHeadlineBentoProps {
@@ -72,33 +121,21 @@ export function EvidenceInsightsHeadlineBento({
   analytics,
   variant = "full",
 }: EvidenceInsightsHeadlineBentoProps) {
-  const items = buildBentoItems(analytics, variant);
+  const items = buildInsightMetrics(analytics, variant);
   const gridClass =
     variant === "compact"
       ? "grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4"
       : "grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3 lg:grid-cols-5";
 
+  return <div className={gridClass}>{items.map((item, index) => renderInsightMetric(item, index, variant === "compact"))}</div>;
+}
+
+export function HomeInsightsMetrics({ analytics }: { analytics: GuardReceiptAnalytics }) {
+  const items = buildInsightMetrics(analytics, "compact");
+
   return (
-    <div className={gridClass}>
-      {items.map((item, index) => (
-        <GuardStatMetric
-          key={item.label}
-          label={item.label}
-          value={
-            item.emphasis === "hero" && item.unit ? (
-              <>
-                {item.value}
-                <span className="ml-1 text-sm font-medium text-slate-500">{item.unit}</span>
-              </>
-            ) : (
-              item.value
-            )
-          }
-          detail={item.emphasis !== "hero" ? item.unit : null}
-          compact={variant === "compact"}
-          animationDelayMs={index * 60}
-        />
-      ))}
+    <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4">
+      {items.map((item, index) => renderInsightMetric(item, index, true))}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 export function formatBlockedShare(blocked: number, total: number): string | null {
-  if (total <= 0 || blocked <= 0) {
+  if (!(total > 0) || !(blocked > 0)) {
     return null;
   }
   const percent = (blocked / total) * 100;

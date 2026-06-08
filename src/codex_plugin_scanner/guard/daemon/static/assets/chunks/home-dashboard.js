@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, G as GuardStatMetric, i as harnessDisplayName, k as formatEvidenceCount, l as formatBlockedShare, m as fetchReceiptAnalytics, n as isDisplayableHarness, E as EmptyState, o as EvidenceInsightsShareModal, p as GuardHero, q as formatNumber, s as HiMiniSparkles, t as HiMiniXMark, u as HiMiniCloud, v as HiMiniQuestionMarkCircle, w as useFocusTrap, x as HiMiniBolt, B as Badge, y as HiMiniChevronRight, z as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, G as GuardStatMetric, i as HomeInsightsMetrics, k as fetchReceiptAnalytics, l as harnessDisplayName, m as isDisplayableHarness, E as EmptyState, n as EvidenceInsightsShareModal, o as GuardHero, p as formatNumber, q as HiMiniSparkles, s as HiMiniXMark, t as HiMiniCloud, u as HiMiniQuestionMarkCircle, v as useFocusTrap, w as HiMiniBolt, B as Badge, x as HiMiniChevronRight, y as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { D as DeviceProofCard, r as resolveCloudIntelCopy } from "./runtime-overview.js";
 function resolveHomeProtectionStatus(snapshot) {
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -213,54 +213,6 @@ function HomeInsightsSkeleton() {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-6 w-20 rounded" })
   ] }, index)) });
 }
-function HomeInsightsMetrics({ analytics }) {
-  const topApp = analytics.by_harness[0] ? harnessDisplayName(analytics.by_harness[0].harness) : "None yet";
-  const streakUnit = analytics.active_day_streak === 1 ? "day" : "days";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardStatMetric,
-      {
-        label: "Current streak",
-        value: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          analytics.active_day_streak,
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 text-sm font-medium text-slate-500", children: streakUnit })
-        ] }),
-        compact: true,
-        animationDelayMs: 120
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardStatMetric,
-      {
-        label: "Peak day",
-        value: formatEvidenceCount(analytics.peak_day_total),
-        detail: "Most actions in one day",
-        compact: true,
-        animationDelayMs: 160
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardStatMetric,
-      {
-        label: "Stopped",
-        value: formatEvidenceCount(analytics.blocked),
-        detail: formatBlockedShare(analytics.blocked, analytics.total),
-        compact: true,
-        animationDelayMs: 200
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardStatMetric,
-      {
-        label: "Top app",
-        value: topApp,
-        detail: "Most recorded actions",
-        compact: true,
-        animationDelayMs: 240
-      }
-    )
-  ] });
-}
 function EvidenceInsightsHomePreview({
   overviewStats,
   analytics,
@@ -292,7 +244,7 @@ function EvidenceInsightsHomePreview({
       },
       item.label
     )) }),
-    showInsightsSection ? analyticsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx(HomeInsightsSkeleton, {}) : insightsAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx(HomeInsightsMetrics, { analytics }) : null : null,
+    showInsightsSection ? analyticsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx(HomeInsightsSkeleton, {}) : analytics !== null && analytics.total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(HomeInsightsMetrics, { analytics }) : null : null,
     showInsightsFooter ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: insightsAvailable && onOpenInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
       {

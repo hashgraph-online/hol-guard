@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildBentoItems } from "./evidence-insights-headline-bento";
+import { buildBentoItems, buildInsightMetrics } from "./evidence-insights-headline-bento";
 import type { GuardReceiptAnalytics } from "../guard-types";
 
 const analytics: GuardReceiptAnalytics = {
@@ -29,5 +29,9 @@ assert.ok(
   !compact.some((item) => item.label === "Lifetime actions"),
   "compact home insights should not repeat the recorded total",
 );
+
+const zeroStreak = buildInsightMetrics({ ...analytics, active_day_streak: 0 }, "compact");
+assert.equal(zeroStreak[0]?.value, "—");
+assert.equal(zeroStreak[0]?.heroUnit, "No active streak");
 
 console.log("evidence-insights-headline-bento.test.ts: all tests passed");

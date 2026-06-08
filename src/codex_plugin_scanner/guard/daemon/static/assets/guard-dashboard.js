@@ -17922,7 +17922,7 @@ function EvidenceInsightStrip({ metrics }) {
 }
 var reactDomExports = requireReactDom();
 function formatBlockedShare(blocked, total) {
-  if (total <= 0 || blocked <= 0) {
+  if (!(total > 0) || !(blocked > 0)) {
     return null;
   }
   const percent = blocked / total * 100;
@@ -18301,71 +18301,93 @@ function GuardStatMetric(props) {
     }
   );
 }
-function buildBentoItems(analytics, variant) {
+function dominantHarnessName(analytics) {
+  const firstHarness = analytics.by_harness?.[0];
+  return firstHarness ? harnessDisplayName(firstHarness.harness) : "None yet";
+}
+function streakPresentation(streak) {
+  if (streak <= 0) {
+    return { value: "—", heroUnit: "No active streak" };
+  }
+  return {
+    value: `${streak}`,
+    heroUnit: streak === 1 ? "day" : "days"
+  };
+}
+function buildInsightMetrics(analytics, variant) {
   const blockedShare = formatBlockedShare(analytics.blocked, analytics.total);
-  const dominantApp = analytics.by_harness[0] ? harnessDisplayName(analytics.by_harness[0].harness) : "None yet";
+  const streak = streakPresentation(analytics.active_day_streak);
+  const dominantApp = dominantHarnessName(analytics);
   const fullItems = [
     {
       label: "Current streak",
-      value: `${analytics.active_day_streak}`,
-      unit: analytics.active_day_streak === 1 ? "day" : "days",
+      value: streak.value,
+      detail: null,
+      heroUnit: streak.heroUnit,
       emphasis: "hero"
     },
     {
       label: "Peak day",
       value: formatEvidenceCount(analytics.peak_day_total),
-      unit: "actions",
+      detail: variant === "compact" ? "Most actions in one day" : "actions",
+      heroUnit: variant === "full" ? "actions" : null,
       emphasis: "hero"
     },
     {
       label: "Lifetime actions",
       value: formatEvidenceCount(analytics.total),
-      unit: null,
+      detail: null,
+      heroUnit: null,
       emphasis: "medium"
     },
     {
       label: "Stopped",
       value: formatEvidenceCount(analytics.blocked),
-      unit: blockedShare,
+      detail: blockedShare,
+      heroUnit: null,
       emphasis: "medium"
     },
     {
       label: "Top app",
       value: dominantApp,
-      unit: null,
+      detail: variant === "compact" ? "Most recorded actions" : null,
+      heroUnit: null,
       emphasis: "quiet"
     }
   ];
   if (variant === "full") {
     return fullItems;
   }
-  return [
-    fullItems[0],
-    fullItems[1],
-    fullItems[3],
-    fullItems[4]
-  ];
+  return [fullItems[0], fullItems[1], fullItems[3], fullItems[4]];
+}
+function renderInsightMetric(item, index, compact) {
+  const showHeroUnitInline = item.emphasis === "hero" && item.heroUnit && item.value !== "—";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    GuardStatMetric,
+    {
+      label: item.label,
+      value: showHeroUnitInline ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        item.value,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 text-sm font-medium text-slate-500", children: item.heroUnit })
+      ] }) : item.value,
+      detail: item.emphasis === "hero" && item.value === "—" ? item.heroUnit : item.detail,
+      compact,
+      animationDelayMs: index * 60
+    },
+    item.label
+  );
 }
 function EvidenceInsightsHeadlineBento({
   analytics,
   variant = "full"
 }) {
-  const items = buildBentoItems(analytics, variant);
+  const items = buildInsightMetrics(analytics, variant);
   const gridClass = variant === "compact" ? "grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4" : "grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3 lg:grid-cols-5";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: gridClass, children: items.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-    GuardStatMetric,
-    {
-      label: item.label,
-      value: item.emphasis === "hero" && item.unit ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        item.value,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 text-sm font-medium text-slate-500", children: item.unit })
-      ] }) : item.value,
-      detail: item.emphasis !== "hero" ? item.unit : null,
-      compact: variant === "compact",
-      animationDelayMs: index * 60
-    },
-    item.label
-  )) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: gridClass, children: items.map((item, index) => renderInsightMetric(item, index, variant === "compact")) });
+}
+function HomeInsightsMetrics({ analytics }) {
+  const items = buildInsightMetrics(analytics, "compact");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4", children: items.map((item, index) => renderInsightMetric(item, index, true)) });
 }
 function getFocusableElements(container2) {
   const selector = [
@@ -24829,83 +24851,82 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  updateSettings as $,
+  clearPolicy as $,
   ActionButton as A,
   Badge as B,
-  HiMiniEye as C,
-  HiMiniWrenchScrewdriver as D,
+  HiMiniWrenchScrewdriver as C,
+  HiMiniExclamationCircle as D,
   EmptyState as E,
-  HiMiniExclamationCircle as F,
+  HiMiniClipboardDocumentCheck as F,
   GuardStatMetric as G,
   HiMiniShieldCheck as H,
-  HiMiniClipboardDocumentCheck as I,
-  HiMiniClipboard as J,
-  requireReact as K,
-  getDefaultExportFromCjs as L,
-  HiMiniLockClosed as M,
-  HiMiniBellAlert as N,
-  HiMiniAdjustmentsHorizontal as O,
+  HiMiniClipboard as I,
+  requireReact as J,
+  getDefaultExportFromCjs as K,
+  HiMiniLockClosed as L,
+  HiMiniBellAlert as M,
+  HiMiniAdjustmentsHorizontal as N,
+  HiMiniCog6Tooth as O,
   ProofStrip as P,
-  HiMiniCog6Tooth as Q,
-  HiMiniCircleStack as R,
+  HiMiniCircleStack as Q,
+  TabBar as R,
   SectionLabel as S,
   Tag as T,
-  TabBar as U,
-  fetchSettings as V,
-  fetchRuntimeSnapshot as W,
-  revokeApprovalGateCooldown as X,
-  enrollApprovalGateTotp as Y,
-  verifyApprovalGateTotp as Z,
-  disableApprovalGateTotp as _,
+  fetchSettings as U,
+  fetchRuntimeSnapshot as V,
+  revokeApprovalGateCooldown as W,
+  enrollApprovalGateTotp as X,
+  verifyApprovalGateTotp as Y,
+  disableApprovalGateTotp as Z,
+  updateSettings as _,
   HiMiniInformationCircle as a,
-  clearPolicy as a0,
-  clearReviewQueue as a1,
-  clearEvidence as a2,
-  exportDiagnostics as a3,
-  repairApprovalCenter as a4,
-  exportSettings as a5,
-  importSettings as a6,
-  resetSettings as a7,
-  setupDesktopNotifications as a8,
-  HiMiniMagnifyingGlass as a9,
-  startPackageFirewallConnect as aA,
-  openPackageFirewallShell as aB,
-  HiMiniBugAnt as aC,
-  IconActionButton as aD,
-  HiMiniBeaker as aE,
-  fetchSupplyChainBundle as aF,
-  runAuditRemediation as aG,
-  guardAwareHref as aH,
-  HiMiniBarsArrowUp as aI,
-  HiMiniBarsArrowDown as aJ,
-  HiMiniSignal as aK,
-  HiMiniClock as aL,
-  approvalGateCooldownLabel as aa,
-  fetchApprovalPage as ab,
-  fetchPolicy as ac,
-  HiMiniArrowLeft as ad,
-  HiMiniHome as ae,
-  detectCategory as af,
-  CATEGORIES as ag,
-  policyIdentityKey as ah,
-  HiMiniChartBar as ai,
-  runHarnessAction as aj,
-  GuardHarnessActionError as ak,
-  HiMiniRocketLaunch as al,
-  HiMiniArrowPath as am,
-  HiMiniTrash as an,
-  clearLabelForScope as ao,
-  formatHarnessCommand as ap,
-  HiMiniCommandLine as aq,
-  WorkspacePageHeader as ar,
-  __vitePreload as as,
-  HiMiniDocumentText as at,
-  HiMiniArrowTopRightOnSquare as au,
-  HiMiniCheckBadge as av,
-  fetchPackageFirewallStatus as aw,
-  runPackageFirewallAction as ax,
-  runPackageAudit as ay,
-  runPackageSync as az,
+  clearReviewQueue as a0,
+  clearEvidence as a1,
+  exportDiagnostics as a2,
+  repairApprovalCenter as a3,
+  exportSettings as a4,
+  importSettings as a5,
+  resetSettings as a6,
+  setupDesktopNotifications as a7,
+  HiMiniMagnifyingGlass as a8,
+  approvalGateCooldownLabel as a9,
+  openPackageFirewallShell as aA,
+  HiMiniBugAnt as aB,
+  IconActionButton as aC,
+  HiMiniBeaker as aD,
+  fetchSupplyChainBundle as aE,
+  runAuditRemediation as aF,
+  guardAwareHref as aG,
+  HiMiniBarsArrowUp as aH,
+  HiMiniBarsArrowDown as aI,
+  HiMiniSignal as aJ,
+  HiMiniClock as aK,
+  fetchApprovalPage as aa,
+  fetchPolicy as ab,
+  HiMiniArrowLeft as ac,
+  HiMiniHome as ad,
+  detectCategory as ae,
+  CATEGORIES as af,
+  policyIdentityKey as ag,
+  HiMiniChartBar as ah,
+  runHarnessAction as ai,
+  GuardHarnessActionError as aj,
+  HiMiniRocketLaunch as ak,
+  HiMiniArrowPath as al,
+  HiMiniTrash as am,
+  clearLabelForScope as an,
+  formatHarnessCommand as ao,
+  HiMiniCommandLine as ap,
+  WorkspacePageHeader as aq,
+  __vitePreload as ar,
+  HiMiniDocumentText as as,
+  HiMiniArrowTopRightOnSquare as at,
+  HiMiniCheckBadge as au,
+  fetchPackageFirewallStatus as av,
+  runPackageFirewallAction as aw,
+  runPackageAudit as ax,
+  runPackageSync as ay,
+  startPackageFirewallConnect as az,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,
@@ -24913,22 +24934,22 @@ export {
   formatRelativeTime as f,
   HiMiniCheckCircle as g,
   HiMiniXCircle as h,
-  harnessDisplayName as i,
+  HomeInsightsMetrics as i,
   jsxRuntimeExports as j,
-  formatEvidenceCount as k,
-  formatBlockedShare as l,
-  fetchReceiptAnalytics as m,
-  isDisplayableHarness as n,
-  EvidenceInsightsShareModal as o,
-  GuardHero as p,
-  formatNumber as q,
+  fetchReceiptAnalytics as k,
+  harnessDisplayName as l,
+  isDisplayableHarness as m,
+  EvidenceInsightsShareModal as n,
+  GuardHero as o,
+  formatNumber as p,
+  HiMiniSparkles as q,
   reactExports as r,
-  HiMiniSparkles as s,
-  HiMiniXMark as t,
-  HiMiniCloud as u,
-  HiMiniQuestionMarkCircle as v,
-  useFocusTrap as w,
-  HiMiniBolt as x,
-  HiMiniChevronRight as y,
-  HiMiniMinusCircle as z
+  HiMiniXMark as s,
+  HiMiniCloud as t,
+  HiMiniQuestionMarkCircle as u,
+  useFocusTrap as v,
+  HiMiniBolt as w,
+  HiMiniChevronRight as x,
+  HiMiniMinusCircle as y,
+  HiMiniEye as z
 };
