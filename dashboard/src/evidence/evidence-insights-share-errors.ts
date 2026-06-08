@@ -1,0 +1,22 @@
+export function insightsSharePublishErrorMessage(raw: string): string {
+  const message = raw.trim();
+  const lower = message.toLowerCase();
+
+  if (lower.includes("not enabled")) {
+    return "Guard insights sharing is not live on Guard Cloud yet. If you just updated, wait a few minutes and try again.";
+  }
+
+  if (
+    lower.includes("guard:insights.share") ||
+    lower.includes("insufficient scope") ||
+    lower.includes("missing scope")
+  ) {
+    return "Reconnect Guard Cloud to grant insights sharing permission, then try again.";
+  }
+
+  if (lower.includes("unauthorized") || lower.includes("401")) {
+    return "Guard Cloud session expired. Reconnect from Settings, then try again.";
+  }
+
+  return message || "Unable to publish share link.";
+}

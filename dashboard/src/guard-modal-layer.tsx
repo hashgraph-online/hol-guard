@@ -28,8 +28,10 @@ export function GuardModalLayer({
     if (!mounted) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.dataset.guardModalOpen = "true";
     return () => {
       document.body.style.overflow = previousOverflow;
+      delete document.documentElement.dataset.guardModalOpen;
     };
   }, [mounted]);
 
@@ -57,7 +59,7 @@ export function GuardModalLayer({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/40 p-4 sm:items-center"
+      className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/45 p-4 backdrop-blur-[2px] sm:items-center"
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"

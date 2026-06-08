@@ -1,6 +1,7 @@
 import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
 import { ActionButton, SectionLabel } from "../approval-center-primitives";
 import { EvidenceInsightsHeadlineBento } from "./evidence-insights-headline-bento";
+import { EvidenceInsightsShareButton } from "./evidence-insights-share-button";
 
 export type HomeOverviewStatTone = "blue" | "green" | "purple" | "slate";
 
@@ -72,9 +73,7 @@ export function EvidenceInsightsHomePreview({
           <p className="mt-1 text-sm text-slate-500">Queue, apps, and insights from this machine.</p>
         </div>
         {cloudConnected && onShare && insightsAvailable ? (
-          <ActionButton variant="outline" onClick={onShare} className="shrink-0">
-            Share stats
-          </ActionButton>
+          <EvidenceInsightsShareButton onClick={onShare} className="shrink-0" />
         ) : null}
       </div>
 
