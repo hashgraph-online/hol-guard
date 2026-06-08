@@ -872,7 +872,8 @@ def run_guard_disconnect_command(
     now: str | None = None,
     urlopen=urllib.request.urlopen,
 ) -> dict[str, object]:
-    credentials = store.get_oauth_local_credentials()
+    store.repair_oauth_local_credential_storage_from_primary()
+    credentials = store.get_oauth_local_credentials(allow_primary=True)
     if credentials is None:
         return {
             "status": "not_connected",
@@ -944,6 +945,7 @@ def run_guard_device_connect_command(
     machine_label: str | None = None,
     include_sync_auth_context: bool = False,
 ) -> dict[str, object]:
+    store.repair_oauth_local_credential_storage_from_primary()
     device = store.get_device_metadata()
     _, allowed_origin = resolve_connect_url(connect_url)
     oauth_client = resolve_guard_oauth_client_config(allowed_origin)
@@ -1039,6 +1041,7 @@ def run_guard_browser_connect_command(
     wait_timeout_seconds: float = 180,
     include_sync_auth_context: bool = False,
 ) -> dict[str, object]:
+    store.repair_oauth_local_credential_storage_from_primary()
     device = store.get_device_metadata()
     _, allowed_origin = resolve_connect_url(connect_url)
     oauth_client = resolve_guard_oauth_client_config(allowed_origin)

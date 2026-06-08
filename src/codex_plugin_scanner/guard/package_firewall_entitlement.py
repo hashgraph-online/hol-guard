@@ -78,6 +78,26 @@ def _bundle_entitlement(payload: object) -> dict[str, object] | None:
     }
 
 
+def _oauth_entitlement_fields_from_sync_payload(payload: object) -> dict[str, object] | None:
+    if not isinstance(payload, dict):
+        return None
+    fields: dict[str, object] = {}
+    for key in (
+        "supply_chain_plan_id",
+        "supply_chain_firewall",
+        "supply_chain_entitlement_expires_at",
+        "workspace_id",
+    ):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            fields[key] = value.strip()
+        elif key == "supply_chain_firewall" and isinstance(value, bool):
+            fields[key] = value
+    if _optional_string(fields.get("supply_chain_plan_id")) is None:
+        return None
+    return fields
+
+
 def _oauth_entitlement(credentials: dict[str, object] | None, *, now: datetime) -> dict[str, object] | None:
     if not isinstance(credentials, dict):
         return None
@@ -124,9 +144,10 @@ def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str,
     oauth_health = store.get_oauth_local_credential_health()
     if not isinstance(oauth_health, dict) or not bool(oauth_health.get("configured")):
         return None
-    oauth_credentials = store.get_oauth_local_credentials()
-    if isinstance(oauth_credentials, dict):
-        plan_id = _optional_string(oauth_credentials.get("supply_chain_plan_id"))
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    oauth_fields = _oauth_entitlement_fields_from_sync_payload(oauth_payload)
+    if isinstance(oauth_fields, dict):
+        plan_id = _optional_string(oauth_fields.get("supply_chain_plan_id"))
         if plan_id is not None and plan_id.lower() not in PACKAGE_FIREWALL_PAID_TIERS:
             return None
     latest_state = store.get_effective_guard_connect_state(now=now.isoformat())
@@ -141,8 +162,8 @@ def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str,
     }:
         return None
     tier = "unknown"
-    if isinstance(oauth_credentials, dict):
-        tier = _optional_string(oauth_credentials.get("supply_chain_plan_id")) or tier
+    if isinstance(oauth_fields, dict):
+        tier = _optional_string(oauth_fields.get("supply_chain_plan_id")) or tier
     elif isinstance(oauth_health.get("workspace_id"), str):
         tier = "unknown"
     return {
@@ -194,7 +215,12 @@ def resolve_package_firewall_entitlement(
 ) -> dict[str, object]:
     resolved_now = now or datetime.now(timezone.utc)
     bundle = _bundle_entitlement(store.get_sync_payload("supply_chain_bundle_entitlement"))
-    oauth = _oauth_entitlement(store.get_oauth_local_credentials(), now=resolved_now)
+    oauth_health = store.get_oauth_local_credential_health()
+    oauth_payload = store.get_sync_payload("oauth_local_credentials")
+    oauth_fields = None
+    if isinstance(oauth_health, dict) and oauth_health.get("state") == "healthy":
+        oauth_fields = _oauth_entitlement_fields_from_sync_payload(oauth_payload)
+    oauth = _oauth_entitlement(oauth_fields, now=resolved_now)
     connect_state = _connect_state_entitlement(store, now=resolved_now)
     if bundle is not None and bool(bundle.get("allowed")):
         return bundle
