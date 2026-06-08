@@ -3,9 +3,11 @@ import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types
 import { ActionButton } from "../approval-center-primitives";
 import { GuardModalLayer } from "../guard-modal-layer";
 import { publishInsightsShare, type GuardInsightsShareResult } from "../guard-api";
-import { EvidenceInsightsHeadlineBento } from "./evidence-insights-headline-bento";
 import { EvidenceInsightsShareSheet } from "./evidence-insights-share-sheet";
-import { insightsSharePublishErrorMessage } from "./evidence-insights-share-errors";
+import { GuardStatMetric } from "./guard-stat-metric";
+import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
+import { EvidenceActivityHeatmapMini, getHeatmapLevel } from "./evidence-activity-heatmap-mini";
+import { insightsSharePublishErrorMessage, isInsightsShareScopeError } from "./evidence-insights-share-errors";
 
 interface EvidenceInsightsShareModalProps {
   analytics: GuardReceiptAnalytics;
@@ -23,14 +25,20 @@ export function EvidenceInsightsShareModal({
   const [displayName, setDisplayName] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rawError, setRawError] = useState<string | null>(null);
   const [shareResult, setShareResult] = useState<GuardInsightsShareResult | null>(null);
 
   const cloudConnected = runtime?.cloud_state === "paired_active";
   const connectUrl = runtime?.connect_url ?? "https://hol.org/guard/connect";
 
+  const handleReauth = useCallback(() => {
+    window.open(connectUrl, "_blank", "noopener,noreferrer");
+  }, [connectUrl]);
+
   const handlePublish = useCallback(async () => {
     setPublishing(true);
     setError(null);
+    setRawError(null);
     try {
       const result = await publishInsightsShare({
         includeTopArtifacts,
@@ -40,11 +48,15 @@ export function EvidenceInsightsShareModal({
       setShareResult(result);
     } catch (publishError) {
       const rawMessage = publishError instanceof Error ? publishError.message : "Unable to publish share link.";
+      setRawError(rawMessage);
       setError(insightsSharePublishErrorMessage(rawMessage));
     } finally {
       setPublishing(false);
     }
   }, [displayName, includeTopArtifacts, showDisplayName]);
+
+  const isScopeError = Boolean(rawError) && isInsightsShareScopeError(rawError ?? "");
+  const errorIsReauth = isScopeError || (rawError?.toLowerCase().includes("unauthorized") ?? false);
 
   if (shareResult) {
     return (
@@ -91,9 +103,41 @@ export function EvidenceInsightsShareModal({
         ) : (
           <>
             <div className="space-y-4 px-5 py-5">
-              <div className="overflow-hidden rounded-2xl border border-slate-200">
-                <EvidenceInsightsHeadlineBento analytics={analytics} variant="compact" />
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="grid grid-cols-3 gap-px bg-slate-100">
+                  <GuardStatMetric
+                    label="Pending"
+                    value={String(runtime?.pending_count ?? 0)}
+                    compact
+                  />
+                  <GuardStatMetric
+                    label="Apps"
+                    value={String(runtime?.managed_installs?.length ?? 0)}
+                    compact
+                  />
+                  <GuardStatMetric
+                    label="Recorded"
+                    value={String(runtime?.receipt_count ?? 0)}
+                    compact
+                  />
+                </div>
+                <HomeInsightsMetrics analytics={analytics} />
+                <div className="px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">Last 5 days</p>
+                  <div className="mt-2">
+                    <EvidenceActivityHeatmapMini
+                      cells={
+                        analytics.daily_activity.slice(-5).map((day) => ({
+                          date: day.date_key,
+                          level: getHeatmapLevel(day.total, analytics.peak_day_total || 1),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
               </div>
+
+              <hr className="border-slate-100" />
 
               <label className="flex items-center gap-3 text-sm text-brand-dark">
                 <input
@@ -130,9 +174,14 @@ export function EvidenceInsightsShareModal({
               </label>
 
               {error ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
-                  {error}
-                </p>
+                <div className={`rounded-xl border px-3 py-2 text-sm ${errorIsReauth ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`} role="alert">
+                  <p>{error}</p>
+                  {errorIsReauth ? (
+                    <ActionButton variant="outline" onClick={handleReauth} className="mt-2 w-full">
+                      Reconnect Guard Cloud
+                    </ActionButton>
+                  ) : null}
+                </div>
               ) : null}
             </div>
 

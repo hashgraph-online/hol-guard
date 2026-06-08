@@ -179,7 +179,7 @@ def test_device_authorization_request_uses_oauth_scopes_without_token_material()
 
     assert parsed["client_id"] == ["guard-local-daemon"]
     assert parsed["scope"] == [
-        "guard:runtime.sync guard:receipt.write guard:runtime.session.write guard:offline_access"
+        "guard:runtime.sync guard:receipt.write guard:runtime.session.write guard:insights.share guard:offline_access"
     ]
     assert parsed["requested_machine_id"] == ["machine-123"]
     assert parsed["requested_machine_label"] == ["Michaels MacBook"]

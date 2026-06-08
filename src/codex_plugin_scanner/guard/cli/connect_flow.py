@@ -36,6 +36,7 @@ DEFAULT_GUARD_DEVICE_SCOPES = (
     "guard:runtime.sync",
     "guard:receipt.write",
     "guard:runtime.session.write",
+    "guard:insights.share",
     "guard:offline_access",
 )
 CI_SAFE_GUARD_DEVICE_SCOPES = (
