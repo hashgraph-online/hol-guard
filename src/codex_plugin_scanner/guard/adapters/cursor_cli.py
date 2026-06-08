@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+
 from .base import HarnessContext, _resolve_command, _run_command_probe
 
 CURSOR_AGENT_EXECUTABLE = "cursor-agent"
@@ -25,6 +27,7 @@ class CursorCliLaunchEntry:
         return [self.executable, *self.prefix_args, *passthrough_args]
 
 
+@lru_cache(maxsize=8)
 def cursor_agent_subcommand_available(cursor_path: str) -> bool:
     probe = _run_command_probe([cursor_path, CURSOR_AGENT_SUBCOMMAND, "--help"], timeout_seconds=5)
     return probe.get("ok") is True or probe.get("return_code") == 0
