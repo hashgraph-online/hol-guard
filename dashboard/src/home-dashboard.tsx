@@ -309,7 +309,7 @@ export function HomeWorkspace(props: {
         overviewStats={[
           { label: "Pending", value: formatNumber(queuedCount), tone: queuedCount > 0 ? "blue" : "slate" },
           { label: "Apps", value: formatNumber(watchedAppsCount), tone: watchedAppsCount > 0 ? "green" : "slate" },
-          { label: "History", value: formatNumber(snapshot.receipt_count ?? 0), tone: "purple" },
+          { label: "Recorded", value: formatNumber(snapshot.receipt_count ?? 0), tone: "slate" },
         ]}
         analytics={analyticsState.kind === "ready" ? analyticsState.data : null}
         analyticsLoading={analyticsState.kind === "loading" && analyticsEnabled}
