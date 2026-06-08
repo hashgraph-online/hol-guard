@@ -68,7 +68,7 @@ def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
 
 def _is_guard_program(program_name: str) -> bool:
     normalized_name = Path(program_name).stem.lower()
-    return normalized_name in {"hol-guard", "plugin-guard"}
+    return normalized_name in {"plugin-guard"}
 
 
 def _is_scanner_program(program_name: str) -> bool:
@@ -196,6 +196,8 @@ def _resolve_legacy_args(argv: list[str] | None, *, program_mode: str) -> list[s
             if argv[1] == "mcp-proxy":
                 return ["hermes-mcp-proxy", *argv[2:]]
         return argv
+    if program_mode == "combined" and argv[0] == "hook":
+        return ["guard", *argv]
     if program_mode == "combined" and argv[0] == "hermes":
         resolved_guard_args = _resolve_legacy_args(argv, program_mode="guard")
         if resolved_guard_args is None:
@@ -216,6 +218,43 @@ def _resolve_legacy_args(argv: list[str] | None, *, program_mode: str) -> list[s
         known_commands.add("guard")
     if argv[0] in known_commands:
         return argv
+    _guard_subcommands = {
+        "start",
+        "status",
+        "dashboard",
+        "init",
+        "apps",
+        "bootstrap",
+        "detect",
+        "install",
+        "update",
+        "uninstall",
+        "package-shims",
+        "run",
+        "protect",
+        "preflight",
+        "diff",
+        "receipts",
+        "inventory",
+        "abom",
+        "approvals",
+        "explain",
+        "allow",
+        "deny",
+        "policies",
+        "exceptions",
+        "advisories",
+        "events",
+        "connect",
+        "disconnect",
+        "login",
+        "sync",
+        "device",
+        "bridge",
+        "hook",
+    }
+    if program_mode == "combined" and argv[0] in _guard_subcommands and "--format" not in argv:
+        return ["guard", *argv]
     if not should_default_to_scan_target(argv[0], known_commands=known_commands):
         return argv
     return ["scan", *argv]
@@ -299,7 +338,8 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
 
 
 def _run_scan(args: argparse.Namespace) -> int:
-    resolved = Path(args.plugin_dir).resolve()
+    plugin_dir = getattr(args, "plugin_dir", ".")
+    resolved = Path(plugin_dir).resolve()
     if not resolved.is_dir():
         print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
         return 1
@@ -503,7 +543,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         program_mode = "combined"
     parser = _build_parser(program_name, program_mode=program_mode)
-    args = parser.parse_args(_resolve_legacy_args(argv, program_mode=program_mode))
+    resolved_argv = _resolve_legacy_args(argv or sys.argv[1:], program_mode=program_mode)
+    args = parser.parse_args(resolved_argv)
     if getattr(args, "list_ecosystems", False):
         for ecosystem in list_supported_ecosystems():
             print(ecosystem)
