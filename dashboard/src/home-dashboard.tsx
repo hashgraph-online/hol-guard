@@ -19,7 +19,6 @@ import {
   EmptyState,
   SectionLabel,
   GuardHero,
-  ProofStrip,
 } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarness } from "./approval-center-utils";
 import { useFocusTrap } from "./use-focus-trap";
@@ -306,24 +305,18 @@ export function HomeWorkspace(props: {
         }
       />
 
-      <ProofStrip
-        items={[
+      <EvidenceInsightsHomePreview
+        overviewStats={[
           { label: "Pending", value: formatNumber(queuedCount), tone: queuedCount > 0 ? "blue" : "slate" },
           { label: "Apps", value: formatNumber(watchedAppsCount), tone: watchedAppsCount > 0 ? "green" : "slate" },
-          { label: "History", value: formatNumber(snapshot?.receipt_count ?? 0), tone: "purple" },
+          { label: "History", value: formatNumber(snapshot.receipt_count ?? 0), tone: "purple" },
         ]}
+        analytics={analyticsState.kind === "ready" ? analyticsState.data : null}
+        analyticsLoading={analyticsState.kind === "loading" && analyticsEnabled}
+        runtime={snapshot}
+        onOpenInsights={props.onOpenInsights}
+        onShare={() => setShareOpen(true)}
       />
-
-      {analyticsState.kind === "loading" && analyticsEnabled ? (
-        <div className="guard-skeleton h-40 w-full rounded-2xl" />
-      ) : analyticsState.kind === "ready" && props.onOpenInsights ? (
-        <EvidenceInsightsHomePreview
-          analytics={analyticsState.data}
-          runtime={snapshot}
-          onOpenInsights={props.onOpenInsights}
-          onShare={() => setShareOpen(true)}
-        />
-      ) : null}
 
       <StreakMilestoneBanner streak={streak} />
 

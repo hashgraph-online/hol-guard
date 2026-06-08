@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/use-focus-trap.js","assets/chunks/runtime-overview.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/help-modal.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/runtime-overview.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/settings-workspace.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -15662,6 +15662,17 @@ async function startPackageFirewallConnect() {
     })
   );
 }
+async function fetchSupplyChainBundle() {
+  const wrapper = await readJson("/v1/supply-chain/bundle");
+  if (!wrapper || typeof wrapper !== "object") {
+    return null;
+  }
+  const bundle = wrapper.bundle;
+  if (bundle === null || bundle === void 0) {
+    return null;
+  }
+  return bundle;
+}
 async function runPackageFirewallAction(action, manager, credentials) {
   const payload = {
     ...manager !== null ? { managers: [manager] } : {},
@@ -18315,6 +18326,122 @@ function EvidenceInsightsHeadlineBento({
     item.label
   )) });
 }
+function getFocusableElements(container2) {
+  const selector = [
+    "button:not([disabled])",
+    "a[href]",
+    "input:not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    '[tabindex]:not([tabindex="-1"])',
+    "[contenteditable]"
+  ].join(",");
+  return Array.from(container2.querySelectorAll(selector)).filter(
+    (el) => el instanceof HTMLElement && el.offsetParent !== null
+  );
+}
+function useFocusTrap(active, containerRef) {
+  const previouslyFocusedRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (!active) return;
+    const container2 = containerRef.current;
+    if (!container2) return;
+    previouslyFocusedRef.current = document.activeElement;
+    const focusable = getFocusableElements(container2);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (first) {
+      first.focus();
+    }
+    function handleKeyDown(event) {
+      if (event.key !== "Tab") return;
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      if (event.shiftKey) {
+        if (document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    }
+    container2.addEventListener("keydown", handleKeyDown);
+    return () => {
+      container2.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocusedRef.current && previouslyFocusedRef.current.isConnected) {
+        previouslyFocusedRef.current.focus();
+      }
+    };
+  }, [active, containerRef]);
+}
+function GuardModalLayer({
+  ariaLabel,
+  children,
+  onClose,
+  panelClassName = "w-full max-w-2xl"
+}) {
+  const [mounted, setMounted] = reactExports.useState(false);
+  const panelRef = reactExports.useRef(null);
+  useFocusTrap(mounted, panelRef);
+  reactExports.useEffect(() => {
+    setMounted(true);
+  }, []);
+  reactExports.useEffect(() => {
+    if (!mounted) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mounted]);
+  reactExports.useEffect(() => {
+    if (!mounted) return;
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [mounted, onClose]);
+  const handleBackdropClick = (event) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+  if (!mounted) {
+    return null;
+  }
+  return reactDomExports.createPortal(
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/40 p-4 sm:items-center",
+        onClick: handleBackdropClick,
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": ariaLabel,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            ref: panelRef,
+            className: `relative ${panelClassName}`,
+            onClick: (event) => event.stopPropagation(),
+            children
+          }
+        )
+      }
+    ),
+    document.body
+  );
+}
 function FiShare2(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" }, "child": [{ "tag": "circle", "attr": { "cx": "18", "cy": "5", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "6", "cy": "12", "r": "3" }, "child": [] }, { "tag": "circle", "attr": { "cx": "18", "cy": "19", "r": "3" }, "child": [] }, { "tag": "line", "attr": { "x1": "8.59", "y1": "13.51", "x2": "15.42", "y2": "17.49" }, "child": [] }, { "tag": "line", "attr": { "x1": "15.41", "y1": "6.51", "x2": "8.59", "y2": "10.49" }, "child": [] }] })(props);
 }
@@ -18353,7 +18480,7 @@ function EvidenceInsightsShareSheet({ publicUrl, onClose }) {
     await handleCopy();
   }, [handleCopy, publicUrl]);
   const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent("My HOL Guard protection stats")}&url=${encodeURIComponent(publicUrl)}`;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 sm:items-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Share link ready", onClose, panelClassName: "w-full max-w-md", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Share link ready" }),
@@ -18441,7 +18568,7 @@ function EvidenceInsightsShareModal({
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 sm:items-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: "Share your Guard stats", onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white shadow-xl", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Share your Guard stats" }),
@@ -24055,11 +24182,11 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([3,4]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([5,2,4,1]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([6,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([7,1]) : void 0).then((m) => ({ default: m.HelpModal })));
+const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([2,3]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([4,1,3]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
@@ -24661,79 +24788,81 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  clearEvidence as $,
+  clearReviewQueue as $,
   ActionButton as A,
   Badge as B,
-  HiMiniClipboardDocumentCheck as C,
-  HiMiniClipboard as D,
+  HiMiniExclamationCircle as C,
+  HiMiniClipboardDocumentCheck as D,
   EvidenceInsightsHeadlineBento as E,
-  requireReact as F,
+  HiMiniClipboard as F,
   GuardHero as G,
   HiMiniShieldCheck as H,
-  getDefaultExportFromCjs as I,
-  HiMiniLockClosed as J,
-  HiMiniBellAlert as K,
-  HiMiniAdjustmentsHorizontal as L,
-  HiMiniCog6Tooth as M,
-  HiMiniCircleStack as N,
-  TabBar as O,
+  requireReact as I,
+  getDefaultExportFromCjs as J,
+  HiMiniLockClosed as K,
+  HiMiniBellAlert as L,
+  HiMiniAdjustmentsHorizontal as M,
+  HiMiniCog6Tooth as N,
+  HiMiniCircleStack as O,
   ProofStrip as P,
-  fetchSettings as Q,
-  fetchRuntimeSnapshot as R,
+  TabBar as Q,
+  fetchSettings as R,
   SectionLabel as S,
   Tag as T,
-  revokeApprovalGateCooldown as U,
-  enrollApprovalGateTotp as V,
-  verifyApprovalGateTotp as W,
-  disableApprovalGateTotp as X,
-  updateSettings as Y,
-  clearPolicy as Z,
-  clearReviewQueue as _,
+  fetchRuntimeSnapshot as U,
+  revokeApprovalGateCooldown as V,
+  enrollApprovalGateTotp as W,
+  verifyApprovalGateTotp as X,
+  disableApprovalGateTotp as Y,
+  updateSettings as Z,
+  clearPolicy as _,
   HiMiniInformationCircle as a,
-  exportDiagnostics as a0,
-  repairApprovalCenter as a1,
-  exportSettings as a2,
-  importSettings as a3,
-  resetSettings as a4,
-  setupDesktopNotifications as a5,
-  HiMiniMagnifyingGlass as a6,
-  approvalGateCooldownLabel as a7,
-  fetchApprovalPage as a8,
-  fetchPolicy as a9,
-  IconActionButton as aA,
-  HiMiniBeaker as aB,
-  runAuditRemediation as aC,
-  guardAwareHref as aD,
-  HiMiniBarsArrowUp as aE,
-  HiMiniBarsArrowDown as aF,
-  HiMiniSignal as aG,
-  HiMiniClock as aH,
-  HiMiniArrowLeft as aa,
-  HiMiniHome as ab,
-  detectCategory as ac,
-  CATEGORIES as ad,
-  policyIdentityKey as ae,
-  HiMiniChartBar as af,
-  runHarnessAction as ag,
-  GuardHarnessActionError as ah,
-  HiMiniRocketLaunch as ai,
-  HiMiniArrowPath as aj,
-  HiMiniTrash as ak,
-  clearLabelForScope as al,
-  formatHarnessCommand as am,
-  HiMiniCommandLine as an,
-  WorkspacePageHeader as ao,
-  __vitePreload as ap,
-  HiMiniDocumentText as aq,
-  HiMiniArrowTopRightOnSquare as ar,
-  HiMiniCheckBadge as as,
-  fetchPackageFirewallStatus as at,
-  runPackageFirewallAction as au,
-  runPackageAudit as av,
-  runPackageSync as aw,
-  startPackageFirewallConnect as ax,
-  openPackageFirewallShell as ay,
-  HiMiniBugAnt as az,
+  clearEvidence as a0,
+  exportDiagnostics as a1,
+  repairApprovalCenter as a2,
+  exportSettings as a3,
+  importSettings as a4,
+  resetSettings as a5,
+  setupDesktopNotifications as a6,
+  HiMiniMagnifyingGlass as a7,
+  approvalGateCooldownLabel as a8,
+  fetchApprovalPage as a9,
+  HiMiniBugAnt as aA,
+  IconActionButton as aB,
+  HiMiniBeaker as aC,
+  fetchSupplyChainBundle as aD,
+  runAuditRemediation as aE,
+  guardAwareHref as aF,
+  HiMiniBarsArrowUp as aG,
+  HiMiniBarsArrowDown as aH,
+  HiMiniSignal as aI,
+  HiMiniClock as aJ,
+  fetchPolicy as aa,
+  HiMiniArrowLeft as ab,
+  HiMiniHome as ac,
+  detectCategory as ad,
+  CATEGORIES as ae,
+  policyIdentityKey as af,
+  HiMiniChartBar as ag,
+  runHarnessAction as ah,
+  GuardHarnessActionError as ai,
+  HiMiniRocketLaunch as aj,
+  HiMiniArrowPath as ak,
+  HiMiniTrash as al,
+  clearLabelForScope as am,
+  formatHarnessCommand as an,
+  HiMiniCommandLine as ao,
+  WorkspacePageHeader as ap,
+  __vitePreload as aq,
+  HiMiniDocumentText as ar,
+  HiMiniArrowTopRightOnSquare as as,
+  HiMiniCheckBadge as at,
+  fetchPackageFirewallStatus as au,
+  runPackageFirewallAction as av,
+  runPackageAudit as aw,
+  runPackageSync as ax,
+  startPackageFirewallConnect as ay,
+  openPackageFirewallShell as az,
   HiMiniExclamationTriangle as b,
   HiMiniArrowRight as c,
   HiMiniChevronUp as d,
@@ -24753,10 +24882,10 @@ export {
   reactExports as r,
   HiMiniCloud as s,
   HiMiniQuestionMarkCircle as t,
-  HiMiniBolt as u,
-  HiMiniChevronRight as v,
-  HiMiniMinusCircle as w,
-  HiMiniEye as x,
-  HiMiniWrenchScrewdriver as y,
-  HiMiniExclamationCircle as z
+  useFocusTrap as u,
+  HiMiniBolt as v,
+  HiMiniChevronRight as w,
+  HiMiniMinusCircle as x,
+  HiMiniEye as y,
+  HiMiniWrenchScrewdriver as z
 };

@@ -618,6 +618,10 @@
     z-index: 50;
   }
 
+  .z-\[100\] {
+    z-index: 100;
+  }
+
   .z-\[120\] {
     z-index: 120;
   }
@@ -830,6 +834,13 @@
 
   .ml-auto {
     margin-left: auto;
+  }
+
+  .line-clamp-2 {
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    display: -webkit-box;
+    overflow: hidden;
   }
 
   .block {
@@ -1132,12 +1143,20 @@
     width: calc(var(--spacing) * 14);
   }
 
+  .w-16 {
+    width: calc(var(--spacing) * 16);
+  }
+
   .w-20 {
     width: calc(var(--spacing) * 20);
   }
 
   .w-24 {
     width: calc(var(--spacing) * 24);
+  }
+
+  .w-32 {
+    width: calc(var(--spacing) * 32);
   }
 
   .w-36 {
@@ -1347,6 +1366,10 @@
 
   .grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .grid-cols-7 {
@@ -4844,6 +4867,16 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
+  .focus-visible\:ring-brand-blue\/30:focus-visible {
+    --tw-ring-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus-visible\:ring-brand-blue\/30:focus-visible {
+      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 30%, transparent);
+    }
+  }
+
   .focus-visible\:ring-brand-blue\/40:focus-visible {
     --tw-ring-color: var(--brand-blue);
   }
@@ -5105,6 +5138,10 @@
 
     .sm\:py-2 {
       padding-block: calc(var(--spacing) * 2);
+    }
+
+    .sm\:py-4 {
+      padding-block: calc(var(--spacing) * 4);
     }
 
     .sm\:py-5 {

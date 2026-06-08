@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, Q as fetchSettings } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, R as fetchSettings } from "../guard-dashboard.js";
 function ApprovalProofModal(props) {
   const { title, detail, confirmLabel, approvalGate, onCancel, onConfirm } = props;
   const [password, setPassword] = reactExports.useState("");
