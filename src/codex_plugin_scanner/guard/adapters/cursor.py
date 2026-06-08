@@ -9,8 +9,13 @@ from pathlib import Path
 
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
+from ..shims import ensure_guard_shim_path_in_shell_profile, install_guard_shim, remove_guard_shim
+from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
+from .cursor_cli import (
+    CURSOR_CLI_SHIM_COMMANDS,
+    cursor_cli_command_available,
+    resolve_cursor_cli_entry,
+)
 from .cursor_hooks import install_cursor_hooks, uninstall_cursor_hooks
 from .mcp_servers import (
     ManagedMcpServer,
@@ -109,14 +114,27 @@ class CursorHarnessAdapter(HarnessAdapter):
                         },
                     )
                 )
+        cli_available = cursor_cli_command_available(context)
         return HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or cli_available,
+            command_available=cli_available,
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
         )
+
+    def resolved_executable(self, context: HarnessContext) -> str | None:
+        entry = resolve_cursor_cli_entry(context)
+        if entry is None:
+            return None
+        return entry.executable
+
+    def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
+        entry = resolve_cursor_cli_entry(context)
+        if entry is None:
+            return [self.executable, *passthrough_args]
+        return entry.launch_argv(passthrough_args)
 
     def install(self, context: HarnessContext, *, surface: str = "editor") -> dict[str, object]:
         if surface == "cli":
@@ -277,17 +295,41 @@ class CursorHarnessAdapter(HarnessAdapter):
         }
 
     def _install_cli(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = install_guard_shim(
+        agent_shim = install_guard_shim(
             self.harness,
             context,
             launcher_name="cursor-agent",
-            display_name="Cursor CLI",
+            display_name="Cursor CLI (cursor-agent)",
         )
+        cursor_shim = install_guard_shim(
+            self.harness,
+            context,
+            launcher_name="cursor",
+            display_name="Cursor CLI (cursor agent)",
+        )
+        profile = ensure_guard_shim_path_in_shell_profile(context)
+        notes = [
+            *agent_shim.get("notes", ()),
+            "Use guard-cursor-agent for the standalone cursor-agent binary.",
+            "Use guard-cursor agent ... when launching through the Cursor app CLI.",
+            f"Guard launcher shims live in {context.guard_home / 'bin'}.",
+        ]
+        if profile.get("changed"):
+            notes.append("Prepended the Guard launcher shim directory to your shell profile.")
+        elif profile.get("restart_shell_required"):
+            notes.append("Restart your shell or open a new terminal so guard-cursor shims are on PATH.")
         return {
             "harness": self.harness,
             "active": True,
             "surface": "cli",
-            **shim_manifest,
+            "shim_path": agent_shim["shim_path"],
+            "shim_dir": agent_shim["shim_dir"],
+            "shim_command": agent_shim["shim_command"],
+            "shim_paths": [agent_shim["shim_path"], cursor_shim["shim_path"]],
+            "shim_commands": list(CURSOR_CLI_SHIM_COMMANDS),
+            "windows_shim_path": agent_shim.get("windows_shim_path"),
+            "shell_profile": profile,
+            "notes": notes,
         }
 
     def _uninstall_cli(self, context: HarnessContext) -> dict[str, object]:
@@ -295,6 +337,7 @@ class CursorHarnessAdapter(HarnessAdapter):
             self.harness,
             context,
             launcher_name="cursor-agent",
+            legacy_launcher_names=self.legacy_launcher_names,
             display_name="Cursor CLI",
         )
         return {
@@ -305,9 +348,10 @@ class CursorHarnessAdapter(HarnessAdapter):
         }
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
-        if not _command_available(self.executable):
+        entry = resolve_cursor_cli_entry(context)
+        if entry is None:
             return None
-        payload = _run_command_probe([self.executable, "mcp", "list"])
+        payload = _run_command_probe(entry.launch_argv(["mcp", "list"]))
         stdout = payload.get("stdout")
         reported_artifacts = None
         if isinstance(stdout, str):

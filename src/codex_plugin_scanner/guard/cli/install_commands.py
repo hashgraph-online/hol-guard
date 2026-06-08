@@ -87,7 +87,17 @@ def _managed_install_payload(managed_install: dict[str, object]) -> dict[str, ob
         payload["primary_integration"] = "native_hooks" if protection_contract.native_approval else "browser_fallback"
     manifest = payload.get("manifest")
     if isinstance(manifest, dict):
-        for key in ("config_path", "managed_config_path", "shim_path", "shim_command", "mode", "surface", "surfaces"):
+        for key in (
+            "config_path",
+            "managed_config_path",
+            "shim_path",
+            "shim_paths",
+            "shim_command",
+            "shim_commands",
+            "mode",
+            "surface",
+            "surfaces",
+        ):
             value = manifest.get(key)
             if value is not None:
                 payload[key] = value
