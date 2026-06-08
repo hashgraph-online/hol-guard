@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import re
 import secrets
+import shlex
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
@@ -16,6 +18,30 @@ _MANAGED_HOOK_ENV = "HOL_GUARD_MANAGED_CURSOR_HOOK"
 _AFTER_SHELL_PROOF_ENV = "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"
 _APPROVAL_BINDING_ENV = "HOL_GUARD_CURSOR_APPROVAL_BINDING"
 _AFTER_SHELL_PROOF_EVENT = "afterShellExecution"
+_LEAN_CTX_WRAPPER_PATTERN = re.compile(r"^(?:(?:\S*/)?lean-ctx)\s+-c\s+(?P<rest>.+)$", re.IGNORECASE)
+
+
+def normalize_cursor_shell_command(command: str) -> str:
+    """Unwrap lean-ctx shell rewrites so approval memory keys stay stable."""
+
+    stripped = command.strip()
+    if not stripped:
+        return stripped
+    match = _LEAN_CTX_WRAPPER_PATTERN.match(stripped)
+    if match is None:
+        return stripped
+    rest = match.group("rest").strip()
+    try:
+        tokens = shlex.split(rest, posix=True, comments=False)
+    except ValueError:
+        return stripped
+    if not tokens:
+        return stripped
+    inner = tokens[0]
+    suffix = tokens[1:]
+    if not suffix:
+        return inner
+    return " ".join((inner, *suffix))
 
 
 def _cursor_shell_binding_segment(conversation_id: str) -> str:
@@ -52,7 +78,8 @@ def cursor_hook_attestation_secret_path(guard_home: Path) -> Path:
 
 
 def cursor_shell_binding_path(guard_home: Path, conversation_id: str, command: str) -> Path:
-    fingerprint = hashlib.sha256(command.strip().encode("utf-8")).hexdigest()[:24]
+    normalized_command = normalize_cursor_shell_command(command)
+    fingerprint = hashlib.sha256(normalized_command.encode("utf-8")).hexdigest()[:24]
     return guard_home / _CURSOR_SHELL_BINDINGS_DIR / _cursor_shell_binding_segment(conversation_id) / fingerprint
 
 
@@ -173,9 +200,10 @@ def compute_cursor_after_shell_proof(
     command: str,
     approval_binding: str,
 ) -> str:
+    normalized_command = normalize_cursor_shell_command(command)
     message = cursor_after_shell_proof_message(
         conversation_id=conversation_id,
-        command=command,
+        command=normalized_command,
         approval_binding=approval_binding,
     )
     digest = hmac.new(secret, message, hashlib.sha256).hexdigest()
@@ -249,7 +277,7 @@ def cursor_after_shell_trusted(
     return verify_cursor_after_shell_proof(
         secret=secret,
         conversation_id=conversation_id,
-        command=command,
+        command=normalize_cursor_shell_command(command),
         approval_binding=payload_binding,
         proof=proof,
     )
@@ -266,6 +294,7 @@ __all__ = [
     "ensure_cursor_approval_binding",
     "ensure_cursor_hook_attestation_secret",
     "managed_cursor_hook_invocation",
+    "normalize_cursor_shell_command",
     "read_cursor_shell_binding_file",
     "remove_cursor_shell_binding_file",
     "resolve_cursor_approval_binding",

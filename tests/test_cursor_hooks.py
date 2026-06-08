@@ -638,6 +638,55 @@ def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path
     )
 
 
+def test_normalize_cursor_shell_command_unwraps_lean_ctx_wrapper() -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
+
+    wrapped = (
+        "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\''' 2>&1 | "
+        "python3 -c \"import json,sys; print(json.load(sys.stdin))\""
+    )
+    normalized = normalize_cursor_shell_command(wrapped)
+
+    assert normalized.startswith("gh api graphql")
+    assert "lean-ctx" not in normalized
+
+
+def test_cursor_native_shell_is_approved_by_artifact_id_in_conversation(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-artifact-session-allow"
+    artifact_id = "cursor:project:tool-action:shared-artifact"
+    now = guard_commands_module._now()
+    store.set_sync_payload(
+        guard_commands_module._cursor_native_shell_allow_state_key(
+            conversation_id,
+            "gh api graphql -f query='query { viewer { login } }'",
+        ),
+        {
+            "saved_at": now,
+            "action": "allow",
+            "artifact_id": artifact_id,
+            "artifact_hash": "hash-shared-artifact",
+            "artifact_name": "destructive shell command",
+            "command": "gh api graphql -f query='query { viewer { login } }'",
+            "native_source": "cursor-native",
+        },
+        now,
+    )
+
+    assert guard_commands_module._cursor_native_shell_is_approved(
+        store,
+        {
+            "conversation_id": conversation_id,
+            "command": "gh api graphql -f query='query { repository(owner:\"org\", name:\"repo\") { pullRequest(number:1) { id } } }'",
+        },
+        artifact_id=artifact_id,
+    )
+
+
 def test_cursor_after_shell_rejects_boolean_duration(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
     from codex_plugin_scanner.guard.cli import commands as guard_commands_module
