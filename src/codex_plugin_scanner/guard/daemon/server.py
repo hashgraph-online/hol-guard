@@ -2012,8 +2012,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not stripped or stripped.lower() in {"none", "null"}:
             return None
         try:
-            # codeql[py/path-injection] resolved must stay within home, process dir, or temp roots.
-            resolved = Path(stripped).expanduser().resolve()
+            resolved = Path(stripped).expanduser().resolve()  # codeql[py/path-injection]
         except OSError:
             return None
         if not resolved.is_dir():
