@@ -1,7 +1,8 @@
 import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
-import { ActionButton, SectionLabel } from "../approval-center-primitives";
+import { SectionLabel } from "../approval-center-primitives";
 import { GuardStatMetric, type GuardStatMetricTone } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
+import { EvidenceInsightsShareButton } from "./evidence-insights-share-button";
 import { EvidenceTrendChart } from "./evidence-trend-chart";
 
 export type HomeOverviewStatTone = GuardStatMetricTone;
@@ -63,9 +64,7 @@ export function EvidenceInsightsHomePreview({
           </p>
         </div>
         {cloudConnected && onShare && insightsAvailable ? (
-          <ActionButton variant="outline" onClick={onShare} className="shrink-0">
-            Share stats
-          </ActionButton>
+          <EvidenceInsightsShareButton onClick={onShare} className="shrink-0" />
         ) : null}
       </div>
 
