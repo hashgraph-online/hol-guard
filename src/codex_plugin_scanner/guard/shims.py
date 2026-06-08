@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,7 +15,6 @@ from .launcher import merge_guard_launcher_env
 
 if TYPE_CHECKING:
     from .adapters.base import HarnessContext
-    from ..store import GuardStore
 
 _PACKAGE_SHIM_COMMANDS = {
     "bun": "bun",
@@ -728,10 +728,9 @@ def test_package_shim_intercepts(
     context: HarnessContext,
     *,
     managers: tuple[str, ...] | None = None,
-    store: GuardStore | None = None,
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
-    """Run protect dry-run probes for PATH-protected package manager shims."""
+    """Execute installed package-manager shims to prove intercept wiring is live."""
 
     status = package_shim_status(context)
     installed = {str(manager) for manager in status.get("installed_managers", []) if isinstance(manager, str)}
@@ -742,6 +741,7 @@ def test_package_shim_intercepts(
     ]
     manager_results: list[dict[str, object]] = []
     target_workspace = workspace_dir or context.workspace_dir or Path.cwd()
+    shim_dir = context.guard_home / "package-shims" / "bin"
     for manager in tested_managers:
         if manager not in installed:
             continue
@@ -754,36 +754,40 @@ def test_package_shim_intercepts(
                 },
             )
             continue
-        if store is None:
+        command = _PACKAGE_SHIM_COMMANDS[manager]
+        shim_path = shim_dir / command
+        if not shim_path.exists():
             manager_results.append(
                 {
                     "intercept_ran": False,
                     "manager": manager,
-                    "skipped_reason": "store_unavailable",
+                    "skipped_reason": "shim_missing",
                 },
             )
             continue
-        from datetime import datetime, timezone
-
-        from ..protect import build_protect_payload
-
-        now = datetime.now(timezone.utc).isoformat()
-        payload, exit_code = build_protect_payload(
-            command=[manager, "--version"],
-            dry_run=True,
-            now=now,
-            store=store,
-            workspace_dir=target_workspace,
-        )
-        verdict = payload.get("verdict")
-        verdict_action = verdict.get("action") if isinstance(verdict, dict) else None
+        try:
+            result = subprocess.run(
+                [str(shim_path), "--version"],
+                capture_output=True,
+                check=False,
+                cwd=target_workspace,
+                text=True,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            manager_results.append(
+                {
+                    "intercept_ran": False,
+                    "manager": manager,
+                    "skipped_reason": "probe_timeout",
+                },
+            )
+            continue
         manager_results.append(
             {
-                "dry_run": True,
                 "intercept_ran": True,
                 "manager": manager,
-                "protect_exit_code": exit_code,
-                "verdict_action": verdict_action,
+                "shim_exit_code": result.returncode,
             },
         )
     intercept_proved = any(bool(result.get("intercept_ran")) for result in manager_results)

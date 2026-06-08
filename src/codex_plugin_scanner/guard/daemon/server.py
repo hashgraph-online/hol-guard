@@ -1982,7 +1982,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return test_package_shim_intercepts(
                 context,
                 managers=managers,
-                store=store,
                 workspace_dir=workspace_dir,
             )
         if operation == "audit":
@@ -2003,11 +2002,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return sync_supply_chain_bundle(self.server.store)  # type: ignore[attr-defined]
         raise ValueError("unsupported_supply_chain_operation")
 
+    @staticmethod
+    def _resolve_supply_chain_workspace_dir(value: object) -> Path | None:
+        if not isinstance(value, str):
+            return None
+        stripped = value.strip()
+        if not stripped or stripped.lower() in {"none", "null"}:
+            return None
+        try:
+            resolved = Path(stripped).expanduser().resolve()
+        except OSError:
+            return None
+        if not resolved.is_dir():
+            return None
+        return resolved
+
     def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
-        workspace_dir: Path | None = None
-        workspace_value = payload.get("workspace_dir")
-        if isinstance(workspace_value, str) and workspace_value.strip():
-            workspace_dir = Path(workspace_value).expanduser().resolve()
+        workspace_dir = self._resolve_supply_chain_workspace_dir(payload.get("workspace_dir"))
         return HarnessContext(
             home_dir=Path.home().resolve(),
             workspace_dir=workspace_dir,
