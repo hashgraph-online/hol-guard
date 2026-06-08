@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, G as GuardStatMetric, i as HomeInsightsMetrics, E as EvidenceTrendChart, k as fetchReceiptAnalytics, l as harnessDisplayName, m as isDisplayableHarness, n as EmptyState, o as EvidenceInsightsShareModal, p as GuardHero, q as formatNumber, s as HiMiniSparkles, t as HiMiniXMark, u as HiMiniCloud, v as HiMiniQuestionMarkCircle, w as useFocusTrap, x as HiMiniBolt, B as Badge, y as HiMiniChevronRight, z as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, E as EvidenceInsightsShareButton, G as GuardStatMetric, i as HomeInsightsMetrics, k as EvidenceActivityHeatmapMini, l as fetchReceiptAnalytics, m as harnessDisplayName, n as isDisplayableHarness, o as EmptyState, p as EvidenceInsightsShareModal, q as GuardHero, s as formatNumber, t as HiMiniSparkles, u as HiMiniXMark, v as HiMiniCloud, w as HiMiniQuestionMarkCircle, x as useFocusTrap, y as HiMiniBolt, B as Badge, z as HiMiniChevronRight, C as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { D as DeviceProofCard, r as resolveCloudIntelCopy } from "./runtime-overview.js";
 function resolveHomeProtectionStatus(snapshot) {
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -214,8 +214,11 @@ function HomeInsightsSkeleton() {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-6 w-20 rounded" })
     ] }, index)) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-5 py-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton mb-2 h-3 w-24 rounded" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-14 w-full rounded-lg" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton mb-3 h-3 w-28 rounded" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-5 gap-2", children: Array.from({ length: 5 }, (_, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-5 w-full max-w-5 rounded-[3px]" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-2.5 w-7 rounded" })
+      ] }, index)) })
     ] })
   ] });
 }
@@ -237,7 +240,7 @@ function EvidenceInsightsHomePreview({
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Your Guard stats" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "What needs you now, plus patterns from recorded actions on this machine." })
       ] }),
-      cloudConnected && onShare && insightsAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onShare, className: "shrink-0", children: "Share stats" }) : null
+      cloudConnected && onShare && insightsAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsShareButton, { onClick: onShare, className: "shrink-0" }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-3 gap-px bg-slate-100", children: overviewStats.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardStatMetric,
@@ -253,8 +256,8 @@ function EvidenceInsightsHomePreview({
     showInsightsSection ? analyticsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx(HomeInsightsSkeleton, {}) : analytics !== null && analytics.total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HomeInsightsMetrics, { analytics }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-5 py-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500", children: "Last 4 days" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTrendChart, { buckets: analytics.trend_buckets, variant: "mini", dayCount: 4 }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent Activity" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceActivityHeatmapMini, { days: analytics.daily_activity, dayCount: 5 }) })
       ] })
     ] }) : null : null,
     showInsightsFooter ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: insightsAvailable && onOpenInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(

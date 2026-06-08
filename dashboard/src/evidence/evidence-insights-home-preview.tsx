@@ -3,7 +3,7 @@ import { SectionLabel } from "../approval-center-primitives";
 import { GuardStatMetric, type GuardStatMetricTone } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
 import { EvidenceInsightsShareButton } from "./evidence-insights-share-button";
-import { EvidenceTrendChart } from "./evidence-trend-chart";
+import { EvidenceActivityHeatmapMini } from "./evidence-activity-heatmap";
 
 export type HomeOverviewStatTone = GuardStatMetricTone;
 
@@ -34,8 +34,15 @@ function HomeInsightsSkeleton() {
         ))}
       </div>
       <div className="border-t border-slate-100 px-5 py-4">
-        <div className="guard-skeleton mb-2 h-3 w-24 rounded" />
-        <div className="guard-skeleton h-14 w-full rounded-lg" />
+        <div className="guard-skeleton mb-3 h-3 w-28 rounded" />
+        <div className="grid grid-cols-5 gap-2">
+          {Array.from({ length: 5 }, (_, index) => (
+            <div key={index} className="flex flex-col items-center gap-1.5">
+              <div className="guard-skeleton h-5 w-full max-w-5 rounded-[3px]" />
+              <div className="guard-skeleton h-2.5 w-7 rounded" />
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );
@@ -88,11 +95,9 @@ export function EvidenceInsightsHomePreview({
           <>
             <HomeInsightsMetrics analytics={analytics} />
             <div className="border-t border-slate-100 px-5 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Last 4 days
-              </p>
+              <SectionLabel>Recent Activity</SectionLabel>
               <div className="mt-3">
-                <EvidenceTrendChart buckets={analytics.trend_buckets} variant="mini" dayCount={4} />
+                <EvidenceActivityHeatmapMini days={analytics.daily_activity} dayCount={5} />
               </div>
             </div>
           </>
