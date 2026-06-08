@@ -290,7 +290,8 @@ a:focus-visible {
 
   .evidence-metric-enter,
   .evidence-share-bar-fill-animate,
-  .evidence-heatmap-motion {
+  .evidence-heatmap-motion,
+  .evidence-trend-chart-bar-motion {
     animation: none !important;
     transition: none !important;
   }
@@ -335,6 +336,50 @@ a:focus-visible {
 
 .evidence-chart-reviewed {
   background-color: var(--evidence-reviewed);
+}
+
+.evidence-trend-chart-well {
+  background-color: color-mix(in srgb, var(--surface-2) 88%, white);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 70%, transparent);
+}
+
+.evidence-trend-chart-bar {
+  transition:
+    transform 180ms var(--ease-out-quart),
+    box-shadow 180ms var(--ease-out-quart);
+}
+
+.evidence-trend-chart-bar:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-blue) 55%, white);
+  outline-offset: 2px;
+}
+
+.evidence-trend-chart-bar-active {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 6px 16px color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
+@keyframes evidence-trend-bar-rise {
+  from {
+    transform: scaleY(0);
+    opacity: 0.65;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.evidence-trend-chart-bar-motion {
+  transform-origin: bottom center;
+  animation: evidence-trend-bar-rise 520ms var(--ease-out-expo) both;
+}
+
+.evidence-trend-chart-bar-motion.evidence-trend-chart-bar-active {
+  animation: none;
+  transform: translateY(-2px);
 }
 
 .evidence-share-bar-fill {
