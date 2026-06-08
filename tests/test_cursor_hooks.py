@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -171,6 +172,28 @@ def test_cursor_hook_script_source_skips_missing_workspace(tmp_path: Path) -> No
     context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
     source = cursor_hook_script_source(context)
     assert "Path(candidate).is_dir()" in source
+
+
+def test_cursor_hook_script_source_routes_hook_argv_by_cli_entrypoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
+    context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: ["hol-guard"],
+    )
+    hol_guard_source = cursor_hook_script_source(context)
+    assert 'GUARD_HOOK_ARGV = ["hook"' in hol_guard_source
+    assert 'GUARD_HOOK_ARGV = ["guard", "hook"' not in hol_guard_source
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
+        lambda: [sys.executable, "-m", "codex_plugin_scanner.cli"],
+    )
+    module_source = cursor_hook_script_source(context)
+    assert 'GUARD_HOOK_ARGV = ["guard", "hook"' in module_source
 
 
 def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path) -> None:
