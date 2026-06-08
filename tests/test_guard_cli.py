@@ -25,6 +25,7 @@ except ModuleNotFoundError:
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
+from codex_plugin_scanner.guard.adapters.cursor_cli import CursorCliLaunchEntry
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
@@ -8883,6 +8884,14 @@ url = http://127.0.0.1:8787/guard-canary
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         monkeypatch.setattr(cursor_adapter_module, "cursor_cli_command_available", lambda _context: True)
+        monkeypatch.setattr(
+            cursor_adapter_module,
+            "resolve_cursor_cli_entry",
+            lambda _context: CursorCliLaunchEntry(
+                executable="cursor-agent",
+                launch_mode="cursor-agent",
+            ),
+        )
         monkeypatch.setattr(
             cursor_adapter_module,
             "_run_command_probe",
