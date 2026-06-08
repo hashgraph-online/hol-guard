@@ -11,7 +11,7 @@ export interface HomeOverviewStat {
 }
 
 interface EvidenceInsightsHomePreviewProps {
-  overviewStats: HomeOverviewStat[];
+  overviewStats: [HomeOverviewStat, HomeOverviewStat, HomeOverviewStat];
   analytics: GuardReceiptAnalytics | null;
   analyticsLoading?: boolean;
   runtime: GuardRuntimeSnapshot | null;

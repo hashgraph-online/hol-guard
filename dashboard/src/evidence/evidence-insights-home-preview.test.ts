@@ -20,6 +20,8 @@ assert(homePreviewSource.includes("Queue, apps, and insights"), "home stats card
 assert(!homeDashboardSource.includes("ProofStrip"), "home dashboard: removed standalone proof strip");
 assert(homeDashboardSource.includes("EvidenceInsightsHomePreview"), "home dashboard: uses unified stats card");
 assert(modalLayerSource.includes("createPortal"), "modal layer: portals to document body");
+assert(modalLayerSource.includes("useFocusTrap"), "modal layer: traps focus inside dialog");
+assert(modalLayerSource.includes("Escape"), "modal layer: supports escape to close");
 assert(shareModalSource.includes("GuardModalLayer"), "share modal: uses viewport modal layer");
 assert(shareSheetSource.includes("GuardModalLayer"), "share sheet: uses viewport modal layer");
 assert(!shareModalSource.includes('className="fixed inset-0 z-50'), "share modal: no inline fixed overlay");
