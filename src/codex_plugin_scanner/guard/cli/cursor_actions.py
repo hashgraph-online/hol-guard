@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..adapters.cursor_cli import cursor_cli_detected, cursor_cli_shim_installed
 from ..adapters.mcp_servers import is_guard_proxy_command
 from ..store import GuardStore
 
@@ -135,7 +135,7 @@ def _cursor_status(detected: bool, *, protected: bool) -> str:
 
 def _cursor_redacted_path(context: HarnessContext, surface: str) -> str:
     if surface == "cli":
-        return "PATH:cursor-agent"
+        return "PATH:guard-cursor-agent|guard-cursor"
     workspace_path = context.workspace_dir / ".cursor" / "mcp.json" if context.workspace_dir is not None else None
     if workspace_path is not None and workspace_path.exists():
         return "$WORKSPACE/.cursor/mcp.json"
@@ -151,9 +151,7 @@ def _cursor_editor_config_paths(context: HarnessContext) -> tuple[Path, ...]:
 
 
 def _cursor_cli_detected(context: HarnessContext) -> bool:
-    if get_adapter("cursor").resolved_executable(context) is not None:
-        return True
-    return (context.guard_home / "bin" / "guard-cursor-agent").exists()
+    return cursor_cli_detected(context)
 
 
 def _cursor_editor_protected(context: HarnessContext) -> bool:
@@ -178,4 +176,4 @@ def _cursor_editor_protected(context: HarnessContext) -> bool:
 
 
 def _cursor_cli_protected(context: HarnessContext) -> bool:
-    return (context.guard_home / "bin" / "guard-cursor-agent").exists()
+    return cursor_cli_shim_installed(context)
