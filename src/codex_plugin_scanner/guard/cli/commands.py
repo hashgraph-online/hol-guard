@@ -3290,7 +3290,7 @@ def run_guard_command(
                 policy_harness == "cursor"
                 and event_name == "PreToolUse"
                 and runtime_artifact.artifact_type == "tool_action_request"
-                and _cursor_native_shell_is_approved(store, payload, artifact_id=artifact_id)
+                and _cursor_native_shell_is_approved(store, payload)
             ):
                 response_payload = {
                     "recorded": True,
@@ -4739,36 +4739,9 @@ def _cursor_native_shell_allowance_is_fresh(approved: Mapping[str, object], *, n
     return _cursor_pending_shell_is_fresh(approved, now=now)
 
 
-def _iter_cursor_native_shell_allow_states(
-    store: GuardStore,
-    conversation_id: str,
-) -> list[tuple[str, dict[str, object]]]:
-    prefix = f"cursor_native_shell_allow:{conversation_id}:"
-    try:
-        with store._connect() as connection:
-            rows = connection.execute(
-                "select state_key, payload_json from sync_state where state_key like ?",
-                (f"{prefix}%",),
-            ).fetchall()
-    except (OSError, sqlite3.Error):
-        return []
-    allowances: list[tuple[str, dict[str, object]]] = []
-    for row in rows:
-        state_key = row[0]
-        try:
-            payload = json.loads(row[1])
-        except (TypeError, json.JSONDecodeError):
-            continue
-        if isinstance(payload, dict):
-            allowances.append((state_key, payload))
-    return allowances
-
-
 def _cursor_native_shell_is_approved(
     store: GuardStore,
     payload: Mapping[str, object],
-    *,
-    artifact_id: str | None = None,
 ) -> bool:
     conversation_id = _cursor_conversation_id(dict(payload))
     command = _cursor_shell_command_from_payload(payload)
@@ -4784,15 +4757,6 @@ def _cursor_native_shell_is_approved(
     if isinstance(approved, dict):
         with suppress(OSError, sqlite3.Error):
             store.delete_sync_payload(_cursor_native_shell_allow_state_key(conversation_id, command))
-    if artifact_id is None:
-        return False
-    for state_key, allowance in _iter_cursor_native_shell_allow_states(store, conversation_id):
-        if allowance.get("artifact_id") != artifact_id:
-            continue
-        if _cursor_native_shell_allowance_is_fresh(allowance, now=now):
-            return True
-        with suppress(OSError, sqlite3.Error):
-            store.delete_sync_payload(state_key)
     return False
 
 

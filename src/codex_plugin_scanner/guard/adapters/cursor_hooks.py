@@ -775,11 +775,28 @@ def _normalize_cursor_shell_command(command: str) -> str:
                 try:
                     tokens = shlex.split(rest, posix=True, comments=False)
                 except ValueError:
-                    return stripped
+                    tokens = None
                 if tokens:
                     inner = tokens[0]
                     suffix = tokens[1:]
                     return " ".join((inner, *suffix)) if suffix else inner
+                if rest.startswith("'"):
+                    parts = []
+                    index = 1
+                    while index < len(rest):
+                        character = rest[index]
+                        if character != "'":
+                            parts.append(character)
+                            index += 1
+                            continue
+                        if index + 3 < len(rest) and rest[index : index + 4] == "'\\''":
+                            parts.append("'")
+                            index += 4
+                            continue
+                        inner = "".join(parts)
+                        suffix = rest[index + 1 :].lstrip()
+                        return " ".join((inner, suffix)) if suffix else inner
+                return stripped
         start = idx + 1
     return stripped
 

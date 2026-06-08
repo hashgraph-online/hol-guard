@@ -21,6 +21,47 @@ _MAX_CURSOR_SHELL_NORMALIZE_BYTES = 8192
 _LEAN_CTX_COMMAND_MARKER = "lean-ctx"
 
 
+def _split_posix_single_quoted_argument(text: str) -> tuple[str, str] | None:
+    if not text.startswith("'"):
+        return None
+    parts: list[str] = []
+    index = 1
+    while index < len(text):
+        character = text[index]
+        if character != "'":
+            parts.append(character)
+            index += 1
+            continue
+        if index + 3 < len(text) and text[index : index + 4] == "'\\''":
+            parts.append("'")
+            index += 4
+            continue
+        return "".join(parts), text[index + 1 :].lstrip()
+    return None
+
+
+def _split_first_shell_argument(text: str) -> tuple[str, str] | None:
+    text = text.lstrip()
+    if not text:
+        return None
+    if text[0] == "'":
+        return _split_posix_single_quoted_argument(text)
+    try:
+        tokens = shlex.split(text, posix=True, comments=False)
+    except ValueError:
+        return None
+    if not tokens:
+        return None
+    first = tokens[0]
+    remainder = text
+    for token in tokens[:1]:
+        token_index = remainder.find(token)
+        if token_index == -1:
+            return first, ""
+        remainder = remainder[token_index + len(token) :].lstrip()
+    return first, remainder
+
+
 def normalize_cursor_shell_command(command: str) -> str:
     """Unwrap lean-ctx shell rewrites so approval memory keys stay stable."""
 
@@ -38,14 +79,20 @@ def normalize_cursor_shell_command(command: str) -> str:
             tail = stripped[idx + len(needle) :].lstrip()
             if tail.startswith("-c"):
                 rest = tail[2:].lstrip()
+                parsed: tuple[str, str] | None = None
                 try:
                     tokens = shlex.split(rest, posix=True, comments=False)
                 except ValueError:
-                    return stripped
+                    tokens = None
                 if tokens:
                     inner = tokens[0]
                     suffix = tokens[1:]
                     return " ".join((inner, *suffix)) if suffix else inner
+                parsed = _split_first_shell_argument(rest)
+                if parsed is None:
+                    return stripped
+                inner, suffix = parsed
+                return " ".join((inner, suffix)) if suffix else inner
         start = idx + 1
     return stripped
 
