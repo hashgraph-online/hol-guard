@@ -32,7 +32,7 @@ Current Guard support in this repo:
 - `cursor`
   - detects global and project `mcp.json`
   - installs native Cursor hooks in `.cursor/hooks.json` for `beforeShellExecution`, `beforeMCPExecution`, `preToolUse`, and `beforeReadFile`
-  - supports wrapper-mode management state and the `guard-cursor-agent` CLI shim
+  - supports wrapper-mode management state and `guard-cursor-agent` / `guard-cursor` CLI shims
   - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
   - leaves native Cursor tool approval in place for `ask` decisions and focuses Guard on artifact trust plus runtime interception
   - managed MCP package-manager tool calls are routed through the supply-chain decision engine before Cursor receives the tool result

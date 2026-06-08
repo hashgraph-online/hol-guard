@@ -217,7 +217,9 @@ def test_cursor_cli_install_uses_cursor_agent_shim_without_editor_config(
     managed_install = install_payload["managed_install"]
     assert managed_install["surface"] == "cli"
     assert managed_install["shim_command"] == "guard-cursor-agent"
+    assert managed_install["shim_commands"] == ["guard-cursor-agent", "guard-cursor"]
     assert Path(managed_install["shim_path"]).exists()
+    assert Path(managed_install["shim_paths"][1]).exists()
     assert install_payload["cursor_action"]["surface"] == "cli"
     assert not (context.workspace_dir / ".cursor" / "mcp.json").exists()
 
@@ -234,6 +236,7 @@ def test_cursor_cli_install_uses_cursor_agent_shim_without_editor_config(
 
     assert remove_payload["managed_install"]["surface"] == "cli"
     assert not Path(managed_install["shim_path"]).exists()
+    assert not Path(managed_install["shim_paths"][1]).exists()
 
 
 def test_cursor_local_action_receipts_include_surface_scope_and_sync_summary(

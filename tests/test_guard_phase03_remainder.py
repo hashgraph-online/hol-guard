@@ -181,7 +181,10 @@ def test_doctor_reports_partial_setup_for_found_unprotected_harness(
     config_path = context.home_dir / ".cursor" / "mcp.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
+        lambda _context: False,
+    )
 
     from codex_plugin_scanner.guard.adapters import get_adapter
 
@@ -201,7 +204,10 @@ def test_doctor_does_not_mark_harness_command_presence_as_guard_active(
     config_path = context.home_dir / ".cursor" / "mcp.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps({"mcpServers": {"local": {"command": "node"}}}), encoding="utf-8")
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
+        lambda _context: True,
+    )
 
     from codex_plugin_scanner.guard.adapters import get_adapter
 
@@ -259,7 +265,10 @@ def test_doctor_treats_guard_launcher_shim_as_active_install(
 ) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
+        lambda _context: True,
+    )
 
     install_payload = apply_managed_install(
         "install",
@@ -296,7 +305,10 @@ def test_doctor_marks_guard_launcher_shim_without_harness_command_broken(
         str(context.workspace_dir),
         "2026-05-13T00:00:00Z",
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
+        lambda _context: False,
+    )
 
     from codex_plugin_scanner.guard.adapters import get_adapter
 
@@ -314,7 +326,10 @@ def test_doctor_ignores_non_utf8_guard_launcher_shim(
     shim_path = context.guard_home / "bin" / "guard-cursor"
     shim_path.parent.mkdir(parents=True, exist_ok=True)
     shim_path.write_bytes(b"\xff\xfe\x00")
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
+        lambda _context: False,
+    )
 
     from codex_plugin_scanner.guard.adapters import get_adapter
 
@@ -358,7 +373,10 @@ def test_doctor_treats_guard_command_artifact_as_managed(
         json.dumps({"mcpServers": {"wrapped": {"command": "guard-cursor", "args": ["--flag"]}}}),
         encoding="utf-8",
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
+        lambda _context: True,
+    )
 
     from codex_plugin_scanner.guard.adapters import get_adapter
 
@@ -383,7 +401,10 @@ def test_doctor_keeps_active_setup_status_for_runtime_probe_timeout(
         str(context.workspace_dir),
         "2026-05-13T00:00:00Z",
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: True)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor.cursor_cli_command_available",
+        lambda _context: True,
+    )
 
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter

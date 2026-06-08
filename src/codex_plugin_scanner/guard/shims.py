@@ -561,6 +561,38 @@ def repair_package_shims(
     }
 
 
+def ensure_guard_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
+    """Prepend the harness launcher shim dir in the user's normal shell profile."""
+
+    shim_dir = context.guard_home / "bin"
+    if os.name == "nt":
+        return {
+            "changed": False,
+            "profile_path": None,
+            "shim_dir": str(shim_dir),
+            "restart_shell_required": False,
+            "manual_path_required": True,
+        }
+    profile_path, export_line = _guard_shim_profile_target(context.home_dir, shim_dir)
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
+    if _profile_already_references_path(existing, shim_dir):
+        return {
+            "changed": False,
+            "profile_path": str(profile_path),
+            "shim_dir": str(shim_dir),
+            "restart_shell_required": True,
+        }
+    prefix = "" if existing == "" or existing.endswith("\n") else "\n"
+    profile_path.write_text(f"{existing}{prefix}{export_line}\n", encoding="utf-8")
+    return {
+        "changed": True,
+        "profile_path": str(profile_path),
+        "shim_dir": str(shim_dir),
+        "restart_shell_required": True,
+    }
+
+
 def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[str, object]:
     """Prepend the package shim dir in the user's normal shell profile."""
 
@@ -583,6 +615,25 @@ def ensure_package_shim_path_in_shell_profile(context: HarnessContext) -> dict[s
         "shim_dir": str(shim_dir),
         "restart_shell_required": True,
     }
+
+
+def _guard_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, str]:
+    shell = Path(os.environ.get("SHELL", "")).name
+    marker = "# HOL Guard harness launchers"
+    if shell == "fish":
+        return (
+            home_dir / ".config" / "fish" / "config.fish",
+            f"{marker}\nfish_add_path --prepend {shim_dir}",
+        )
+    if shell == "bash":
+        return (
+            home_dir / ".bashrc",
+            f'{marker}\nexport PATH="{shim_dir}:$PATH"',
+        )
+    return (
+        home_dir / ".zshrc",
+        f'{marker}\nexport PATH="{shim_dir}:$PATH"',
+    )
 
 
 def _package_shim_profile_target(home_dir: Path, shim_dir: Path) -> tuple[Path, str]:
@@ -812,6 +863,7 @@ def test_package_shim_intercepts(
 
 __all__ = [
     "activate_package_shims",
+    "ensure_guard_shim_path_in_shell_profile",
     "ensure_package_shim_path_in_shell_profile",
     "install_guard_shim",
     "install_package_shims",

@@ -7,9 +7,20 @@ Cursor support is split by surface so the dashboard does not imply protection th
 | Surface | What Guard installs | What is intercepted |
 | ------- | ------------------- | ----------------- |
 | **Editor (IDE)** | MCP proxies in `.cursor/mcp.json` and native hooks in `.cursor/hooks.json` | Agent `beforeShellExecution`, `beforeMCPExecution`, `preToolUse` (Shell/MCP/Read), and `beforeReadFile` |
-| **CLI** | `guard-cursor-agent` shim on `PATH` | Launches routed through `hol-guard run cursor` before `cursor-agent` starts |
+| **CLI** | `guard-cursor-agent` and `guard-cursor` shims on `PATH` | Launches routed through `hol-guard run cursor` before the real Cursor CLI agent starts |
 
-Run `hol-guard install cursor --surface all` to enable both editor hooks and the CLI shim.
+Run `hol-guard apps connect cursor --surface all` (or `hol-guard install cursor` for both surfaces) to enable editor hooks and CLI shims.
+
+### Cursor CLI entry points
+
+Guard supports both modern Cursor CLI installs:
+
+| User command | Guard shim | Resolved launch |
+| ------------ | ---------- | --------------- |
+| `cursor-agent ...` | `guard-cursor-agent ...` | `cursor-agent ...` when available |
+| `cursor agent ...` | `guard-cursor agent ...` | `cursor agent ...` when the app CLI exposes the `agent` subcommand |
+
+CLI install prepends `$HOL_GUARD_HOME/bin` to your shell profile when needed. Restart the shell or open a new terminal, then use the Guard shims instead of the raw Cursor binaries for preflight protection.
 
 ## Native Cursor hooks
 
