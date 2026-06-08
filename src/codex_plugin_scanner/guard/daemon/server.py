@@ -13,6 +13,7 @@ import os
 import platform
 import secrets
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
+from ...path_support import resolves_within_root
 from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
@@ -2014,6 +2016,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except OSError:
             return None
         if not resolved.is_dir():
+            return None
+        allowed_roots = (
+            Path.home().resolve(),
+            Path.cwd().resolve(),
+            Path(tempfile.gettempdir()).resolve(),
+        )
+        if not any(resolves_within_root(root, resolved, require_exists=True) for root in allowed_roots):
             return None
         return resolved
 

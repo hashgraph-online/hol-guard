@@ -736,9 +736,7 @@ def test_package_shim_intercepts(
     installed = {str(manager) for manager in status.get("installed_managers", []) if isinstance(manager, str)}
     protected = {str(manager) for manager in status.get("protected_managers", []) if isinstance(manager, str)}
     tested_managers = list(managers or tuple(sorted(installed)))
-    path_repair_required = [
-        manager for manager in tested_managers if manager in installed and manager not in protected
-    ]
+    path_repair_required = [manager for manager in tested_managers if manager in installed and manager not in protected]
     manager_results: list[dict[str, object]] = []
     target_workspace = workspace_dir or context.workspace_dir or Path.cwd()
     shim_dir = context.guard_home / "package-shims" / "bin"
@@ -774,12 +772,12 @@ def test_package_shim_intercepts(
                 text=True,
                 timeout=15,
             )
-        except subprocess.TimeoutExpired:
+        except (subprocess.TimeoutExpired, OSError):
             manager_results.append(
                 {
                     "intercept_ran": False,
                     "manager": manager,
-                    "skipped_reason": "probe_timeout",
+                    "skipped_reason": "probe_failed",
                 },
             )
             continue
