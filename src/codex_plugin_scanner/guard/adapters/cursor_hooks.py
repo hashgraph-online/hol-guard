@@ -487,6 +487,7 @@ import hashlib
 import hmac
 import json
 import os
+import shlex
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -756,15 +757,59 @@ def _cursor_conversation_id(payload: Mapping[str, object]) -> str | None:
     return None
 
 
+def _normalize_cursor_shell_command(command: str) -> str:
+    stripped = command.strip()
+    if not stripped or len(stripped) > 8192:
+        return stripped
+    lowered = stripped.lower()
+    needle = "lean-ctx"
+    start = 0
+    while True:
+        idx = lowered.find(needle, start)
+        if idx == -1:
+            return stripped
+        if idx == 0 or stripped[idx - 1] == "/":
+            tail = stripped[idx + len(needle) :].lstrip()
+            if tail.startswith("-c"):
+                rest = tail[2:].lstrip()
+                try:
+                    tokens = shlex.split(rest, posix=True, comments=False)
+                except ValueError:
+                    tokens = None
+                if tokens:
+                    inner = tokens[0]
+                    suffix = tokens[1:]
+                    return " ".join((inner, *suffix)) if suffix else inner
+                if rest.startswith("'"):
+                    parts = []
+                    index = 1
+                    while index < len(rest):
+                        character = rest[index]
+                        if character != "'":
+                            parts.append(character)
+                            index += 1
+                            continue
+                        if index + 3 < len(rest) and rest[index : index + 4] == "'\\''":
+                            parts.append("'")
+                            index += 4
+                            continue
+                        inner = "".join(parts)
+                        suffix = rest[index + 1 :].lstrip()
+                        return " ".join((inner, suffix)) if suffix else inner
+                return stripped
+        start = idx + 1
+    return stripped
+
+
 def _cursor_shell_command(payload: Mapping[str, object]) -> str | None:
     command = payload.get("command")
     if isinstance(command, str) and command.strip():
-        return command.strip()
+        return _normalize_cursor_shell_command(command)
     tool_input = payload.get("tool_input")
     if isinstance(tool_input, dict):
         nested = tool_input.get("command")
         if isinstance(nested, str) and nested.strip():
-            return nested.strip()
+            return _normalize_cursor_shell_command(nested)
     return None
 
 
@@ -774,7 +819,8 @@ def _cursor_shell_binding_path(conversation_id: str, command: str) -> Path:
         segment = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:32] if cleaned else "missing-conversation"
     else:
         segment = cleaned
-    fingerprint = hashlib.sha256(command.strip().encode("utf-8")).hexdigest()[:24]
+    normalized_command = _normalize_cursor_shell_command(command)
+    fingerprint = hashlib.sha256(normalized_command.encode("utf-8")).hexdigest()[:24]
     return Path(GUARD_HOME) / "cursor-shell-bindings" / segment / fingerprint
 
 
