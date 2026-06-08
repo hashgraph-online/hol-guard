@@ -9,6 +9,16 @@ type HeatmapCell = {
   flatIndex: number;
 };
 
+export function selectRecentDailyActivity(
+  days: GuardReceiptDailyActivity[] | null | undefined,
+  dayCount: number,
+): GuardReceiptDailyActivity[] {
+  if (!days || dayCount <= 0) {
+    return [];
+  }
+  return days.slice(-dayCount);
+}
+
 function intensityClass(total: number, peak: number): string {
   if (total <= 0) return "evidence-heatmap-0";
   const ratio = peak > 0 ? total / peak : 0;
@@ -16,6 +26,10 @@ function intensityClass(total: number, peak: number): string {
   if (ratio >= 0.4) return "evidence-heatmap-3";
   if (ratio >= 0.15) return "evidence-heatmap-2";
   return "evidence-heatmap-1";
+}
+
+function formatWeekdayShort(dateKey: string): string {
+  return new Date(`${dateKey}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" });
 }
 
 function buildWeekColumns(days: GuardReceiptDailyActivity[]): Array<Array<HeatmapCell | null>> {
@@ -87,6 +101,168 @@ interface TooltipState {
   top: number;
   left: number;
   placement: "above" | "below";
+}
+
+export function EvidenceActivityHeatmapMini({
+  days,
+  dayCount = 5,
+  onSelectDay,
+}: {
+  days: GuardReceiptDailyActivity[];
+  dayCount?: number;
+  onSelectDay?: (dateKey: string) => void;
+}) {
+  const cellRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  const visibleDays = useMemo(() => selectRecentDailyActivity(days, dayCount), [days, dayCount]);
+  const peak = useMemo(() => Math.max(...visibleDays.map((day) => day.total), 0), [visibleDays]);
+
+  useEffect(() => {
+    setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
+
+  const updateTooltipForKey = useCallback(
+    (dateKey: string | null) => {
+      if (!dateKey || isGuardModalOpen()) {
+        setTooltip(null);
+        return;
+      }
+      const day = visibleDays.find((entry) => entry.date_key === dateKey);
+      const element = cellRefs.current.get(dateKey);
+      if (!day || !element) {
+        setTooltip(null);
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      const aboveTop = rect.top - 8;
+      const belowTop = rect.bottom + 8;
+      const placement = aboveTop > 72 ? "above" : "below";
+      setTooltip({
+        dateKey: day.date_key,
+        total: day.total,
+        left: rect.left + rect.width / 2,
+        top: placement === "above" ? aboveTop : belowTop,
+        placement,
+      });
+    },
+    [visibleDays],
+  );
+
+  useLayoutEffect(() => {
+    updateTooltipForKey(hoveredKey);
+  }, [hoveredKey, updateTooltipForKey, visibleDays]);
+
+  useEffect(() => {
+    if (!hoveredKey) return;
+    const onScrollOrResize = () => updateTooltipForKey(hoveredKey);
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [hoveredKey, updateTooltipForKey]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const dismissWhenModalOpens = () => {
+      if (isGuardModalOpen()) {
+        setTooltip(null);
+        setHoveredKey(null);
+      }
+    };
+    const observer = new MutationObserver(dismissWhenModalOpens);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-guard-modal-open"] });
+    return () => observer.disconnect();
+  }, []);
+
+  const miniHeatmapTooltipId = "mini-heatmap-tooltip";
+
+  if (visibleDays.length === 0) {
+    return <p className="py-2 text-sm text-slate-400">No activity in this period.</p>;
+  }
+
+  const tooltipNode =
+    tooltip && !isGuardModalOpen() && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="pointer-events-none fixed z-40 -translate-x-1/2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg"
+            style={{
+              left: tooltip.left,
+              top: tooltip.top,
+              transform: `translate(-50%, ${tooltip.placement === "above" ? "-100%" : "0"})`,
+            }}
+            role="tooltip"
+            id={miniHeatmapTooltipId}
+          >
+            <div className="font-semibold">{formatDayLabel(tooltip.dateKey)}</div>
+            <div className="mt-0.5 text-slate-200">
+              {tooltip.total > 0
+                ? `${formatEvidenceCount(tooltip.total)} action${tooltip.total === 1 ? "" : "s"}`
+                : "No activity"}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <div className="space-y-3">
+      {tooltipNode}
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))` }}
+        role="group"
+        aria-label={`Last ${visibleDays.length} days of Guard activity`}
+      >
+        {visibleDays.map((day) => {
+          const isHovered = hoveredKey === day.date_key;
+          const showTooltip = isHovered && tooltip !== null;
+          return (
+            <div key={day.date_key} className="flex min-w-0 flex-col items-center gap-1.5">
+              <button
+                type="button"
+                ref={(node) => {
+                  if (node) cellRefs.current.set(day.date_key, node);
+                  else cellRefs.current.delete(day.date_key);
+                }}
+                aria-label={`${formatDayLabel(day.date_key)}: ${day.total} actions`}
+                aria-describedby={showTooltip ? miniHeatmapTooltipId : undefined}
+                className={`h-5 w-full max-w-5 rounded-[3px] transition-[transform,opacity] duration-150 ${intensityClass(day.total, peak)} ${
+                  day.total > 0 ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-90"
+                } ${isHovered ? "evidence-heatmap-active" : ""} ${reduceMotion ? "" : "evidence-heatmap-motion"}`}
+                onMouseEnter={() => setHoveredKey(day.date_key)}
+                onMouseLeave={() => setHoveredKey(null)}
+                onFocus={() => setHoveredKey(day.date_key)}
+                onBlur={() => setHoveredKey(null)}
+                onClick={() => {
+                  if (day.total > 0 && onSelectDay) {
+                    onSelectDay(day.date_key);
+                  }
+                }}
+              />
+              <span className="w-full truncate text-center text-[10px] font-medium leading-none text-slate-400">
+                {formatWeekdayShort(day.date_key)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
+        <span>Less</span>
+        <span className="h-3 w-3 rounded-[2px] evidence-heatmap-0" />
+        <span className="h-3 w-3 rounded-[2px] evidence-heatmap-1" />
+        <span className="h-3 w-3 rounded-[2px] evidence-heatmap-2" />
+        <span className="h-3 w-3 rounded-[2px] evidence-heatmap-3" />
+        <span className="h-3 w-3 rounded-[2px] evidence-heatmap-4" />
+        <span>More</span>
+      </div>
+    </div>
+  );
 }
 
 export function EvidenceActivityHeatmap({
