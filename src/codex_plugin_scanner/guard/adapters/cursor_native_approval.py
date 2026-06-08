@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-import re
 import secrets
 import shlex
 from collections.abc import Mapping
@@ -18,30 +17,37 @@ _MANAGED_HOOK_ENV = "HOL_GUARD_MANAGED_CURSOR_HOOK"
 _AFTER_SHELL_PROOF_ENV = "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"
 _APPROVAL_BINDING_ENV = "HOL_GUARD_CURSOR_APPROVAL_BINDING"
 _AFTER_SHELL_PROOF_EVENT = "afterShellExecution"
-_LEAN_CTX_WRAPPER_PATTERN = re.compile(r"^(?:(?:\S*/)?lean-ctx)\s+-c\s+(?P<rest>.+)$", re.IGNORECASE)
+_MAX_CURSOR_SHELL_NORMALIZE_BYTES = 8192
+_LEAN_CTX_COMMAND_MARKER = "lean-ctx"
 
 
 def normalize_cursor_shell_command(command: str) -> str:
     """Unwrap lean-ctx shell rewrites so approval memory keys stay stable."""
 
     stripped = command.strip()
-    if not stripped:
+    if not stripped or len(stripped) > _MAX_CURSOR_SHELL_NORMALIZE_BYTES:
         return stripped
-    match = _LEAN_CTX_WRAPPER_PATTERN.match(stripped)
-    if match is None:
-        return stripped
-    rest = match.group("rest").strip()
-    try:
-        tokens = shlex.split(rest, posix=True, comments=False)
-    except ValueError:
-        return stripped
-    if not tokens:
-        return stripped
-    inner = tokens[0]
-    suffix = tokens[1:]
-    if not suffix:
-        return inner
-    return " ".join((inner, *suffix))
+    lowered = stripped.lower()
+    needle = _LEAN_CTX_COMMAND_MARKER
+    start = 0
+    while True:
+        idx = lowered.find(needle, start)
+        if idx == -1:
+            return stripped
+        if idx == 0 or stripped[idx - 1] == "/":
+            tail = stripped[idx + len(needle) :].lstrip()
+            if tail.startswith("-c"):
+                rest = tail[2:].lstrip()
+                try:
+                    tokens = shlex.split(rest, posix=True, comments=False)
+                except ValueError:
+                    return stripped
+                if tokens:
+                    inner = tokens[0]
+                    suffix = tokens[1:]
+                    return " ".join((inner, *suffix)) if suffix else inner
+        start = idx + 1
+    return stripped
 
 
 def _cursor_shell_binding_segment(conversation_id: str) -> str:

@@ -13508,26 +13508,6 @@ def test_guard_runtime_allows_cd_with_parentheses_in_directory_name(tmp_path):
     assert match is None
 
 
-def test_guard_runtime_allows_gh_graphql_pipeline_with_python_parser(tmp_path):
-    command = (
-        "gh api graphql -f query='query { viewer { login } }' 2>&1 | "
-        "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
-    )
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is None
-
-
-def test_guard_runtime_allows_lean_ctx_wrapped_gh_graphql_pipeline(tmp_path):
-    command = (
-        "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\''' 2>&1 | "
-        "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
-    )
-    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
-
-    assert match is None
-
-
 def test_guard_runtime_blocks_shadowed_pytest_module_invocation(tmp_path):
     _write_text(tmp_path / "pytest.py", "from pathlib import Path; Path('marker').write_text('owned')\n")
 

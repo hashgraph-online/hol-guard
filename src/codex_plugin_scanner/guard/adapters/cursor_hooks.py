@@ -487,7 +487,6 @@ import hashlib
 import hmac
 import json
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -760,23 +759,29 @@ def _cursor_conversation_id(payload: Mapping[str, object]) -> str | None:
 
 def _normalize_cursor_shell_command(command: str) -> str:
     stripped = command.strip()
-    if not stripped:
+    if not stripped or len(stripped) > 8192:
         return stripped
-    match = re.match(r"^(?:(?:\\S*/)?lean-ctx)\\s+-c\\s+(?P<rest>.+)$", stripped, re.IGNORECASE)
-    if match is None:
-        return stripped
-    rest = match.group("rest").strip()
-    try:
-        tokens = shlex.split(rest, posix=True, comments=False)
-    except ValueError:
-        return stripped
-    if not tokens:
-        return stripped
-    inner = tokens[0]
-    suffix = tokens[1:]
-    if not suffix:
-        return inner
-    return " ".join((inner, *suffix))
+    lowered = stripped.lower()
+    needle = "lean-ctx"
+    start = 0
+    while True:
+        idx = lowered.find(needle, start)
+        if idx == -1:
+            return stripped
+        if idx == 0 or stripped[idx - 1] == "/":
+            tail = stripped[idx + len(needle) :].lstrip()
+            if tail.startswith("-c"):
+                rest = tail[2:].lstrip()
+                try:
+                    tokens = shlex.split(rest, posix=True, comments=False)
+                except ValueError:
+                    return stripped
+                if tokens:
+                    inner = tokens[0]
+                    suffix = tokens[1:]
+                    return " ".join((inner, *suffix)) if suffix else inner
+        start = idx + 1
+    return stripped
 
 
 def _cursor_shell_command(payload: Mapping[str, object]) -> str | None:

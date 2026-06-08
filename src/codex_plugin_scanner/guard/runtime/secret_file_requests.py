@@ -5647,9 +5647,7 @@ def _looks_like_read_only_shell_pipeline(
     pipeline = pipelines[0]
     if len(pipeline) < 2:
         return False
-    return all(
-        _pipeline_segment_is_read_only(segment, cwd=cwd, home_dir=home_dir) for segment in pipeline
-    )
+    return all(_pipeline_segment_is_read_only(segment, cwd=cwd, home_dir=home_dir) for segment in pipeline)
 
 
 def _pipeline_segment_is_read_only(
