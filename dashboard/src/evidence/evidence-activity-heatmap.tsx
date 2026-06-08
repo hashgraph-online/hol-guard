@@ -65,6 +65,12 @@ function monthLabels(weeks: Array<Array<HeatmapCell | null>>): string[] {
   return labels;
 }
 
+function isGuardModalOpen(): boolean {
+  if (typeof document === "undefined") return false;
+  const count = Number(document.documentElement.dataset.guardModalOpen ?? 0);
+  return Number.isFinite(count) && count > 0;
+}
+
 function flatCellsFromWeeks(weeks: Array<Array<HeatmapCell | null>>): HeatmapCell[] {
   const result: HeatmapCell[] = [];
   for (const week of weeks) {
@@ -112,7 +118,7 @@ export function EvidenceActivityHeatmap({
   }, []);
 
   const updateTooltipForKey = useCallback((dateKey: string | null) => {
-    if (!dateKey) {
+    if (!dateKey || isGuardModalOpen()) {
       setTooltip(null);
       return;
     }
@@ -148,6 +154,19 @@ export function EvidenceActivityHeatmap({
       window.removeEventListener("resize", onScrollOrResize);
     };
   }, [displayKey, updateTooltipForKey]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const dismissWhenModalOpens = () => {
+      if (isGuardModalOpen()) {
+        setTooltip(null);
+        setHoveredKey(null);
+      }
+    };
+    const observer = new MutationObserver(dismissWhenModalOpens);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-guard-modal-open"] });
+    return () => observer.disconnect();
+  }, []);
 
   const moveActive = useCallback(
     (delta: number) => {
@@ -191,10 +210,10 @@ export function EvidenceActivityHeatmap({
   }
 
   const tooltipNode =
-    tooltip && typeof document !== "undefined"
+    tooltip && !isGuardModalOpen() && typeof document !== "undefined"
       ? createPortal(
           <div
-            className="pointer-events-none fixed z-[120] -translate-x-1/2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg"
+            className="pointer-events-none fixed z-40 -translate-x-1/2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg"
             style={{
               left: tooltip.left,
               top: tooltip.top,

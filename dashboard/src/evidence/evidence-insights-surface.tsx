@@ -7,11 +7,12 @@ import type {
   GuardRuntimeSnapshot,
 } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
-import { ActionButton, SectionLabel } from "../approval-center-primitives";
+import { SectionLabel } from "../approval-center-primitives";
 import { EvidenceActivityHeatmap } from "./evidence-activity-heatmap";
 import { EvidenceDataProvenanceStrip } from "./evidence-data-provenance-strip";
 import { EvidenceInsightsHeadlineBento } from "./evidence-insights-headline-bento";
 import { EvidenceInsightsShareModal } from "./evidence-insights-share-modal";
+import { EvidenceInsightsShareButton } from "./evidence-insights-share-button";
 import { EvidenceShareBar } from "./evidence-share-bar";
 
 interface EvidenceInsightsSurfaceProps {
@@ -175,6 +176,7 @@ export function EvidenceInsightsSurface({
     () => analytics.top_artifacts.reduce((sum, item) => sum + item.total, 0),
     [analytics.top_artifacts],
   );
+  const cloudConnected = runtime?.cloud_state === "paired_active";
 
   if (analytics.total === 0) {
     return (
@@ -200,9 +202,9 @@ export function EvidenceInsightsSurface({
             <SectionLabel>Your Guard stats</SectionLabel>
             <p className="mt-1 text-sm text-slate-500">All-time local store</p>
           </div>
-          <ActionButton variant="outline" onClick={() => setShareOpen(true)}>
-            Share stats
-          </ActionButton>
+          {cloudConnected ? (
+            <EvidenceInsightsShareButton onClick={() => setShareOpen(true)} />
+          ) : null}
         </div>
         <EvidenceInsightsHeadlineBento analytics={analytics} variant="full" />
 
