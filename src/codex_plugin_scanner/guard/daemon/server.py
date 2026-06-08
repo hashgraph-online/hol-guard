@@ -90,6 +90,7 @@ from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
     build_local_supply_chain_posture,
+    build_workspace_audit_payload,
     resolve_package_firewall_entitlement_with_refresh,
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
@@ -117,6 +118,7 @@ from ..shims import (
     activate_package_shims,
     package_shim_status,
     package_shim_supported_managers,
+    test_package_shim_intercepts,
     uninstall_package_shims,
 )
 from ..stable_digest import stable_digest_hex
@@ -1969,6 +1971,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         context: HarnessContext,
         managers: tuple[str, ...] | None,
     ) -> dict[str, object]:
+        store = self.server.store  # type: ignore[attr-defined]
         if operation == "install":
             return activate_package_shims(context, managers=managers)
         if operation == "repair":
@@ -1976,33 +1979,39 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if operation == "remove":
             return uninstall_package_shims(context, managers=managers)
         if operation == "test":
-            status = package_shim_status(context)
-            installed = {str(manager) for manager in status.get("installed_managers", []) if isinstance(manager, str)}
-            protected = {str(manager) for manager in status.get("protected_managers", []) if isinstance(manager, str)}
-            tested_managers = list(managers or tuple(sorted(installed)))
-            path_repair_required = [
-                manager for manager in tested_managers if manager in installed and manager not in protected
-            ]
-            return {
-                "blocked_execution": bool(tested_managers) and all(manager in protected for manager in tested_managers),
-                "missing_managers": [manager for manager in tested_managers if manager not in installed],
-                "package_shims": status,
-                "path_repair_required": path_repair_required,
-                "tested_managers": tested_managers,
-            }
-        if operation == "audit":
-            return build_local_supply_chain_posture(
-                self.server.store,  # type: ignore[attr-defined]
-                load_guard_config(self.server.store.guard_home),  # type: ignore[attr-defined]
+            workspace_dir = context.workspace_dir or Path.cwd()
+            return test_package_shim_intercepts(
+                context,
+                managers=managers,
+                store=store,
+                workspace_dir=workspace_dir,
             )
+        if operation == "audit":
+            config = load_guard_config(store.guard_home)
+            workspace_dir = context.workspace_dir or Path.cwd()
+            now = datetime.now(timezone.utc).isoformat()
+            audit_payload, exit_code = build_workspace_audit_payload(
+                command_name="audit",
+                config=config,
+                now=now,
+                sbom_paths=(),
+                store=store,
+                workspace_dir=workspace_dir,
+            )
+            audit_payload["exit_code"] = exit_code
+            return audit_payload
         if operation == "sync":
             return sync_supply_chain_bundle(self.server.store)  # type: ignore[attr-defined]
         raise ValueError("unsupported_supply_chain_operation")
 
     def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
+        workspace_dir: Path | None = None
+        workspace_value = payload.get("workspace_dir")
+        if isinstance(workspace_value, str) and workspace_value.strip():
+            workspace_dir = Path(workspace_value).expanduser().resolve()
         return HarnessContext(
             home_dir=Path.home().resolve(),
-            workspace_dir=None,
+            workspace_dir=workspace_dir,
             guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
 

@@ -14,6 +14,7 @@ from .launcher import merge_guard_launcher_env
 
 if TYPE_CHECKING:
     from .adapters.base import HarnessContext
+    from ..store import GuardStore
 
 _PACKAGE_SHIM_COMMANDS = {
     "bun": "bun",
@@ -723,6 +724,80 @@ def _path_export_hints(shim_dir: Path) -> dict[str, str]:
     }
 
 
+def test_package_shim_intercepts(
+    context: HarnessContext,
+    *,
+    managers: tuple[str, ...] | None = None,
+    store: GuardStore | None = None,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
+    """Run protect dry-run probes for PATH-protected package manager shims."""
+
+    status = package_shim_status(context)
+    installed = {str(manager) for manager in status.get("installed_managers", []) if isinstance(manager, str)}
+    protected = {str(manager) for manager in status.get("protected_managers", []) if isinstance(manager, str)}
+    tested_managers = list(managers or tuple(sorted(installed)))
+    path_repair_required = [
+        manager for manager in tested_managers if manager in installed and manager not in protected
+    ]
+    manager_results: list[dict[str, object]] = []
+    target_workspace = workspace_dir or context.workspace_dir or Path.cwd()
+    for manager in tested_managers:
+        if manager not in installed:
+            continue
+        if manager not in protected:
+            manager_results.append(
+                {
+                    "intercept_ran": False,
+                    "manager": manager,
+                    "skipped_reason": "path_inactive",
+                },
+            )
+            continue
+        if store is None:
+            manager_results.append(
+                {
+                    "intercept_ran": False,
+                    "manager": manager,
+                    "skipped_reason": "store_unavailable",
+                },
+            )
+            continue
+        from datetime import datetime, timezone
+
+        from ..protect import build_protect_payload
+
+        now = datetime.now(timezone.utc).isoformat()
+        payload, exit_code = build_protect_payload(
+            command=[manager, "--version"],
+            dry_run=True,
+            now=now,
+            store=store,
+            workspace_dir=target_workspace,
+        )
+        verdict = payload.get("verdict")
+        verdict_action = verdict.get("action") if isinstance(verdict, dict) else None
+        manager_results.append(
+            {
+                "dry_run": True,
+                "intercept_ran": True,
+                "manager": manager,
+                "protect_exit_code": exit_code,
+                "verdict_action": verdict_action,
+            },
+        )
+    intercept_proved = any(bool(result.get("intercept_ran")) for result in manager_results)
+    return {
+        "blocked_execution": bool(tested_managers) and all(manager in protected for manager in tested_managers),
+        "intercept_proved": intercept_proved,
+        "manager_results": manager_results,
+        "missing_managers": [manager for manager in tested_managers if manager not in installed],
+        "package_shims": status,
+        "path_repair_required": path_repair_required,
+        "tested_managers": tested_managers,
+    }
+
+
 __all__ = [
     "activate_package_shims",
     "ensure_package_shim_path_in_shell_profile",
@@ -732,5 +807,6 @@ __all__ = [
     "package_shim_status",
     "package_shim_supported_managers",
     "remove_guard_shim",
+    "test_package_shim_intercepts",
     "uninstall_package_shims",
 ]
