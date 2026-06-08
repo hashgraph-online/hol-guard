@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { GuardReceiptAnalyticsBucket } from "../guard-types";
 import { formatEvidenceCount } from "./evidence-format";
@@ -6,8 +6,15 @@ import { formatEvidenceCount } from "./evidence-format";
 const CHART_HEIGHT_PX = 112;
 const TOOLTIP_ID = "evidence-trend-chart-tooltip";
 
-function bucketTotal(bucket: GuardReceiptAnalyticsBucket): number {
+export function bucketTotal(bucket: GuardReceiptAnalyticsBucket): number {
   return bucket.allowed + bucket.blocked + bucket.reviewed;
+}
+
+export function computeTrendBarHeight(total: number, maxTotal: number, chartHeight = CHART_HEIGHT_PX): number {
+  if (total <= 0 || maxTotal <= 0) {
+    return 0;
+  }
+  return Math.max(Math.round((total / maxTotal) * chartHeight), 10);
 }
 
 function isGuardModalOpen(): boolean {
@@ -40,7 +47,11 @@ export function EvidenceTrendChart({ buckets }: EvidenceTrendChartProps) {
   const hasAnyData = useMemo(() => buckets.some((bucket) => bucketTotal(bucket) > 0), [buckets]);
 
   useEffect(() => {
-    setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncPreference = () => setReduceMotion(media.matches);
+    syncPreference();
+    media.addEventListener("change", syncPreference);
+    return () => media.removeEventListener("change", syncPreference);
   }, []);
 
   const updateTooltipForKey = useCallback(
@@ -72,7 +83,7 @@ export function EvidenceTrendChart({ buckets }: EvidenceTrendChartProps) {
     [buckets],
   );
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     updateTooltipForKey(hoveredKey);
   }, [hoveredKey, updateTooltipForKey, buckets]);
 
@@ -109,7 +120,7 @@ export function EvidenceTrendChart({ buckets }: EvidenceTrendChartProps) {
       ? createPortal(
           <div
             id={TOOLTIP_ID}
-            className="pointer-events-none fixed z-40 -translate-x-1/2 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg"
+            className="pointer-events-none fixed z-40 rounded-lg bg-brand-dark px-3 py-2 text-xs text-white shadow-lg"
             style={{
               left: tooltip.left,
               top: tooltip.top,
@@ -159,8 +170,7 @@ export function EvidenceTrendChart({ buckets }: EvidenceTrendChartProps) {
 
         {buckets.map((bucket, index) => {
           const total = bucketTotal(bucket);
-          const barHeight =
-            total > 0 ? Math.max(Math.round((total / maxTotal) * CHART_HEIGHT_PX), 10) : 0;
+          const barHeight = computeTrendBarHeight(total, maxTotal);
           const isActive = hoveredKey === bucket.date_key;
           const showTooltip = isActive && tooltip !== null;
 
@@ -170,7 +180,7 @@ export function EvidenceTrendChart({ buckets }: EvidenceTrendChartProps) {
                 className={`mb-2 text-[11px] font-semibold tabular-nums tracking-tight transition-colors ${
                   isActive ? "text-brand-blue" : "text-brand-dark"
                 }`}
-                aria-hidden={total <= 0}
+                aria-hidden="true"
               >
                 {total > 0 ? formatEvidenceCount(total) : ""}
               </span>
