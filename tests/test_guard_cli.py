@@ -8882,7 +8882,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(cursor_adapter_module, "_command_available", lambda command: True)
+        monkeypatch.setattr(cursor_adapter_module, "cursor_cli_command_available", lambda _context: True)
         monkeypatch.setattr(
             cursor_adapter_module,
             "_run_command_probe",
