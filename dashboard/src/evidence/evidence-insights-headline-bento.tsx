@@ -1,6 +1,7 @@
 import type { GuardReceiptAnalytics } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
-import { formatEvidenceCount } from "./evidence-format";
+import { formatBlockedShare, formatEvidenceCount } from "./evidence-format";
+import { GuardStatMetric } from "./guard-stat-metric";
 
 type BentoEmphasis = "hero" | "medium" | "quiet";
 
@@ -11,8 +12,8 @@ interface BentoItem {
   emphasis: BentoEmphasis;
 }
 
-function buildBentoItems(analytics: GuardReceiptAnalytics, variant: "full" | "compact"): BentoItem[] {
-  const stopRate = analytics.total > 0 ? Math.round((analytics.blocked / analytics.total) * 100) : 0;
+export function buildBentoItems(analytics: GuardReceiptAnalytics, variant: "full" | "compact"): BentoItem[] {
+  const blockedShare = formatBlockedShare(analytics.blocked, analytics.total);
   const dominantApp = analytics.by_harness[0]
     ? harnessDisplayName(analytics.by_harness[0].harness)
     : "None yet";
@@ -39,7 +40,7 @@ function buildBentoItems(analytics: GuardReceiptAnalytics, variant: "full" | "co
     {
       label: "Stopped",
       value: formatEvidenceCount(analytics.blocked),
-      unit: `${stopRate}% of total`,
+      unit: blockedShare,
       emphasis: "medium",
     },
     {
@@ -56,7 +57,7 @@ function buildBentoItems(analytics: GuardReceiptAnalytics, variant: "full" | "co
 
   return [
     fullItems[0],
-    fullItems[2],
+    fullItems[1],
     fullItems[3],
     fullItems[4],
   ];
@@ -80,34 +81,23 @@ export function EvidenceInsightsHeadlineBento({
   return (
     <div className={gridClass}>
       {items.map((item, index) => (
-        <div
+        <GuardStatMetric
           key={item.label}
-          className={`bg-white px-4 py-4 sm:py-5 evidence-metric-enter ${
-            variant === "full" && item.emphasis === "hero" ? "sm:py-6" : variant === "compact" ? "py-3.5" : ""
-          }`}
-          style={{ animationDelay: `${index * 60}ms` }}
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{item.label}</p>
-          <p
-            className={`mt-1 font-semibold tabular-nums tracking-tight text-brand-dark ${
-              variant === "compact"
-                ? "text-lg"
-                : item.emphasis === "hero"
-                  ? "text-3xl"
-                  : item.emphasis === "medium"
-                    ? "text-xl"
-                    : "text-base truncate"
-            }`}
-          >
-            {item.value}
-            {item.emphasis === "hero" && item.unit ? (
-              <span className="ml-1 text-sm font-medium text-slate-500">{item.unit}</span>
-            ) : null}
-          </p>
-          {item.emphasis !== "hero" && item.unit ? (
-            <p className="mt-0.5 text-xs text-slate-500">{item.unit}</p>
-          ) : null}
-        </div>
+          label={item.label}
+          value={
+            item.emphasis === "hero" && item.unit ? (
+              <>
+                {item.value}
+                <span className="ml-1 text-sm font-medium text-slate-500">{item.unit}</span>
+              </>
+            ) : (
+              item.value
+            )
+          }
+          detail={item.emphasis !== "hero" ? item.unit : null}
+          compact={variant === "compact"}
+          animationDelayMs={index * 60}
+        />
       ))}
     </div>
   );

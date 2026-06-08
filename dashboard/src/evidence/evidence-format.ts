@@ -1,3 +1,17 @@
+export function formatBlockedShare(blocked: number, total: number): string | null {
+  if (total <= 0 || blocked <= 0) {
+    return null;
+  }
+  const percent = (blocked / total) * 100;
+  if (percent < 1) {
+    return "<1% of recorded actions";
+  }
+  if (percent < 10) {
+    return `${percent.toFixed(1).replace(/\.0$/, "")}% of recorded actions`;
+  }
+  return `${Math.round(percent)}% of recorded actions`;
+}
+
 export function formatEvidenceCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (value >= 10_000) return `${Math.round(value / 1_000)}K`;

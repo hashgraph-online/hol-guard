@@ -1,8 +1,10 @@
 import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
+import { harnessDisplayName } from "../approval-center-utils";
 import { ActionButton, SectionLabel } from "../approval-center-primitives";
-import { EvidenceInsightsHeadlineBento } from "./evidence-insights-headline-bento";
+import { formatBlockedShare, formatEvidenceCount } from "./evidence-format";
+import { GuardStatMetric, type GuardStatMetricTone } from "./guard-stat-metric";
 
-export type HomeOverviewStatTone = "blue" | "green" | "purple" | "slate";
+export type HomeOverviewStatTone = GuardStatMetricTone;
 
 export interface HomeOverviewStat {
   label: string;
@@ -19,34 +21,57 @@ interface EvidenceInsightsHomePreviewProps {
   onShare?: () => void;
 }
 
-function overviewValueClass(tone: HomeOverviewStatTone | undefined): string {
-  switch (tone) {
-    case "blue":
-      return "text-brand-blue";
-    case "green":
-      return "text-emerald-600";
-    case "purple":
-      return "text-brand-purple";
-    default:
-      return "text-brand-dark";
-  }
-}
-
-function HomeOverviewStatsRow({ items }: { items: HomeOverviewStat[] }) {
+function HomeInsightsSkeleton() {
   return (
-    <div className="grid grid-cols-3 gap-px bg-slate-100">
-      {items.map((item, index) => (
-        <div
-          key={item.label}
-          className="bg-white px-4 py-3.5 sm:py-4 evidence-metric-enter"
-          style={{ animationDelay: `${index * 40}ms` }}
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{item.label}</p>
-          <p className={`mt-1 text-lg font-semibold tabular-nums tracking-tight ${overviewValueClass(item.tone)}`}>
-            {item.value}
-          </p>
+    <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4">
+      {Array.from({ length: 4 }, (_, index) => (
+        <div key={index} className="space-y-2 bg-white px-4 py-3.5 sm:py-4">
+          <div className="guard-skeleton h-3 w-16 rounded" />
+          <div className="guard-skeleton h-6 w-20 rounded" />
         </div>
       ))}
+    </div>
+  );
+}
+
+function HomeInsightsMetrics({ analytics }: { analytics: GuardReceiptAnalytics }) {
+  const topApp = analytics.by_harness[0] ? harnessDisplayName(analytics.by_harness[0].harness) : "None yet";
+  const streakUnit = analytics.active_day_streak === 1 ? "day" : "days";
+
+  return (
+    <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4">
+      <GuardStatMetric
+        label="Current streak"
+        value={
+          <>
+            {analytics.active_day_streak}
+            <span className="ml-1 text-sm font-medium text-slate-500">{streakUnit}</span>
+          </>
+        }
+        compact
+        animationDelayMs={120}
+      />
+      <GuardStatMetric
+        label="Peak day"
+        value={formatEvidenceCount(analytics.peak_day_total)}
+        detail="Most actions in one day"
+        compact
+        animationDelayMs={160}
+      />
+      <GuardStatMetric
+        label="Stopped"
+        value={formatEvidenceCount(analytics.blocked)}
+        detail={formatBlockedShare(analytics.blocked, analytics.total)}
+        compact
+        animationDelayMs={200}
+      />
+      <GuardStatMetric
+        label="Top app"
+        value={topApp}
+        detail="Most recorded actions"
+        compact
+        animationDelayMs={240}
+      />
     </div>
   );
 }
@@ -69,7 +94,9 @@ export function EvidenceInsightsHomePreview({
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div className="min-w-0 flex-1">
           <SectionLabel>Your Guard stats</SectionLabel>
-          <p className="mt-1 text-sm text-slate-500">Queue, apps, and insights from this machine.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            What needs you now, plus patterns from recorded actions on this machine.
+          </p>
         </div>
         {cloudConnected && onShare && insightsAvailable ? (
           <ActionButton variant="outline" onClick={onShare} className="shrink-0">
@@ -78,24 +105,24 @@ export function EvidenceInsightsHomePreview({
         ) : null}
       </div>
 
-      <HomeOverviewStatsRow items={overviewStats} />
+      <div className="grid grid-cols-3 gap-px bg-slate-100">
+        {overviewStats.map((item, index) => (
+          <GuardStatMetric
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            tone={item.tone}
+            compact
+            animationDelayMs={index * 40}
+          />
+        ))}
+      </div>
 
       {showInsightsSection ? (
         analyticsLoading ? (
-          <div className="border-t border-slate-100 px-5 py-5">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {Array.from({ length: 4 }, (_, index) => (
-                <div key={index} className="space-y-2">
-                  <div className="guard-skeleton h-3 w-16 rounded" />
-                  <div className="guard-skeleton h-6 w-20 rounded" />
-                </div>
-              ))}
-            </div>
-          </div>
+          <HomeInsightsSkeleton />
         ) : insightsAvailable ? (
-          <div className="border-t border-slate-100">
-            <EvidenceInsightsHeadlineBento analytics={analytics} variant="compact" />
-          </div>
+          <HomeInsightsMetrics analytics={analytics} />
         ) : null
       ) : null}
 

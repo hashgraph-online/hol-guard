@@ -14,9 +14,12 @@ const shareModalSource = readFileSync(join(__dirname, "evidence-insights-share-m
 const shareSheetSource = readFileSync(join(__dirname, "evidence-insights-share-sheet.tsx"), "utf8");
 const modalLayerSource = readFileSync(join(__dirname, "../guard-modal-layer.tsx"), "utf8");
 
-assert(homePreviewSource.includes("HomeOverviewStatsRow"), "home stats card: overview row component exists");
 assert(homePreviewSource.includes("overviewStats"), "home stats card: accepts overview stats");
-assert(homePreviewSource.includes("Queue, apps, and insights"), "home stats card: unified subtitle copy");
+assert(homePreviewSource.includes("patterns from recorded actions"), "home stats card: explains overview vs insights");
+assert(homePreviewSource.includes("GuardStatMetric"), "home stats card: uses shared metric cells");
+assert(homePreviewSource.includes("HomeInsightsMetrics"), "home stats card: renders distinct insight metrics");
+assert(!homePreviewSource.includes("EvidenceInsightsHeadlineBento"), "home stats card: avoids duplicate lifetime metric row");
+assert(homeDashboardSource.includes('label: "Recorded"'), "home dashboard: uses recorded label instead of history");
 assert(!homeDashboardSource.includes("ProofStrip"), "home dashboard: removed standalone proof strip");
 assert(homeDashboardSource.includes("EvidenceInsightsHomePreview"), "home dashboard: uses unified stats card");
 assert(modalLayerSource.includes("createPortal"), "modal layer: portals to document body");

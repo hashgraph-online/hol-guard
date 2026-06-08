@@ -3478,11 +3478,6 @@
     line-height: var(--tw-leading, var(--text-2xl--line-height));
   }
 
-  .text-3xl {
-    font-size: var(--text-3xl);
-    line-height: var(--tw-leading, var(--text-3xl--line-height));
-  }
-
   .text-4xl {
     font-size: var(--text-4xl);
     line-height: var(--tw-leading, var(--text-4xl--line-height));
@@ -5146,10 +5141,6 @@
 
     .sm\:py-5 {
       padding-block: calc(var(--spacing) * 5);
-    }
-
-    .sm\:py-6 {
-      padding-block: calc(var(--spacing) * 6);
     }
 
     .sm\:py-16 {
