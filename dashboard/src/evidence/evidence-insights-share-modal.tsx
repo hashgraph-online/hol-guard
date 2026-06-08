@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import type { GuardReceiptAnalytics, GuardRuntimeSnapshot } from "../guard-types";
 import { ActionButton } from "../approval-center-primitives";
+import { GuardModalLayer } from "../guard-modal-layer";
 import { publishInsightsShare, type GuardInsightsShareResult } from "../guard-api";
 import { EvidenceInsightsHeadlineBento } from "./evidence-insights-headline-bento";
 import { EvidenceInsightsShareSheet } from "./evidence-insights-share-sheet";
@@ -56,8 +57,8 @@ export function EvidenceInsightsShareModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-4 sm:items-center">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl">
+    <GuardModalLayer ariaLabel="Share your Guard stats" onClose={onClose}>
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -140,6 +141,6 @@ export function EvidenceInsightsShareModal({
           </>
         )}
       </div>
-    </div>
+    </GuardModalLayer>
   );
 }

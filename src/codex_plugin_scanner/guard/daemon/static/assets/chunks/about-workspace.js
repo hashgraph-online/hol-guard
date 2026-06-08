@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, H as HiMiniShieldCheck, aq as HiMiniDocumentText, J as HiMiniLockClosed, s as HiMiniCloud, ar as HiMiniArrowTopRightOnSquare, as as HiMiniCheckBadge, B as Badge, r as reactExports } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, H as HiMiniShieldCheck, ar as HiMiniDocumentText, K as HiMiniLockClosed, s as HiMiniCloud, as as HiMiniArrowTopRightOnSquare, at as HiMiniCheckBadge, B as Badge, r as reactExports } from "../guard-dashboard.js";
 const ALLOWED_HOSTS = /* @__PURE__ */ new Set([
   "hol.org",
   "www.hol.org",
