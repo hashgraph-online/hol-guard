@@ -420,8 +420,7 @@ def _resolve_guard_cli_command() -> list[str]:
     return [sys.executable, "-m", "codex_plugin_scanner.cli"]
 
 
-def _uses_top_level_hook_command(guard_cli: list[str]) -> bool:
-    del guard_cli
+def _uses_top_level_hook_command(_guard_cli: list[str]) -> bool:
     # Installed hol-guard exposes hooks at `hol-guard guard hook`, not `hol-guard hook`.
     return False
 
