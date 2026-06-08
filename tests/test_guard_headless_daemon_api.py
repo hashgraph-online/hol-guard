@@ -717,6 +717,55 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     assert test_payload["result"]["tested_managers"] == ["npm"]
     assert test_payload["result"]["blocked_execution"] is False
     assert test_payload["result"]["path_repair_required"] == ["npm"]
+    assert test_payload["result"]["intercept_proved"] is False
+    assert test_payload["result"]["manager_results"] == [
+        {
+            "intercept_ran": False,
+            "manager": "npm",
+            "skipped_reason": "path_inactive",
+        },
+    ]
+
+
+def test_supply_chain_audit_scans_workspace_manifests(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / "package.json").write_text(
+        json.dumps({"name": "demo", "version": "1.0.0"}),
+        encoding="utf-8",
+    )
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "cloud-token",
+        "2026-05-27T16:00:00.000Z",
+        workspace_id="workspace-1",
+    )
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {"tier": "premium", "workspace_id": "workspace-1"},
+        "2026-05-27T16:00:00.000Z",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        audit_status, audit_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/audit",
+                token=token,
+                payload={"workspace_dir": str(workspace_dir)},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert audit_status == 200
+    assert audit_payload["operation"] == "audit"
+    assert audit_payload["status"] == "completed"
+    assert audit_payload["result"]["manifest_paths"] == ["package.json"]
+    assert "supply_chain" in audit_payload["result"]
 
 
 def test_supply_chain_package_firewall_status_exposes_local_recovery_when_connect_is_missing(
