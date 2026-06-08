@@ -767,10 +767,10 @@ _SLOW_QUERY_THRESHOLD_MS: int = 200
 _OAUTH_HEALTH_CACHE_TTL_SECONDS = 60.0
 _OAUTH_HEALTH_DEGRADED_CACHE_TTL_SECONDS = 15.0
 _OAUTH_STORAGE_REPAIR_MIN_INTERVAL_SECONDS = 3600.0
+_OAUTH_KEYCHAIN_ACCESS_STATE_FILE = "oauth-keychain-access.json"
 _store_logger = logging.getLogger(__name__)
 _OAUTH_SECRET_PAYLOAD_PROCESS_CACHE: dict[tuple[str, str, str], str] = {}
 _OAUTH_HEALTH_RESULT_PROCESS_CACHE: dict[tuple[str, str], tuple[float, dict[str, object]]] = {}
-_OAUTH_STORAGE_REPAIR_ATTEMPTS: dict[str, float] = {}
 
 
 class GuardStore:
@@ -3548,16 +3548,19 @@ class GuardStore:
     def get_cloud_sync_profile(self) -> dict[str, str] | None:
         oauth_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if isinstance(oauth_payload, dict):
-            oauth_credentials = self.get_oauth_local_credentials()
-            if oauth_credentials is None:
+            oauth_health = self.get_oauth_local_credential_health()
+            if not isinstance(oauth_health, dict) or oauth_health.get("state") != "healthy":
                 return None
-            issuer = oauth_credentials.get("issuer")
+            metadata = self._oauth_local_credentials_metadata(oauth_payload)
+            if metadata is None:
+                return None
+            issuer = metadata.get("issuer")
             if isinstance(issuer, str) and issuer.strip():
                 profile = {
                     "auth_mode": "oauth",
                     "sync_url": _oauth_sync_url_from_issuer(issuer),
                 }
-                workspace_id = oauth_credentials.get("workspace_id")
+                workspace_id = metadata.get("workspace_id")
                 if isinstance(workspace_id, str) and workspace_id.strip():
                     profile["workspace_id"] = workspace_id.strip()
                 return profile
@@ -3657,14 +3660,14 @@ class GuardStore:
         self._assert_oauth_secret_persisted(self._oauth_local_credentials_ref, secret_json)
         self.set_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY, payload, now)
 
-    def get_oauth_local_credentials(self) -> dict[str, object] | None:
+    def get_oauth_local_credentials(self, *, allow_primary: bool = False) -> dict[str, object] | None:
         payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if not isinstance(payload, dict):
             return None
         metadata = self._oauth_local_credentials_metadata(payload)
         if metadata is None:
             return None
-        secret_payload = self._load_oauth_secret_payload(payload)
+        secret_payload = self._load_oauth_secret_payload(payload, allow_primary=allow_primary)
         if secret_payload is None:
             return None
         return self._build_oauth_local_credentials_result(metadata=metadata, secret_payload=secret_payload)
@@ -3710,8 +3713,6 @@ class GuardStore:
             health.update(cached_health)
             return health
         secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
-        if secret_payload is None and self._maybe_repair_oauth_local_credential_storage(payload):
-            secret_payload = self._load_oauth_secret_payload(payload, promote=False, allow_primary=False)
         if secret_payload is None:
             health["state"] = "degraded"
             self._remember_oauth_health_result(secret_hash, health)
@@ -3798,19 +3799,50 @@ class GuardStore:
             SystemKeyringSecretStore,
         )
 
+    def _oauth_keychain_access_state_path(self) -> Path:
+        return self.guard_home / _OAUTH_KEYCHAIN_ACCESS_STATE_FILE
+
+    def _read_oauth_keychain_access_state(self) -> dict[str, object]:
+        path = self._oauth_keychain_access_state_path()
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_oauth_keychain_access_state(self, payload: dict[str, object]) -> None:
+        path = self._oauth_keychain_access_state_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            tmp_path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+            _set_private_mode(tmp_path, _GUARD_STORE_PRIVATE_FILE_MODE)
+            tmp_path.replace(path)
+            _set_private_mode(path, _GUARD_STORE_PRIVATE_FILE_MODE)
+        finally:
+            if tmp_path.exists():
+                with suppress(OSError):
+                    tmp_path.unlink()
+
     def _should_attempt_oauth_storage_repair(self) -> bool:
         if not self._oauth_primary_repair_available():
             return False
-        scope = self._oauth_process_cache_scope()
-        last_attempt = _OAUTH_STORAGE_REPAIR_ATTEMPTS.get(scope)
-        if last_attempt is None:
+        state = self._read_oauth_keychain_access_state()
+        last_attempt = state.get("last_repair_attempt_at")
+        if not isinstance(last_attempt, (int, float)):
             return True
-        return (time.monotonic() - last_attempt) >= _OAUTH_STORAGE_REPAIR_MIN_INTERVAL_SECONDS
+        return (time.time() - float(last_attempt)) >= _OAUTH_STORAGE_REPAIR_MIN_INTERVAL_SECONDS
 
     def _mark_oauth_storage_repair_attempt(self) -> None:
-        _OAUTH_STORAGE_REPAIR_ATTEMPTS[self._oauth_process_cache_scope()] = time.monotonic()
+        state = self._read_oauth_keychain_access_state()
+        state["last_repair_attempt_at"] = time.time()
+        self._write_oauth_keychain_access_state(state)
 
-    def _maybe_repair_oauth_local_credential_storage(self, payload: dict[str, object]) -> bool:
+    def repair_oauth_local_credential_storage_from_primary(self) -> bool:
+        """Re-mirror OAuth secrets from the system keychain into encrypted fallback storage."""
+        payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
+        if not isinstance(payload, dict):
+            return False
         if not self._should_attempt_oauth_storage_repair():
             return False
         self._mark_oauth_storage_repair_attempt()
@@ -3820,6 +3852,7 @@ class GuardStore:
         cache_key = self._oauth_health_process_cache_key(payload.get(_OAUTH_LOCAL_CREDENTIALS_HASH_KEY))
         if cache_key is not None:
             _OAUTH_HEALTH_RESULT_PROCESS_CACHE.pop(cache_key, None)
+        self._clear_oauth_secret_payload_cache()
         return True
 
     def _load_oauth_secret_payload(
