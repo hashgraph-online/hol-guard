@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import os
 import secrets
+import shlex
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
@@ -16,6 +17,84 @@ _MANAGED_HOOK_ENV = "HOL_GUARD_MANAGED_CURSOR_HOOK"
 _AFTER_SHELL_PROOF_ENV = "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"
 _APPROVAL_BINDING_ENV = "HOL_GUARD_CURSOR_APPROVAL_BINDING"
 _AFTER_SHELL_PROOF_EVENT = "afterShellExecution"
+_MAX_CURSOR_SHELL_NORMALIZE_BYTES = 8192
+_LEAN_CTX_COMMAND_MARKER = "lean-ctx"
+
+
+def _split_posix_single_quoted_argument(text: str) -> tuple[str, str] | None:
+    if not text.startswith("'"):
+        return None
+    parts: list[str] = []
+    index = 1
+    while index < len(text):
+        character = text[index]
+        if character != "'":
+            parts.append(character)
+            index += 1
+            continue
+        if index + 3 < len(text) and text[index : index + 4] == "'\\''":
+            parts.append("'")
+            index += 4
+            continue
+        return "".join(parts), text[index + 1 :].lstrip()
+    return None
+
+
+def _split_first_shell_argument(text: str) -> tuple[str, str] | None:
+    text = text.lstrip()
+    if not text:
+        return None
+    if text[0] == "'":
+        return _split_posix_single_quoted_argument(text)
+    try:
+        tokens = shlex.split(text, posix=True, comments=False)
+    except ValueError:
+        return None
+    if not tokens:
+        return None
+    first = tokens[0]
+    remainder = text
+    for token in tokens[:1]:
+        token_index = remainder.find(token)
+        if token_index == -1:
+            return first, ""
+        remainder = remainder[token_index + len(token) :].lstrip()
+    return first, remainder
+
+
+def normalize_cursor_shell_command(command: str) -> str:
+    """Unwrap lean-ctx shell rewrites so approval memory keys stay stable."""
+
+    stripped = command.strip()
+    if not stripped or len(stripped) > _MAX_CURSOR_SHELL_NORMALIZE_BYTES:
+        return stripped
+    lowered = stripped.lower()
+    needle = _LEAN_CTX_COMMAND_MARKER
+    start = 0
+    while True:
+        idx = lowered.find(needle, start)
+        if idx == -1:
+            return stripped
+        if idx == 0 or stripped[idx - 1] == "/":
+            tail = stripped[idx + len(needle) :].lstrip()
+            if tail.startswith("-c"):
+                rest = tail[2:].lstrip()
+                parsed: tuple[str, str] | None = None
+                try:
+                    tokens = shlex.split(rest, posix=True, comments=False)
+                except ValueError:
+                    tokens = None
+                if tokens:
+                    inner = tokens[0]
+                    suffix = tokens[1:]
+                    return " ".join((inner, *suffix)) if suffix else inner
+                parsed = _split_first_shell_argument(rest)
+                if parsed is None:
+                    return stripped
+                inner, suffix = parsed
+                return " ".join((inner, suffix)) if suffix else inner
+        start = idx + 1
+    return stripped
 
 
 def _cursor_shell_binding_segment(conversation_id: str) -> str:
@@ -52,7 +131,8 @@ def cursor_hook_attestation_secret_path(guard_home: Path) -> Path:
 
 
 def cursor_shell_binding_path(guard_home: Path, conversation_id: str, command: str) -> Path:
-    fingerprint = hashlib.sha256(command.strip().encode("utf-8")).hexdigest()[:24]
+    normalized_command = normalize_cursor_shell_command(command)
+    fingerprint = hashlib.sha256(normalized_command.encode("utf-8")).hexdigest()[:24]
     return guard_home / _CURSOR_SHELL_BINDINGS_DIR / _cursor_shell_binding_segment(conversation_id) / fingerprint
 
 
@@ -173,9 +253,10 @@ def compute_cursor_after_shell_proof(
     command: str,
     approval_binding: str,
 ) -> str:
+    normalized_command = normalize_cursor_shell_command(command)
     message = cursor_after_shell_proof_message(
         conversation_id=conversation_id,
-        command=command,
+        command=normalized_command,
         approval_binding=approval_binding,
     )
     digest = hmac.new(secret, message, hashlib.sha256).hexdigest()
@@ -249,7 +330,7 @@ def cursor_after_shell_trusted(
     return verify_cursor_after_shell_proof(
         secret=secret,
         conversation_id=conversation_id,
-        command=command,
+        command=normalize_cursor_shell_command(command),
         approval_binding=payload_binding,
         proof=proof,
     )
@@ -266,6 +347,7 @@ __all__ = [
     "ensure_cursor_approval_binding",
     "ensure_cursor_hook_attestation_secret",
     "managed_cursor_hook_invocation",
+    "normalize_cursor_shell_command",
     "read_cursor_shell_binding_file",
     "remove_cursor_shell_binding_file",
     "resolve_cursor_approval_binding",

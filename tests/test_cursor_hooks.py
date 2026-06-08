@@ -349,7 +349,7 @@ def test_cursor_hook_script_source_infers_event_before_prepare(tmp_path: Path) -
     context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
     source = cursor_hook_script_source(context)
     assert "inferred = _infer_cursor_hook_event_name(payload)" in source
-    assert "hook_event_name = str(inferred.get(\"hook_event_name\")" in source
+    assert 'hook_event_name = str(inferred.get("hook_event_name")' in source
     assert "aftershellexecution" in source.lower()
     assert "HOL_GUARD_MANAGED_CURSOR_HOOK" in source
     assert "_compute_cursor_after_shell_proof" in source
@@ -574,9 +574,7 @@ def test_cursor_after_shell_proof_message_uses_null_separator() -> None:
         command="echo hello",
         approval_binding="hol-guard:test-binding",
     )
-    assert message == (
-        b"conv-test\x00echo hello\x00hol-guard:test-binding\x00afterShellExecution"
-    )
+    assert message == (b"conv-test\x00echo hello\x00hol-guard:test-binding\x00afterShellExecution")
 
 
 def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:
@@ -635,6 +633,84 @@ def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path
                 "cwd": str(workspace_dir),
             }
         ),
+    )
+
+
+def test_normalize_cursor_shell_command_unwraps_lean_ctx_wrapper() -> None:
+    from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
+
+    wrapped = (
+        "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\''' 2>&1 | "
+        'python3 -c "import json,sys; print(json.load(sys.stdin))"'
+    )
+    normalized = normalize_cursor_shell_command(wrapped)
+
+    assert normalized.startswith("gh api graphql")
+    assert "lean-ctx" not in normalized
+
+
+def test_cursor_native_shell_is_approved_for_lean_ctx_wrapped_retry(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-lean-ctx-session-allow"
+    command = "gh api graphql -f query='query { viewer { login } }'"
+    wrapped = "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\'''"
+    now = guard_commands_module._now()
+    store.set_sync_payload(
+        guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command),
+        {
+            "saved_at": now,
+            "action": "allow",
+            "artifact_id": "cursor:project:tool-action:gh-viewer-login",
+            "artifact_hash": "hash-gh-viewer-login",
+            "artifact_name": "destructive shell command",
+            "command": command,
+            "native_source": "cursor-native",
+        },
+        now,
+    )
+
+    assert guard_commands_module._cursor_native_shell_is_approved(
+        store,
+        {
+            "conversation_id": conversation_id,
+            "command": wrapped,
+        },
+    )
+
+
+def test_cursor_native_shell_does_not_approve_unrelated_command(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-unrelated-command"
+    approved_command = "gh api graphql -f query='query { viewer { login } }'"
+    now = guard_commands_module._now()
+    store.set_sync_payload(
+        guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, approved_command),
+        {
+            "saved_at": now,
+            "action": "allow",
+            "artifact_id": "cursor:project:tool-action:shared-artifact",
+            "artifact_hash": "hash-shared-artifact",
+            "artifact_name": "destructive shell command",
+            "command": approved_command,
+            "native_source": "cursor-native",
+        },
+        now,
+    )
+
+    assert not guard_commands_module._cursor_native_shell_is_approved(
+        store,
+        {
+            "conversation_id": conversation_id,
+            "command": 'gh api graphql -f query=\'query { repository(owner:"org", name:"repo") { pullRequest(number:1) { id } } }\'',
+        },
     )
 
 

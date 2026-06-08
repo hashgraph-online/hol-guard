@@ -4615,14 +4615,20 @@ def _cursor_conversation_id(payload: dict[str, object]) -> str | None:
 
 
 def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | None:
+    from ..adapters.cursor_native_approval import normalize_cursor_shell_command
+
     command = _optional_string(payload.get("command"))
-    if command is not None:
-        return command
-    return _hook_command_text(payload)
+    if command is None:
+        command = _hook_command_text(payload)
+    if command is None:
+        return None
+    return normalize_cursor_shell_command(command)
 
 
 def _cursor_shell_command_fingerprint(command: str) -> str:
-    return hashlib.sha256(command.strip().encode("utf-8")).hexdigest()[:24]
+    from ..adapters.cursor_native_approval import normalize_cursor_shell_command
+
+    return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
 
 
 def _cursor_pending_shell_index_key(conversation_id: str) -> str:
@@ -4727,23 +4733,31 @@ def _record_cursor_native_shell_allow_state(
     return True
 
 
-def _cursor_native_shell_is_approved(store: GuardStore, payload: Mapping[str, object]) -> bool:
+def _cursor_native_shell_allowance_is_fresh(approved: Mapping[str, object], *, now: str) -> bool:
+    if not isinstance(approved, dict) or approved.get("action") != "allow":
+        return False
+    return _cursor_pending_shell_is_fresh(approved, now=now)
+
+
+def _cursor_native_shell_is_approved(
+    store: GuardStore,
+    payload: Mapping[str, object],
+) -> bool:
     conversation_id = _cursor_conversation_id(dict(payload))
     command = _cursor_shell_command_from_payload(payload)
     if conversation_id is None or command is None:
         return False
+    now = _now()
     try:
         approved = store.get_sync_payload(_cursor_native_shell_allow_state_key(conversation_id, command))
     except (OSError, sqlite3.Error):
-        return False
-    if not isinstance(approved, dict) or approved.get("action") != "allow":
-        return False
-    now = _now()
-    if not _cursor_pending_shell_is_fresh(approved, now=now):
+        approved = None
+    if isinstance(approved, dict) and _cursor_native_shell_allowance_is_fresh(approved, now=now):
+        return True
+    if isinstance(approved, dict):
         with suppress(OSError, sqlite3.Error):
             store.delete_sync_payload(_cursor_native_shell_allow_state_key(conversation_id, command))
-        return False
-    return True
+    return False
 
 
 def _record_cursor_pending_shell_permission(
@@ -4867,8 +4881,31 @@ def _load_cursor_pending_shell_permission(
     try:
         pending = store.get_sync_payload(pending_key)
     except (OSError, sqlite3.Error):
+        pending = None
+    if isinstance(pending, dict):
+        return pending
+    target_fingerprint = _cursor_shell_command_fingerprint(command)
+    try:
+        index_payload = store.get_sync_payload(_cursor_pending_shell_index_key(conversation_id))
+    except (OSError, sqlite3.Error):
         return None
-    return pending if isinstance(pending, dict) else None
+    if not isinstance(index_payload, list):
+        return None
+    for indexed_key in index_payload:
+        if not isinstance(indexed_key, str):
+            continue
+        try:
+            candidate = store.get_sync_payload(indexed_key)
+        except (OSError, sqlite3.Error):
+            continue
+        if not isinstance(candidate, dict):
+            continue
+        stored_command = _optional_string(candidate.get("command"))
+        if stored_command is None:
+            continue
+        if _cursor_shell_command_fingerprint(stored_command) == target_fingerprint:
+            return candidate
+    return None
 
 
 def _remove_cursor_pending_shell_permission(
