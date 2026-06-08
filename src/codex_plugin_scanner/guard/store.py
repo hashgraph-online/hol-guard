@@ -3810,24 +3810,29 @@ class GuardStore:
     def _write_oauth_keychain_access_state(self, payload: dict[str, object]) -> None:
         path = self._oauth_keychain_access_state_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
-        _set_private_mode(tmp_path, _GUARD_STORE_PRIVATE_FILE_MODE)
-        tmp_path.replace(path)
-        _set_private_mode(path, _GUARD_STORE_PRIVATE_FILE_MODE)
+        tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            tmp_path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+            _set_private_mode(tmp_path, _GUARD_STORE_PRIVATE_FILE_MODE)
+            tmp_path.replace(path)
+            _set_private_mode(path, _GUARD_STORE_PRIVATE_FILE_MODE)
+        finally:
+            if tmp_path.exists():
+                with suppress(OSError):
+                    tmp_path.unlink()
 
     def _should_attempt_oauth_storage_repair(self) -> bool:
         if not self._oauth_primary_repair_available():
             return False
         state = self._read_oauth_keychain_access_state()
-        last_attempt = state.get("last_repair_attempt_monotonic")
+        last_attempt = state.get("last_repair_attempt_at")
         if not isinstance(last_attempt, (int, float)):
             return True
-        return (time.monotonic() - float(last_attempt)) >= _OAUTH_STORAGE_REPAIR_MIN_INTERVAL_SECONDS
+        return (time.time() - float(last_attempt)) >= _OAUTH_STORAGE_REPAIR_MIN_INTERVAL_SECONDS
 
     def _mark_oauth_storage_repair_attempt(self) -> None:
         state = self._read_oauth_keychain_access_state()
-        state["last_repair_attempt_monotonic"] = time.monotonic()
+        state["last_repair_attempt_at"] = time.time()
         self._write_oauth_keychain_access_state(state)
 
     def repair_oauth_local_credential_storage_from_primary(self) -> bool:

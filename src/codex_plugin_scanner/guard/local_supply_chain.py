@@ -11,9 +11,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from .adapters.base import HarnessContext
 from .config import GuardConfig, resolve_risk_action
@@ -161,12 +163,17 @@ def _read_package_firewall_refresh_state(guard_home: Path) -> dict[str, object]:
 def _write_package_firewall_refresh_state(guard_home: Path, last_attempt: float) -> None:
     path = _package_firewall_refresh_state_path(guard_home)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-    tmp_path.write_text(
-        json.dumps({"last_refresh_attempt_monotonic": last_attempt}, sort_keys=True, separators=(",", ":")),
-        encoding="utf-8",
-    )
-    tmp_path.replace(path)
+    tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        tmp_path.write_text(
+            json.dumps({"last_refresh_attempt_at": last_attempt}, sort_keys=True, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        tmp_path.replace(path)
+    finally:
+        if tmp_path.exists():
+            with suppress(OSError):
+                tmp_path.unlink()
 
 
 def build_local_supply_chain_posture(
@@ -296,10 +303,10 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
         return entitlement
     if str(entitlement.get("reason") or "") not in {"guard_cloud_reconnect_required", "paid_guard_cloud_required"}:
         return entitlement
-    now = time.monotonic()
+    now = time.time()
     with _PACKAGE_FIREWALL_REFRESH_LOCK:
         state = _read_package_firewall_refresh_state(store.guard_home)
-        last_refresh_at = state.get("last_refresh_attempt_monotonic")
+        last_refresh_at = state.get("last_refresh_attempt_at")
         if (
             isinstance(last_refresh_at, (int, float))
             and (now - float(last_refresh_at)) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS
