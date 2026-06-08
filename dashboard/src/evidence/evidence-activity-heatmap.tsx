@@ -66,7 +66,9 @@ function monthLabels(weeks: Array<Array<HeatmapCell | null>>): string[] {
 }
 
 function isGuardModalOpen(): boolean {
-  return typeof document !== "undefined" && document.documentElement.dataset.guardModalOpen === "true";
+  if (typeof document === "undefined") return false;
+  const count = Number(document.documentElement.dataset.guardModalOpen ?? 0);
+  return Number.isFinite(count) && count > 0;
 }
 
 function flatCellsFromWeeks(weeks: Array<Array<HeatmapCell | null>>): HeatmapCell[] {
@@ -154,18 +156,17 @@ export function EvidenceActivityHeatmap({
   }, [displayKey, updateTooltipForKey]);
 
   useEffect(() => {
-    if (!tooltip) return;
+    if (typeof document === "undefined") return;
     const dismissWhenModalOpens = () => {
       if (isGuardModalOpen()) {
         setTooltip(null);
         setHoveredKey(null);
       }
     };
-    dismissWhenModalOpens();
     const observer = new MutationObserver(dismissWhenModalOpens);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-guard-modal-open"] });
     return () => observer.disconnect();
-  }, [tooltip]);
+  }, []);
 
   const moveActive = useCallback(
     (delta: number) => {

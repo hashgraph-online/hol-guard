@@ -28,10 +28,16 @@ export function GuardModalLayer({
     if (!mounted) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    document.documentElement.dataset.guardModalOpen = "true";
+    const previousCount = Number(document.documentElement.dataset.guardModalOpen ?? 0);
+    document.documentElement.dataset.guardModalOpen = String(previousCount + 1);
     return () => {
       document.body.style.overflow = previousOverflow;
-      delete document.documentElement.dataset.guardModalOpen;
+      const nextCount = Number(document.documentElement.dataset.guardModalOpen ?? 1) - 1;
+      if (nextCount <= 0) {
+        delete document.documentElement.dataset.guardModalOpen;
+      } else {
+        document.documentElement.dataset.guardModalOpen = String(nextCount);
+      }
     };
   }, [mounted]);
 

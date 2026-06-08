@@ -29,6 +29,7 @@ assert(modalLayerSource.includes("useFocusTrap"), "modal layer: traps focus insi
 assert(modalLayerSource.includes("Escape"), "modal layer: supports escape to close");
 assert(modalLayerSource.includes("z-[200]"), "modal layer: stacks above heatmap tooltips");
 assert(modalLayerSource.includes("guardModalOpen"), "modal layer: signals open state for tooltip suppression");
+assert(modalLayerSource.includes("previousCount"), "modal layer: reference counts nested modals");
 assert(heatmapSource.includes("isGuardModalOpen"), "heatmap: suppresses tooltips while modal is open");
 assert(shareModalSource.includes("GuardModalLayer"), "share modal: uses viewport modal layer");
 assert(shareSheetSource.includes("GuardModalLayer"), "share sheet: uses viewport modal layer");

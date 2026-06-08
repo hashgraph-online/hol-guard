@@ -2,7 +2,7 @@ export function insightsSharePublishErrorMessage(raw: string): string {
   const message = raw.trim();
   const lower = message.toLowerCase();
 
-  if (lower.includes("not enabled")) {
+  if (lower.includes("insights") && lower.includes("not enabled")) {
     return "Guard insights sharing is not live on Guard Cloud yet. If you just updated, wait a few minutes and try again.";
   }
 
