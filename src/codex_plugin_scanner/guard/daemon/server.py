@@ -2012,6 +2012,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not stripped or stripped.lower() in {"none", "null"}:
             return None
         try:
+            # codeql[py/path-injection] resolved must stay within home, process dir, or temp roots.
             resolved = Path(stripped).expanduser().resolve()
         except OSError:
             return None
@@ -2024,7 +2025,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         if not any(resolves_within_root(root, resolved, require_exists=True) for root in allowed_roots):
             return None
-        # codeql[py/path-injection] resolved must stay within home, process dir, or temp roots.
         return resolved
 
     def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
