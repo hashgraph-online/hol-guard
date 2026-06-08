@@ -10,10 +10,10 @@ type HeatmapCell = {
 };
 
 export function selectRecentDailyActivity(
-  days: GuardReceiptDailyActivity[],
+  days: GuardReceiptDailyActivity[] | null | undefined,
   dayCount: number,
 ): GuardReceiptDailyActivity[] {
-  if (dayCount <= 0) {
+  if (!days || dayCount <= 0) {
     return [];
   }
   return days.slice(-dayCount);
@@ -29,7 +29,7 @@ function intensityClass(total: number, peak: number): string {
 }
 
 function formatWeekdayShort(dateKey: string): string {
-  return new Date(`${dateKey}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" });
+  return new Date(`${dateKey}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" });
 }
 
 function buildWeekColumns(days: GuardReceiptDailyActivity[]): Array<Array<HeatmapCell | null>> {
@@ -156,6 +156,7 @@ export function EvidenceActivityHeatmapMini({
   }, [hoveredKey, updateTooltipForKey, visibleDays]);
 
   useEffect(() => {
+    if (!hoveredKey) return;
     const onScrollOrResize = () => updateTooltipForKey(hoveredKey);
     window.addEventListener("scroll", onScrollOrResize, true);
     window.addEventListener("resize", onScrollOrResize);
@@ -178,6 +179,8 @@ export function EvidenceActivityHeatmapMini({
     return () => observer.disconnect();
   }, []);
 
+  const miniHeatmapTooltipId = "mini-heatmap-tooltip";
+
   if (visibleDays.length === 0) {
     return <p className="py-2 text-sm text-slate-400">No activity in this period.</p>;
   }
@@ -193,6 +196,7 @@ export function EvidenceActivityHeatmapMini({
               transform: `translate(-50%, ${tooltip.placement === "above" ? "-100%" : "0"})`,
             }}
             role="tooltip"
+            id={miniHeatmapTooltipId}
           >
             <div className="font-semibold">{formatDayLabel(tooltip.dateKey)}</div>
             <div className="mt-0.5 text-slate-200">
@@ -211,11 +215,12 @@ export function EvidenceActivityHeatmapMini({
       <div
         className="grid gap-2"
         style={{ gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))` }}
-        role="img"
+        role="group"
         aria-label={`Last ${visibleDays.length} days of Guard activity`}
       >
         {visibleDays.map((day) => {
           const isHovered = hoveredKey === day.date_key;
+          const showTooltip = isHovered && tooltip !== null;
           return (
             <div key={day.date_key} className="flex min-w-0 flex-col items-center gap-1.5">
               <button
@@ -225,6 +230,7 @@ export function EvidenceActivityHeatmapMini({
                   else cellRefs.current.delete(day.date_key);
                 }}
                 aria-label={`${formatDayLabel(day.date_key)}: ${day.total} actions`}
+                aria-describedby={showTooltip ? miniHeatmapTooltipId : undefined}
                 className={`h-5 w-full max-w-5 rounded-[3px] transition-[transform,opacity] duration-150 ${intensityClass(day.total, peak)} ${
                   day.total > 0 ? "cursor-pointer hover:opacity-90" : "cursor-default opacity-90"
                 } ${isHovered ? "evidence-heatmap-active" : ""} ${reduceMotion ? "" : "evidence-heatmap-motion"}`}

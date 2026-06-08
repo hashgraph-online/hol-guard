@@ -14,6 +14,8 @@ assert.equal(selectRecentDailyActivity(days, 5).length, 5);
 assert.equal(selectRecentDailyActivity(days, 5)[0]?.date_key, "2026-06-06");
 assert.equal(selectRecentDailyActivity(days, 5)[4]?.date_key, "2026-06-10");
 assert.deepEqual(selectRecentDailyActivity(days, 0), []);
+assert.deepEqual(selectRecentDailyActivity(null, 5), []);
+assert.deepEqual(selectRecentDailyActivity(undefined, 5), []);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const heatmapSource = readFileSync(join(__dirname, "evidence-activity-heatmap.tsx"), "utf8");
