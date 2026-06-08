@@ -3548,6 +3548,9 @@ class GuardStore:
     def get_cloud_sync_profile(self) -> dict[str, str] | None:
         oauth_payload = self.get_sync_payload(_OAUTH_LOCAL_CREDENTIALS_STATE_KEY)
         if isinstance(oauth_payload, dict):
+            oauth_health = self.get_oauth_local_credential_health()
+            if not isinstance(oauth_health, dict) or oauth_health.get("state") != "healthy":
+                return None
             metadata = self._oauth_local_credentials_metadata(oauth_payload)
             if metadata is None:
                 return None

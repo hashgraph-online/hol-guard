@@ -1628,7 +1628,7 @@ def test_get_cloud_sync_profile_uses_oauth_metadata_without_primary_keychain_rea
         now="2026-06-01T00:00:00+00:00",
     )
     assert isinstance(store._oauth_secret_store, FallbackSecretStore)
-    store._oauth_secret_store.fallback.delete_secret(store._oauth_local_credentials_ref)
+    assert store.get_oauth_local_credential_health()["state"] == "healthy"
 
     primary_reads = 0
 
