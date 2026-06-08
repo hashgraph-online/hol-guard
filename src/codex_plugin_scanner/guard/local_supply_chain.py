@@ -140,9 +140,33 @@ _SEVERITY_RANK = {
     "high": 3,
     "critical": 4,
 }
-_PACKAGE_FIREWALL_REFRESH_ATTEMPTS: dict[str, float] = {}
 _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
+_PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
+
+
+def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
+    return guard_home / _PACKAGE_FIREWALL_REFRESH_STATE_FILE
+
+
+def _read_package_firewall_refresh_state(guard_home: Path) -> dict[str, object]:
+    path = _package_firewall_refresh_state_path(guard_home)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_package_firewall_refresh_state(guard_home: Path, last_attempt: float) -> None:
+    path = _package_firewall_refresh_state_path(guard_home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    tmp_path.write_text(
+        json.dumps({"last_refresh_attempt_monotonic": last_attempt}, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    tmp_path.replace(path)
 
 
 def build_local_supply_chain_posture(
@@ -272,13 +296,16 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
         return entitlement
     if str(entitlement.get("reason") or "") not in {"guard_cloud_reconnect_required", "paid_guard_cloud_required"}:
         return entitlement
-    refresh_key = str(store.guard_home.expanduser().resolve())
     now = time.monotonic()
     with _PACKAGE_FIREWALL_REFRESH_LOCK:
-        last_refresh_at = _PACKAGE_FIREWALL_REFRESH_ATTEMPTS.get(refresh_key)
-        if last_refresh_at is not None and (now - last_refresh_at) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS:
+        state = _read_package_firewall_refresh_state(store.guard_home)
+        last_refresh_at = state.get("last_refresh_attempt_monotonic")
+        if (
+            isinstance(last_refresh_at, (int, float))
+            and (now - float(last_refresh_at)) < _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS
+        ):
             return entitlement
-        _PACKAGE_FIREWALL_REFRESH_ATTEMPTS[refresh_key] = now
+        _write_package_firewall_refresh_state(store.guard_home, now)
     for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
         try:
             refresh(store)

@@ -2438,7 +2438,7 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
 def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
     with _guard_sync_auth_lock(store):
         oauth_health = store.get_oauth_local_credential_health()
-        oauth_credentials = store.get_oauth_local_credentials()
+        oauth_credentials = store.get_oauth_local_credentials(allow_primary=True)
         if oauth_credentials is not None:
             return _resolve_guard_sync_auth_context_from_oauth_credentials(store, oauth_credentials)
         if bool(oauth_health.get("configured")):

@@ -278,7 +278,7 @@ def evaluate_package_request_artifact(
     if (
         bundle_evaluation is not None
         and bundle_evaluation.refresh_required
-        and store.get_oauth_local_credentials() is None
+        and not bool(store.get_oauth_local_credential_health().get("configured"))
     ):
         fallback = _finalize_evaluation(
             bundle_evaluation,
