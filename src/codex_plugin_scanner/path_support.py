@@ -58,6 +58,27 @@ def iter_safe_matching_files(root: Path, base_dir: Path, pattern: str) -> tuple[
     )
 
 
+def resolve_path_within_allowed_roots(
+    value: str,
+    allowed_roots: tuple[Path, ...],
+    *,
+    require_exists: bool = False,
+) -> Path | None:
+    stripped = value.strip()
+    if not stripped or stripped.lower() in {"none", "null"}:
+        return None
+    try:
+        resolved = Path(stripped).expanduser().resolve()
+    except OSError:
+        return None
+    if require_exists and not resolved.is_dir():
+        return None
+    for root in allowed_roots:
+        if resolves_within_root(root, resolved, require_exists=require_exists):
+            return resolved
+    return None
+
+
 def normalize_codex_relative_path(value: str) -> str:
     if not value or is_remote_reference(value):
         return value

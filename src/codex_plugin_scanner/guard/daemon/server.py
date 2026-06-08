@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
-from ...path_support import resolves_within_root
+from ...path_support import resolve_path_within_allowed_roots
 from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
@@ -2008,23 +2008,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _resolve_supply_chain_workspace_dir(value: object) -> Path | None:
         if not isinstance(value, str):
             return None
-        stripped = value.strip()
-        if not stripped or stripped.lower() in {"none", "null"}:
-            return None
-        try:
-            resolved = Path(stripped).expanduser().resolve()  # codeql[py/path-injection]
-        except OSError:
-            return None
-        if not resolved.is_dir():
-            return None
         allowed_roots = (
             Path.home().resolve(),
             Path.cwd().resolve(),
             Path(tempfile.gettempdir()).resolve(),
         )
-        if not any(resolves_within_root(root, resolved, require_exists=True) for root in allowed_roots):
-            return None
-        return resolved
+        return resolve_path_within_allowed_roots(
+            value,
+            allowed_roots,
+            require_exists=True,
+        )
 
     def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
         workspace_dir = self._resolve_supply_chain_workspace_dir(payload.get("workspace_dir"))
