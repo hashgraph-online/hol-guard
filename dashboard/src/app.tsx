@@ -761,7 +761,21 @@ export function App() {
       }
       aboutContent={
         <Suspense fallback={<LazyFallback />}>
-          <AboutWorkspace />
+          <AboutWorkspace runtimeSummary={
+            runtime.kind === "ready"
+              ? {
+                  // TODO: GuardRuntimeSnapshot does not yet expose guard_version or protected_app_count.
+                  // When those fields are added, populate them here instead of null/0.
+                  guardVersion: null,
+                  cloudState: runtime.snapshot.cloud_state ?? "unknown",
+                  cloudStateLabel: runtime.snapshot.cloud_state_label ?? "Unknown",
+                  syncConfigured: runtime.snapshot.sync_configured ?? false,
+                  pendingCount: runtime.snapshot.pending_count ?? 0,
+                  receiptCount: runtime.snapshot.receipt_count ?? 0,
+                  protectedAppCount: 0,
+                }
+              : null
+          } />
         </Suspense>
       }
     />
