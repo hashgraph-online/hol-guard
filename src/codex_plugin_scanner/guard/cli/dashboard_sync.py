@@ -235,6 +235,12 @@ def _git_run(
         return None
 
 
+def _is_safe_committed_tree_path(path: str) -> bool:
+    if path == "" or path.startswith(("/", "\\")) or "\\" in path or "\0" in path:
+        return False
+    return all(part not in {"", ".", ".."} for part in path.split("/"))
+
+
 def _list_committed_static_files(checkout: Path, static_prefix: str) -> list[str]:
     result = _git_run(checkout, "ls-tree", "-r", "--name-only", "HEAD", "--", static_prefix)
     if result is None or result.returncode != 0:
@@ -243,13 +249,20 @@ def _list_committed_static_files(checkout: Path, static_prefix: str) -> list[str
     prefix = f"{static_prefix.rstrip('/')}/"
     for line in result.stdout.splitlines():
         relative = line.strip()
-        if relative == "" or relative.endswith("/") or not relative.startswith(prefix):
+        if (
+            relative == ""
+            or relative.endswith("/")
+            or not relative.startswith(prefix)
+            or not _is_safe_committed_tree_path(relative)
+        ):
             continue
         files.append(relative)
     return files
 
 
 def _read_committed_file(checkout: Path, relative_path: str) -> bytes | None:
+    if not _is_safe_committed_tree_path(relative_path):
+        return None
     result = _git_run(checkout, "show", f"HEAD:{relative_path}", text=False)
     if result is None or result.returncode != 0:
         return None
@@ -263,7 +276,20 @@ def _relative_static_path(relative_path: str, static_prefix: str) -> Path | None
     normalized_prefix = static_prefix.rstrip("/")
     if not relative_path.startswith(f"{normalized_prefix}/"):
         return None
-    return Path(relative_path.removeprefix(f"{normalized_prefix}/"))
+    suffix = relative_path.removeprefix(f"{normalized_prefix}/")
+    if not _is_safe_committed_tree_path(suffix):
+        return None
+    return Path(suffix)
+
+
+def _resolve_static_export_path(installed_static: Path, relative_to_static: Path) -> Path | None:
+    base = installed_static.resolve()
+    destination = (base / relative_to_static).resolve()
+    try:
+        destination.relative_to(base)
+    except ValueError:
+        return None
+    return destination
 
 
 def _export_committed_static_files(
@@ -280,7 +306,9 @@ def _export_committed_static_files(
         relative_to_static = _relative_static_path(relative_path, static_prefix)
         if relative_to_static is None:
             continue
-        dest = installed_static / relative_to_static
+        dest = _resolve_static_export_path(installed_static, relative_to_static)
+        if dest is None:
+            continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(payload)
         copied_count += 1
