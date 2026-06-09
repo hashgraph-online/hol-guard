@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
-from ...path_support import resolve_path_within_allowed_roots
 from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
@@ -91,8 +90,10 @@ from ..desktop_notifications import (
 from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
+    audit_receipt_metadata,
     build_workspace_audit_payload,
     resolve_package_firewall_entitlement_with_refresh,
+    resolve_supply_chain_audit_workspace_dir,
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..package_firewall_entitlement import (
@@ -1950,6 +1951,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": str(error), "operation": operation}, status=400)
             return
+        receipt_overrides: dict[str, object] = {}
+        if operation == "audit":
+            receipt_overrides = audit_receipt_metadata(result)
         receipt = self._record_headless_receipt(
             harness="package-firewall",
             operation=operation,
@@ -1957,16 +1961,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result=result,
             workspace_id=self._optional_string(payload.get("workspace_id"))
             or self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
+            policy_decision=self._optional_string(receipt_overrides.get("policy_decision")),
+            capabilities_summary=self._optional_string(receipt_overrides.get("capabilities_summary")),
+            artifact_name=self._optional_string(receipt_overrides.get("artifact_name")),
+            scanner_evidence_extra=(
+                receipt_overrides.get("scanner_evidence")
+                if isinstance(receipt_overrides.get("scanner_evidence"), dict)
+                else None
+            ),
         )
-        self._write_json(
-            {
-                "entitlement": entitlement,
-                "operation": operation,
-                "receipt": receipt,
-                "result": result,
-                "status": "completed",
-            }
-        )
+        response_payload: dict[str, object] = {
+            "entitlement": entitlement,
+            "operation": operation,
+            "receipt": receipt,
+            "result": result,
+            "status": "completed",
+        }
+        if operation == "audit":
+            cloud_sync = _queue_headless_cloud_sync(store=self.server.store)  # type: ignore[attr-defined]
+            receipt["cloud_sync"] = cloud_sync
+            response_payload["cloud_sync"] = cloud_sync
+        self._write_json(response_payload)
 
     def _run_supply_chain_package_action(
         self,
@@ -2007,22 +2022,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         raise ValueError("unsupported_supply_chain_operation")
 
     @staticmethod
-    def _resolve_supply_chain_workspace_dir(value: object) -> Path | None:
-        if not isinstance(value, str):
-            return None
+    def _resolve_supply_chain_workspace_dir(payload: dict[str, object]) -> Path | None:
         allowed_roots = (
             Path.home().resolve(),
             Path.cwd().resolve(),
             Path(tempfile.gettempdir()).resolve(),
         )
-        return resolve_path_within_allowed_roots(
-            value,
-            allowed_roots,
-            require_exists=True,
+        return resolve_supply_chain_audit_workspace_dir(
+            workspace_dir_value=payload.get("workspace_dir"),
+            workspace_value=payload.get("workspace"),
+            allowed_roots=allowed_roots,
         )
 
     def _supply_chain_context(self, payload: dict[str, object]) -> HarnessContext:
-        workspace_dir = self._resolve_supply_chain_workspace_dir(payload.get("workspace_dir"))
+        workspace_dir = self._resolve_supply_chain_workspace_dir(payload)
         return HarnessContext(
             home_dir=Path.home().resolve(),
             workspace_dir=workspace_dir,
@@ -2259,6 +2272,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         result: dict[str, object],
         workspace_id: str | None,
         cloud_sync: dict[str, object] | None = None,
+        policy_decision: str | None = None,
+        capabilities_summary: str | None = None,
+        artifact_name: str | None = None,
+        scanner_evidence_extra: dict[str, object] | None = None,
     ) -> dict[str, object]:
         cursor_receipt_context = self._cursor_receipt_context(
             harness=harness,
@@ -2281,19 +2298,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         artifact_hash = stable_digest_hex(material.encode("utf-8"))
         changed_capabilities = [] if operation in {"status", "scan"} else [operation]
         artifact_id = f"headless:{harness}:{operation}"
-        artifact_name = f"Headless {operation}"
-        capabilities_summary = f"Guard local daemon completed headless {operation}."
+        resolved_artifact_name = artifact_name or f"Headless {operation}"
+        resolved_capabilities_summary = capabilities_summary or f"Guard local daemon completed headless {operation}."
         source_scope = "local-daemon"
+        resolved_policy_decision = policy_decision or "allow"
         scanner_evidence: dict[str, object] = {
             "operation": operation,
             "location_id": location_id,
             "workspace_id": workspace_id,
             "status": "completed",
         }
+        if scanner_evidence_extra is not None:
+            scanner_evidence.update(scanner_evidence_extra)
         if cursor_receipt_context is not None:
             artifact_id = str(cursor_receipt_context["action_scope"])
-            artifact_name = str(cursor_receipt_context["artifact_name"])
-            capabilities_summary = str(cursor_receipt_context["capabilities_summary"])
+            resolved_artifact_name = str(cursor_receipt_context["artifact_name"])
+            resolved_capabilities_summary = str(cursor_receipt_context["capabilities_summary"])
             source_scope = str(cursor_receipt_context["source_scope"])
             changed_capabilities = [str(cursor_receipt_context["changed_capability"])]
             scanner_evidence.update(cursor_receipt_context["scanner_evidence"])
@@ -2301,11 +2321,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             harness=harness,
             artifact_id=artifact_id,
             artifact_hash=artifact_hash,
-            policy_decision="allow",
-            capabilities_summary=capabilities_summary,
+            policy_decision=resolved_policy_decision,
+            capabilities_summary=resolved_capabilities_summary,
             changed_capabilities=changed_capabilities,
             provenance_summary="Guard Cloud local daemon API",
-            artifact_name=artifact_name,
+            artifact_name=resolved_artifact_name,
             source_scope=source_scope,
             scanner_evidence=(scanner_evidence,),
             approval_source="guard-cloud-headless",
