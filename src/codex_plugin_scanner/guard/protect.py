@@ -511,6 +511,8 @@ def _package_manager_request(command: list[str], ecosystem: str, specs: tuple[st
 def _package_target(ecosystem: str, spec: str) -> ProtectTarget:
     package_name, version = _parse_package_identity(ecosystem, spec)
     source_url = _spec_url(spec)
+    if source_url is None and version is not None:
+        source_url = _spec_url(version)
     identity = package_name or spec
     return ProtectTarget(
         artifact_id=f"install:{ecosystem}:{identity}",
