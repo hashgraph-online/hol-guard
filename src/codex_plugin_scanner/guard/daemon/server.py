@@ -3531,9 +3531,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return False
         location_id = self._claim_string(claims, "location_id", "locationId")
         payload_location_id = (
-            self._optional_string(payload.get("location_id"))
-            or self._optional_string(payload.get("locationId"))
-            or ""
+            self._optional_string(payload.get("location_id")) or self._optional_string(payload.get("locationId")) or ""
         )
         if location_id and payload_location_id != location_id:
             return False
