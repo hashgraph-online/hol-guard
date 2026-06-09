@@ -290,7 +290,7 @@ def package_firewall_operation_allowed(
     if normalized_operation in {"status", "connect", "open-shell"}:
         return True
     reason = str(entitlement.get("reason") or "").strip().lower()
-    if reason in {"guard_cloud_connect_required", "guard_cloud_reconnect_required"}:
+    if reason == "guard_cloud_reconnect_required":
         return False
     if bool(entitlement.get("allowed")):
         return True
