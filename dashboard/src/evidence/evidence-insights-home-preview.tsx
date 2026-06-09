@@ -3,7 +3,7 @@ import { SectionLabel } from "../approval-center-primitives";
 import { GuardStatMetric, type GuardStatMetricTone } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
 import { EvidenceInsightsShareButton } from "./evidence-insights-share-button";
-import { EvidenceActivityHeatmapMini } from "./evidence-activity-heatmap";
+import { EvidenceActivityHeatmapMini, getHeatmapLevel } from "./evidence-activity-heatmap-mini";
 
 export type HomeOverviewStatTone = GuardStatMetricTone;
 
@@ -61,6 +61,11 @@ export function EvidenceInsightsHomePreview({
   const showInsightsSection = analyticsLoading || insightsAvailable;
   const showInsightsFooter = Boolean(onOpenInsights) && (analyticsLoading || insightsAvailable);
 
+  const miniHeatmapDays = analytics?.daily_activity?.slice(-5).map((day) => ({
+    date: day.date_key,
+    level: getHeatmapLevel(day.total, analytics?.peak_day_total || 1),
+  })) ?? [];
+
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
@@ -95,9 +100,9 @@ export function EvidenceInsightsHomePreview({
           <>
             <HomeInsightsMetrics analytics={analytics} />
             <div className="border-t border-slate-100 px-5 py-4">
-              <SectionLabel>Recent Activity</SectionLabel>
+              <SectionLabel>Last 5 days</SectionLabel>
               <div className="mt-3">
-                <EvidenceActivityHeatmapMini days={analytics.daily_activity} dayCount={5} />
+                <EvidenceActivityHeatmapMini cells={miniHeatmapDays} />
               </div>
             </div>
           </>

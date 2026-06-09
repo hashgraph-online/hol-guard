@@ -23,6 +23,9 @@ def test_build_insights_share_payload_defaults():
     assert payload["headline"]["topHarness"] == "Cursor"
     assert payload["headline"]["stopRatePct"] == 10
     assert "topArtifacts" not in payload
+    assert payload["overviewStats"] == {"pending": 0, "apps": 0, "recorded": 0}
+    assert payload["miniHeatmap"]["days"] == len(payload["miniHeatmap"]["cells"])
+    assert len(payload["miniHeatmap"]["cells"]) == 2
 
 
 def test_build_insights_share_payload_with_top_artifacts():
@@ -40,10 +43,14 @@ def test_build_insights_share_payload_with_top_artifacts():
         include_top_artifacts=True,
         show_display_name=True,
         display_name="Alex",
+        overview_stats={"pending": 2, "apps": 3, "recorded": 50},
     )
     assert payload["topArtifacts"] == [{"label": "bash", "count": 3}]
     assert payload["displayName"] == "Alex"
     assert payload["showDisplayName"] is True
+    assert payload["overviewStats"] == {"pending": 2, "apps": 3, "recorded": 50}
+    assert payload["miniHeatmap"]["days"] == len(payload["miniHeatmap"]["cells"])
+    assert len(payload["miniHeatmap"]["cells"]) == 1
 
 
 def test_normalized_insights_share_url_from_receipts_sync():
