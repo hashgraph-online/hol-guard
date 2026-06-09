@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.cli.dashboard_sync import (
     _export_committed_static_files,
     _is_safe_committed_tree_path,
     _is_trusted_hol_guard_origin,
+    _list_committed_static_files,
     _normalize_github_repo_slug,
     _relative_static_path,
     verify_source_checkout,
@@ -102,159 +103,50 @@ def test_relative_static_path_rejects_traversal_suffix() -> None:
     assert _relative_static_path(traversal_path, static_prefix) is None
 
 
-def _hash_blob(checkout: Path, payload: bytes) -> str:
-    return (
-        subprocess.run(
-            ["git", "hash-object", "-w", "--stdin"],
-            cwd=checkout,
-            input=payload,
-            capture_output=True,
-            check=True,
-            text=False,
-        )
-        .stdout.decode("utf-8")
-        .strip()
-    )
+class _FakeGitLsTreeResult:
+    returncode = 0
+
+    def __init__(self, stdout: str) -> None:
+        self.stdout = stdout
 
 
-def _mktree(checkout: Path, entries: list[tuple[str, str, str, str]]) -> str:
-    lines = [f"{mode} {kind} {obj_hash}\t{name}" for mode, kind, obj_hash, name in entries]
-    result = subprocess.run(
-        ["git", "mktree"],
-        cwd=checkout,
-        input="\n".join(lines).encode("utf-8") + b"\n",
-        capture_output=True,
-        check=True,
-        text=False,
-    )
-    return result.stdout.decode("utf-8").strip()
-
-
-def _parse_ls_tree_line(line: str) -> tuple[str, str, str, str]:
-    mode, obj_type, obj_hash, name = line.split(maxsplit=3)
-    return mode, obj_type, obj_hash, name.removeprefix('"').removesuffix('"')
-
-
-def _replace_tree_at_path(
-    checkout: Path,
-    tree_hash: str,
-    parts: list[str],
-    replacement_hash: str,
-) -> str:
-    if not parts:
-        return replacement_hash
-
-    part = parts[0]
-    child_entries: list[tuple[str, str, str, str]] = []
-    child_hash = ""
-    for line in subprocess.run(
-        ["git", "ls-tree", tree_hash],
-        cwd=checkout,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout.splitlines():
-        mode, obj_type, obj_hash, name = _parse_ls_tree_line(line)
-        if name == part:
-            child_hash = obj_hash
-        child_entries.append((mode, obj_type, obj_hash, name))
-
-    if child_hash == "":
-        raise RuntimeError(f"missing tree segment: {part}")
-
-    updated_child = (
-        replacement_hash
-        if len(parts) == 1
-        else _replace_tree_at_path(checkout, child_hash, parts[1:], replacement_hash)
-    )
-    return _mktree(
-        checkout,
-        [
-            (mode, obj_type, updated_child if name == part else obj_hash, name)
-            for mode, obj_type, obj_hash, name in child_entries
-        ],
-    )
-
-
-def _commit_tree_with_traversal_entry(
-    checkout: Path,
-    *,
-    static_prefix: str,
-    blob_text: str,
-) -> None:
-    safe_index_path = f"{static_prefix}/index.html"
-    safe_index_bytes = subprocess.run(
-        ["git", "show", f"HEAD:{safe_index_path}"],
-        cwd=checkout,
-        capture_output=True,
-        check=True,
-        text=False,
-    ).stdout
-    safe_blob_hash = _hash_blob(checkout, safe_index_bytes)
-    evil_blob_hash = _hash_blob(checkout, blob_text.encode("utf-8"))
-    parent_tree = _mktree(checkout, [("100644", "blob", evil_blob_hash, "evil.py")])
-    static_tree = _mktree(
-        checkout,
-        [
-            ("100644", "blob", safe_blob_hash, "index.html"),
-            ("040000", "tree", parent_tree, ".."),
-        ],
-    )
-    head_tree = subprocess.run(
-        ["git", "rev-parse", "HEAD^{tree}"],
-        cwd=checkout,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout.strip()
-    root_tree = _replace_tree_at_path(
-        checkout,
-        head_tree,
-        static_prefix.split("/"),
-        static_tree,
-    )
-    parent_hash = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=checkout,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout.strip()
-    commit_hash = subprocess.run(
-        ["git", "commit-tree", root_tree, "-p", parent_hash, "-m", "add traversal entry"],
-        cwd=checkout,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout.strip()
-    branch = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        cwd=checkout,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout.strip()
-    subprocess.run(
-        ["git", "update-ref", f"refs/heads/{branch}", commit_hash],
-        cwd=checkout,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-
-def test_export_committed_static_files_rejects_git_tree_traversal(
+def test_list_committed_static_files_skips_unsafe_ls_tree_paths(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    checkout = _init_fake_checkout(
-        tmp_path,
-        remote_url="https://github.com/hashgraph-online/hol-guard.git",
-    )
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
     static_prefix = "src/codex_plugin_scanner/guard/daemon/static"
-    _commit_tree_with_traversal_entry(
-        checkout,
-        static_prefix=static_prefix,
-        blob_text="malicious",
+    safe_path = f"{static_prefix}/index.html"
+    traversal_path = f"{static_prefix}/../../evil.py"
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.dashboard_sync._git_run",
+        lambda *_args, **_kwargs: _FakeGitLsTreeResult(f"{safe_path}\n{traversal_path}\n"),
+    )
+
+    assert _list_committed_static_files(checkout, static_prefix) == [safe_path]
+
+
+def test_export_committed_static_files_rejects_traversal_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    static_prefix = "src/codex_plugin_scanner/guard/daemon/static"
+    safe_path = f"{static_prefix}/index.html"
+    traversal_path = f"{static_prefix}/../../evil.py"
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.dashboard_sync._list_committed_static_files",
+        lambda *_args, **_kwargs: [safe_path, traversal_path],
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.dashboard_sync._read_committed_file",
+        lambda _checkout, path: (
+            b"<html>safe</html>" if path == safe_path else b"malicious"
+        ),
     )
 
     installed_static = tmp_path / "installed-static"
