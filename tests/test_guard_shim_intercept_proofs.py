@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import shims as shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
@@ -73,7 +74,9 @@ def test_shim_execution_helper_records_fake_manager_invocation(tmp_path: Path) -
     assert payload["argv"][1:] == ["install", "lodash"]
 
 
-def test_package_shim_intercept_probe_records_evaluator_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_package_shim_intercept_probe_records_evaluator_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
     context = _harness_context(tmp_path, workspace_dir=workspace_dir)
@@ -97,6 +100,63 @@ def test_package_shim_intercept_probe_records_evaluator_evidence(tmp_path: Path,
     assert manager_result["evaluator_invoked"] is True
     assert manager_result["intercept_ran"] is True
     assert manager_result.get("protect_decision") in {"allow", "review", "block", "monitor"}
+
+
+def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    context = _harness_context(tmp_path, workspace_dir=workspace_dir)
+    install_package_shims(context, managers=("npm",))
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    monkeypatch.setenv("PATH", str(shim_dir))
+
+    def raise_timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=["npm"], timeout=15)
+
+    monkeypatch.setattr(shims_module.subprocess, "run", raise_timeout)
+
+    result = probe_package_shim_intercepts(context, managers=("npm",), workspace_dir=workspace_dir)
+
+    assert result["intercept_proved"] is False
+    assert result["manager_results"] == [
+        {
+            "evaluator_invoked": False,
+            "intercept_ran": False,
+            "manager": "npm",
+            "skipped_reason": "probe_failed",
+        },
+    ]
+
+
+def test_package_shim_intercept_probe_omits_manager_stdout_secrets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True)
+    context = _harness_context(tmp_path, workspace_dir=workspace_dir)
+    install_package_shims(context, managers=("npm",))
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True)
+    write_fake_manager_script(
+        fake_bin=fake_bin,
+        manager="npm",
+        marker_path=tmp_path / "npm-secret-marker.json",
+        exit_code=0,
+        stdout_text="npm token=npm_super_secret_value",
+    )
+    monkeypatch.setenv("PATH", os.pathsep.join([str(shim_dir), str(fake_bin)]))
+
+    result = probe_package_shim_intercepts(context, managers=("npm",), workspace_dir=workspace_dir)
+    manager_result = result["manager_results"][0]
+
+    assert manager_result["evaluator_invoked"] is True
+    serialized = json.dumps(manager_result)
+    assert "npm_super_secret_value" not in serialized
 
 
 def test_package_shim_intercept_skips_tampered_shim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
