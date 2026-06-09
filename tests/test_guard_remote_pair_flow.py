@@ -24,15 +24,19 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 def _fake_access_token(*, grant_id: str = "grant-1", machine_id: str = "machine-1", workspace_id: str = "ws-1") -> str:
     header = base64.urlsafe_b64encode(json.dumps({"alg": "none"}).encode("ascii")).decode("ascii").rstrip("=")
-    payload = base64.urlsafe_b64encode(
-        json.dumps(
-            {
-                "grant": {"grantId": grant_id},
-                "machine": {"machineId": machine_id},
-                "workspace": {"workspaceId": workspace_id},
-            }
-        ).encode("ascii")
-    ).decode("ascii").rstrip("=")
+    payload = (
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {
+                    "grant": {"grantId": grant_id},
+                    "machine": {"machineId": machine_id},
+                    "workspace": {"workspaceId": workspace_id},
+                }
+            ).encode("ascii")
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
     return f"{header}.{payload}.sig"
 
 

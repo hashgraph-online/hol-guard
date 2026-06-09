@@ -220,11 +220,7 @@ from .install_commands import (
     uninstall_confirmation_token,
 )
 from .product import build_guard_start_payload, build_guard_status_payload
-from .remote_pair_flow import (
-    build_remote_pair_status_payload,
-    redact_remote_pairing_text,
-    run_guard_remote_pair_command,
-)
+from .remote_pair_flow import dispatch_guard_remote_pair_command
 from .update_commands import run_guard_update
 
 DEFAULT_GUARD_APPS_URL = "https://hol.org/guard/apps"
@@ -2600,47 +2596,14 @@ def run_guard_command(
         return exit_code
 
     if args.guard_command == "remote-pair":
-        if getattr(args, "remote_pair_command", None) == "status":
-            payload = build_remote_pair_status_payload(store=store, context=context)
-            _emit("remote-pair", payload, getattr(args, "json", False))
-            return 0
-
-        runtime = getattr(args, "runtime", None)
-        pair_code = getattr(args, "pair_code", None)
-        if not isinstance(runtime, str) or not runtime.strip():
-            print("remote-pair requires --runtime openclaw|hermes.", file=sys.stderr)
-            return 2
-        if not isinstance(pair_code, str) or not pair_code.strip():
-            print("remote-pair requires --pair-code.", file=sys.stderr)
-            return 2
-
-        try:
-            payload = run_guard_remote_pair_command(
-                store=store,
-                context=context,
-                connect_url=args.connect_url,
-                runtime=runtime.strip(),
-                pair_code=pair_code,
-                label=getattr(args, "label", None),
-                no_root=bool(getattr(args, "no_root", False)),
-                now=_now(),
-            )
-        except ValueError as error:
-            print(redact_remote_pairing_text(str(error)), file=sys.stderr)
-            return 2
-        except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
-            print(redact_remote_pairing_text(str(error)), file=sys.stderr)
-            return 1
-
-        if bool(getattr(args, "verify", False)):
-            payload = _finalize_guard_connect_payload(
-                store=store,
-                connect_url=args.connect_url,
-                payload=payload,
-                now=_now(),
-            )
-        _emit("remote-pair", payload, getattr(args, "json", False))
-        return 0
+        return dispatch_guard_remote_pair_command(
+            args=args,
+            store=store,
+            context=context,
+            emit=_emit,
+            finalize_connect_payload=_finalize_guard_connect_payload,
+            now=_now(),
+        )
 
     if args.guard_command == "connect":
         connect_subcommand = getattr(args, "connect_command", None)

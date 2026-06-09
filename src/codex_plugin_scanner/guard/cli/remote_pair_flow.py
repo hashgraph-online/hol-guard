@@ -5,15 +5,17 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import urllib.error
-import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
 from ..adapters.base import HarnessContext
 from ..redaction import redact_sensitive_text
+from ..remote_pairing_constants import REMOTE_PAIRING_CODE_ALPHABET, REMOTE_PAIRING_CODE_PREFIX
 from ..store import GuardStore
 from .connect_flow import (
     CONNECT_REPAIR_COMMAND,
@@ -30,12 +32,13 @@ from .oauth_client import generate_dpop_key_pair, resolve_guard_oauth_client_con
 
 REMOTE_PAIRING_OAUTH_CLIENT_ID = "guard-local-daemon"
 REMOTE_PAIRING_RUNTIMES = frozenset({"openclaw", "hermes"})
-REMOTE_PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 REMOTE_PAIRING_CODE_PATTERN = re.compile(
-    rf"^HLG-[{REMOTE_PAIRING_CODE_ALPHABET}]{{6}}$",
+    rf"^{REMOTE_PAIRING_CODE_PREFIX}-[{REMOTE_PAIRING_CODE_ALPHABET}]{{6}}$",
+    re.IGNORECASE,
 )
 REMOTE_PAIRING_CODE_REDACTION_PATTERN = re.compile(
-    rf"\bHLG-[{REMOTE_PAIRING_CODE_ALPHABET}]{{6}}\b",
+    rf"\b{REMOTE_PAIRING_CODE_PREFIX}-[{REMOTE_PAIRING_CODE_ALPHABET}]{{6}}\b",
+    re.IGNORECASE,
 )
 REMOTE_PAIR_COMMAND = "hol-guard remote-pair"
 REMOTE_PAIR_STATUS_COMMAND = "hol-guard remote-pair status"
@@ -66,36 +69,47 @@ def remote_pairing_claim_url(*, issuer: str) -> str:
 def _assert_no_root_install_allowed(*, no_root: bool) -> None:
     if not no_root:
         return
-    if hasattr(os, "geteuid") and os.geteuid() == 0:
+    if hasattr(os, "geteuid") and callable(os.geteuid) and os.geteuid() == 0:
         raise ValueError("Remote pairing --no-root refuses to run as root.")
+    if os.name == "nt":
+        import ctypes
+
+        if bool(ctypes.windll.shell32.IsUserAnAdmin()):
+            raise ValueError("Remote pairing --no-root refuses elevated Administrator sessions.")
     sudo_user = os.environ.get("SUDO_USER", "").strip()
     if sudo_user:
         raise ValueError("Remote pairing --no-root refuses sudo sessions.")
 
 
 def _assert_user_space_paths_writable(home_dir: Path) -> None:
+    if not home_dir.is_dir():
+        raise ValueError("Remote pairing requires a writable home directory.")
+    if not os.access(home_dir, os.W_OK):
+        raise ValueError("Remote pairing requires a writable home directory.")
+
     required_paths = (
         home_dir / ".local" / "bin",
         home_dir / ".hol-guard" / "bin",
     )
     for path in required_paths:
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-        except OSError as error:
-            raise ValueError(
-                f"Remote pairing requires a writable user-space install path at {path}."
-            ) from error
-        if not os.access(path, os.W_OK):
-            raise ValueError(
-                f"Remote pairing requires a writable user-space install path at {path}."
-            )
+        parent = path.parent
+        writable_parent = parent if parent.exists() else home_dir
+        if not os.access(writable_parent, os.W_OK):
+            raise ValueError(f"Remote pairing requires a writable user-space install path at {path}.")
+        if path.exists() and not os.access(path, os.W_OK):
+            raise ValueError(f"Remote pairing requires a writable user-space install path at {path}.")
 
 
 def _runtime_label(runtime: str) -> str:
     return RUNTIME_LABELS.get(runtime, runtime)
 
 
-def _build_capability_summary(*, runtime: str, context: HarnessContext) -> dict[str, object]:
+def _build_capability_summary(
+    *,
+    runtime: str,
+    context: HarnessContext,
+    no_root: bool,
+) -> dict[str, object]:
     from ..adapters import get_adapter
 
     adapter = get_adapter(runtime)
@@ -104,7 +118,7 @@ def _build_capability_summary(*, runtime: str, context: HarnessContext) -> dict[
     return {
         "runtime": runtime,
         "runtimeLabel": _runtime_label(runtime),
-        "userSpaceInstall": True,
+        "userSpaceInstall": no_root,
         "nativeHookWritable": bool(contract_payload.get("native_hooks")),
         "pretoolAvailable": bool(contract_payload.get("pretool_available")),
         "mcpProxyAvailable": bool(contract_payload.get("mcp_proxy_available")),
@@ -158,12 +172,14 @@ def claim_remote_pairing_intent(
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         error_payload = _load_error_payload(error)
-        message = (
-            str(error_payload.get("error") or error_payload.get("message") or error.reason)
-            if isinstance(error_payload, dict)
-            else str(error.reason)
-        )
-        code = str(error_payload.get("code") or "").strip() if isinstance(error_payload, dict) else ""
+        if isinstance(error_payload, dict):
+            message = str(
+                error_payload.get("error") or error_payload.get("message") or "Remote pairing claim failed."
+            ).strip()
+            code = str(error_payload.get("code") or "").strip()
+        else:
+            message = "Remote pairing claim failed."
+            code = ""
         detail = f"{code}: {message}" if code else message
         raise RuntimeError(redact_remote_pairing_text(detail)) from error
     except urllib.error.URLError as error:
@@ -205,9 +221,9 @@ def build_remote_pair_status_payload(
     if runtime_id in REMOTE_PAIRING_RUNTIMES:
         verification = build_harness_verification(runtime_id, context, store)
         protection_status = "active" if bool(verification.get("safe")) else "paired_not_protected"
-        warnings = verification.get("verification", {})
-        if isinstance(warnings, dict):
-            warning_items = warnings.get("warnings")
+        verification_block = verification.get("verification", {})
+        if isinstance(verification_block, dict):
+            warning_items = verification_block.get("warnings")
             if isinstance(warning_items, list) and warning_items:
                 protection_reason = str(warning_items[0])
 
@@ -264,7 +280,11 @@ def run_guard_remote_pair_command(
         installation_id=installation_id,
         label=resolved_label,
         public_dpop_jwk=dpop_key_material.public_jwk,
-        capability_summary=_build_capability_summary(runtime=runtime, context=context),
+        capability_summary=_build_capability_summary(
+            runtime=runtime,
+            context=context,
+            no_root=no_root,
+        ),
         urlopen=urlopen,
     )
 
@@ -338,11 +358,64 @@ def run_guard_remote_pair_command(
     )
 
 
+def dispatch_guard_remote_pair_command(
+    *,
+    args: object,
+    store: GuardStore,
+    context: HarnessContext,
+    emit: Callable[[str, dict[str, object], bool], None],
+    finalize_connect_payload: Callable[..., dict[str, object]],
+    now: str,
+) -> int:
+    if getattr(args, "remote_pair_command", None) == "status":
+        payload = build_remote_pair_status_payload(store=store, context=context)
+        emit("remote-pair", payload, bool(getattr(args, "json", False)))
+        return 0
+
+    runtime = getattr(args, "runtime", None)
+    pair_code = getattr(args, "pair_code", None)
+    if not isinstance(runtime, str) or not runtime.strip():
+        print("remote-pair requires --runtime openclaw|hermes.", file=sys.stderr)
+        return 2
+    if not isinstance(pair_code, str) or not pair_code.strip():
+        print("remote-pair requires --pair-code.", file=sys.stderr)
+        return 2
+
+    try:
+        payload = run_guard_remote_pair_command(
+            store=store,
+            context=context,
+            connect_url=str(getattr(args, "connect_url", DEFAULT_GUARD_CONNECT_URL)),
+            runtime=runtime.strip(),
+            pair_code=pair_code,
+            label=getattr(args, "label", None),
+            no_root=bool(getattr(args, "no_root", False)),
+            now=now,
+        )
+    except ValueError as error:
+        print(redact_remote_pairing_text(str(error)), file=sys.stderr)
+        return 2
+    except RuntimeError as error:
+        print(redact_remote_pairing_text(str(error)), file=sys.stderr)
+        return 1
+
+    if bool(getattr(args, "verify", False)):
+        payload = finalize_connect_payload(
+            store=store,
+            connect_url=str(getattr(args, "connect_url", DEFAULT_GUARD_CONNECT_URL)),
+            payload=payload,
+            now=now,
+        )
+    emit("remote-pair", payload, bool(getattr(args, "json", False)))
+    return 0
+
+
 __all__ = [
     "REMOTE_PAIR_COMMAND",
     "REMOTE_PAIR_STATUS_COMMAND",
     "build_remote_pair_status_payload",
     "claim_remote_pairing_intent",
+    "dispatch_guard_remote_pair_command",
     "is_remote_pairing_code_shape",
     "normalize_remote_pairing_code",
     "redact_remote_pairing_text",
