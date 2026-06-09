@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.cli.oauth_client import (
     generate_dpop_key_pair,
     generate_pkce_verifier,
     resolve_guard_oauth_client_config,
+    validate_guard_sync_endpoint,
 )
 
 
@@ -46,6 +47,13 @@ def test_resolve_guard_oauth_client_config_for_docker_lab_host() -> None:
     assert config.client_id == LOCAL_GUARD_OAUTH_CLIENT_ID
     assert config.authorize_endpoint == "http://host.docker.internal:3017/api/guard/oauth/authorize"
     assert detect_guard_oauth_environment(config.issuer) == "local"
+
+
+def test_validate_guard_sync_endpoint_allows_docker_lab_http() -> None:
+    issuer = "http://host.docker.internal:3017"
+    sync_url = "http://host.docker.internal:3017/api/guard/receipts/sync"
+
+    assert validate_guard_sync_endpoint(sync_url, issuer=issuer) == sync_url
 
 
 def test_resolve_guard_oauth_client_config_rejects_unallowlisted_host() -> None:

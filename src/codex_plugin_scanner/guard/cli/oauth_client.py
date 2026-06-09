@@ -91,7 +91,9 @@ def _require_allowlisted_guard_oauth_origin(issuer: str) -> str:
         or _is_local_guard_origin(origin)
     ):
         return origin
-    raise ValueError("Guard OAuth issuer must use an allowlisted HOL origin or local loopback.")
+    raise ValueError(
+        "Guard OAuth issuer must use an allowlisted HOL origin, local loopback, or docker-lab host."
+    )
 
 
 def _oauth_endpoints(origin: str) -> GuardOAuthClientConfig:
