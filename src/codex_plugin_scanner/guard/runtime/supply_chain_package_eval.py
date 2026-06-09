@@ -259,6 +259,9 @@ def evaluate_package_request_artifact(
         )
         _persist_evidence(store=store, artifact=artifact, evaluation=no_material_result, now=now_value)
         return no_material_result
+    bundle_defer_eligible = bundle_evaluation is not None and (
+        bundle_evaluation.decision == "block" or not bundle_evaluation.refresh_required
+    )
     cloud_result, cloud_fallback_reason = _evaluate_with_cloud(
         artifact=artifact,
         targets=targets,
@@ -266,8 +269,17 @@ def evaluate_package_request_artifact(
         workspace_id=workspace_id,
         workspace_fingerprint=workspace_fingerprint,
         bundle_meta=bundle_meta,
+        bundle_defer_eligible=bundle_defer_eligible,
         store=store,
     )
+    if cloud_result is not None and _cloud_result_should_defer_to_bundle(
+        cloud_result, bundle_evaluation=bundle_evaluation
+    ):
+        if cloud_fallback_reason is None and cloud_result.reasons:
+            first_reason = cloud_result.reasons[0]
+            if isinstance(first_reason, dict):
+                cloud_fallback_reason = dict(first_reason)
+        cloud_result = None
     if cloud_result is not None:
         upgraded = cloud_result
         if cloud_result.enforcement == "upgrade_required":
@@ -587,6 +599,7 @@ def _evaluate_with_cloud(
     workspace_id: str | None,
     workspace_fingerprint: str | None,
     bundle_meta: dict[str, str] | None,
+    bundle_defer_eligible: bool,
     store: GuardStore,
 ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
     if workspace_id is None or workspace_fingerprint is None:
@@ -603,6 +616,13 @@ def _evaluate_with_cloud(
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
     except GuardSyncAuthorizationExpiredError:
+        if bundle_meta is not None and bundle_defer_eligible and resolve_fail_closed_decision() != "block":
+            return None, _cloud_fallback_reason(
+                code="cloud_auth_error",
+                message=(
+                    "Guard cloud evaluation was not authorized, so Guard fell back to signed bundle intelligence."
+                ),
+            )
         return (
             _cloud_fail_closed_evaluation(
                 code="cloud_auth_error",
@@ -3558,6 +3578,26 @@ def _with_additional_reason(
         updated_package["reasons"] = (reason,)
         updated_packages.append(updated_package)
     return replace(evaluation, reasons=updated_reasons, packages=tuple(updated_packages))
+
+
+def _cloud_result_should_defer_to_bundle(
+    evaluation: PackageRequestEvaluation,
+    *,
+    bundle_evaluation: _EvaluationDraft | None,
+) -> bool:
+    if bundle_evaluation is None:
+        return False
+    if not (bundle_evaluation.decision == "block" or not bundle_evaluation.refresh_required):
+        return False
+    reason_codes = {str(reason.get("code") or "") for reason in evaluation.reasons if isinstance(reason, dict)}
+    if evaluation.decision == "block" and evaluation.policy_action == "block":
+        if "cloud_validation_error" in reason_codes and "cloud_timeout" not in reason_codes:
+            return False
+        return False
+    defer_codes = {"cloud_auth_error", "cloud_http_error", "cloud_timeout"}
+    if not any(code in defer_codes for code in reason_codes):
+        return False
+    return _decision_rank(bundle_evaluation.decision) > _decision_rank(evaluation.decision)
 
 
 def _cloud_fallback_reason(*, code: str, message: str) -> dict[str, object]:
