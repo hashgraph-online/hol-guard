@@ -645,6 +645,7 @@ class TestGuardProtect:
                 "--workspace",
                 str(workspace_dir),
                 "--json",
+                "--dry-run",
                 "npm",
                 "install",
                 "badpkg",
@@ -655,6 +656,7 @@ class TestGuardProtect:
 
         assert "supply_chain_evaluation" in output
         assert not any(item.get("id") == "adv-block-tail" for item in output.get("matched_advisories", []))
+        assert output.get("dry_run") is True
         assert rc in {0, 2}
 
     def test_guard_protect_ignores_legacy_package_url_blocks_for_package_installs(self, tmp_path, capsys) -> None:
@@ -685,6 +687,7 @@ class TestGuardProtect:
                 "--workspace",
                 str(workspace_dir),
                 "--json",
+                "--dry-run",
                 "npm",
                 "install",
                 "badpkg@1.2.3",
@@ -695,6 +698,7 @@ class TestGuardProtect:
 
         assert "supply_chain_evaluation" in output
         assert not any(item.get("id") == "adv-purl-block" for item in output.get("matched_advisories", []))
+        assert output.get("dry_run") is True
         assert rc in {0, 2}
 
     def test_guard_protect_ignores_legacy_scoped_package_url_blocks_for_package_installs(
@@ -729,6 +733,7 @@ class TestGuardProtect:
                 "--workspace",
                 str(workspace_dir),
                 "--json",
+                "--dry-run",
                 "npm",
                 "install",
                 "@scope/badpkg@1.2.3",
@@ -739,6 +744,7 @@ class TestGuardProtect:
 
         assert "supply_chain_evaluation" in output
         assert not any(item.get("id") == "adv-purl-scoped-block" for item in output.get("matched_advisories", []))
+        assert output.get("dry_run") is True
         assert rc in {0, 2}
 
     def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator(
