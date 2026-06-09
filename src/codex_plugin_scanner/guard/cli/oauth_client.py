@@ -24,6 +24,7 @@ LOCAL_GUARD_ISSUER = "http://127.0.0.1:3000"
 _ALLOWED_PRODUCTION_GUARD_ORIGINS = frozenset({PRODUCTION_GUARD_ISSUER})
 _ALLOWED_STAGING_GUARD_ORIGINS = frozenset({STAGING_GUARD_ISSUER})
 _LOOPBACK_GUARD_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_DOCKER_LAB_GUARD_HOSTS = frozenset({"host.docker.internal"})
 
 _PKCE_ALLOWED_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
 
@@ -62,6 +63,14 @@ def _is_loopback_guard_origin(origin: str) -> bool:
     return _issuer_host(origin) in _LOOPBACK_GUARD_HOSTS
 
 
+def _is_docker_lab_guard_origin(origin: str) -> bool:
+    return _issuer_host(origin) in _DOCKER_LAB_GUARD_HOSTS
+
+
+def _is_local_guard_origin(origin: str) -> bool:
+    return _is_loopback_guard_origin(origin) or _is_docker_lab_guard_origin(origin)
+
+
 def is_guard_oauth_origin_allowed(issuer: str) -> bool:
     try:
         origin = _issuer_origin(issuer)
@@ -70,7 +79,7 @@ def is_guard_oauth_origin_allowed(issuer: str) -> bool:
     return (
         origin in _ALLOWED_PRODUCTION_GUARD_ORIGINS
         or origin in _ALLOWED_STAGING_GUARD_ORIGINS
-        or _is_loopback_guard_origin(origin)
+        or _is_local_guard_origin(origin)
     )
 
 
@@ -79,10 +88,10 @@ def _require_allowlisted_guard_oauth_origin(issuer: str) -> str:
     if (
         origin in _ALLOWED_PRODUCTION_GUARD_ORIGINS
         or origin in _ALLOWED_STAGING_GUARD_ORIGINS
-        or _is_loopback_guard_origin(origin)
+        or _is_local_guard_origin(origin)
     ):
         return origin
-    raise ValueError("Guard OAuth issuer must use an allowlisted HOL origin or local loopback.")
+    raise ValueError("Guard OAuth issuer must use an allowlisted HOL origin, local loopback, or docker-lab host.")
 
 
 def _oauth_endpoints(origin: str) -> GuardOAuthClientConfig:
@@ -104,7 +113,7 @@ def _oauth_endpoints(origin: str) -> GuardOAuthClientConfig:
 
 def detect_guard_oauth_environment(issuer: str) -> str:
     origin = _require_allowlisted_guard_oauth_origin(issuer).lower()
-    if _is_loopback_guard_origin(origin):
+    if _is_local_guard_origin(origin):
         return "local"
     if origin in _ALLOWED_STAGING_GUARD_ORIGINS:
         return "staging"
@@ -124,7 +133,7 @@ def validate_guard_sync_endpoint(sync_url: str, *, issuer: str | None = None) ->
     if parsed.fragment:
         raise ValueError("Guard Cloud sync URL fragments are not allowed.")
     origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
-    if parsed.scheme != "https" and not _is_loopback_guard_origin(origin):
+    if parsed.scheme != "https" and not _is_local_guard_origin(origin):
         raise ValueError("Guard Cloud sync URL must use HTTPS.")
     if issuer is not None:
         oauth_client = resolve_guard_oauth_client_config(issuer)
