@@ -22,6 +22,9 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytest_plugins = ["tests.bundle_first_cloud"]
+pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
+
 WORKSPACE_ID = "workspace-alpha"
 
 
@@ -445,4 +448,4 @@ def test_phase14_claude_daemon_hook_bridge_queues_package_install_without_node(t
     assert "minimist@1.2.8" in result.stdout
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "policy-review-1" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "minimist@1.2.8" in payload["hookSpecificOutput"]["permissionDecisionReason"]

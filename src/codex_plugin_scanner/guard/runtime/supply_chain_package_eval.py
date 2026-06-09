@@ -249,53 +249,6 @@ def evaluate_package_request_artifact(
         if bundle_response is not None
         else None
     )
-    if bundle_evaluation is not None and bundle_meta is not None and bundle_evaluation.decision != "monitor":
-        result = _finalize_evaluation(
-            bundle_evaluation, package_intent_hash=package_intent_hash, workspace_fingerprint=workspace_fingerprint
-        )
-        store.cache_supply_chain_evaluation(
-            workspace_id=workspace_id or bundle_payload["bundle"]["workspaceId"],
-            package_intent_hash=package_intent_hash,
-            feed_snapshot_hash=bundle_meta["feed_snapshot_hash"],
-            policy_hash=bundle_meta["policy_hash"],
-            scoring_version=bundle_meta["scoring_version"],
-            bundle_version=bundle_meta["bundle_version"],
-            decision=result.to_cache_dict(),
-            now=now_value,
-        )
-        _persist_evidence(store=store, artifact=artifact, evaluation=result, now=now_value)
-        if result.refresh_required:
-            store.add_event(
-                "supply_chain_bundle_refresh_requested",
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_name": artifact.name,
-                    "reason": "feed_stale",
-                },
-                now_value,
-            )
-        return result
-    if (
-        bundle_evaluation is not None
-        and bundle_evaluation.refresh_required
-        and not bool(store.get_oauth_local_credential_health().get("configured"))
-    ):
-        fallback = _finalize_evaluation(
-            bundle_evaluation,
-            package_intent_hash=package_intent_hash,
-            workspace_fingerprint=workspace_fingerprint,
-        )
-        _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
-        store.add_event(
-            "supply_chain_bundle_refresh_requested",
-            {
-                "artifact_id": artifact.artifact_id,
-                "artifact_name": artifact.name,
-                "reason": "feed_stale",
-            },
-            now_value,
-        )
-        return fallback
     if not _artifact_has_package_material(artifact, targets):
         no_material_result = _empty_package_material_result(
             artifact=artifact,
@@ -306,6 +259,9 @@ def evaluate_package_request_artifact(
         )
         _persist_evidence(store=store, artifact=artifact, evaluation=no_material_result, now=now_value)
         return no_material_result
+    bundle_defer_eligible = bundle_evaluation is not None and (
+        bundle_evaluation.decision == "block" or not bundle_evaluation.refresh_required
+    )
     cloud_result, cloud_fallback_reason = _evaluate_with_cloud(
         artifact=artifact,
         targets=targets,
@@ -313,8 +269,17 @@ def evaluate_package_request_artifact(
         workspace_id=workspace_id,
         workspace_fingerprint=workspace_fingerprint,
         bundle_meta=bundle_meta,
+        bundle_defer_eligible=bundle_defer_eligible,
         store=store,
     )
+    if cloud_result is not None and _cloud_result_should_defer_to_bundle(
+        cloud_result, bundle_evaluation=bundle_evaluation
+    ):
+        if cloud_fallback_reason is None and cloud_result.reasons:
+            first_reason = cloud_result.reasons[0]
+            if isinstance(first_reason, dict):
+                cloud_fallback_reason = dict(first_reason)
+        cloud_result = None
     if cloud_result is not None:
         upgraded = cloud_result
         if cloud_result.enforcement == "upgrade_required":
@@ -345,12 +310,52 @@ def evaluate_package_request_artifact(
                 )
         _persist_evidence(store=store, artifact=artifact, evaluation=upgraded, now=now_value)
         return upgraded
+    if (
+        bundle_evaluation is not None
+        and bundle_evaluation.refresh_required
+        and not bool(store.get_oauth_local_credential_health().get("configured"))
+    ):
+        fallback = _finalize_evaluation(
+            bundle_evaluation,
+            package_intent_hash=package_intent_hash,
+            workspace_fingerprint=workspace_fingerprint,
+        )
+        _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
+        store.add_event(
+            "supply_chain_bundle_refresh_requested",
+            {
+                "artifact_id": artifact.artifact_id,
+                "artifact_name": artifact.name,
+                "reason": "feed_stale",
+            },
+            now_value,
+        )
+        return fallback
     if bundle_evaluation is not None:
         fallback = _finalize_evaluation(
             bundle_evaluation, package_intent_hash=package_intent_hash, workspace_fingerprint=workspace_fingerprint
         )
         if cloud_fallback_reason is not None:
             fallback = _with_additional_reason(fallback, cloud_fallback_reason)
+        if bundle_meta is not None and bundle_evaluation.decision != "monitor" and isinstance(bundle_payload, dict):
+            cache_workspace_id = workspace_id
+            if cache_workspace_id is None:
+                bundle_section = bundle_payload.get("bundle")
+                if isinstance(bundle_section, dict):
+                    bundle_workspace_id = bundle_section.get("workspaceId")
+                    if isinstance(bundle_workspace_id, str) and bundle_workspace_id:
+                        cache_workspace_id = bundle_workspace_id
+            if cache_workspace_id:
+                store.cache_supply_chain_evaluation(
+                    workspace_id=cache_workspace_id,
+                    package_intent_hash=package_intent_hash,
+                    feed_snapshot_hash=bundle_meta["feed_snapshot_hash"],
+                    policy_hash=bundle_meta["policy_hash"],
+                    scoring_version=bundle_meta["scoring_version"],
+                    bundle_version=bundle_meta["bundle_version"],
+                    decision=fallback.to_cache_dict(),
+                    now=now_value,
+                )
         _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
         if fallback.refresh_required:
             store.add_event(
@@ -594,6 +599,7 @@ def _evaluate_with_cloud(
     workspace_id: str | None,
     workspace_fingerprint: str | None,
     bundle_meta: dict[str, str] | None,
+    bundle_defer_eligible: bool,
     store: GuardStore,
 ) -> tuple[PackageRequestEvaluation | None, dict[str, object] | None]:
     if workspace_id is None or workspace_fingerprint is None:
@@ -610,6 +616,13 @@ def _evaluate_with_cloud(
     try:
         auth_context = _resolve_guard_sync_auth_context(store)
     except GuardSyncAuthorizationExpiredError:
+        if bundle_meta is not None and bundle_defer_eligible and resolve_fail_closed_decision() != "block":
+            return None, _cloud_fallback_reason(
+                code="cloud_auth_error",
+                message=(
+                    "Guard cloud evaluation was not authorized, so Guard fell back to signed bundle intelligence."
+                ),
+            )
         return (
             _cloud_fail_closed_evaluation(
                 code="cloud_auth_error",
@@ -3565,6 +3578,26 @@ def _with_additional_reason(
         updated_package["reasons"] = (reason,)
         updated_packages.append(updated_package)
     return replace(evaluation, reasons=updated_reasons, packages=tuple(updated_packages))
+
+
+def _cloud_result_should_defer_to_bundle(
+    evaluation: PackageRequestEvaluation,
+    *,
+    bundle_evaluation: _EvaluationDraft | None,
+) -> bool:
+    if bundle_evaluation is None:
+        return False
+    if not (bundle_evaluation.decision == "block" or not bundle_evaluation.refresh_required):
+        return False
+    reason_codes = {str(reason.get("code") or "") for reason in evaluation.reasons if isinstance(reason, dict)}
+    if evaluation.decision == "block" and evaluation.policy_action == "block":
+        if "cloud_validation_error" in reason_codes and "cloud_timeout" not in reason_codes:
+            return False
+        return False
+    defer_codes = {"cloud_auth_error", "cloud_http_error", "cloud_timeout"}
+    if not any(code in defer_codes for code in reason_codes):
+        return False
+    return _decision_rank(bundle_evaluation.decision) > _decision_rank(evaluation.decision)
 
 
 def _cloud_fallback_reason(*, code: str, message: str) -> dict[str, object]:
