@@ -123,20 +123,30 @@ def build_protect_payload(
     if len(command) == 0:
         raise ValueError("Guard protect requires a command to wrap.")
     request = parse_protect_command(command)
+    advisories = store.list_cached_advisories(limit=None)
+    cached_verdict = evaluate_protect_request(request, advisories)
+    cached_gate = cached_verdict.blocking
     package_payload = build_package_protect_payload(
         command=command,
         store=store,
         workspace_dir=workspace_dir,
-        dry_run=dry_run,
+        dry_run=dry_run or cached_gate,
         now=now,
         config=config,
         unsafe_raw_output=unsafe_raw_output,
         timeout_seconds=_protect_command_timeout_seconds(),
     )
     if package_payload is not None:
+        if cached_gate:
+            return _merge_cached_advisory_into_package_payload(
+                package_payload,
+                cached_verdict=cached_verdict,
+                requested_dry_run=dry_run,
+                store=store,
+                now=now,
+            )
         return package_payload
-    advisories = store.list_cached_advisories(limit=None)
-    verdict = evaluate_protect_request(request, advisories)
+    verdict = cached_verdict
     receipt = _build_install_receipt(request, verdict)
     payload: dict[str, object] = {
         "generated_at": now,
@@ -211,6 +221,95 @@ def build_protect_payload(
             now,
         )
     return (payload, int(execution.returncode))
+
+
+def _merge_cached_advisory_into_package_payload(
+    result: tuple[dict[str, object], int],
+    *,
+    cached_verdict: ProtectVerdict,
+    requested_dry_run: bool,
+    store: GuardStore,
+    now: str,
+) -> tuple[dict[str, object], int]:
+    """Apply locally cached advisory blocks/reviews to package protect results."""
+
+    payload, exit_code = result
+    verdict = payload.get("verdict")
+    if not isinstance(verdict, dict):
+        return result
+    package_action = verdict.get("action")
+    if not isinstance(package_action, str):
+        package_action = "allow"
+
+    merged_action = package_action
+    merged_reason = verdict.get("reason")
+    if not isinstance(merged_reason, str):
+        merged_reason = cached_verdict.reason
+    merged_advisories = list(verdict.get("matched_advisories") or [])
+    risk_signals = list(verdict.get("risk_signals") or [])
+
+    if cached_verdict.action == "block":
+        merged_action = "block"
+        merged_reason = cached_verdict.reason
+    elif cached_verdict.action == "review" and package_action in {"allow", "warn"}:
+        merged_action = "review"
+        merged_reason = cached_verdict.reason
+
+    for item in cached_verdict.matched_advisories:
+        if item not in merged_advisories:
+            merged_advisories.append(item)
+    for signal in cached_verdict.risk_signals:
+        if signal not in risk_signals:
+            risk_signals.append(signal)
+
+    action_changed = merged_action != package_action
+    advisories_changed = merged_advisories != list(verdict.get("matched_advisories") or [])
+    if not action_changed and not advisories_changed:
+        return result
+
+    blocking = merged_action in {"block", "review"}
+    updated_verdict = {
+        **verdict,
+        "action": merged_action,
+        "reason": merged_reason,
+        "risk_signals": risk_signals,
+        "matched_advisories": merged_advisories,
+        "blocking": blocking,
+    }
+    updated_payload: dict[str, object] = {
+        **payload,
+        "verdict": updated_verdict,
+        "matched_advisories": merged_advisories,
+        "executed": False,
+        "dry_run": requested_dry_run or blocking,
+    }
+    receipt = payload.get("receipt")
+    if isinstance(receipt, dict):
+        updated_receipt = {**receipt, "policy_decision": merged_action}
+        updated_payload["receipt"] = updated_receipt
+        if action_changed:
+            receipt_id = updated_receipt.get("receipt_id")
+            if isinstance(receipt_id, str) and receipt_id:
+                store.update_receipt_policy_decision(receipt_id, merged_action)
+            request = payload.get("request")
+            executor = request.get("executor") if isinstance(request, dict) else None
+            install_kind = request.get("install_kind") if isinstance(request, dict) else None
+            store.add_event(
+                f"install_time_{merged_action}",
+                {
+                    "artifact_id": updated_receipt.get("artifact_id"),
+                    "artifact_name": updated_receipt.get("artifact_name"),
+                    "executor": executor,
+                    "install_kind": install_kind,
+                    "action": merged_action,
+                    "risk_signals": risk_signals,
+                    "cached_advisory_override": True,
+                },
+                now,
+            )
+    if blocking:
+        return (updated_payload, 2)
+    return (updated_payload, exit_code)
 
 
 def _protect_command_timeout_seconds() -> int:

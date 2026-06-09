@@ -655,11 +655,12 @@ class TestGuardProtect:
         output = json.loads(capsys.readouterr().out)
 
         assert "supply_chain_evaluation" in output
-        assert not any(item.get("id") == "adv-block-tail" for item in output.get("matched_advisories", []))
+        assert any(item.get("id") == "adv-block-tail" for item in output.get("matched_advisories", []))
+        assert output["verdict"]["action"] == "block"
         assert output.get("dry_run") is True
-        assert rc in {0, 2}
+        assert rc == 2
 
-    def test_guard_protect_ignores_legacy_package_url_blocks_for_package_installs(self, tmp_path, capsys) -> None:
+    def test_guard_protect_honors_cached_package_url_blocks_for_package_installs(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True)
@@ -697,11 +698,12 @@ class TestGuardProtect:
         output = json.loads(capsys.readouterr().out)
 
         assert "supply_chain_evaluation" in output
-        assert not any(item.get("id") == "adv-purl-block" for item in output.get("matched_advisories", []))
+        assert any(item.get("id") == "adv-purl-block" for item in output.get("matched_advisories", []))
+        assert output["verdict"]["action"] == "block"
         assert output.get("dry_run") is True
-        assert rc in {0, 2}
+        assert rc == 2
 
-    def test_guard_protect_ignores_legacy_scoped_package_url_blocks_for_package_installs(
+    def test_guard_protect_honors_cached_scoped_package_url_blocks_for_package_installs(
         self,
         tmp_path,
         capsys,
@@ -743,9 +745,63 @@ class TestGuardProtect:
         output = json.loads(capsys.readouterr().out)
 
         assert "supply_chain_evaluation" in output
-        assert not any(item.get("id") == "adv-purl-scoped-block" for item in output.get("matched_advisories", []))
+        assert any(item.get("id") == "adv-purl-scoped-block" for item in output.get("matched_advisories", []))
+        assert output["verdict"]["action"] == "block"
         assert output.get("dry_run") is True
-        assert rc in {0, 2}
+        assert rc == 2
+
+    def test_guard_protect_blocks_package_install_when_cached_advisory_overrides_bundle_allow(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from codex_plugin_scanner.guard.protect import build_protect_payload
+
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        store = GuardStore(home_dir)
+        _seed_bundle_cache_only(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="badpkg",
+            package_version="1.0.0",
+            action="allow",
+        )
+        store.cache_advisories(
+            [
+                {
+                    "id": "adv-cached-block",
+                    "ecosystem": "npm",
+                    "package": "badpkg",
+                    "severity": "high",
+                    "action": "block",
+                    "headline": "Locally cached malicious package block.",
+                }
+            ],
+            _now(),
+        )
+
+        payload, exit_code = build_protect_payload(
+            command=["npm", "install", "badpkg@1.0.0"],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=False,
+            now=_now(),
+        )
+
+        assert exit_code == 2
+        assert payload["executed"] is False
+        assert payload["verdict"]["action"] == "block"
+        assert payload["receipt"]["policy_decision"] == "block"
+        assert any(item.get("id") == "adv-cached-block" for item in payload.get("matched_advisories", []))
+        stored_receipt = store.list_receipts(limit=1)[0]
+        assert stored_receipt["policy_decision"] == "block"
+        events = store.list_events(limit=10)
+        assert any(
+            event.get("event_name") == "install_time_block"
+            and event.get("payload", {}).get("cached_advisory_override") is True
+            for event in events
+        )
 
     def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator(
         self,

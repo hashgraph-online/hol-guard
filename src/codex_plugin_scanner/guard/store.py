@@ -2156,6 +2156,13 @@ class GuardStore:
                 ),
             )
 
+    def update_receipt_policy_decision(self, receipt_id: str, policy_decision: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "update runtime_receipts set policy_decision = ? where receipt_id = ?",
+                (policy_decision, receipt_id),
+            )
+
     @staticmethod
     def _receipt_base_query(where_clause: str = "") -> str:
         base = """
