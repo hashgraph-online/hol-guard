@@ -325,11 +325,7 @@ def evaluate_package_request_artifact(
         )
         if cloud_fallback_reason is not None:
             fallback = _with_additional_reason(fallback, cloud_fallback_reason)
-        if (
-            bundle_meta is not None
-            and bundle_evaluation.decision != "monitor"
-            and isinstance(bundle_payload, dict)
-        ):
+        if bundle_meta is not None and bundle_evaluation.decision != "monitor" and isinstance(bundle_payload, dict):
             cache_workspace_id = workspace_id
             if cache_workspace_id is None:
                 bundle_section = bundle_payload.get("bundle")
