@@ -720,6 +720,7 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     assert test_payload["result"]["intercept_proved"] is False
     assert test_payload["result"]["manager_results"] == [
         {
+            "evaluator_invoked": False,
             "intercept_ran": False,
             "manager": "npm",
             "skipped_reason": "path_inactive",

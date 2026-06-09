@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .launcher import merge_guard_launcher_env
+from .shim_probe import (
+    package_shim_probe_args,
+    parse_protect_json_stdout,
+    protect_evaluator_evidence,
+)
 
 if TYPE_CHECKING:
     from .adapters.base import HarnessContext
@@ -775,7 +780,7 @@ def _path_export_hints(shim_dir: Path) -> dict[str, str]:
     }
 
 
-def test_package_shim_intercepts(
+def probe_package_shim_intercepts(
     context: HarnessContext,
     *,
     managers: tuple[str, ...] | None = None,
@@ -789,14 +794,32 @@ def test_package_shim_intercepts(
     tested_managers = list(managers or tuple(sorted(installed)))
     path_repair_required = [manager for manager in tested_managers if manager in installed and manager not in protected]
     manager_results: list[dict[str, object]] = []
+    manager_details = status.get("manager_details", [])
+    detail_by_manager = {
+        str(item.get("manager")): item
+        for item in manager_details
+        if isinstance(item, dict) and isinstance(item.get("manager"), str)
+    }
     target_workspace = workspace_dir or context.workspace_dir or context.home_dir
     shim_dir = context.guard_home / "package-shims" / "bin"
     for manager in tested_managers:
         if manager not in installed:
             continue
+        manager_detail = detail_by_manager.get(manager)
+        if manager_detail is not None and manager_detail.get("integrity") == "tampered":
+            manager_results.append(
+                {
+                    "evaluator_invoked": False,
+                    "intercept_ran": False,
+                    "manager": manager,
+                    "skipped_reason": "shim_tampered",
+                },
+            )
+            continue
         if manager not in protected:
             manager_results.append(
                 {
+                    "evaluator_invoked": False,
                     "intercept_ran": False,
                     "manager": manager,
                     "skipped_reason": "path_inactive",
@@ -807,6 +830,7 @@ def test_package_shim_intercepts(
         if command is None:
             manager_results.append(
                 {
+                    "evaluator_invoked": False,
                     "intercept_ran": False,
                     "manager": manager,
                     "skipped_reason": "unsupported_manager",
@@ -817,16 +841,18 @@ def test_package_shim_intercepts(
         if not shim_path.exists():
             manager_results.append(
                 {
+                    "evaluator_invoked": False,
                     "intercept_ran": False,
                     "manager": manager,
                     "skipped_reason": "shim_missing",
                 },
             )
             continue
+        probe_args = package_shim_probe_args(manager)
         try:
             # codeql[py/path-injection] target_workspace is home_dir or a validated daemon workspace_dir.
             result = subprocess.run(
-                [str(shim_path), "--version"],
+                [str(shim_path), *probe_args],
                 capture_output=True,
                 check=False,
                 cwd=target_workspace,
@@ -836,20 +862,27 @@ def test_package_shim_intercepts(
         except (subprocess.TimeoutExpired, OSError):
             manager_results.append(
                 {
+                    "evaluator_invoked": False,
                     "intercept_ran": False,
                     "manager": manager,
                     "skipped_reason": "probe_failed",
                 },
             )
             continue
+        protect_payload = parse_protect_json_stdout(result.stdout)
+        evaluator_evidence = protect_evaluator_evidence(protect_payload)
         manager_results.append(
             {
-                "intercept_ran": True,
+                "evaluator_invoked": evaluator_evidence["evaluator_invoked"],
+                "evidence_ids": evaluator_evidence["evidence_ids"],
+                "intercept_ran": bool(evaluator_evidence["evaluator_invoked"]),
                 "manager": manager,
+                "protect_decision": evaluator_evidence["protect_decision"],
+                "probe_args": list(probe_args),
                 "shim_exit_code": result.returncode,
             },
         )
-    intercept_proved = any(bool(result.get("intercept_ran")) for result in manager_results)
+    intercept_proved = any(bool(result.get("evaluator_invoked")) for result in manager_results)
     return {
         "blocked_execution": bool(tested_managers) and all(manager in protected for manager in tested_managers),
         "intercept_proved": intercept_proved,
@@ -870,7 +903,7 @@ __all__ = [
     "package_shim_cloud_coverage",
     "package_shim_status",
     "package_shim_supported_managers",
+    "probe_package_shim_intercepts",
     "remove_guard_shim",
-    "test_package_shim_intercepts",
     "uninstall_package_shims",
 ]
