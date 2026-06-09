@@ -20,3 +20,15 @@ export function insightsSharePublishErrorMessage(raw: string): string {
 
   return message || "Unable to publish share link.";
 }
+
+export function isInsightsShareScopeError(raw: string): boolean {
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes("guard:insights.share") ||
+    lower.includes("insufficient_scope") ||
+    lower.includes("insufficient scope") ||
+    lower.includes("missing_scope") ||
+    lower.includes("missing scope") ||
+    lower.includes("unauthorized")
+  );
+}

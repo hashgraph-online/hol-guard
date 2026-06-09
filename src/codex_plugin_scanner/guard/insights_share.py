@@ -50,6 +50,7 @@ def build_insights_share_payload(
     include_top_artifacts: bool = False,
     show_display_name: bool = False,
     display_name: str | None = None,
+    overview_stats: dict[str, int] | None = None,
 ) -> dict[str, object]:
     total = int(analytics.get("total") or 0)
     blocked = int(analytics.get("blocked") or 0)
@@ -87,6 +88,20 @@ def build_insights_share_payload(
             }
         )
 
+    # Build mini heatmap for last 5 days
+    mini_heatmap_cells: list[dict[str, object]] = []
+    for row in daily_rows[-5:]:
+        date_key = str(row.get("date_key") or "")
+        if not date_key:
+            continue
+        day_total = int(row.get("total") or 0)
+        mini_heatmap_cells.append(
+            {
+                "date": date_key,
+                "level": _heatmap_level(day_total, peak=heatmap_peak),
+            }
+        )
+
     payload: dict[str, object] = {
         "version": 1,
         "generatedAt": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -104,6 +119,16 @@ def build_insights_share_payload(
         "heatmap": {"days": len(heatmap_cells) or 90, "cells": heatmap_cells},
         "showDisplayName": bool(show_display_name and display_name),
     }
+
+    payload["overviewStats"] = {
+        "pending": int(overview_stats.get("pending") or 0) if overview_stats else 0,
+        "apps": int(overview_stats.get("apps") or 0) if overview_stats else 0,
+        "recorded": int(overview_stats.get("recorded") or 0) if overview_stats else 0,
+    }
+
+    if mini_heatmap_cells:
+        payload["miniHeatmap"] = {"days": len(mini_heatmap_cells), "cells": mini_heatmap_cells}
+
     if show_display_name and display_name:
         payload["displayName"] = display_name.strip()[:120]
 
@@ -156,11 +181,17 @@ def publish_insights_share(
     )
 
     analytics = store.receipt_analytics(activity_days=90, trend_days=7, top_limit=8)
+    overview_stats = {
+        "pending": store.count_approval_requests(),
+        "apps": len(store.list_managed_installs()),
+        "recorded": store.count_receipts(),
+    }
     payload = build_insights_share_payload(
         analytics,
         include_top_artifacts=include_top_artifacts,
         show_display_name=show_display_name,
         display_name=display_name,
+        overview_stats=overview_stats,
     )
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     request_url = normalized_insights_share_url(str(resolved_auth_context["sync_url"]))

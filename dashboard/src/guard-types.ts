@@ -448,6 +448,17 @@ export type GuardInsightsShareResult = {
   expiresAt: string;
 };
 
+export type GuardInsightsShareHeatmapCell = {
+  date: string;
+  level: 0 | 1 | 2 | 3 | 4;
+};
+
+export type GuardInsightsShareOverviewStats = {
+  pending: number;
+  apps: number;
+  recorded: number;
+};
+
 export type GuardArtifactDiff = {
   artifact_id: string;
   harness: string;
