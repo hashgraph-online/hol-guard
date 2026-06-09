@@ -552,7 +552,7 @@ class TestGuardProtect:
         assert output["executed"] is True
         assert captured["timeout"] == 300
 
-    def test_guard_protect_checks_blocking_advisory_beyond_default_cache_limit(self, tmp_path, capsys) -> None:
+    def test_guard_protect_defers_package_installs_to_canonical_evaluator(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True)
@@ -597,11 +597,11 @@ class TestGuardProtect:
 
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 2
-        assert output["verdict"]["action"] == "block"
-        assert any(item["id"] == "adv-block-tail" for item in output["matched_advisories"])
+        assert "supply_chain_evaluation" in output
+        assert not any(item.get("id") == "adv-block-tail" for item in output.get("matched_advisories", []))
+        assert rc in {0, 2}
 
-    def test_guard_protect_matches_blocking_advisory_by_package_url(self, tmp_path, capsys) -> None:
+    def test_guard_protect_ignores_legacy_package_url_blocks_for_package_installs(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True)
@@ -637,11 +637,15 @@ class TestGuardProtect:
 
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 2
-        assert output["verdict"]["action"] == "block"
-        assert output["matched_advisories"][0]["id"] == "adv-purl-block"
+        assert "supply_chain_evaluation" in output
+        assert not any(item.get("id") == "adv-purl-block" for item in output.get("matched_advisories", []))
+        assert rc in {0, 2}
 
-    def test_guard_protect_matches_blocking_advisory_by_scoped_package_url(self, tmp_path, capsys) -> None:
+    def test_guard_protect_ignores_legacy_scoped_package_url_blocks_for_package_installs(
+        self,
+        tmp_path,
+        capsys,
+    ) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True)
@@ -677,9 +681,11 @@ class TestGuardProtect:
 
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 2
-        assert output["verdict"]["action"] == "block"
-        assert output["matched_advisories"][0]["id"] == "adv-purl-scoped-block"
+        assert "supply_chain_evaluation" in output
+        assert not any(
+            item.get("id") == "adv-purl-scoped-block" for item in output.get("matched_advisories", [])
+        )
+        assert rc in {0, 2}
 
     def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator(
         self,

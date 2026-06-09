@@ -42,6 +42,14 @@ from codex_plugin_scanner.guard.store import GuardStore
 WORKSPACE_ID = "workspace-alpha"
 
 
+def _force_cloud_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    def cloud_timeout(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise TimeoutError("cloud unreachable")
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", cloud_timeout)
+
+
 def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -290,6 +298,54 @@ def _cloud_response(*, decision: str, enforcement: str, entitlement_state: str, 
         "staleSources": [],
         "workspaceId": WORKSPACE_ID,
     }
+
+
+def test_canonical_decision_order_prefers_cloud_over_signed_bundle(tmp_path: Path) -> None:
+    _EvaluateHandler.captured_headers = {}
+    _EvaluateHandler.captured_requests = []
+    _EvaluateHandler.response_payload = _cloud_response(
+        decision="monitor",
+        enforcement="premium_cloud",
+        entitlement_state="premium",
+        package_name="minimist",
+    )
+    server = HTTPServer(("127.0.0.1", 0), _EvaluateHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            "demo-token",
+            "2026-05-19T00:00:00Z",
+            workspace_id=WORKSPACE_ID,
+        )
+        bundle_response = _bundle_response(
+            packages=[
+                _package(
+                    ecosystem="npm",
+                    name="minimist",
+                    version="1.2.8",
+                    default_action="block",
+                    recommended_fix_version="1.2.9",
+                )
+            ]
+        )
+        store.cache_supply_chain_bundle(WORKSPACE_ID, bundle_response, "2026-05-19T00:00:00Z")
+        result = evaluate_package_request_artifact(
+            artifact=_artifact_for_targets("minimist@1.2.8"),
+            store=store,
+            workspace_dir=tmp_path / "workspace",
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert _EvaluateHandler.captured_requests
+    assert result.decision == "monitor"
+    assert result.enforcement == "premium_cloud"
+    assert result.policy_action == "allow"
 
 
 def test_evaluate_package_request_artifact_posts_cloud_request_and_maps_block_response(tmp_path: Path) -> None:
@@ -901,7 +957,10 @@ def test_evaluate_package_request_artifact_normalizes_cloud_review_decision(
     assert result.policy_action == "require-reapproval"
 
 
-def test_evaluate_package_request_artifact_applies_policy_rule_override(tmp_path: Path) -> None:
+def test_evaluate_package_request_artifact_applies_policy_rule_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
@@ -1050,7 +1109,10 @@ def test_evaluate_package_request_artifact_keeps_policy_metadata_on_winning_pack
     assert result.enforcement == "offline_cached"
 
 
-def test_evaluate_package_request_artifact_applies_allow_exception_rule(tmp_path: Path) -> None:
+def test_evaluate_package_request_artifact_applies_allow_exception_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
@@ -1094,7 +1156,10 @@ def test_evaluate_package_request_artifact_applies_allow_exception_rule(tmp_path
     assert result.exception_id == "guard-exception-123"
 
 
-def test_evaluate_package_request_artifact_summarizes_multi_package_and_safe_alternatives(tmp_path: Path) -> None:
+def test_evaluate_package_request_artifact_summarizes_multi_package_and_safe_alternatives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
@@ -1140,7 +1205,9 @@ def test_evaluate_package_request_artifact_summarizes_multi_package_and_safe_alt
 
 def test_evaluate_package_request_artifact_blocks_maintainer_compromise_fixture(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
@@ -1180,7 +1247,9 @@ def test_evaluate_package_request_artifact_blocks_maintainer_compromise_fixture(
 
 def test_evaluate_package_request_artifact_blocks_transitive_lockfile_match_with_dependency_path(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
@@ -1228,7 +1297,9 @@ def test_evaluate_package_request_artifact_blocks_transitive_lockfile_match_with
 
 def test_evaluate_package_request_artifact_warns_for_low_confidence_transitive_lockfile_match(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
@@ -1447,7 +1518,9 @@ def test_resolved_target_version_uses_registry_metadata_for_npm_ranges(monkeypat
 
 def test_evaluate_package_request_artifact_blocks_hoisted_lockfile_match(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID
@@ -1703,7 +1776,7 @@ def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
     assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
 
 
-def test_evaluate_package_request_artifact_blocks_from_cached_bundle_without_cloud_reachability(
+def test_evaluate_package_request_artifact_blocks_from_cached_bundle_after_cloud_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
@@ -1723,11 +1796,14 @@ def test_evaluate_package_request_artifact_blocks_from_cached_bundle_without_clo
     )
     store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T00:00:00Z")
 
-    def fail_if_cloud_called(*args: object, **kwargs: object) -> object:
-        del args, kwargs
-        raise AssertionError("cached bundle blocking should not call Guard Cloud")
+    cloud_attempts = 0
 
-    monkeypatch.setattr(urllib.request, "urlopen", fail_if_cloud_called)
+    def cloud_timeout(*args: object, **kwargs: object) -> object:
+        nonlocal cloud_attempts
+        cloud_attempts += 1
+        raise TimeoutError("cloud unreachable")
+
+    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", cloud_timeout)
     result = evaluate_package_request_artifact(
         artifact=_artifact_for_targets("minimist@1.2.8"),
         store=store,
@@ -1735,12 +1811,17 @@ def test_evaluate_package_request_artifact_blocks_from_cached_bundle_without_clo
         now="2026-05-19T00:00:00Z",
     )
 
+    assert cloud_attempts == 1
     assert result.decision == "block"
     assert result.policy_action == "block"
     assert result.enforcement == "offline_cached"
+    assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
 
 
-def test_evaluate_package_request_artifact_stale_bundle_requests_refresh_and_records_monitor(tmp_path: Path) -> None:
+def test_evaluate_package_request_artifact_stale_bundle_requests_refresh_and_records_monitor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _force_cloud_fallback(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
         "https://hol.org/api/guard/receipts/sync", "demo-token", "2026-05-19T00:00:00Z", workspace_id=WORKSPACE_ID

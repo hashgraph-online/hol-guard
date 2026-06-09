@@ -249,53 +249,6 @@ def evaluate_package_request_artifact(
         if bundle_response is not None
         else None
     )
-    if bundle_evaluation is not None and bundle_meta is not None and bundle_evaluation.decision != "monitor":
-        result = _finalize_evaluation(
-            bundle_evaluation, package_intent_hash=package_intent_hash, workspace_fingerprint=workspace_fingerprint
-        )
-        store.cache_supply_chain_evaluation(
-            workspace_id=workspace_id or bundle_payload["bundle"]["workspaceId"],
-            package_intent_hash=package_intent_hash,
-            feed_snapshot_hash=bundle_meta["feed_snapshot_hash"],
-            policy_hash=bundle_meta["policy_hash"],
-            scoring_version=bundle_meta["scoring_version"],
-            bundle_version=bundle_meta["bundle_version"],
-            decision=result.to_cache_dict(),
-            now=now_value,
-        )
-        _persist_evidence(store=store, artifact=artifact, evaluation=result, now=now_value)
-        if result.refresh_required:
-            store.add_event(
-                "supply_chain_bundle_refresh_requested",
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_name": artifact.name,
-                    "reason": "feed_stale",
-                },
-                now_value,
-            )
-        return result
-    if (
-        bundle_evaluation is not None
-        and bundle_evaluation.refresh_required
-        and not bool(store.get_oauth_local_credential_health().get("configured"))
-    ):
-        fallback = _finalize_evaluation(
-            bundle_evaluation,
-            package_intent_hash=package_intent_hash,
-            workspace_fingerprint=workspace_fingerprint,
-        )
-        _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
-        store.add_event(
-            "supply_chain_bundle_refresh_requested",
-            {
-                "artifact_id": artifact.artifact_id,
-                "artifact_name": artifact.name,
-                "reason": "feed_stale",
-            },
-            now_value,
-        )
-        return fallback
     if not _artifact_has_package_material(artifact, targets):
         no_material_result = _empty_package_material_result(
             artifact=artifact,
@@ -345,12 +298,48 @@ def evaluate_package_request_artifact(
                 )
         _persist_evidence(store=store, artifact=artifact, evaluation=upgraded, now=now_value)
         return upgraded
+    if (
+        bundle_evaluation is not None
+        and bundle_evaluation.refresh_required
+        and not bool(store.get_oauth_local_credential_health().get("configured"))
+    ):
+        fallback = _finalize_evaluation(
+            bundle_evaluation,
+            package_intent_hash=package_intent_hash,
+            workspace_fingerprint=workspace_fingerprint,
+        )
+        _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
+        store.add_event(
+            "supply_chain_bundle_refresh_requested",
+            {
+                "artifact_id": artifact.artifact_id,
+                "artifact_name": artifact.name,
+                "reason": "feed_stale",
+            },
+            now_value,
+        )
+        return fallback
     if bundle_evaluation is not None:
         fallback = _finalize_evaluation(
             bundle_evaluation, package_intent_hash=package_intent_hash, workspace_fingerprint=workspace_fingerprint
         )
         if cloud_fallback_reason is not None:
             fallback = _with_additional_reason(fallback, cloud_fallback_reason)
+        if (
+            bundle_meta is not None
+            and bundle_evaluation.decision != "monitor"
+            and isinstance(bundle_payload, dict)
+        ):
+            store.cache_supply_chain_evaluation(
+                workspace_id=workspace_id or str(bundle_payload["bundle"]["workspaceId"]),
+                package_intent_hash=package_intent_hash,
+                feed_snapshot_hash=bundle_meta["feed_snapshot_hash"],
+                policy_hash=bundle_meta["policy_hash"],
+                scoring_version=bundle_meta["scoring_version"],
+                bundle_version=bundle_meta["bundle_version"],
+                decision=fallback.to_cache_dict(),
+                now=now_value,
+            )
         _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
         if fallback.refresh_required:
             store.add_event(

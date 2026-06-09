@@ -123,6 +123,18 @@ def build_protect_payload(
     if len(command) == 0:
         raise ValueError("Guard protect requires a command to wrap.")
     request = parse_protect_command(command)
+    package_payload = build_package_protect_payload(
+        command=command,
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=dry_run,
+        now=now,
+        config=config,
+        unsafe_raw_output=unsafe_raw_output,
+        timeout_seconds=_protect_command_timeout_seconds(),
+    )
+    if package_payload is not None:
+        return package_payload
     advisories = store.list_cached_advisories(limit=None)
     verdict = evaluate_protect_request(request, advisories)
     receipt = _build_install_receipt(request, verdict)
@@ -136,33 +148,6 @@ def build_protect_payload(
         "receipt": receipt.to_dict(),
         "matched_advisories": list(verdict.matched_advisories),
     }
-    if verdict.blocking:
-        store.add_receipt(receipt)
-        store.add_event(
-            f"install_time_{verdict.action}",
-            {
-                "artifact_id": request.targets[0].artifact_id,
-                "artifact_name": request.targets[0].artifact_name,
-                "executor": request.executor,
-                "install_kind": request.install_kind,
-                "action": verdict.action,
-                "risk_signals": list(verdict.risk_signals),
-            },
-            now,
-        )
-        return (payload, 2)
-    package_payload = build_package_protect_payload(
-        command=command,
-        store=store,
-        workspace_dir=workspace_dir,
-        dry_run=dry_run,
-        now=now,
-        config=config,
-        unsafe_raw_output=unsafe_raw_output,
-        timeout_seconds=_protect_command_timeout_seconds(),
-    )
-    if package_payload is not None:
-        return package_payload
     if verdict.blocking or dry_run:
         store.add_receipt(receipt)
         store.add_event(
