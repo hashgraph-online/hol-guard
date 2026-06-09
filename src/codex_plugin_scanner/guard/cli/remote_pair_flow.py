@@ -297,30 +297,35 @@ def run_guard_remote_pair_command(
         raise RuntimeError("Remote pairing claim succeeded but refresh token is missing.")
 
     timestamp = now or datetime.now(timezone.utc).isoformat()
-    _persist_oauth_local_credentials(
-        store=store,
-        issuer=oauth_client.issuer,
-        client_id=REMOTE_PAIRING_OAUTH_CLIENT_ID,
-        refresh_token=token_result.refresh_token,
-        dpop_key_material=dpop_key_material,
-        grant_id=token_result.grant_id,
-        machine_id=token_result.machine_id or installation_id,
-        supply_chain_entitlement=token_result.supply_chain_entitlement,
-        workspace_id=token_result.workspace_id,
-        runtime_id=runtime,
-        runtime_label=resolved_label,
-        now=timestamp,
-    )
-
-    install_payload = apply_managed_install(
-        "install",
-        runtime,
-        False,
-        context,
-        store,
-        str(context.workspace_dir) if context.workspace_dir is not None else None,
-        timestamp,
-    )
+    try:
+        _persist_oauth_local_credentials(
+            store=store,
+            issuer=oauth_client.issuer,
+            client_id=REMOTE_PAIRING_OAUTH_CLIENT_ID,
+            refresh_token=token_result.refresh_token,
+            dpop_key_material=dpop_key_material,
+            grant_id=token_result.grant_id,
+            machine_id=token_result.machine_id or installation_id,
+            supply_chain_entitlement=token_result.supply_chain_entitlement,
+            workspace_id=token_result.workspace_id,
+            runtime_id=runtime,
+            runtime_label=resolved_label,
+            now=timestamp,
+        )
+        install_payload = apply_managed_install(
+            "install",
+            runtime,
+            False,
+            context,
+            store,
+            str(context.workspace_dir) if context.workspace_dir is not None else None,
+            timestamp,
+        )
+    except OSError as error:
+        raise RuntimeError(
+            "Remote pairing claimed the one-time code but failed to save local credentials or "
+            "install runtime protection. Generate a new pairing code in Guard Cloud and retry."
+        ) from error
     verification = build_harness_verification(runtime, context, store)
     protection_status = "active" if bool(verification.get("safe")) else "paired_not_protected"
     protection_reason = None

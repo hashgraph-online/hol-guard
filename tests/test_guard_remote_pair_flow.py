@@ -195,6 +195,46 @@ def test_build_remote_pair_status_payload_reports_disconnected_by_default(tmp_pa
     assert payload["protection"] == "unknown"
 
 
+def test_run_guard_remote_pair_command_wraps_local_save_oserror(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+
+    def fake_claim(**_kwargs: object) -> dict[str, object]:
+        return {
+            "intentId": "intent-99",
+            "state": "connected",
+            "tokens": {
+                "access_token": _fake_access_token(),
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "refresh_token": "refresh-token-value",
+            },
+        }
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow.claim_remote_pairing_intent",
+        fake_claim,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._persist_oauth_local_credentials",
+        lambda **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    with pytest.raises(RuntimeError, match="Generate a new pairing code"):
+        run_guard_remote_pair_command(
+            store=store,
+            context=context,
+            connect_url="https://hol.org/guard/connect",
+            runtime="openclaw",
+            pair_code="HLG-7K3D29",
+            label="Hosted OpenClaw",
+            no_root=True,
+        )
+
+
 def test_claim_remote_pairing_intent_surfaces_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_urlopen(_request, timeout=30):
         raise urllib.error.HTTPError(
