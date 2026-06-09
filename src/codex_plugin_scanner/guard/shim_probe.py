@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+SHIM_PROBE_ENV_VAR = "HOL_GUARD_SHIM_PROBE"
+SHIM_PROBE_ENV_VALUE = "1"
+
 _PACKAGE_SHIM_PROBE_ARGS: dict[str, tuple[str, ...]] = {
     "npm": ("install", "--dry-run", "lodash@4.17.21"),
     "npx": ("-y", "lodash@4.17.21"),
