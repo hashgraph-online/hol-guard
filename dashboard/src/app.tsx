@@ -11,6 +11,7 @@ import {
   fetchRequest,
   fetchInboxState,
   fetchSettings,
+  fetchGuardUpdateStatus,
   guardAwareHref,
   repairApprovalCenter,
   resolveRequestWithQueueResult,
@@ -229,6 +230,7 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [clearConfirm, setClearConfirm] = useState<{ harness?: string; all?: boolean } | null>(null);
   const [approvalGate, setApprovalGate] = useState<GuardApprovalGatePublicConfig | null>(null);
+  const [guardVersion, setGuardVersion] = useState<string | null>(null);
   const resolutionInFlight = useRef(false);
 
   useEffect(() => {
@@ -303,6 +305,13 @@ export function App() {
       .then((payload) => {
         if (!cancelled && payload.settings.approval_gate !== undefined) {
           setApprovalGate(payload.settings.approval_gate);
+        }
+      })
+      .catch(() => {});
+    fetchGuardUpdateStatus()
+      .then((status) => {
+        if (!cancelled && status.current_version) {
+          setGuardVersion(status.current_version);
         }
       })
       .catch(() => {});
@@ -766,7 +775,7 @@ export function App() {
               ? {
                   // TODO: GuardRuntimeSnapshot does not yet expose guard_version or protected_app_count.
                   // When those fields are added, populate them here instead of null/0.
-                  guardVersion: null,
+                  guardVersion: guardVersion,
                   cloudState: runtime.snapshot.cloud_state ?? "unknown",
                   cloudStateLabel: runtime.snapshot.cloud_state_label ?? "Unknown",
                   syncConfigured: runtime.snapshot.sync_configured ?? false,
