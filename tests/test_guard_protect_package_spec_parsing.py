@@ -55,6 +55,17 @@ def test_parse_protect_command_records_npm_registry_override_before_package() ->
     assert target.version == "1.2.3"
 
 
+def test_parse_protect_command_records_pip_pep508_direct_url_spec() -> None:
+    request = protect.parse_protect_command(
+        ["pip", "install", "requests @ https://files.example.com/requests-2.32.3.tar.gz"],
+    )
+
+    target = request.targets[0]
+    assert target.package_name == "requests"
+    assert target.version == "https://files.example.com/requests-2.32.3.tar.gz"
+    assert target.source_url == "https://files.example.com/requests-2.32.3.tar.gz"
+
+
 def test_parse_protect_command_records_pip_registry_override_before_package() -> None:
     request = protect.parse_protect_command(
         [
