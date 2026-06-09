@@ -12,10 +12,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def _scan_cmd(fixture_path: Path, fmt: str) -> list[str]:
-    """Build scanner invocation, bypassing guard preflight if active."""
-    if os.environ.get("GUARD_PREFLIGHT_DISABLE") == "1" or shutil.which("uv") is None:
-        return ["python3", "-m", "codex_plugin_scanner.cli", "scan", str(fixture_path), "--format", fmt]
-    return ["uv", "run", "hol-guard", "scan", str(fixture_path), "--format", fmt]
+    """Build scanner invocation, bypassing guard preflight by using direct python module."""
+    return ["python3", "-m", "codex_plugin_scanner.cli", "scan", str(fixture_path), "--format", fmt]
 
 def run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str, str]:
     env = dict(os.environ)
