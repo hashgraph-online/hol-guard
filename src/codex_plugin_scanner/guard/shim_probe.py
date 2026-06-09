@@ -52,9 +52,7 @@ def protect_evaluator_evidence(payload: dict[str, Any]) -> dict[str, object]:
     verdict_dict = verdict if isinstance(verdict, dict) else {}
     evidence_ids = supply_chain_dict.get("evidence_ids")
     normalized_evidence_ids = (
-        [str(item) for item in evidence_ids if item is not None]
-        if isinstance(evidence_ids, list)
-        else []
+        [str(item) for item in evidence_ids if item is not None] if isinstance(evidence_ids, list) else []
     )
     return {
         "evaluator_invoked": "supply_chain_evaluation" in payload or "verdict" in payload,
