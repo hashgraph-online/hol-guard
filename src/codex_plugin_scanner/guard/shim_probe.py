@@ -7,10 +7,12 @@ from typing import Any
 
 _PACKAGE_SHIM_PROBE_ARGS: dict[str, tuple[str, ...]] = {
     "npm": ("install", "--dry-run", "lodash@4.17.21"),
+    "npx": ("-y", "lodash@4.17.21"),
     "pnpm": ("add", "--dry-run", "lodash@4.17.21"),
     "yarn": ("add", "--dry-run", "lodash@4.17.21"),
     "bun": ("add", "--dry-run", "lodash@4.17.21"),
     "pip": ("install", "--dry-run", "requests==2.32.3"),
+    "pip3": ("install", "--dry-run", "requests==2.32.3"),
     "pip3": ("install", "--dry-run", "requests==2.32.3"),
     "uv": ("add", "--dry-run", "requests==2.32.3"),
     "poetry": ("add", "--dry-run", "requests@2.32.3"),
