@@ -41,8 +41,7 @@ def sync_dashboard_assets() -> dict[str, object] | None:
             "source_checkout": str(source_checkout),
             "dashboard_dir_found": False,
             "notes": [
-                "Source checkout found but no built dashboard assets. "
-                "Run `npm run build` in the dashboard directory.",
+                "Source checkout found but no built dashboard assets. Run `npm run build` in the dashboard directory.",
             ],
         }
 
