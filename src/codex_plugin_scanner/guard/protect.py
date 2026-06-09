@@ -288,6 +288,9 @@ def _merge_cached_advisory_into_package_payload(
         updated_receipt = {**receipt, "policy_decision": merged_action}
         updated_payload["receipt"] = updated_receipt
         if action_changed:
+            receipt_id = updated_receipt.get("receipt_id")
+            if isinstance(receipt_id, str) and receipt_id:
+                store.update_receipt_policy_decision(receipt_id, merged_action)
             request = payload.get("request")
             executor = request.get("executor") if isinstance(request, dict) else None
             install_kind = request.get("install_kind") if isinstance(request, dict) else None

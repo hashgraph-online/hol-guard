@@ -792,7 +792,16 @@ class TestGuardProtect:
         assert exit_code == 2
         assert payload["executed"] is False
         assert payload["verdict"]["action"] == "block"
+        assert payload["receipt"]["policy_decision"] == "block"
         assert any(item.get("id") == "adv-cached-block" for item in payload.get("matched_advisories", []))
+        stored_receipt = store.list_receipts(limit=1)[0]
+        assert stored_receipt["policy_decision"] == "block"
+        events = store.list_events(limit=10)
+        assert any(
+            event.get("event_name") == "install_time_block"
+            and event.get("payload", {}).get("cached_advisory_override") is True
+            for event in events
+        )
 
     def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator(
         self,

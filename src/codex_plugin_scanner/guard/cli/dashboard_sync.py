@@ -169,15 +169,12 @@ def _origin_urls_from_git_config(config_text: str) -> list[str]:
     in_origin = False
     for line in config_text.splitlines():
         stripped = line.strip()
-        section_match = re.fullmatch(r'\[remote "(.+)"\]', stripped)
-        if section_match is not None:
-            in_origin = section_match.group(1) == "origin"
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section_match = re.fullmatch(r'\[remote "(.+)"\]', stripped)
+            in_origin = section_match is not None and section_match.group(1) == "origin"
             continue
         if in_origin and stripped.startswith("url ="):
             urls.append(stripped.split("=", 1)[1].strip())
-            continue
-        if stripped.startswith("["):
-            in_origin = False
     return urls
 
 
