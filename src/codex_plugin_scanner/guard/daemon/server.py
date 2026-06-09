@@ -96,10 +96,12 @@ from ..local_supply_chain import (
     resolve_supply_chain_audit_workspace_dir,
 )
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
+from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
     package_firewall_available_actions,
     package_firewall_block_details,
+    package_firewall_operation_allowed,
 )
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
@@ -200,6 +202,9 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     active_stream_clients_lock: threading.Lock
     package_firewall_connect_state: dict[str, object] | None
     package_firewall_connect_state_lock: threading.Lock
+    package_firewall_action_rate_limiter: PackageFirewallActionRateLimiter
+    package_firewall_session_nonces: dict[str, float]
+    package_firewall_session_nonces_lock: threading.Lock
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -1914,10 +1919,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(response, status=status)
             return
         operation = "remove" if action == "uninstall" else action
+        if not self._enforce_package_firewall_rate_limit(operation, payload):
+            return
         entitlement = self._supply_chain_entitlement()
         context = self._supply_chain_context(payload)
         current_status = package_shim_status(context)
-        if operation not in {"repair", "remove"} and not bool(entitlement["allowed"]):
+        if not package_firewall_operation_allowed(
+            entitlement,
+            operation,
+            has_installed_managers=bool(current_status.get("installed_managers")),
+        ):
             status, error_code, message = package_firewall_block_details(entitlement)
             self._write_json(
                 {
@@ -1938,7 +1949,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": manager_error, "operation": operation}, status=400)
             return
         try:
-            if operation in {"install", "repair", "remove", "test"}:
+            if operation in {"install", "repair", "remove", "test", "sync"}:
                 require_high_risk(
                     self.server.store.guard_home,  # type: ignore[attr-defined]
                     purpose="supply_chain_firewall",
@@ -3443,6 +3454,54 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             path_parts,
         )
 
+    def _claim_string(self, claims: dict[str, object], *keys: str) -> str | None:
+        for key in keys:
+            value = self._optional_string(claims.get(key))
+            if value is not None:
+                return value
+        return None
+
+    def _enforce_package_firewall_rate_limit(
+        self,
+        operation: str,
+        payload: dict[str, object],
+    ) -> bool:
+        workspace_id = (
+            self._optional_string(payload.get("workspace_id"))
+            or self._optional_string(payload.get("workspaceId"))
+            or self.server.store.get_cloud_workspace_id()  # type: ignore[attr-defined]
+            or "local"
+        )
+        rate_key = f"{workspace_id}:{operation}"
+        allowed, retry_after = self.server.package_firewall_action_rate_limiter.allow(rate_key)  # type: ignore[attr-defined]
+        if allowed:
+            return True
+        self._write_json(
+            {
+                "error": "rate_limited",
+                "message": "Package firewall actions are temporarily rate limited.",
+                "operation": operation,
+                "retry_after_seconds": retry_after,
+            },
+            status=429,
+        )
+        return False
+
+    def _consume_dashboard_session_nonce(self, nonce: str) -> bool:
+        now = time.monotonic()
+        ttl_seconds = 600.0
+        with self.server.package_firewall_session_nonces_lock:  # type: ignore[attr-defined]
+            stale_before = now - ttl_seconds
+            stale_keys = [
+                key for key, seen_at in self.server.package_firewall_session_nonces.items() if seen_at <= stale_before
+            ]
+            for key in stale_keys:
+                del self.server.package_firewall_session_nonces[key]
+            if nonce in self.server.package_firewall_session_nonces:
+                return False
+            self.server.package_firewall_session_nonces[nonce] = now
+            return True
+
     def _supply_chain_dashboard_claims_authorize(
         self,
         claims: dict[str, object],
@@ -3457,12 +3516,35 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         if supply_chain_action != action_path and supply_chain_action not in allowed_actions:
             return False
+        claim_nonce = self._claim_string(claims, "nonce")
+        if claim_nonce is not None and not self._consume_dashboard_session_nonce(claim_nonce):
+            return False
         if payload is None:
             return supply_chain_action in {"package_shims_status", "supply_chain_bundle"}
-        workspace_id = self._optional_string(claims.get("workspace_id")) or ""
-        payload_workspace_id = self._optional_string(payload.get("workspace_id")) or ""
+        workspace_id = self._claim_string(claims, "workspace_id", "workspaceId") or ""
+        payload_workspace_id = (
+            self._optional_string(payload.get("workspace_id"))
+            or self._optional_string(payload.get("workspaceId"))
+            or ""
+        )
         if workspace_id and payload_workspace_id != workspace_id:
             return False
+        location_id = self._claim_string(claims, "location_id", "locationId")
+        payload_location_id = (
+            self._optional_string(payload.get("location_id")) or self._optional_string(payload.get("locationId")) or ""
+        )
+        if location_id and payload_location_id != location_id:
+            return False
+        daemon_origin = self._claim_string(claims, "daemon_origin", "daemonOrigin")
+        if daemon_origin is not None:
+            request_origin = self._normalize_origin(self.headers.get("Origin"))
+            payload_origin = (
+                self._optional_string(payload.get("daemon_origin"))
+                or self._optional_string(payload.get("daemonOrigin"))
+                or request_origin
+            )
+            if payload_origin != daemon_origin:
+                return False
         managers_claim = claims.get("managers")
         if not isinstance(managers_claim, list):
             return True
@@ -4133,6 +4215,9 @@ class GuardDaemonServer:
         self._server.active_stream_clients_lock = threading.Lock()
         self._server.package_firewall_connect_state = None
         self._server.package_firewall_connect_state_lock = threading.Lock()
+        self._server.package_firewall_action_rate_limiter = PackageFirewallActionRateLimiter()
+        self._server.package_firewall_session_nonces = {}
+        self._server.package_firewall_session_nonces_lock = threading.Lock()
         self.port = int(self._server.server_address[1])
         self._bundle_refresh_backoff_seconds = bundle_refresh_backoff_seconds
         self._bundle_refresh_interval_seconds = bundle_refresh_interval_seconds
