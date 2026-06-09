@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 
 from .launcher import merge_guard_launcher_env
 from .shim_probe import (
+    SHIM_PROBE_ENV_VALUE,
+    SHIM_PROBE_ENV_VAR,
     package_shim_probe_args,
     parse_protect_json_stdout,
     protect_evaluator_evidence,
@@ -731,6 +733,8 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "    sys.stderr.write(guard_process.stderr)",
             "if guard_process.returncode != 0:",
             "    raise SystemExit(guard_process.returncode)",
+            f"if os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}:",
+            "    raise SystemExit(0)",
             "path_entries = [entry for entry in os.environ.get('PATH', '').split(os.pathsep) if entry]",
             "shim_dir_abs = os.path.abspath(shim_dir)",
             "filtered_entries = [entry for entry in path_entries if os.path.abspath(entry) != shim_dir_abs]",
@@ -917,6 +921,8 @@ def probe_package_shim_intercepts(
             )
             continue
         probe_args = package_shim_probe_args(manager)
+        probe_env = dict(os.environ)
+        probe_env[SHIM_PROBE_ENV_VAR] = SHIM_PROBE_ENV_VALUE
         try:
             # codeql[py/path-injection] target_workspace is home_dir or a validated daemon workspace_dir.
             result = subprocess.run(
@@ -924,6 +930,7 @@ def probe_package_shim_intercepts(
                 capture_output=True,
                 check=False,
                 cwd=target_workspace,
+                env=probe_env,
                 text=True,
                 timeout=15,
             )

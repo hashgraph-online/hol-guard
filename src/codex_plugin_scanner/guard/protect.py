@@ -334,6 +334,7 @@ def parse_protect_command(command: list[str]) -> ProtectRequest:
         "pnpm": _parse_pnpm_request,
         "yarn": _parse_yarn_request,
         "pip": _parse_pip_request,
+        "pip3": _parse_pip_request,
         "uv": _parse_uv_request,
         "go": _parse_go_request,
         "claude": _parse_claude_request,

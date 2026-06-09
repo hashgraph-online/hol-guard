@@ -100,6 +100,7 @@ def test_package_shim_intercept_probe_records_evaluator_evidence(
     assert manager_result["evaluator_invoked"] is True
     assert manager_result["intercept_ran"] is True
     assert manager_result.get("protect_decision") in {"allow", "review", "block", "monitor"}
+    assert not (tmp_path / "npm-never-runs.json").exists()
 
 
 def test_package_shim_intercept_probe_marks_hung_manager_as_probe_failed(

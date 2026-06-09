@@ -61,6 +61,7 @@ def parse_package_intent(command_text: str, *, workspace: Path | None = None) ->
         "bun": _parse_bun_intent,
         "bunx": _parse_exec_intent,
         "pip": _parse_pip_intent,
+        "pip3": _parse_pip_intent,
         "pipx": _parse_pipx_intent,
         "uv": _parse_uv_intent,
         "uvx": _parse_exec_intent,

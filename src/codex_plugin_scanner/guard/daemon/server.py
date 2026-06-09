@@ -1938,7 +1938,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": manager_error, "operation": operation}, status=400)
             return
         try:
-            if operation in {"install", "repair", "remove"}:
+            if operation in {"install", "repair", "remove", "test"}:
                 require_high_risk(
                     self.server.store.guard_home,  # type: ignore[attr-defined]
                     purpose="supply_chain_firewall",
