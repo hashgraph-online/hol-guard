@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.cli.dashboard_sync import (
     _export_committed_static_files,
     _is_safe_committed_tree_path,
@@ -77,11 +79,26 @@ def test_verify_source_checkout_accepts_canonical_origin(tmp_path: Path) -> None
     assert verify_source_checkout(checkout) == checkout
 
 
-def test_is_safe_committed_tree_path_rejects_traversal_segments() -> None:
+@pytest.mark.parametrize(
+    "bad_path",
+    [
+        "src/static/../../evil.py",
+        "src/static/./hidden.js",
+        "/etc/passwd",
+        "src\\static\\evil.py",
+        "src/static/\x00evil.py",
+        "",
+        "src/static//double-slash",
+    ],
+)
+def test_is_safe_committed_tree_path_rejects_unsafe_paths(bad_path: str) -> None:
+    assert _is_safe_committed_tree_path(bad_path) is False
+
+
+def test_relative_static_path_rejects_traversal_suffix() -> None:
     static_prefix = "src/codex_plugin_scanner/guard/daemon/static"
     traversal_path = f"{static_prefix}/../../evil.py"
 
-    assert _is_safe_committed_tree_path(traversal_path) is False
     assert _relative_static_path(traversal_path, static_prefix) is None
 
 
@@ -253,4 +270,4 @@ def test_export_committed_static_files_rejects_git_tree_traversal(
     assert copied_count == 1
     assert (installed_static / "index.html").is_file()
     assert not (tmp_path / "evil.py").exists()
-    assert not (installed_static.parent / "evil.py").exists()
+    assert not (installed_static / "evil.py").exists()
