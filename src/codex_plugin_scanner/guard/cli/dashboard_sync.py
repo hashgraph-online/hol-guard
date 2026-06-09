@@ -13,6 +13,7 @@ from ..redaction import redact_sensitive_text
 _TRUSTED_REPO_SLUG = "hashgraph-online/hol-guard"
 _GIT_HOOKS_DISABLED = ("/dev/null",)
 _GIT_TIMEOUT_SECONDS = 10.0
+_RUN_PROCESS = subprocess.run
 
 
 def sync_dashboard_assets() -> dict[str, object] | None:
@@ -70,7 +71,7 @@ def sync_dashboard_assets() -> dict[str, object] | None:
             static_prefix=static_prefix,
             installed_static=installed_static,
         )
-    except OSError as error:
+    except (OSError, ValueError) as error:
         return {
             "source_checkout_found": True,
             "source_checkout": str(source_checkout),
@@ -212,7 +213,7 @@ def _git_head_exists(checkout: Path) -> bool:
 
 def _git_run(checkout: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
     try:
-        return subprocess.run(
+        return _RUN_PROCESS(
             [
                 "git",
                 "-c",
@@ -235,9 +236,10 @@ def _list_committed_static_files(checkout: Path, static_prefix: str) -> list[str
     if result is None or result.returncode != 0:
         return []
     files: list[str] = []
+    prefix = f"{static_prefix.rstrip('/')}/"
     for line in result.stdout.splitlines():
         relative = line.strip()
-        if relative == "" or relative.endswith("/"):
+        if relative == "" or relative.endswith("/") or not relative.startswith(prefix):
             continue
         files.append(relative)
     return files
@@ -248,6 +250,13 @@ def _read_committed_file(checkout: Path, relative_path: str) -> bytes | None:
     if result is None or result.returncode != 0:
         return None
     return result.stdout.encode("utf-8")
+
+
+def _relative_static_path(relative_path: str, static_prefix: str) -> Path | None:
+    normalized_prefix = static_prefix.rstrip("/")
+    if not relative_path.startswith(f"{normalized_prefix}/"):
+        return None
+    return Path(relative_path.removeprefix(f"{normalized_prefix}/"))
 
 
 def _export_committed_static_files(
@@ -261,7 +270,9 @@ def _export_committed_static_files(
         payload = _read_committed_file(source_checkout, relative_path)
         if payload is None:
             continue
-        relative_to_static = Path(relative_path).relative_to(static_prefix)
+        relative_to_static = _relative_static_path(relative_path, static_prefix)
+        if relative_to_static is None:
+            continue
         dest = installed_static / relative_to_static
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(payload)
