@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import PackageRequestEvaluation
 
@@ -30,26 +30,26 @@ REQUIRED_DECISION_EVIDENCE_FIELDS = (
 
 def validate_decision_evidence_v1(payload: Mapping[str, object]) -> list[str]:
     errors: list[str] = []
-    for field in REQUIRED_DECISION_EVIDENCE_FIELDS:
-        if field not in payload:
-            errors.append(f"missing field: {field}")
+    missing = {field for field in REQUIRED_DECISION_EVIDENCE_FIELDS if field not in payload}
+    for field in missing:
+        errors.append(f"missing field: {field}")
     contract_version = payload.get("contractVersion")
-    if contract_version != DECISION_EVIDENCE_CONTRACT_VERSION:
+    if "contractVersion" not in missing and contract_version != DECISION_EVIDENCE_CONTRACT_VERSION:
         errors.append(f"unexpected contractVersion: {contract_version!r}")
     decision = payload.get("decision")
-    if decision not in DECISION_VALUES:
+    if "decision" not in missing and decision not in DECISION_VALUES:
         errors.append(f"invalid decision: {decision!r}")
     recommendation = payload.get("recommendation")
     if recommendation not in DECISION_VALUES:
         errors.append(f"invalid recommendation: {recommendation!r}")
     enforcement = payload.get("enforcement")
-    if enforcement not in ENFORCEMENT_VALUES:
+    if "enforcement" not in missing and enforcement not in ENFORCEMENT_VALUES:
         errors.append(f"invalid enforcement: {enforcement!r}")
     entitlement_state = payload.get("entitlementState")
-    if entitlement_state not in ENTITLEMENT_VALUES:
+    if "entitlementState" not in missing and entitlement_state not in ENTITLEMENT_VALUES:
         errors.append(f"invalid entitlementState: {entitlement_state!r}")
     cache_status = payload.get("cacheStatus")
-    if cache_status not in CACHE_STATUS_VALUES:
+    if "cacheStatus" not in missing and cache_status not in CACHE_STATUS_VALUES:
         errors.append(f"invalid cacheStatus: {cache_status!r}")
     command_shape = payload.get("commandShape")
     if not isinstance(command_shape, dict):
@@ -104,6 +104,6 @@ def cloud_evaluate_response_to_decision_evidence_v1(
         "policyVersion": response.get("policyVersion"),
         "packageIntentHash": package_intent_hash,
         "commandShape": dict(command_shape),
-        "reasons": list(response.get("reasons", [])),
-        "evidenceIds": list(response.get("evidenceIds", [])),
+        "reasons": list(response.get("reasons") or []),
+        "evidenceIds": list(response.get("evidenceIds") or []),
     }

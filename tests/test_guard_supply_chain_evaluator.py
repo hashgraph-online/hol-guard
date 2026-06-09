@@ -340,6 +340,7 @@ def test_canonical_decision_order_prefers_cloud_over_signed_bundle(tmp_path: Pat
         )
     finally:
         server.shutdown()
+        server.server_close()
         thread.join(timeout=5)
 
     assert _EvaluateHandler.captured_requests

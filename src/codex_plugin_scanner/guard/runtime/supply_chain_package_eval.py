@@ -330,16 +330,24 @@ def evaluate_package_request_artifact(
             and bundle_evaluation.decision != "monitor"
             and isinstance(bundle_payload, dict)
         ):
-            store.cache_supply_chain_evaluation(
-                workspace_id=workspace_id or str(bundle_payload["bundle"]["workspaceId"]),
-                package_intent_hash=package_intent_hash,
-                feed_snapshot_hash=bundle_meta["feed_snapshot_hash"],
-                policy_hash=bundle_meta["policy_hash"],
-                scoring_version=bundle_meta["scoring_version"],
-                bundle_version=bundle_meta["bundle_version"],
-                decision=fallback.to_cache_dict(),
-                now=now_value,
-            )
+            cache_workspace_id = workspace_id
+            if cache_workspace_id is None:
+                bundle_section = bundle_payload.get("bundle")
+                if isinstance(bundle_section, dict):
+                    bundle_workspace_id = bundle_section.get("workspaceId")
+                    if isinstance(bundle_workspace_id, str) and bundle_workspace_id:
+                        cache_workspace_id = bundle_workspace_id
+            if cache_workspace_id:
+                store.cache_supply_chain_evaluation(
+                    workspace_id=cache_workspace_id,
+                    package_intent_hash=package_intent_hash,
+                    feed_snapshot_hash=bundle_meta["feed_snapshot_hash"],
+                    policy_hash=bundle_meta["policy_hash"],
+                    scoring_version=bundle_meta["scoring_version"],
+                    bundle_version=bundle_meta["bundle_version"],
+                    decision=fallback.to_cache_dict(),
+                    now=now_value,
+                )
         _persist_evidence(store=store, artifact=artifact, evaluation=fallback, now=now_value)
         if fallback.refresh_required:
             store.add_event(

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.contracts.supply_chain_decision_evidence_v1 import (
     DECISION_EVIDENCE_CONTRACT_VERSION,
     cloud_evaluate_response_to_decision_evidence_v1,
@@ -60,6 +62,38 @@ def _sample_evaluation() -> PackageRequestEvaluation:
         ),
         evidence_ids=(_evidence_id(package_intent_hash, package),),
     )
+
+
+def test_decision_evidence_validation_reports_missing_fields_once() -> None:
+    errors = validate_decision_evidence_v1({})
+    assert errors.count("missing field: decision") == 1
+    assert "invalid decision: None" not in errors
+
+
+def test_cloud_evaluate_response_handles_null_reason_and_evidence_lists() -> None:
+    payload = cloud_evaluate_response_to_decision_evidence_v1(
+        {
+            "decision": "monitor",
+            "recommendation": "monitor",
+            "enforcement": "premium_cloud",
+            "entitlementState": "premium",
+            "cacheStatus": "miss",
+            "policyVersion": "policy-hash-1",
+            "reasons": None,
+            "evidenceIds": None,
+        },
+        package_intent_hash="intent-hash-1",
+        command_shape={
+            "argCount": 1,
+            "flags": [],
+            "packageManager": "npm",
+            "redacted": True,
+            "verb": "install",
+        },
+    )
+
+    assert payload["reasons"] == []
+    assert payload["evidenceIds"] == []
 
 
 def test_decision_evidence_contract_schema_accepts_shared_fields() -> None:
@@ -170,6 +204,8 @@ def test_redacted_command_shape_parity_matches_portal_contract_fields() -> None:
             / "v1"
             / "supply-chain.ts"
         )
+    if not portal_contract_path.exists():
+        pytest.skip("hol-points-portal contract file not found")
     contract_text = portal_contract_path.read_text(encoding="utf-8")
     for field in ("argCount", "flags", "packageManager", "redacted", "verb"):
         assert field in contract_text
