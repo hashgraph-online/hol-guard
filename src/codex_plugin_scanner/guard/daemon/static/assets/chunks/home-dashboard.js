@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, E as EvidenceInsightsShareButton, G as GuardStatMetric, i as HomeInsightsMetrics, k as EvidenceActivityHeatmapMini, l as fetchReceiptAnalytics, m as harnessDisplayName, n as isDisplayableHarness, o as EmptyState, p as EvidenceInsightsShareModal, q as GuardHero, s as formatNumber, t as HiMiniSparkles, u as HiMiniXMark, v as HiMiniCloud, w as HiMiniQuestionMarkCircle, x as useFocusTrap, y as HiMiniBolt, B as Badge, z as HiMiniChevronRight, C as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, H as HiMiniShieldCheck, a as HiMiniInformationCircle, b as HiMiniExclamationTriangle, S as SectionLabel, A as ActionButton, c as HiMiniArrowRight, T as Tag, f as formatRelativeTime, d as HiMiniChevronUp, e as HiMiniChevronDown, g as HiMiniCheckCircle, h as HiMiniXCircle, i as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, k as HomeInsightsMetrics, l as EvidenceActivityHeatmapMini, m as fetchReceiptAnalytics, n as harnessDisplayName, o as isDisplayableHarness, p as EmptyState, q as EvidenceInsightsShareModal, s as GuardHero, t as formatNumber, u as HiMiniSparkles, v as HiMiniXMark, w as HiMiniCloud, x as HiMiniQuestionMarkCircle, y as useFocusTrap, z as HiMiniBolt, B as Badge, C as HiMiniChevronRight, D as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { D as DeviceProofCard, r as resolveCloudIntelCopy } from "./runtime-overview.js";
 function resolveHomeProtectionStatus(snapshot) {
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -234,6 +234,10 @@ function EvidenceInsightsHomePreview({
   const insightsAvailable = analytics !== null && analytics.total > 0;
   const showInsightsSection = analyticsLoading || insightsAvailable;
   const showInsightsFooter = Boolean(onOpenInsights) && (analyticsLoading || insightsAvailable);
+  const miniHeatmapDays = analytics?.daily_activity?.slice(-5).map((day) => ({
+    date: day.date_key,
+    level: getHeatmapLevel(day.total, analytics?.peak_day_total || 1)
+  })) ?? [];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
@@ -256,8 +260,8 @@ function EvidenceInsightsHomePreview({
     showInsightsSection ? analyticsLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx(HomeInsightsSkeleton, {}) : analytics !== null && analytics.total > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HomeInsightsMetrics, { analytics }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-5 py-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent Activity" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceActivityHeatmapMini, { days: analytics.daily_activity, dayCount: 5 }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last 5 days" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceActivityHeatmapMini, { cells: miniHeatmapDays }) })
       ] })
     ] }) : null : null,
     showInsightsFooter ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: insightsAvailable && onOpenInsights ? /* @__PURE__ */ jsxRuntimeExports.jsx(

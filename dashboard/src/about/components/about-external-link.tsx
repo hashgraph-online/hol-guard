@@ -45,9 +45,10 @@ export function AboutExternalLink({
       rel={safe.rel}
       onClick={handleClick}
       className={[
-        `inline-flex items-center gap-1 transition-colors hover:text-brand-blue`,
-        `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2`,
+        `inline-flex items-center gap-1 transition-colors`,
+        className?.includes("hover:") ? "" : "hover:text-brand-blue",
         className ?? "",
+        `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2`,
       ].join(" ")}
     >
       {children}
