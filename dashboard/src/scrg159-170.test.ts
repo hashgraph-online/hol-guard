@@ -253,6 +253,33 @@ const blockedItem = auditWithBlocked.find((r) => r.id === `blocked-${blockedRece
 assert(blockedItem !== undefined, "SCRG162-G: blocked receipt should appear in audit");
 assert(blockedItem!.severity === "medium", "SCRG162-H: blocked receipt should be medium");
 
+const workspaceAuditReceipt = {
+  ...makeReceipt("block", receiptNow),
+  harness: "package-firewall",
+  artifact_name: "Workspace supply-chain audit",
+  capabilities_summary: "Workspace audit completed with block decision across 3 packages.",
+  scanner_evidence: [
+    {
+      operation: "audit",
+      audit_decision: "block",
+      blocked_package_count: 1,
+      manifest_paths: ["package.json"],
+      lockfile_paths: ["package-lock.json"],
+      total_packages: 3,
+    },
+  ],
+};
+const auditWithWorkspaceScan = deriveFrontendAuditResults([workspaceAuditReceipt], baseSnapshot);
+const workspaceAuditItem = auditWithWorkspaceScan.find(
+  (result) => result.id === `workspace-audit-${workspaceAuditReceipt.receipt_id}`,
+);
+assert(workspaceAuditItem !== undefined, "SCRG162-I: workspace audit receipt should render in audit tab");
+assert(workspaceAuditItem!.severity === "high", "SCRG162-J: blocked workspace audit should be high severity");
+assert(
+  workspaceAuditItem!.detail.includes("Workspace audit completed"),
+  "SCRG162-K: workspace audit detail should summarize the receipt",
+);
+
 const policies = [makePolicy("claude"), makePolicy("claude"), makePolicy("cursor")];
 const grouped = groupPoliciesByHarness(policies);
 assert(grouped.get("claude")?.length === 2, "SCRG164-A: 2 claude policies");

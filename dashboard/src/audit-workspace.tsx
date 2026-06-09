@@ -45,6 +45,23 @@ export type AuditRemediationRequest = {
   label: string;
 };
 
+function isSupplyChainAuditEvidence(value: unknown): value is Record<string, unknown> & { operation: "audit" } {
+  return typeof value === "object" && value !== null && (value as Record<string, unknown>).operation === "audit";
+}
+
+function auditSeverityForDecision(decision: string, blockedCount: number): AuditSeverity {
+  if (decision === "block" || blockedCount > 0) {
+    return "high";
+  }
+  if (decision === "ask") {
+    return "medium";
+  }
+  if (decision === "warn") {
+    return "medium";
+  }
+  return "info";
+}
+
 export type AuditFilterState = {
   severityFilter: AuditSeverity | "all";
   harnessFilter: string;
@@ -111,6 +128,60 @@ export function deriveFrontendAuditResults(
       remediationAction: null,
       resolved: true,
       evidenceHref: `/evidence?${evidenceParams.toString()}`,
+    });
+  }
+
+  for (const receipt of receipts) {
+    if (receipt.harness !== "package-firewall") {
+      continue;
+    }
+    const evidence = receipt.scanner_evidence?.find(isSupplyChainAuditEvidence);
+    if (evidence === undefined) {
+      continue;
+    }
+    const decision =
+      typeof evidence.audit_decision === "string" ? evidence.audit_decision : "monitor";
+    const blockedCount =
+      typeof evidence.blocked_package_count === "number" ? evidence.blocked_package_count : 0;
+    const totalPackages =
+      typeof evidence.total_packages === "number" ? evidence.total_packages : blockedCount;
+    const manifestPaths = Array.isArray(evidence.manifest_paths)
+      ? evidence.manifest_paths.filter((entry): entry is string => typeof entry === "string")
+      : [];
+    const lockfilePaths = Array.isArray(evidence.lockfile_paths)
+      ? evidence.lockfile_paths.filter((entry): entry is string => typeof entry === "string")
+      : [];
+    const inventorySummary = [
+      manifestPaths.length > 0 ? `${manifestPaths.length} manifest(s)` : null,
+      lockfilePaths.length > 0 ? `${lockfilePaths.length} lockfile(s)` : null,
+      `${totalPackages} package(s)`,
+    ]
+      .filter((entry): entry is string => entry !== null)
+      .join(", ");
+    results.push({
+      id: `workspace-audit-${receipt.receipt_id}`,
+      severity: auditSeverityForDecision(decision, blockedCount),
+      title:
+        decision === "block"
+          ? "Workspace audit found blocked packages"
+          : decision === "ask"
+            ? "Workspace audit needs review"
+            : "Workspace audit completed",
+      detail:
+        receipt.capabilities_summary ||
+        `Guard scanned ${inventorySummary} and returned a ${decision} decision.`,
+      harness: "package-firewall",
+      workspace: receipt.source_scope,
+      timestamp: receipt.timestamp,
+      remediation:
+        blockedCount > 0
+          ? "Review blocked packages in Evidence and update lockfiles before retrying installs."
+          : decision === "ask"
+            ? "Review flagged packages and repair lockfiles before continuing."
+            : "Re-run workspace audit after dependency changes.",
+      remediationAction: null,
+      resolved: decision === "monitor" && blockedCount === 0,
+      evidenceHref: `/evidence?harness=package-firewall&search=${encodeURIComponent(receipt.receipt_id)}`,
     });
   }
 

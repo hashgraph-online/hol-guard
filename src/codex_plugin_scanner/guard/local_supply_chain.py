@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 import threading
@@ -16,6 +17,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
+
+from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
 
 from .adapters.base import HarnessContext
 from .config import GuardConfig, resolve_risk_action
@@ -145,6 +148,17 @@ _SEVERITY_RANK = {
 _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
 _PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
+_AUDIT_SENSITIVE_BASENAMES = frozenset(
+    {
+        ".env",
+        ".env.local",
+        ".env.development",
+        ".env.production",
+        ".env.test",
+        ".envrc",
+    }
+)
+_KNOWN_UNSUPPORTED_LOCKFILE_BASENAMES = frozenset({"bun.lockb"})
 
 
 def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
@@ -327,6 +341,144 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
     return resolve_package_firewall_entitlement(store)
 
 
+def _is_audit_sensitive_basename(name: str) -> bool:
+    lowered = name.lower()
+    return lowered in _AUDIT_SENSITIVE_BASENAMES or lowered.startswith(".env.")
+
+
+def _read_workspace_audit_text(workspace_dir: Path, relative_path: str) -> str | None:
+    if _is_audit_sensitive_basename(Path(relative_path).name):
+        return None
+    disk_path = workspace_dir / relative_path
+    try:
+        return disk_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _workspace_has_project_markers(workspace_dir: Path) -> bool:
+    try:
+        resolved = workspace_dir.resolve()
+    except OSError:
+        return False
+    return any((resolved / marker).exists() for marker in _MANIFEST_CANDIDATES)
+
+
+def resolve_supply_chain_audit_workspace_dir(
+    *,
+    workspace_dir_value: object,
+    workspace_value: object,
+    allowed_roots: tuple[Path, ...],
+) -> Path | None:
+    for candidate in (workspace_dir_value, workspace_value):
+        if isinstance(candidate, str):
+            resolved = resolve_path_within_allowed_roots(
+                candidate,
+                allowed_roots,
+                require_exists=True,
+            )
+            if resolved is not None:
+                return resolved
+    cursor_project = os.environ.get("CURSOR_PROJECT_DIR", "").strip()
+    if cursor_project:
+        resolved = resolve_path_within_allowed_roots(
+            cursor_project,
+            allowed_roots,
+            require_exists=True,
+        )
+        if resolved is not None and _workspace_has_project_markers(resolved):
+            return resolved
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        return None
+    if not _workspace_has_project_markers(cwd):
+        return None
+    for root in allowed_roots:
+        if resolves_within_root(root, cwd, require_exists=True):
+            return cwd
+    return None
+
+
+def _audit_lockfile_warnings(
+    workspace_dir: Path,
+    lockfile_paths: tuple[str, ...],
+) -> tuple[dict[str, object], ...]:
+    warnings: list[dict[str, object]] = []
+    for lockfile_path in lockfile_paths:
+        lockfile_name = Path(lockfile_path).name
+        disk_path = workspace_dir / lockfile_path
+        if not disk_path.exists():
+            continue
+        if lockfile_name in _KNOWN_UNSUPPORTED_LOCKFILE_BASENAMES:
+            warnings.append(
+                {
+                    "code": "bun_lockfile_binary_fallback",
+                    "message": (
+                        "Guard detected bun.lockb but Bun stores it as a binary lockfile, so audit "
+                        "fell back to manifest-only monitoring."
+                    ),
+                    "path": lockfile_path,
+                }
+            )
+            continue
+        if lockfile_name not in _ECOSYSTEM_BY_LOCKFILE:
+            continue
+        lockfile_text = _read_workspace_audit_text(workspace_dir, lockfile_path)
+        if lockfile_text is None:
+            warnings.append(
+                {
+                    "code": "lockfile_unreadable",
+                    "message": f"Guard could not read {lockfile_name} for workspace audit.",
+                    "path": lockfile_path,
+                }
+            )
+            continue
+        dependency_map = parse_manifest_dependencies(path=lockfile_path, text=lockfile_text)
+        if not dependency_map:
+            warnings.append(
+                {
+                    "code": "lockfile_parse_warning",
+                    "message": f"Guard could not parse {lockfile_name} for workspace audit.",
+                    "path": lockfile_path,
+                }
+            )
+    return tuple(warnings)
+
+
+def audit_receipt_metadata(result: dict[str, object]) -> dict[str, object]:
+    evaluation = result.get("evaluation")
+    if not isinstance(evaluation, dict):
+        return {}
+    decision = str(evaluation.get("decision") or "monitor")
+    packages = evaluation.get("packages")
+    package_items = [item for item in packages if isinstance(item, dict)] if isinstance(packages, list) else []
+    blocked_packages = [item for item in package_items if str(item.get("decision") or "") == "block"]
+    policy_decision = "allow"
+    if decision == "block":
+        policy_decision = "block"
+    elif decision == "ask":
+        policy_decision = "ask"
+    inventory = result.get("inventory")
+    inventory_summary = inventory if isinstance(inventory, dict) else {}
+    return {
+        "policy_decision": policy_decision,
+        "capabilities_summary": (
+            f"Workspace audit completed with {decision} decision across "
+            f"{inventory_summary.get('total_packages', len(package_items))} packages."
+        ),
+        "artifact_name": "Workspace supply-chain audit",
+        "scanner_evidence": {
+            "operation": "audit",
+            "audit_decision": decision,
+            "blocked_package_count": len(blocked_packages),
+            "lockfile_paths": list(result.get("lockfile_paths") or ()),
+            "manifest_paths": list(result.get("manifest_paths") or ()),
+            "total_packages": inventory_summary.get("total_packages", len(package_items)),
+        },
+    }
+
+
 def build_workspace_scan_payload(
     *,
     store: GuardStore,
@@ -453,6 +605,9 @@ def build_workspace_audit_payload(
         "evaluation": evaluation,
         "supply_chain": posture,
     }
+    lockfile_warnings = _audit_lockfile_warnings(target_workspace_dir, lockfile_paths)
+    if lockfile_warnings:
+        payload["lockfile_warnings"] = list(lockfile_warnings)
     if diff_summary is not None:
         payload["diff"] = diff_summary
     if fallback_reason is not None:
@@ -950,10 +1105,8 @@ def _workspace_inventory_from_paths(
         ecosystem = _ECOSYSTEM_BY_MANIFEST.get(Path(manifest_path).name)
         if ecosystem is None:
             continue
-        disk_path = workspace_dir / manifest_path
-        try:
-            manifest_text = disk_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        manifest_text = _read_workspace_audit_text(workspace_dir, manifest_path)
+        if manifest_text is None:
             continue
         for package_name, version in parse_manifest_dependencies(path=manifest_path, text=manifest_text).items():
             namespace, name = _split_namespace_name(package_name)
@@ -972,10 +1125,8 @@ def _workspace_inventory_from_paths(
         ecosystem = _ECOSYSTEM_BY_LOCKFILE.get(Path(lockfile_path).name)
         if ecosystem is None:
             continue
-        disk_path = workspace_dir / lockfile_path
-        try:
-            lockfile_text = disk_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        lockfile_text = _read_workspace_audit_text(workspace_dir, lockfile_path)
+        if lockfile_text is None:
             continue
         for package_name, version in parse_manifest_dependencies(path=lockfile_path, text=lockfile_text).items():
             namespace, name = _split_namespace_name(package_name)
@@ -1365,17 +1516,18 @@ def _workspace_audit_lockfile_context(
     lockfile_path = workspace_dir / lockfile_paths[0]
     if not lockfile_path.exists():
         return None
-    try:
-        lockfile_text = lockfile_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    lockfile_text = _read_workspace_audit_text(workspace_dir, lockfile_paths[0])
+    if lockfile_text is None:
         return None
     manifest_hash = None
     if manifest_paths:
         manifest_path = workspace_dir / manifest_paths[0]
         try:
-            manifest_hash = stable_digest_hex(manifest_path.read_bytes())
+            manifest_bytes = manifest_path.read_bytes()
         except OSError:
-            manifest_hash = None
+            manifest_bytes = None
+        if manifest_bytes is not None and not _is_audit_sensitive_basename(manifest_path.name):
+            manifest_hash = stable_digest_hex(manifest_bytes)
     return {
         "dependencyCount": len(inventory),
         "fileName": lockfile_path.name,
