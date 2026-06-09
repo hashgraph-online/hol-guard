@@ -119,7 +119,7 @@ from ..shims import (
     activate_package_shims,
     package_shim_status,
     package_shim_supported_managers,
-    test_package_shim_intercepts,
+    probe_package_shim_intercepts,
     uninstall_package_shims,
 )
 from ..stable_digest import stable_digest_hex
@@ -1980,7 +1980,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if operation == "remove":
             return uninstall_package_shims(context, managers=managers)
         if operation == "test":
-            return test_package_shim_intercepts(
+            return probe_package_shim_intercepts(
                 context,
                 managers=managers,
                 workspace_dir=context.workspace_dir,
