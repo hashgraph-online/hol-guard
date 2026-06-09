@@ -88,6 +88,11 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
         ),
         "*****",
     ),
+    (
+        "remote-pairing-code",
+        re.compile(r"\bHLG-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}\b"),
+        "HLG-******",
+    ),
 )
 
 _SENSITIVE_INLINE_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = (

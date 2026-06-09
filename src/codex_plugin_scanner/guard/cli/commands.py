@@ -220,6 +220,11 @@ from .install_commands import (
     uninstall_confirmation_token,
 )
 from .product import build_guard_start_payload, build_guard_status_payload
+from .remote_pair_flow import (
+    build_remote_pair_status_payload,
+    redact_remote_pairing_text,
+    run_guard_remote_pair_command,
+)
 from .update_commands import run_guard_update
 
 DEFAULT_GUARD_APPS_URL = "https://hol.org/guard/apps"
@@ -402,7 +407,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         metavar=(
             "{start,status,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
             "receipts,inventory,abom,approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,"
-            "disconnect,"
+            "remote-pair,disconnect,"
             "login,sync,device,bridge}"
         ),
     )
@@ -895,6 +900,33 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         help="Alias for --headless. Start Device Code approval without opening a browser.",
     )
     connect_parser.add_argument("--json", action="store_true")
+
+    remote_pair_parser = guard_subparsers.add_parser(
+        "remote-pair",
+        help="Pair a hosted OpenClaw or Hermes runtime with a Guard Cloud pairing code",
+    )
+    remote_pair_parser.add_argument(
+        "remote_pair_command",
+        nargs="?",
+        choices=("status",),
+        help="Inspect remote pairing status without claiming a new code",
+    )
+    remote_pair_parser.add_argument("--runtime", choices=("openclaw", "hermes"))
+    remote_pair_parser.add_argument("--pair-code")
+    remote_pair_parser.add_argument("--label")
+    remote_pair_parser.add_argument(
+        "--no-root",
+        action="store_true",
+        help="Install and pair using user-space paths only; refuse root or sudo sessions",
+    )
+    remote_pair_parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Run the first Guard Cloud sync after pairing succeeds",
+    )
+    remote_pair_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
+    _add_guard_common_args(remote_pair_parser)
+    remote_pair_parser.add_argument("--json", action="store_true")
 
     disconnect_parser = guard_subparsers.add_parser(
         "disconnect",
@@ -2566,6 +2598,49 @@ def run_guard_command(
             return exit_code
         _emit("connect", payload, getattr(args, "json", False))
         return exit_code
+
+    if args.guard_command == "remote-pair":
+        if getattr(args, "remote_pair_command", None) == "status":
+            payload = build_remote_pair_status_payload(store=store, context=context)
+            _emit("remote-pair", payload, getattr(args, "json", False))
+            return 0
+
+        runtime = getattr(args, "runtime", None)
+        pair_code = getattr(args, "pair_code", None)
+        if not isinstance(runtime, str) or not runtime.strip():
+            print("remote-pair requires --runtime openclaw|hermes.", file=sys.stderr)
+            return 2
+        if not isinstance(pair_code, str) or not pair_code.strip():
+            print("remote-pair requires --pair-code.", file=sys.stderr)
+            return 2
+
+        try:
+            payload = run_guard_remote_pair_command(
+                store=store,
+                context=context,
+                connect_url=args.connect_url,
+                runtime=runtime.strip(),
+                pair_code=pair_code,
+                label=getattr(args, "label", None),
+                no_root=bool(getattr(args, "no_root", False)),
+                now=_now(),
+            )
+        except ValueError as error:
+            print(redact_remote_pairing_text(str(error)), file=sys.stderr)
+            return 2
+        except (RuntimeError, urllib.error.URLError, http.client.HTTPException) as error:
+            print(redact_remote_pairing_text(str(error)), file=sys.stderr)
+            return 1
+
+        if bool(getattr(args, "verify", False)):
+            payload = _finalize_guard_connect_payload(
+                store=store,
+                connect_url=args.connect_url,
+                payload=payload,
+                now=_now(),
+            )
+        _emit("remote-pair", payload, getattr(args, "json", False))
+        return 0
 
     if args.guard_command == "connect":
         connect_subcommand = getattr(args, "connect_command", None)
