@@ -62,6 +62,26 @@ function auditSeverityForDecision(decision: string, blockedCount: number): Audit
   return "info";
 }
 
+function workspaceAuditTitle(decision: string): string {
+  if (decision === "block") {
+    return "Workspace audit found blocked packages";
+  }
+  if (decision === "ask") {
+    return "Workspace audit needs review";
+  }
+  return "Workspace audit completed";
+}
+
+function workspaceAuditRemediation(decision: string, blockedCount: number): string {
+  if (blockedCount > 0) {
+    return "Review blocked packages in Evidence and update lockfiles before retrying installs.";
+  }
+  if (decision === "ask") {
+    return "Review flagged packages and repair lockfiles before continuing.";
+  }
+  return "Re-run workspace audit after dependency changes.";
+}
+
 export type AuditFilterState = {
   severityFilter: AuditSeverity | "all";
   harnessFilter: string;
@@ -161,24 +181,14 @@ export function deriveFrontendAuditResults(
     results.push({
       id: `workspace-audit-${receipt.receipt_id}`,
       severity: auditSeverityForDecision(decision, blockedCount),
-      title:
-        decision === "block"
-          ? "Workspace audit found blocked packages"
-          : decision === "ask"
-            ? "Workspace audit needs review"
-            : "Workspace audit completed",
+      title: workspaceAuditTitle(decision),
       detail:
         receipt.capabilities_summary ||
         `Guard scanned ${inventorySummary} and returned a ${decision} decision.`,
       harness: "package-firewall",
       workspace: receipt.source_scope,
       timestamp: receipt.timestamp,
-      remediation:
-        blockedCount > 0
-          ? "Review blocked packages in Evidence and update lockfiles before retrying installs."
-          : decision === "ask"
-            ? "Review flagged packages and repair lockfiles before continuing."
-            : "Re-run workspace audit after dependency changes.",
+      remediation: workspaceAuditRemediation(decision, blockedCount),
       remediationAction: null,
       resolved: decision === "monitor" && blockedCount === 0,
       evidenceHref: `/evidence?harness=package-firewall&search=${encodeURIComponent(receipt.receipt_id)}`,
