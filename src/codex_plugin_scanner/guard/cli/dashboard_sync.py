@@ -1,21 +1,23 @@
+"""Dashboard asset sync helpers with trusted-source verification."""
+
+from __future__ import annotations
+
+import importlib.util
+import re
+import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
 
 from ..redaction import redact_sensitive_text
 
+_TRUSTED_REPO_SLUG = "hashgraph-online/hol-guard"
+_GIT_HOOKS_DISABLED = ("/dev/null",)
+_GIT_TIMEOUT_SECONDS = 10.0
+_RUN_PROCESS = subprocess.run
+
 
 def sync_dashboard_assets() -> dict[str, object] | None:
-    """Copy pre-built dashboard assets from a local source checkout to the installed package.
-
-    When HOL Guard is installed from PyPI/uv/pipx, the wheel may not include the latest
-    dashboard Vite build. This function detects a local source checkout and copies the
-    already-built assets into the installed package's static directory so the running
-    daemon serves fresh UI. No build step is performed; run ``npm run build`` in the
-    dashboard directory first if assets are stale.
-    """
-    import importlib.util
-    import shutil
-
-    # Find the installed package's static directory
+    """Copy committed dashboard assets from a verified hol-guard checkout."""
     spec = importlib.util.find_spec("codex_plugin_scanner.guard.daemon.server")
     if spec is None or spec.origin is None:
         return None
@@ -26,7 +28,6 @@ def sync_dashboard_assets() -> dict[str, object] | None:
     except OSError:
         return None
 
-    # Find a local source checkout by walking up from cwd looking for hol-guard/dashboard
     try:
         source_checkout = find_source_checkout()
     except OSError:
@@ -34,40 +35,25 @@ def sync_dashboard_assets() -> dict[str, object] | None:
     if source_checkout is None:
         return {"source_checkout_found": False, "installed_static": str(installed_static)}
 
-    try:
-        dashboard_dir = source_checkout / "dashboard"
-        source_static = dashboard_dir / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "static"
-        # Fallback: if the repo builds into src/codex_plugin_scanner/guard/daemon/static
-        if not source_static.is_dir():
-            source_static = source_checkout / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "static"
-        if not source_static.is_dir():
-            return {
-                "source_checkout_found": True,
-                "source_checkout": str(source_checkout),
-                "dashboard_dir_found": False,
-                "notes": [
-                    "Source checkout found but no built dashboard assets. "
-                    "Run `npm run build` in the dashboard directory.",
-                ],
-            }
-    except OSError as error:
+    source_static = _resolve_source_static(source_checkout)
+    if source_static is None:
         return {
             "source_checkout_found": True,
             "source_checkout": str(source_checkout),
-            "copied": False,
-            "error": redact_sensitive_text(str(error)),
-            "notes": ["Dashboard asset sync failed due to file system error."],
+            "dashboard_dir_found": False,
+            "notes": [
+                "Source checkout found but no built dashboard assets. Run `npm run build` in the dashboard directory.",
+            ],
         }
 
-    # Compare source vs installed to decide if copy is needed
-    source_index = source_static / "index.html"
+    static_prefix = source_static.relative_to(source_checkout).as_posix()
     installed_index = installed_static / "index.html"
     needs_copy = True
     try:
-        if installed_index.is_file() and source_index.is_file():
-            installed_mtime = installed_index.stat().st_mtime
-            source_mtime = source_index.stat().st_mtime
-            needs_copy = source_mtime > installed_mtime
+        if installed_index.is_file():
+            committed_index = _read_committed_file(source_checkout, f"{static_prefix}/index.html")
+            if committed_index is not None:
+                needs_copy = committed_index != installed_index.read_bytes()
     except OSError:
         needs_copy = True
 
@@ -79,24 +65,29 @@ def sync_dashboard_assets() -> dict[str, object] | None:
             "reason": "installed assets are already up to date",
         }
 
-    # Copy all files from source static to installed static
-    copied_count = 0
     try:
-        for src_file in source_static.rglob("*"):
-            if not src_file.is_file():
-                continue
-            relative = src_file.relative_to(source_static)
-            dest = installed_static / relative
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_file, dest)
-            copied_count += 1
-    except OSError as error:
+        copied_count = _export_committed_static_files(
+            source_checkout=source_checkout,
+            static_prefix=static_prefix,
+            installed_static=installed_static,
+        )
+    except (OSError, ValueError) as error:
         return {
             "source_checkout_found": True,
             "source_checkout": str(source_checkout),
             "copied": False,
             "error": redact_sensitive_text(str(error)),
             "notes": ["Dashboard asset sync failed. The daemon may serve stale UI."],
+        }
+    if copied_count == 0:
+        return {
+            "source_checkout_found": True,
+            "source_checkout": str(source_checkout),
+            "dashboard_dir_found": False,
+            "notes": [
+                "Trusted checkout found but no committed dashboard assets at HEAD. "
+                "Commit a dashboard build before syncing.",
+            ],
         }
 
     return {
@@ -105,18 +96,12 @@ def sync_dashboard_assets() -> dict[str, object] | None:
         "installed_static": str(installed_static),
         "copied": True,
         "copied_files": copied_count,
-        "notes": [f"Synced {copied_count} dashboard asset files to the installed package."],
+        "notes": [f"Synced {copied_count} committed dashboard asset files to the installed package."],
     }
 
 
 def find_source_checkout() -> Path | None:
-    """Return a local hol-guard source checkout if one is detected nearby.
-
-    Security: Only returns a directory after VCS verification proves it is the
-    real hashgraph-online/hol-guard repository. Trivial directory markers like
-    dashboard/package.json and src/codex_plugin_scanner are NOT sufficient on
-    their own because any untrusted project can create them.
-    """
+    """Return a verified local hol-guard checkout near the current working directory."""
     try:
         cwd = Path.cwd().resolve()
     except OSError:
@@ -126,7 +111,6 @@ def find_source_checkout() -> Path | None:
         checkout = verify_source_checkout(candidate)
         if checkout is not None:
             return checkout
-    # Check one level deeper for repo roots that may contain hol-guard as a sub-project
     for candidate in candidates:
         try:
             for sub in candidate.iterdir():
@@ -141,26 +125,14 @@ def find_source_checkout() -> Path | None:
     return None
 
 
-_TRUSTED_REPO_KEYWORDS = ("hashgraph-online/hol-guard",)
-
-
 def verify_source_checkout(path: Path) -> Path | None:
-    """Verify a candidate directory is the real hol-guard source checkout.
-
-    Returns *path* only when:
-    - It contains the expected source tree markers.
-    - It is a git repository whose remotes reference the trusted upstream.
-
-    Security: This function reads ``.git/config`` directly instead of executing
-    ``git`` in the candidate directory to avoid triggering repository-local Git
-    hooks or configuration that could lead to arbitrary code execution.
-    """
+    """Accept only the canonical hol-guard GitHub origin and source tree markers."""
     try:
         if not (path / "dashboard" / "package.json").is_file():
             return None
         if not (path / "src" / "codex_plugin_scanner").is_dir():
             return None
-        if not (path / ".git").is_dir():
+        if not (path / ".git").exists():
             return None
     except OSError:
         return None
@@ -173,7 +145,150 @@ def verify_source_checkout(path: Path) -> Path | None:
     except OSError:
         return None
 
-    if not any(kw in remote_text for kw in _TRUSTED_REPO_KEYWORDS):
+    origin_urls = _origin_urls_from_git_config(remote_text)
+    if not any(_is_trusted_hol_guard_origin(url) for url in origin_urls):
+        return None
+    if not _git_head_exists(path):
+        return None
+    return path
+
+
+def _resolve_source_static(checkout: Path) -> Path | None:
+    dashboard_dir = checkout / "dashboard"
+    source_static = dashboard_dir / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "static"
+    if source_static.is_dir():
+        return source_static
+    fallback = checkout / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "static"
+    if fallback.is_dir():
+        return fallback
+    return None
+
+
+def _origin_urls_from_git_config(config_text: str) -> list[str]:
+    urls: list[str] = []
+    in_origin = False
+    for line in config_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section_match = re.fullmatch(r'\[remote "(.+)"\]', stripped)
+            in_origin = section_match is not None and section_match.group(1) == "origin"
+            continue
+        if in_origin and stripped.startswith("url ="):
+            urls.append(stripped.split("=", 1)[1].strip())
+    return urls
+
+
+def _normalize_github_repo_slug(url: str) -> str | None:
+    candidate = url.strip()
+    if candidate == "":
+        return None
+    if candidate.startswith("git@"):
+        host_and_path = candidate[4:]
+        if ":" not in host_and_path:
+            return None
+        host, repo_path = host_and_path.split(":", 1)
+        if host != "github.com":
+            return None
+        return repo_path.strip("/").removesuffix(".git")
+    parsed = urlparse(candidate)
+    if parsed.scheme not in {"http", "https", "ssh"}:
+        return None
+    host = parsed.hostname
+    if host is None:
+        return None
+    if host != "github.com":
+        return None
+    return parsed.path.strip("/").removesuffix(".git")
+
+
+def _is_trusted_hol_guard_origin(url: str) -> bool:
+    slug = _normalize_github_repo_slug(url)
+    return slug == _TRUSTED_REPO_SLUG
+
+
+def _git_head_exists(checkout: Path) -> bool:
+    result = _git_run(checkout, "rev-parse", "--verify", "HEAD")
+    return result is not None and result.returncode == 0
+
+
+def _git_run(
+    checkout: Path,
+    *args: str,
+    text: bool = True,
+) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes] | None:
+    try:
+        return _RUN_PROCESS(
+            [
+                "git",
+                "-c",
+                f"core.hooksPath={_GIT_HOOKS_DISABLED[0]}",
+                "-C",
+                str(checkout),
+                *args,
+            ],
+            capture_output=True,
+            check=False,
+            text=text,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
         return None
 
-    return path
+
+def _list_committed_static_files(checkout: Path, static_prefix: str) -> list[str]:
+    result = _git_run(checkout, "ls-tree", "-r", "--name-only", "HEAD", "--", static_prefix)
+    if result is None or result.returncode != 0:
+        return []
+    files: list[str] = []
+    prefix = f"{static_prefix.rstrip('/')}/"
+    for line in result.stdout.splitlines():
+        relative = line.strip()
+        if relative == "" or relative.endswith("/") or not relative.startswith(prefix):
+            continue
+        files.append(relative)
+    return files
+
+
+def _read_committed_file(checkout: Path, relative_path: str) -> bytes | None:
+    result = _git_run(checkout, "show", f"HEAD:{relative_path}", text=False)
+    if result is None or result.returncode != 0:
+        return None
+    stdout = result.stdout
+    if not isinstance(stdout, bytes):
+        return None
+    return stdout
+
+
+def _relative_static_path(relative_path: str, static_prefix: str) -> Path | None:
+    normalized_prefix = static_prefix.rstrip("/")
+    if not relative_path.startswith(f"{normalized_prefix}/"):
+        return None
+    return Path(relative_path.removeprefix(f"{normalized_prefix}/"))
+
+
+def _export_committed_static_files(
+    *,
+    source_checkout: Path,
+    static_prefix: str,
+    installed_static: Path,
+) -> int:
+    copied_count = 0
+    for relative_path in _list_committed_static_files(source_checkout, static_prefix):
+        payload = _read_committed_file(source_checkout, relative_path)
+        if payload is None:
+            continue
+        relative_to_static = _relative_static_path(relative_path, static_prefix)
+        if relative_to_static is None:
+            continue
+        dest = installed_static / relative_to_static
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(payload)
+        copied_count += 1
+    return copied_count
+
+
+__all__ = [
+    "find_source_checkout",
+    "sync_dashboard_assets",
+    "verify_source_checkout",
+]
