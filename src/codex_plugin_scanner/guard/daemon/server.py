@@ -179,8 +179,10 @@ def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
     status = package_shim_status(context)
     return {
         "package_manager_coverage": {
-            "shims_installed": status.get("active_managers", []),
+            "detected_managers": status.get("detected_managers", []),
             "path_active": status.get("active_managers", []),
+            "shims_installed": status.get("active_managers", []),
+            "undetected_managers": status.get("undetected_managers", []),
             "unsupported_managers": [],
         }
     }
