@@ -40,6 +40,14 @@ def test_resolve_guard_oauth_client_config_for_local_loopback() -> None:
     assert detect_guard_oauth_environment(config.issuer) == "local"
 
 
+def test_resolve_guard_oauth_client_config_for_docker_lab_host() -> None:
+    config = resolve_guard_oauth_client_config("http://host.docker.internal:3017")
+
+    assert config.client_id == LOCAL_GUARD_OAUTH_CLIENT_ID
+    assert config.authorize_endpoint == "http://host.docker.internal:3017/api/guard/oauth/authorize"
+    assert detect_guard_oauth_environment(config.issuer) == "local"
+
+
 def test_resolve_guard_oauth_client_config_rejects_unallowlisted_host() -> None:
     with pytest.raises(ValueError, match="allowlisted"):
         resolve_guard_oauth_client_config("https://evil.example")
