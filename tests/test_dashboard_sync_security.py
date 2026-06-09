@@ -40,10 +40,14 @@ def _init_fake_checkout(root: Path, *, remote_url: str) -> Path:
 
 
 def test_normalize_github_repo_slug_requires_exact_repo_path() -> None:
-    assert _normalize_github_repo_slug("https://github.com/hashgraph-online/hol-guard.git") == "hashgraph-online/hol-guard"
-    assert _normalize_github_repo_slug("git@github.com:hashgraph-online/hol-guard.git") == "hashgraph-online/hol-guard"
-    assert _normalize_github_repo_slug("https://evil.example/hashgraph-online/hol-guard.git") is None
-    assert _normalize_github_repo_slug("https://github.com/evil/hashgraph-online/hol-guard.git") == "evil/hashgraph-online/hol-guard"
+    trusted_https = "https://github.com/hashgraph-online/hol-guard.git"
+    trusted_ssh = "git@github.com:hashgraph-online/hol-guard.git"
+    spoofed_host = "https://evil.example/hashgraph-online/hol-guard.git"
+    wrong_owner = "https://github.com/evil/hashgraph-online/hol-guard.git"
+    assert _normalize_github_repo_slug(trusted_https) == "hashgraph-online/hol-guard"
+    assert _normalize_github_repo_slug(trusted_ssh) == "hashgraph-online/hol-guard"
+    assert _normalize_github_repo_slug(spoofed_host) is None
+    assert _normalize_github_repo_slug(wrong_owner) == "evil/hashgraph-online/hol-guard"
 
 
 def test_is_trusted_hol_guard_origin_rejects_spoofed_hosts() -> None:

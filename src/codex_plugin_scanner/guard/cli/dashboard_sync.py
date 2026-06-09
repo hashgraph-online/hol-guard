@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import re
-import shutil
 import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
@@ -48,7 +47,6 @@ def sync_dashboard_assets() -> dict[str, object] | None:
         }
 
     static_prefix = source_static.relative_to(source_checkout).as_posix()
-    source_index = source_static / "index.html"
     installed_index = installed_static / "index.html"
     needs_copy = True
     try:
