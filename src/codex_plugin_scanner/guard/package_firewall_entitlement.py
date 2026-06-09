@@ -280,6 +280,25 @@ def package_firewall_available_actions(
     return actions
 
 
+def package_firewall_operation_allowed(
+    entitlement: dict[str, object],
+    operation: str,
+    *,
+    has_installed_managers: bool,
+) -> bool:
+    normalized_operation = operation.strip().lower()
+    if normalized_operation in {"status", "connect", "open-shell"}:
+        return True
+    reason = str(entitlement.get("reason") or "").strip().lower()
+    if reason == "guard_cloud_reconnect_required":
+        return False
+    if bool(entitlement.get("allowed")):
+        return True
+    if normalized_operation in {"repair", "remove"}:
+        return has_installed_managers
+    return False
+
+
 def package_firewall_block_details(entitlement: dict[str, object]) -> tuple[int, str, str]:
     if entitlement.get("reason") == "guard_cloud_connect_required":
         return (
