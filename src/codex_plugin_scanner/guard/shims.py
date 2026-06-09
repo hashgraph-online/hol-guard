@@ -903,7 +903,7 @@ __all__ = [
     "package_shim_cloud_coverage",
     "package_shim_status",
     "package_shim_supported_managers",
-    "remove_guard_shim",
     "probe_package_shim_intercepts",
+    "remove_guard_shim",
     "uninstall_package_shims",
 ]
