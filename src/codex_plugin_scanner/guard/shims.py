@@ -768,9 +768,11 @@ def _package_shim_manifest_path(context: HarnessContext) -> Path:
 
 def _filtered_manager_path(context: HarnessContext) -> str:
     shim_dir = context.guard_home / "package-shims" / "bin"
-    shim_dir_resolved = shim_dir.expanduser().resolve()
+    shim_dir_abs = os.path.abspath(os.path.expanduser(str(shim_dir)))
     path_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
-    filtered_entries = [entry for entry in path_entries if Path(entry).expanduser().resolve() != shim_dir_resolved]
+    filtered_entries = [
+        entry for entry in path_entries if os.path.abspath(os.path.expanduser(entry)) != shim_dir_abs
+    ]
     return os.pathsep.join(filtered_entries)
 
 
@@ -778,11 +780,13 @@ def _detect_system_package_managers(context: HarnessContext) -> tuple[list[str],
     """Return supported managers with and without a real binary on PATH."""
 
     filtered_path = _filtered_manager_path(context)
+    if filtered_path == "":
+        return [], list(package_shim_supported_managers())
     detected: list[str] = []
     undetected: list[str] = []
     for manager in package_shim_supported_managers():
         command = _PACKAGE_SHIM_COMMANDS[manager]
-        resolved = shutil.which(command, path=filtered_path or None)
+        resolved = shutil.which(command, path=filtered_path)
         if resolved is not None:
             detected.append(manager)
         else:

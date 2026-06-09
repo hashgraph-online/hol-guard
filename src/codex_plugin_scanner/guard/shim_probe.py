@@ -13,7 +13,6 @@ _PACKAGE_SHIM_PROBE_ARGS: dict[str, tuple[str, ...]] = {
     "bun": ("add", "--dry-run", "lodash@4.17.21"),
     "pip": ("install", "--dry-run", "requests==2.32.3"),
     "pip3": ("install", "--dry-run", "requests==2.32.3"),
-    "pip3": ("install", "--dry-run", "requests==2.32.3"),
     "uv": ("add", "--dry-run", "requests==2.32.3"),
     "poetry": ("add", "--dry-run", "requests@2.32.3"),
     "pipenv": ("install", "--dry-run", "requests==2.32.3"),
