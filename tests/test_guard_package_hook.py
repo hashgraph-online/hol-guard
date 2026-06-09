@@ -18,6 +18,9 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytest_plugins = ["tests.bundle_first_cloud"]
+pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
+
 WORKSPACE_ID = "workspace-alpha"
 
 

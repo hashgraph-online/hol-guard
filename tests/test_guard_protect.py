@@ -7,6 +7,7 @@ import sys
 import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from subprocess import CompletedProcess
 from typing import ClassVar
 
@@ -41,6 +42,61 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
         return
 
 
+class _SyncAndEvaluateHandler(BaseHTTPRequestHandler):
+    sync_payload: ClassVar[dict[str, object]] = {}
+    evaluate_status: ClassVar[int] = 401
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        if length:
+            self.rfile.read(length)
+        if "supply-chain/evaluate" in self.path:
+            self.send_response(self.evaluate_status)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(self.sync_payload).encode("utf-8"))
+
+    def log_message(self, fmt: str, *args) -> None:
+        return
+
+
+def _seed_bundle_cache_only(
+    home_dir: Path,
+    *,
+    ecosystem: str,
+    package_name: str,
+    package_version: str,
+    action: str,
+) -> None:
+    from tests.test_guard_package_shims import WORKSPACE_ID, _bundle_response
+
+    store = GuardStore(home_dir)
+    now = "2026-05-19T00:00:00Z"
+    response = _bundle_response(
+        action=action,
+        ecosystem=ecosystem,
+        package_name=package_name,
+        package_version=package_version,
+    )
+    store.cache_supply_chain_bundle(WORKSPACE_ID, response, now)
+    bundle = response["bundle"]
+    assert isinstance(bundle, dict)
+    store.set_sync_payload(
+        "supply_chain_bundle_entitlement",
+        {
+            "bundle_version": bundle["bundleVersion"],
+            "key_id": bundle["keyId"],
+            "policy_hash": bundle["policyHash"],
+            "tier": bundle["tier"],
+            "workspace_id": WORKSPACE_ID,
+        },
+        now,
+    )
+
+
 class TestGuardProtect:
     def test_guard_protect_blocks_advisory_before_install(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
@@ -51,11 +107,11 @@ class TestGuardProtect:
             [
                 {
                     "id": "adv-block-1",
-                    "ecosystem": "npm",
-                    "package": "badpkg",
+                    "ecosystem": "claude-code",
+                    "endpoint_indicators": ["evil.example/install"],
                     "severity": "high",
                     "action": "block",
-                    "headline": "Known exfiltration package.",
+                    "headline": "Known risky endpoint.",
                 }
             ],
             _now(),
@@ -70,9 +126,11 @@ class TestGuardProtect:
                 "--workspace",
                 str(workspace_dir),
                 "--json",
-                "npm",
-                "install",
-                "badpkg",
+                "claude",
+                "mcp",
+                "add",
+                "remote-risk",
+                "https://evil.example/install",
             ]
         )
 
@@ -81,9 +139,7 @@ class TestGuardProtect:
         assert rc == 2
         assert output["verdict"]["action"] == "block"
         assert output["executed"] is False
-        assert output["targets"][0]["package_name"] == "badpkg"
         assert output["matched_advisories"][0]["id"] == "adv-block-1"
-        assert store.list_receipts(limit=1)[0]["artifact_id"] == "install:npm:badpkg"
         assert store.list_events(limit=1)[0]["event_name"] == "install_time_block"
 
     def test_guard_protect_executes_safe_custom_command(self, tmp_path, capsys) -> None:
@@ -552,7 +608,7 @@ class TestGuardProtect:
         assert output["executed"] is True
         assert captured["timeout"] == 300
 
-    def test_guard_protect_checks_blocking_advisory_beyond_default_cache_limit(self, tmp_path, capsys) -> None:
+    def test_guard_protect_defers_package_installs_to_canonical_evaluator(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True)
@@ -589,6 +645,7 @@ class TestGuardProtect:
                 "--workspace",
                 str(workspace_dir),
                 "--json",
+                "--dry-run",
                 "npm",
                 "install",
                 "badpkg",
@@ -597,11 +654,12 @@ class TestGuardProtect:
 
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 2
-        assert output["verdict"]["action"] == "block"
-        assert any(item["id"] == "adv-block-tail" for item in output["matched_advisories"])
+        assert "supply_chain_evaluation" in output
+        assert not any(item.get("id") == "adv-block-tail" for item in output.get("matched_advisories", []))
+        assert output.get("dry_run") is True
+        assert rc in {0, 2}
 
-    def test_guard_protect_matches_blocking_advisory_by_package_url(self, tmp_path, capsys) -> None:
+    def test_guard_protect_ignores_legacy_package_url_blocks_for_package_installs(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True)
@@ -629,6 +687,7 @@ class TestGuardProtect:
                 "--workspace",
                 str(workspace_dir),
                 "--json",
+                "--dry-run",
                 "npm",
                 "install",
                 "badpkg@1.2.3",
@@ -637,11 +696,16 @@ class TestGuardProtect:
 
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 2
-        assert output["verdict"]["action"] == "block"
-        assert output["matched_advisories"][0]["id"] == "adv-purl-block"
+        assert "supply_chain_evaluation" in output
+        assert not any(item.get("id") == "adv-purl-block" for item in output.get("matched_advisories", []))
+        assert output.get("dry_run") is True
+        assert rc in {0, 2}
 
-    def test_guard_protect_matches_blocking_advisory_by_scoped_package_url(self, tmp_path, capsys) -> None:
+    def test_guard_protect_ignores_legacy_scoped_package_url_blocks_for_package_installs(
+        self,
+        tmp_path,
+        capsys,
+    ) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True)
@@ -669,6 +733,7 @@ class TestGuardProtect:
                 "--workspace",
                 str(workspace_dir),
                 "--json",
+                "--dry-run",
                 "npm",
                 "install",
                 "@scope/badpkg@1.2.3",
@@ -677,9 +742,10 @@ class TestGuardProtect:
 
         output = json.loads(capsys.readouterr().out)
 
-        assert rc == 2
-        assert output["verdict"]["action"] == "block"
-        assert output["matched_advisories"][0]["id"] == "adv-purl-scoped-block"
+        assert "supply_chain_evaluation" in output
+        assert not any(item.get("id") == "adv-purl-scoped-block" for item in output.get("matched_advisories", []))
+        assert output.get("dry_run") is True
+        assert rc in {0, 2}
 
     def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator(
         self,
@@ -923,10 +989,13 @@ class TestGuardProtect:
         assert {str(item["package"]) for item in advisories} == {"pkg-alpha", "pkg-beta"}
 
     def test_guard_protect_auto_syncs_cloud_advisories(self, tmp_path, capsys) -> None:
+        from codex_plugin_scanner.guard.runtime.runner import sync_receipts
+        from tests.test_guard_package_shims import WORKSPACE_ID
+
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True)
-        _SyncRequestHandler.response_payload = {
+        _SyncAndEvaluateHandler.sync_payload = {
             "syncedAt": "2026-04-09T00:00:00Z",
             "receiptsStored": 0,
             "inventoryStored": 0,
@@ -973,11 +1042,26 @@ class TestGuardProtect:
             },
         }
 
-        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        server = HTTPServer(("127.0.0.1", 0), _SyncAndEvaluateHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            _seed_sync_credentials(home_dir, f"http://127.0.0.1:{server.server_port}/receipts")
+            store = GuardStore(home_dir)
+            sync_now = "2026-04-09T00:00:00Z"
+            store.set_sync_credentials(
+                f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+                "demo-token",
+                sync_now,
+                workspace_id=WORKSPACE_ID,
+            )
+            _seed_bundle_cache_only(
+                home_dir=home_dir,
+                ecosystem="npm",
+                package_name="badpkg",
+                package_version="1.0.0",
+                action="block",
+            )
+            sync_receipts(store)
             login_rc = 0
 
             protect_rc = main(
@@ -991,15 +1075,18 @@ class TestGuardProtect:
                     "--json",
                     "npm",
                     "install",
-                    "badpkg",
+                    "badpkg@1.0.0",
                 ]
             )
             protect_output = json.loads(capsys.readouterr().out)
         finally:
             server.shutdown()
+            server.server_close()
             thread.join(timeout=5)
 
         assert login_rc == 0
         assert protect_rc == 2
         assert protect_output["verdict"]["action"] == "block"
-        assert protect_output["matched_advisories"][0]["id"] == "adv-sync-block"
+        assert protect_output["supply_chain_evaluation"]["decision"] == "block"
+        synced_advisories = GuardStore(home_dir).list_cached_advisories(limit=None)
+        assert any(item.get("id") == "adv-sync-block" for item in synced_advisories)

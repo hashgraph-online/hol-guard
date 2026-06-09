@@ -1,0 +1,1 @@
+"""Guard shared contract helpers."""

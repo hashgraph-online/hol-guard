@@ -7,7 +7,9 @@ import hashlib
 import json
 import os
 import subprocess
+import threading
 from datetime import datetime, timedelta, timezone
+from http.server import HTTPServer
 from pathlib import Path
 
 import pytest
@@ -20,6 +22,8 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
+from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler
 
 WORKSPACE_ID = "workspace-alpha"
 
@@ -156,33 +160,48 @@ def _seed_bundle(
     package_version: str,
     action: str,
 ) -> None:
-    store = GuardStore(home_dir)
-    now = "2026-05-19T00:00:00Z"
-    response = _bundle_response(
-        action=action,
+    _seed_bundle_cache_only(
+        home_dir=home_dir,
         ecosystem=ecosystem,
         package_name=package_name,
         package_version=package_version,
+        action=action,
     )
-    store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "demo-token", now, workspace_id=WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        response,
-        now,
-    )
-    bundle = response["bundle"]
-    assert isinstance(bundle, dict)
-    store.set_sync_payload(
-        "supply_chain_bundle_entitlement",
-        {
-            "bundle_version": bundle["bundleVersion"],
-            "key_id": bundle["keyId"],
-            "policy_hash": bundle["policyHash"],
-            "tier": bundle["tier"],
-            "workspace_id": WORKSPACE_ID,
-        },
-        now,
-    )
+
+
+def _seed_workspace_sync_credentials(home_dir: Path, sync_url: str, *, now: str = "2026-05-19T00:00:00Z") -> None:
+    GuardStore(home_dir).set_sync_credentials(sync_url, "demo-token", now, workspace_id=WORKSPACE_ID)
+
+
+def _start_cloud_eval_server(
+    *,
+    decision: str,
+    package_name: str,
+    evaluate_status: int = 200,
+) -> tuple[HTTPServer, threading.Thread, str]:
+    if evaluate_status == 200:
+        _EvaluateHandler.response_payload = _cloud_response(
+            decision=decision,
+            enforcement="premium_cloud",
+            entitlement_state="premium",
+            package_name=package_name,
+        )
+        handler = _EvaluateHandler
+    else:
+        _SyncAndEvaluateHandler.sync_payload = {"syncedAt": "2026-05-19T00:00:00Z", "receiptsStored": 0}
+        _SyncAndEvaluateHandler.evaluate_status = evaluate_status
+        handler = _SyncAndEvaluateHandler
+    server = HTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    sync_url = f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync"
+    return server, thread, sync_url
+
+
+def _stop_cloud_eval_server(server: HTTPServer, thread: threading.Thread) -> None:
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=5)
 
 
 def _install_single_manager_shim(
@@ -333,25 +352,36 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     fake_bin.mkdir()
     marker_path = tmp_path / "npm-allowed.json"
     _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
-    _seed_bundle(home_dir=home_dir, ecosystem="npm", package_name="minimist", package_version="1.2.9", action="allow")
-    shim_path = _install_single_manager_shim(
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-        manager="npm",
-        capsys=capsys,
-    )
-    env = dict(os.environ)
-    env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
+    server, thread, sync_url = _start_cloud_eval_server(decision="allow", package_name="minimist")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.9",
+            action="allow",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        shim_path = _install_single_manager_shim(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            manager="npm",
+            capsys=capsys,
+        )
+        env = dict(os.environ)
+        env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
 
-    result = subprocess.run(
-        [str(shim_path), "install", "minimist@1.2.9"],
-        cwd=workspace_dir,
-        env=env,
-        capture_output=True,
-        check=False,
-        text=True,
-        timeout=30,
-    )
+        result = subprocess.run(
+            [str(shim_path), "install", "minimist@1.2.9"],
+            cwd=workspace_dir,
+            env=env,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=30,
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
     assert marker_path.exists(), f"stdout={result.stdout!r} stderr={result.stderr!r} returncode={result.returncode}"
     marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
 
@@ -727,30 +757,39 @@ def test_guard_package_shims_block_before_manager_execution(
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / f"{manager}-marker.json"
     _write_fake_manager_script(fake_bin=fake_bin, manager=manager, marker_path=marker_path, exit_code=0)
-    _seed_bundle(
-        home_dir=home_dir,
-        ecosystem=ecosystem,
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
         package_name=package_name,
-        package_version=package_version,
-        action="block",
+        evaluate_status=401,
     )
-    shim_path = _install_single_manager_shim(
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-        manager=manager,
-        capsys=capsys,
-    )
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem=ecosystem,
+            package_name=package_name,
+            package_version=package_version,
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        shim_path = _install_single_manager_shim(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            manager=manager,
+            capsys=capsys,
+        )
 
-    env = dict(os.environ)
-    env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
-    result = subprocess.run(
-        [str(shim_path), *shim_args],
-        cwd=workspace_dir,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+        env = dict(os.environ)
+        env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
+        result = subprocess.run(
+            [str(shim_path), *shim_args],
+            cwd=workspace_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
 
     assert result.returncode != 0
     assert marker_path.exists() is False
@@ -771,25 +810,36 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: 
         stdout_text="fake-manager-stdout",
         stderr_text="fake-manager-stderr",
     )
-    _seed_bundle(home_dir=home_dir, ecosystem="npm", package_name="minimist", package_version="1.2.8", action="allow")
-    shim_path = _install_single_manager_shim(
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-        manager="npm",
-        capsys=capsys,
-    )
+    server, thread, sync_url = _start_cloud_eval_server(decision="allow", package_name="minimist")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="allow",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        shim_path = _install_single_manager_shim(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            manager="npm",
+            capsys=capsys,
+        )
 
-    env = dict(os.environ)
-    env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
-    env["SHIM_TEST_VAR"] = "shim-value"
-    result = subprocess.run(
-        [str(shim_path), "ci"],
-        cwd=workspace_dir,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+        env = dict(os.environ)
+        env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
+        env["SHIM_TEST_VAR"] = "shim-value"
+        result = subprocess.run(
+            [str(shim_path), "ci"],
+            cwd=workspace_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
     marker_payload = json.loads(marker_path.read_text(encoding="utf-8"))
 
     assert result.returncode == 7
@@ -804,17 +854,28 @@ def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     _write_npm_ci_workspace(workspace_dir, package_name="minimist", package_version="1.2.8")
-    _seed_bundle(home_dir=home_dir, ecosystem="npm", package_name="minimist", package_version="1.2.8", action="block")
-    store = GuardStore(home_dir)
+    server, thread, sync_url = _start_cloud_eval_server(decision="block", package_name="minimist")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        store = GuardStore(home_dir)
 
-    payload, exit_code = build_protect_payload(
-        command=["npm", "ci"],
-        store=store,
-        workspace_dir=workspace_dir,
-        dry_run=True,
-        now="2026-05-19T00:00:00Z",
-        unsafe_raw_output=False,
-    )
+        payload, exit_code = build_protect_payload(
+            command=["npm", "ci"],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=True,
+            now="2026-05-19T00:00:00Z",
+            unsafe_raw_output=False,
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
 
     assert exit_code == 2
     assert payload["executed"] is False
@@ -836,24 +897,35 @@ def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / "npm-ci-marker.json"
     _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
-    _seed_bundle(home_dir=home_dir, ecosystem="npm", package_name="minimist", package_version="1.2.8", action="block")
-    shim_path = _install_single_manager_shim(
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-        manager="npm",
-        capsys=capsys,
-    )
+    server, thread, sync_url = _start_cloud_eval_server(decision="block", package_name="minimist")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        shim_path = _install_single_manager_shim(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            manager="npm",
+            capsys=capsys,
+        )
 
-    env = dict(os.environ)
-    env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
-    result = subprocess.run(
-        [str(shim_path), "ci"],
-        cwd=workspace_dir,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+        env = dict(os.environ)
+        env["PATH"] = os.pathsep.join(filter(None, [str(fake_bin), env.get("PATH")]))
+        result = subprocess.run(
+            [str(shim_path), "ci"],
+            cwd=workspace_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
 
     assert result.returncode != 0
     assert marker_path.exists() is False
