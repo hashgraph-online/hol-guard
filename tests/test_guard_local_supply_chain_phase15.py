@@ -23,6 +23,9 @@ from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytest_plugins = ["tests.bundle_first_cloud"]
+pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
+
 WORKSPACE_ID = "workspace-alpha"
 
 
