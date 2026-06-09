@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.shim_execution_helpers import write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
 from tests.test_guard_supply_chain_evaluator import _cloud_response, _EvaluateHandler
 
@@ -287,7 +288,7 @@ def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, cap
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
     marker_path = tmp_path / "npm-ran.json"
-    _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
     shim_path = _install_single_manager_shim(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -351,7 +352,7 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
     marker_path = tmp_path / "npm-allowed.json"
-    _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
     server, thread, sync_url = _start_cloud_eval_server(decision="allow", package_name="minimist")
     try:
         _seed_bundle(
@@ -388,46 +389,6 @@ def test_package_manager_shim_runs_allowed_command_once_when_shim_dir_is_on_path
     assert result.returncode == 0
     assert marker_payload["argv"][1:] == ["install", "minimist@1.2.9"]
     assert marker_payload["cwd"] == str(workspace_dir)
-
-
-def _write_fake_manager_script(
-    *,
-    fake_bin: Path,
-    manager: str,
-    marker_path: Path,
-    exit_code: int,
-    stdout_text: str | None = None,
-    stderr_text: str | None = None,
-) -> None:
-    script_path = fake_bin / manager
-    script_path.write_text(
-        "\n".join(
-            [
-                "#!/usr/bin/env python3",
-                "from __future__ import annotations",
-                "import json",
-                "import os",
-                "import sys",
-                f"marker_path = {str(marker_path)!r}",
-                "payload = {",
-                "    'argv': sys.argv,",
-                "    'cwd': os.getcwd(),",
-                "    'path': os.environ.get('PATH', ''),",
-                "    'shim_var': os.environ.get('SHIM_TEST_VAR'),",
-                "}",
-                "with open(marker_path, 'w', encoding='utf-8') as handle:",
-                "    json.dump(payload, handle)",
-                f"if {stdout_text!r} is not None:",
-                f"    print({stdout_text!r})",
-                f"if {stderr_text!r} is not None:",
-                f"    print({stderr_text!r}, file=sys.stderr)",
-                f"raise SystemExit({exit_code})",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    script_path.chmod(script_path.stat().st_mode | 0o755)
 
 
 _BLOCKING_SHIM_CASES = (
@@ -756,7 +717,7 @@ def test_guard_package_shims_block_before_manager_execution(
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / f"{manager}-marker.json"
-    _write_fake_manager_script(fake_bin=fake_bin, manager=manager, marker_path=marker_path, exit_code=0)
+    write_fake_manager_script(fake_bin=fake_bin, manager=manager, marker_path=marker_path, exit_code=0)
     server, thread, sync_url = _start_cloud_eval_server(
         decision="allow",
         package_name=package_name,
@@ -802,7 +763,7 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: 
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / "npm-allow-marker.json"
-    _write_fake_manager_script(
+    write_fake_manager_script(
         fake_bin=fake_bin,
         manager="npm",
         marker_path=marker_path,
@@ -896,7 +857,7 @@ def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir(parents=True, exist_ok=True)
     marker_path = tmp_path / "npm-ci-marker.json"
-    _write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
     server, thread, sync_url = _start_cloud_eval_server(decision="block", package_name="minimist")
     try:
         _seed_bundle(
