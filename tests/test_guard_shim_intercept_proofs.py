@@ -13,7 +13,12 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.shims import install_package_shims, probe_package_shim_intercepts
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.shim_execution_helpers import write_fake_manager_script
+from tests.shim_execution_helpers import (
+    manager_probe_args,
+    parse_protect_json_output,
+    protect_evaluator_evidence,
+    write_fake_manager_script,
+)
 from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
 
 
@@ -27,6 +32,24 @@ def _harness_context(tmp_path: Path, *, workspace_dir: Path | None = None) -> Ha
         workspace_dir=workspace_dir,
         guard_home=guard_home,
     )
+
+
+def test_parse_protect_json_output_ignores_trailing_manager_stdout() -> None:
+    payload = {
+        "dry_run": True,
+        "supply_chain_evaluation": {"evidence_ids": [42, "ev-1"]},
+        "verdict": {"action": "allow"},
+    }
+    stdout = json.dumps(payload) + "\nnpm notice dry-run complete\n"
+    parsed = parse_protect_json_output(stdout)
+    evidence = protect_evaluator_evidence(parsed)
+    assert evidence["evaluator_invoked"] is True
+    assert evidence["protect_decision"] == "allow"
+    assert evidence["evidence_ids"] == ["42", "ev-1"]
+
+
+def test_manager_probe_args_include_dry_run_for_npm() -> None:
+    assert manager_probe_args("npm") == ("install", "--dry-run", "lodash@4.17.21")
 
 
 def test_shim_execution_helper_records_fake_manager_invocation(tmp_path: Path) -> None:
