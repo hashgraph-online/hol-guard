@@ -1,14 +1,11 @@
 /**
- * Allowed external hosts for the About page.
+ * Allowed external links for the About page.
  * All links must use HTTPS. No localhost, loopback, or unknown hosts.
+ * Links are validated by stable linkId + href, not just hostname.
  */
-const ALLOWED_HOSTS = new Set([
-  "hol.org",
-  "www.hol.org",
-  "github.com",
-  "x.com",
-  "t.me",
-]);
+
+import type { AboutLinkId } from "./about-types";
+import { ALLOWED_LINKS } from "./about-content";
 
 export class AboutExternalLinkError extends Error {
   constructor(message: string) {
@@ -17,21 +14,40 @@ export class AboutExternalLinkError extends Error {
   }
 }
 
-function isLocalhost(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "[::1]" ||
-    hostname === "::1" ||
-    hostname.startsWith("192.168.") ||
-    hostname.startsWith("10.") ||
-    hostname.startsWith("172.") ||
-    hostname.endsWith(".local") ||
-    hostname.endsWith(".internal")
-  );
+function isPrivateHost(rawHostname: string): boolean {
+  // Strip IPv6 brackets before checking
+  const hostname = rawHostname.startsWith("[") && rawHostname.endsWith("]")
+    ? rawHostname.slice(1, -1)
+    : rawHostname;
+
+  if (hostname === "localhost" || hostname.startsWith("127.") || hostname === "::1" || hostname === "0.0.0.0") {
+    return true;
+  }
+
+  // RFC1918 private ranges
+  if (hostname.startsWith("10.")) return true;
+  if (hostname.startsWith("192.168.")) return true;
+
+  // 172.16.0.0/12
+  if (hostname.startsWith("172.")) {
+    const secondOctet = parseInt(hostname.split(".")[1] ?? "", 10);
+    if (secondOctet >= 16 && secondOctet <= 31) return true;
+  }
+
+  // Link-local
+  if (hostname === "169.254.0.0" || hostname.startsWith("169.254.")) return true;
+  if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return true;
+
+  // IPv6 link-local
+  if (hostname.startsWith("fe80:")) return true;
+
+  return false;
 }
 
-export function assertSafeAboutExternalUrl(raw: string): {
+export function assertSafeAboutExternalUrl(
+  linkId: AboutLinkId,
+  raw: string
+): {
   url: string;
   hostname: string;
   rel: string;
@@ -61,15 +77,28 @@ export function assertSafeAboutExternalUrl(raw: string): {
     throw new AboutExternalLinkError(`URL must not contain credentials: ${raw}`);
   }
 
-  if (isLocalhost(parsed.hostname)) {
-    throw new AboutExternalLinkError(`URL must not point to localhost or loopback: ${raw}`);
+  if (isPrivateHost(parsed.hostname)) {
+    throw new AboutExternalLinkError(`URL must not point to localhost or private host: ${raw}`);
   }
 
-  if (!ALLOWED_HOSTS.has(parsed.hostname)) {
-    throw new AboutExternalLinkError(`Unknown host not in allowlist: ${parsed.hostname}`);
+  const allowed = ALLOWED_LINKS[linkId];
+  if (!allowed) {
+    throw new AboutExternalLinkError(`Unknown link ID: ${linkId}`);
   }
 
-  const forbiddenParams = ["guard-token", "guardDaemon", "workspace", "device", "install", "user"];
+  if (parsed.hostname !== allowed.host && !parsed.hostname.endsWith(`.${allowed.host}`)) {
+    throw new AboutExternalLinkError(
+      `Host mismatch for ${linkId}: expected ${allowed.host}, got ${parsed.hostname}`
+    );
+  }
+
+  if (!parsed.pathname.startsWith(allowed.pathPrefix)) {
+    throw new AboutExternalLinkError(
+      `Path prefix mismatch for ${linkId}: expected ${allowed.pathPrefix}, got ${parsed.pathname}`
+    );
+  }
+
+  const forbiddenParams = ["guard-token", "guardDaemon", "workspace", "device", "install", "user", "referral", "ref"];
   for (const param of forbiddenParams) {
     if (parsed.searchParams.has(param)) {
       throw new AboutExternalLinkError(`URL must not contain parameter ${param}: ${raw}`);
@@ -84,6 +113,6 @@ export function assertSafeAboutExternalUrl(raw: string): {
   };
 }
 
-export function validateAboutExternalLinkOrThrow(raw: string): void {
-  assertSafeAboutExternalUrl(raw);
+export function validateAboutExternalLinkOrThrow(linkId: AboutLinkId, raw: string): void {
+  assertSafeAboutExternalUrl(linkId, raw);
 }
