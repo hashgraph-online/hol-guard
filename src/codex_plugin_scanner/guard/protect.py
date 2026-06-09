@@ -125,7 +125,7 @@ def build_protect_payload(
     request = parse_protect_command(command)
     advisories = store.list_cached_advisories(limit=None)
     cached_verdict = evaluate_protect_request(request, advisories)
-    cached_gate = cached_verdict.blocking or cached_verdict.action == "review"
+    cached_gate = cached_verdict.blocking
     package_payload = build_package_protect_payload(
         command=command,
         store=store,
@@ -142,6 +142,8 @@ def build_protect_payload(
                 package_payload,
                 cached_verdict=cached_verdict,
                 requested_dry_run=dry_run,
+                store=store,
+                now=now,
             )
         return package_payload
     verdict = cached_verdict
@@ -226,6 +228,8 @@ def _merge_cached_advisory_into_package_payload(
     *,
     cached_verdict: ProtectVerdict,
     requested_dry_run: bool,
+    store: GuardStore,
+    now: str,
 ) -> tuple[dict[str, object], int]:
     """Apply locally cached advisory blocks/reviews to package protect results."""
 
@@ -251,15 +255,18 @@ def _merge_cached_advisory_into_package_payload(
         merged_action = "review"
         merged_reason = cached_verdict.reason
 
-    if merged_action == package_action:
-        return result
-
     for item in cached_verdict.matched_advisories:
         if item not in merged_advisories:
             merged_advisories.append(item)
     for signal in cached_verdict.risk_signals:
         if signal not in risk_signals:
             risk_signals.append(signal)
+
+    action_changed = merged_action != package_action
+    advisories_changed = merged_advisories != list(verdict.get("matched_advisories") or [])
+    if not action_changed and not advisories_changed:
+        return result
+
     blocking = merged_action in {"block", "review"}
     updated_verdict = {
         **verdict,
@@ -276,6 +283,27 @@ def _merge_cached_advisory_into_package_payload(
         "executed": False,
         "dry_run": requested_dry_run or blocking,
     }
+    receipt = payload.get("receipt")
+    if isinstance(receipt, dict):
+        updated_receipt = {**receipt, "policy_decision": merged_action}
+        updated_payload["receipt"] = updated_receipt
+        if action_changed:
+            request = payload.get("request")
+            executor = request.get("executor") if isinstance(request, dict) else None
+            install_kind = request.get("install_kind") if isinstance(request, dict) else None
+            store.add_event(
+                f"install_time_{merged_action}",
+                {
+                    "artifact_id": updated_receipt.get("artifact_id"),
+                    "artifact_name": updated_receipt.get("artifact_name"),
+                    "executor": executor,
+                    "install_kind": install_kind,
+                    "action": merged_action,
+                    "risk_signals": risk_signals,
+                    "cached_advisory_override": True,
+                },
+                now,
+            )
     if blocking:
         return (updated_payload, 2)
     return (updated_payload, exit_code)

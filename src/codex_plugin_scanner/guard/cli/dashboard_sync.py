@@ -175,6 +175,9 @@ def _origin_urls_from_git_config(config_text: str) -> list[str]:
             continue
         if in_origin and stripped.startswith("url ="):
             urls.append(stripped.split("=", 1)[1].strip())
+            continue
+        if stripped.startswith("["):
+            in_origin = False
     return urls
 
 
@@ -211,7 +214,11 @@ def _git_head_exists(checkout: Path) -> bool:
     return result is not None and result.returncode == 0
 
 
-def _git_run(checkout: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
+def _git_run(
+    checkout: Path,
+    *args: str,
+    text: bool = True,
+) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes] | None:
     try:
         return _RUN_PROCESS(
             [
@@ -224,7 +231,7 @@ def _git_run(checkout: Path, *args: str) -> subprocess.CompletedProcess[str] | N
             ],
             capture_output=True,
             check=False,
-            text=True,
+            text=text,
             timeout=_GIT_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -246,10 +253,13 @@ def _list_committed_static_files(checkout: Path, static_prefix: str) -> list[str
 
 
 def _read_committed_file(checkout: Path, relative_path: str) -> bytes | None:
-    result = _git_run(checkout, "show", f"HEAD:{relative_path}")
+    result = _git_run(checkout, "show", f"HEAD:{relative_path}", text=False)
     if result is None or result.returncode != 0:
         return None
-    return result.stdout.encode("utf-8")
+    stdout = result.stdout
+    if not isinstance(stdout, bytes):
+        return None
+    return stdout
 
 
 def _relative_static_path(relative_path: str, static_prefix: str) -> Path | None:
