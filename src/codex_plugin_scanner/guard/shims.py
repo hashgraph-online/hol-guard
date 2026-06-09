@@ -770,9 +770,7 @@ def _filtered_manager_path(context: HarnessContext) -> str:
     shim_dir = context.guard_home / "package-shims" / "bin"
     shim_dir_abs = os.path.abspath(os.path.expanduser(str(shim_dir)))
     path_entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
-    filtered_entries = [
-        entry for entry in path_entries if os.path.abspath(os.path.expanduser(entry)) != shim_dir_abs
-    ]
+    filtered_entries = [entry for entry in path_entries if os.path.abspath(os.path.expanduser(entry)) != shim_dir_abs]
     return os.pathsep.join(filtered_entries)
 
 
