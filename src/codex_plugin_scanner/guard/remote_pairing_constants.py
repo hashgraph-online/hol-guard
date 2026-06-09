@@ -1,0 +1,4 @@
+"""Shared constants for browserless remote agent pairing."""
+
+REMOTE_PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+REMOTE_PAIRING_CODE_PREFIX = "HLG"

@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .remote_pairing_constants import REMOTE_PAIRING_CODE_ALPHABET
+
 
 @dataclass(frozen=True, slots=True)
 class RedactedText:
@@ -87,6 +89,14 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
             re.IGNORECASE,
         ),
         "*****",
+    ),
+    (
+        "remote-pairing-code",
+        re.compile(
+            rf"\bHLG-[{REMOTE_PAIRING_CODE_ALPHABET}]{{6}}\b",
+            re.IGNORECASE,
+        ),
+        "HLG-******",
     ),
 )
 

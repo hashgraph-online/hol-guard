@@ -71,6 +71,10 @@ def _is_guard_program(program_name: str) -> bool:
     return normalized_name in {"plugin-guard"}
 
 
+def _is_hol_guard_binary(program_name: str) -> bool:
+    return Path(program_name).stem.lower() == "hol-guard"
+
+
 def _is_scanner_program(program_name: str) -> bool:
     normalized_name = Path(program_name).stem.lower()
     return normalized_name in {"plugin-scanner", "plugin-ecosystem-scanner"}
@@ -235,6 +239,7 @@ def _resolve_legacy_args(argv: list[str] | None, *, program_mode: str) -> list[s
         "preflight",
         "diff",
         "receipts",
+        "history",
         "inventory",
         "abom",
         "approvals",
@@ -242,15 +247,19 @@ def _resolve_legacy_args(argv: list[str] | None, *, program_mode: str) -> list[s
         "allow",
         "deny",
         "policies",
+        "settings",
         "exceptions",
         "advisories",
         "events",
+        "doctor",
         "connect",
+        "remote-pair",
         "disconnect",
         "login",
         "sync",
         "device",
         "bridge",
+        "daemon",
         "hook",
     }
     if program_mode == "combined" and argv[0] in _guard_subcommands and "--format" not in argv:
@@ -544,6 +553,8 @@ def main(argv: list[str] | None = None) -> int:
         program_mode = "combined"
     parser = _build_parser(program_name, program_mode=program_mode)
     resolved_argv = _resolve_legacy_args(argv or sys.argv[1:], program_mode=program_mode)
+    if _is_hol_guard_binary(program_name) and not resolved_argv:
+        parser.error("the following arguments are required: command")
     args = parser.parse_args(resolved_argv)
     if getattr(args, "list_ecosystems", False):
         for ecosystem in list_supported_ecosystems():
