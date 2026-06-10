@@ -31,6 +31,8 @@ import {
   SupplyChainCloudDegradedBanner,
   SupplyChainEvidenceRail,
 } from "./supply-chain-evidence-rail-panel";
+import { resolveSupplyChainCloudCapabilities } from "./supply-chain-cloud-capabilities";
+import { SupplyChainCloudCapabilitiesPanel } from "./supply-chain-cloud-capabilities-panel";
 import { resolveSupplyChainPostureAlerts } from "./supply-chain-posture";
 import { SupplyChainPostureBanners } from "./supply-chain-posture-banners";
 import {
@@ -164,6 +166,10 @@ export function SupplyChainWorkspace({
     () => resolveSupplyChainPostureAlerts(snapshot),
     [snapshot],
   );
+  const cloudCapabilities = useMemo(
+    () => resolveSupplyChainCloudCapabilities(snapshot),
+    [snapshot],
+  );
   const protectedManagersStat = useMemo(
     () => resolveProtectedManagersStat(stats),
     [stats],
@@ -222,6 +228,8 @@ export function SupplyChainWorkspace({
       <SupplyChainCloudDegradedBanner state={cloudDegraded} />
 
       <SupplyChainPostureBanners alerts={postureAlerts} />
+
+      <SupplyChainCloudCapabilitiesPanel state={cloudCapabilities} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active apps" value={stats.activeApps} tone="green" />

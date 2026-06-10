@@ -12787,6 +12787,9 @@ function HiMiniCube(props) {
 function HiMiniCpuChip(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M14 6H6v8h8V6Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.25 3V1.75a.75.75 0 0 1 1.5 0V3h1.5V1.75a.75.75 0 0 1 1.5 0V3h.5A2.75 2.75 0 0 1 17 5.75v.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v.5A2.75 2.75 0 0 1 14.25 17h-.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-.5A2.75 2.75 0 0 1 3 14.25v-.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-.5A2.75 2.75 0 0 1 5.75 3h.5V1.75a.75.75 0 0 1 1.5 0V3h1.5ZM4.5 5.75c0-.69.56-1.25 1.25-1.25h8.5c.69 0 1.25.56 1.25 1.25v8.5c0 .69-.56 1.25-1.25 1.25h-8.5c-.69 0-1.25-.56-1.25-1.25v-8.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniComputerDesktop(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniCommandLine(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.25 3A2.25 2.25 0 0 0 1 5.25v9.5A2.25 2.25 0 0 0 3.25 17h13.5A2.25 2.25 0 0 0 19 14.75v-9.5A2.25 2.25 0 0 0 16.75 3H3.25Zm.943 8.752a.75.75 0 0 1 .055-1.06L6.128 9l-1.88-1.693a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 0 1-1.06-.055ZM9.75 10.25a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -20235,7 +20238,7 @@ function WorkspacePageHeader({
       description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: description }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full min-w-0 sm:w-auto [&>div]:flex-wrap", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs, active: activeTab, onChange: onTabChange }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full min-w-0 sm:w-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TabBar, { tabs, active: activeTab, onChange: onTabChange }) }),
       actions ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center justify-end gap-2", children: actions }) : null
     ] })
   ] });
@@ -24638,7 +24641,7 @@ const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./
 const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = reactExports.lazy(
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.s), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const AboutWorkspace = reactExports.lazy(
   () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
@@ -25305,15 +25308,16 @@ export {
   fetchSupplyChainBundle as aI,
   HiMiniDocumentMagnifyingGlass as aJ,
   HiMiniShieldExclamation as aK,
-  HiMiniInformationCircle as aL,
-  fetchReceipts as aM,
-  HiMiniArrowRight as aN,
-  runAuditRemediation as aO,
-  HiMiniDocumentText as aP,
-  guardAwareHref as aQ,
-  HiMiniBarsArrowUp as aR,
-  HiMiniBarsArrowDown as aS,
-  HiMiniSignal as aT,
+  HiMiniComputerDesktop as aL,
+  HiMiniInformationCircle as aM,
+  fetchReceipts as aN,
+  HiMiniArrowRight as aO,
+  runAuditRemediation as aP,
+  HiMiniDocumentText as aQ,
+  guardAwareHref as aR,
+  HiMiniBarsArrowUp as aS,
+  HiMiniBarsArrowDown as aT,
+  HiMiniSignal as aU,
   approvalGateCooldownLabel as aa,
   fetchApprovalPage as ab,
   fetchPolicy as ac,

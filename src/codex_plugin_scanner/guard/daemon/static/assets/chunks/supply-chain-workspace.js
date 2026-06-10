@@ -1,8 +1,9 @@
-import { j as jsxRuntimeExports, a8 as Tag, A as ActionButton, am as HiMiniArrowPath, l as HiMiniShieldCheck, au as HiMiniArrowTopRightOnSquare, r as reactExports, d as HiMiniCheckCircle, v as HiMiniExclamationTriangle, m as formatRelativeTime, D as HiMiniXCircle, aw as HiMiniClock, ax as IconActionButton, an as HiMiniTrash, C as HiMiniWrenchScrewdriver, ay as HiMiniBeaker, a9 as HiMiniMagnifyingGlass, b as EmptyState, az as HiMiniBugAnt, o as HiMiniXMark, aA as fetchPackageFirewallStatus, aB as runPackageFirewallAction, ak as GuardHarnessActionError, aC as runPackageAudit, aD as runPackageSync, aE as startPackageFirewallConnect, aF as openPackageFirewallShell, S as SectionLabel, aG as HiMiniArrowDown, aH as HiMiniArrowUp, aI as fetchSupplyChainBundle, B as Badge, aJ as HiMiniDocumentMagnifyingGlass, aK as HiMiniShieldExclamation, aL as HiMiniInformationCircle, aM as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, a8 as Tag, A as ActionButton, am as HiMiniArrowPath, l as HiMiniShieldCheck, au as HiMiniArrowTopRightOnSquare, r as reactExports, d as HiMiniCheckCircle, v as HiMiniExclamationTriangle, m as formatRelativeTime, D as HiMiniXCircle, aw as HiMiniClock, ax as IconActionButton, an as HiMiniTrash, C as HiMiniWrenchScrewdriver, ay as HiMiniBeaker, a9 as HiMiniMagnifyingGlass, b as EmptyState, az as HiMiniBugAnt, o as HiMiniXMark, aA as fetchPackageFirewallStatus, aB as runPackageFirewallAction, ak as GuardHarnessActionError, aC as runPackageAudit, aD as runPackageSync, aE as startPackageFirewallConnect, aF as openPackageFirewallShell, S as SectionLabel, aG as HiMiniArrowDown, aH as HiMiniArrowUp, aI as fetchSupplyChainBundle, B as Badge, aJ as HiMiniDocumentMagnifyingGlass, aK as HiMiniShieldExclamation, aL as HiMiniComputerDesktop, s as HiMiniCloud, aM as HiMiniInformationCircle, aN as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
+import { r as resolveProtectedManagersStat, S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -2721,6 +2722,118 @@ function SupplyChainCloudDegradedBanner({ state }) {
     }
   );
 }
+const LOCAL_FREE_CAPABILITIES = [
+  { label: "Block risky package installs on this device", available: true },
+  { label: "Install and repair package tool protection", available: true },
+  { label: "Run workspace audits with on-device rules", available: true },
+  { label: "Review recent blocks and audits on this machine", available: true }
+];
+const CLOUD_CAPABILITIES = [
+  { label: "Live package warnings from Guard Cloud", available: false },
+  { label: "Sync policy and evidence across devices", available: false },
+  { label: "Fleet visibility for connected machines", available: false },
+  { label: "Cloud-backed audit and sync actions", available: false }
+];
+const CLOUD_ACTIVE_CAPABILITIES = CLOUD_CAPABILITIES.map(
+  (item) => ({ ...item, available: true })
+);
+function resolveSupplyChainCloudCapabilities(snapshot) {
+  if (snapshot.cloud_state === "paired_active") {
+    return {
+      mode: "paired_active",
+      title: "Guard Cloud connected",
+      detail: snapshot.cloud_state_detail.trim().length > 0 ? `${snapshot.cloud_state_detail} Local protection still runs on this device.` : "Live package warnings and synced policy are active. Local protection still runs on this device.",
+      tone: "green",
+      localHeading: "Still on this device",
+      cloudHeading: "Now from Guard Cloud",
+      localCapabilities: LOCAL_FREE_CAPABILITIES,
+      cloudCapabilities: CLOUD_ACTIVE_CAPABILITIES
+    };
+  }
+  if (snapshot.cloud_state === "paired_waiting") {
+    return {
+      mode: "paired_waiting",
+      title: "Guard Cloud pairing in progress",
+      detail: snapshot.cloud_state_detail.trim().length > 0 ? snapshot.cloud_state_detail : "Finish connecting this machine to Guard Cloud. Local package protection stays available while pairing completes.",
+      tone: "blue",
+      localHeading: "Available now on this device",
+      cloudHeading: "Unlocks after pairing",
+      localCapabilities: LOCAL_FREE_CAPABILITIES,
+      cloudCapabilities: CLOUD_CAPABILITIES
+    };
+  }
+  return {
+    mode: "local_only",
+    title: "Local protection works on this device",
+    detail: snapshot.cloud_state_detail.trim().length > 0 ? snapshot.cloud_state_detail : "You can block installs and run audits locally for free. Connect Guard Cloud for live warnings, synced policy, and cross-device evidence.",
+    tone: "slate",
+    localHeading: "Free on this device",
+    cloudHeading: "Adds with Guard Cloud",
+    localCapabilities: LOCAL_FREE_CAPABILITIES,
+    cloudCapabilities: CLOUD_CAPABILITIES
+  };
+}
+function CapabilityList({ heading, icon: Icon, items }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 rounded-xl border border-slate-100 bg-white/80 p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 flex items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4 shrink-0 text-slate-500", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: heading })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-2", children: items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex min-w-0 items-start gap-2 text-xs leading-relaxed", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniCheckCircle,
+        {
+          className: `mt-0.5 h-3.5 w-3.5 shrink-0 ${item.available ? "text-brand-green" : "text-slate-300"}`,
+          "aria-hidden": "true"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: item.available ? "text-slate-600" : "text-slate-400", children: item.label })
+    ] }, item.label)) })
+  ] });
+}
+function panelToneClass(tone) {
+  if (tone === "green") {
+    return "border-brand-green/20 bg-brand-green/[0.04]";
+  }
+  if (tone === "blue") {
+    return "border-brand-blue/20 bg-brand-blue/[0.04]";
+  }
+  return "border-slate-200 bg-slate-50/80";
+}
+function SupplyChainCloudCapabilitiesPanel({ state }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: `rounded-2xl border px-4 py-4 ${panelToneClass(state.tone)}`,
+      "aria-label": "Local and Guard Cloud capabilities",
+      "data-testid": "supply-chain-cloud-capabilities",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: state.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-600", children: state.detail })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid min-w-0 gap-3 md:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            CapabilityList,
+            {
+              heading: state.localHeading,
+              icon: HiMiniComputerDesktop,
+              items: state.localCapabilities
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            CapabilityList,
+            {
+              heading: state.cloudHeading,
+              icon: HiMiniCloud,
+              items: state.cloudCapabilities
+            }
+          )
+        ] })
+      ]
+    }
+  );
+}
 function resolveSupplyChainPostureAlerts(snapshot) {
   const alerts = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -2834,28 +2947,6 @@ function SupplyChainPostureBanners({ alerts }) {
     }
   );
 }
-const SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS = "min-w-0 max-w-full space-y-6 overflow-x-hidden";
-function resolveProtectedManagersStat(stats) {
-  if (stats.stagedManagers > 0) {
-    return {
-      label: "Ready after restart",
-      value: stats.stagedManagers,
-      tone: "blue"
-    };
-  }
-  if (stats.repairRequiredManagers > 0) {
-    return {
-      label: "Needs path fix",
-      value: stats.repairRequiredManagers,
-      tone: "attention"
-    };
-  }
-  return {
-    label: "Protected tools",
-    value: stats.protectedManagers,
-    tone: "green"
-  };
-}
 function StatCard({ label, value, tone = "slate" }) {
   const toneClass = tone === "green" ? "text-brand-green" : tone === "attention" ? "text-brand-attention" : tone === "blue" ? "text-brand-blue" : "text-brand-dark";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: [
@@ -2931,6 +3022,10 @@ function SupplyChainWorkspace({
     () => resolveSupplyChainPostureAlerts(snapshot),
     [snapshot]
   );
+  const cloudCapabilities = reactExports.useMemo(
+    () => resolveSupplyChainCloudCapabilities(snapshot),
+    [snapshot]
+  );
   const protectedManagersStat = reactExports.useMemo(
     () => resolveProtectedManagersStat(stats),
     [stats]
@@ -2974,6 +3069,7 @@ function SupplyChainWorkspace({
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudDegradedBanner, { state: cloudDegraded }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainPostureBanners, { alerts: postureAlerts }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudCapabilitiesPanel, { state: cloudCapabilities }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Active apps", value: stats.activeApps, tone: "green" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Prevented installs", value: stats.preventedInstalls, tone: stats.preventedInstalls > 0 ? "attention" : "slate" }),
