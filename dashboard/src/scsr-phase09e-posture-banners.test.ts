@@ -116,6 +116,27 @@ assert(
   "SCSR161: path repair required surfaces repair banner",
 );
 
+const missingPathAlerts = resolveSupplyChainPostureAlerts({
+  ...baseSnapshot,
+  supply_chain: {
+    package_manager_protection: makeProtection({
+      path_status: "missing_from_path",
+      installed_managers: [],
+      protected_managers: [],
+      unprotected_managers: ["npm", "pip"],
+    }),
+  },
+});
+assert(
+  missingPathAlerts.some(
+    (alert) =>
+      alert.kind === "path_repair" &&
+      alert.title === "Guard shims are missing from PATH" &&
+      !alert.detail.includes("0 manager"),
+  ),
+  "SCSR161-C: missing PATH with no installed managers uses shim-missing copy",
+);
+
 const restartAlerts = resolveSupplyChainPostureAlerts({
   ...baseSnapshot,
   supply_chain: {

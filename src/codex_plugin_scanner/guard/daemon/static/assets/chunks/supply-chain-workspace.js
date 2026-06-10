@@ -333,6 +333,47 @@ function filterPackageWorkbenchFindings(findings, filters) {
 function packageWorkbenchEcosystems(findings) {
   return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
 }
+function resolveManagerCoverageStatus(protection, manager) {
+  if (protection === void 0) {
+    return "unprotected";
+  }
+  if (protection.protected_managers.includes(manager)) {
+    return "protected";
+  }
+  if (protection.installed_managers.includes(manager)) {
+    if (protection.path_status === "restart_required") {
+      return "restart_required";
+    }
+    return "path_repair";
+  }
+  return "unprotected";
+}
+function buildSupplyChainStats(snapshot) {
+  const managedInstalls = snapshot.managed_installs ?? [];
+  const protection = snapshot.supply_chain?.package_manager_protection;
+  const supportedManagers = protection?.supported_managers ?? [];
+  const protectedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "protected"
+  ).length;
+  const stagedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required"
+  ).length;
+  const repairRequiredManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair"
+  ).length;
+  const unprotectedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected"
+  ).length;
+  return {
+    totalApps: managedInstalls.length,
+    activeApps: managedInstalls.filter((install) => install.active).length,
+    preventedInstalls: managedInstalls.filter((install) => !install.active).length,
+    protectedManagers,
+    stagedManagers,
+    repairRequiredManagers,
+    unprotectedManagers
+  };
+}
 function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -2680,49 +2721,30 @@ function SupplyChainCloudDegradedBanner({ state }) {
     }
   );
 }
-function repairRequiredManagerCount(protection) {
-  if (protection === void 0) {
-    return 0;
-  }
-  return protection.supported_managers.filter((manager) => {
-    if (protection.protected_managers.includes(manager)) {
-      return false;
-    }
-    if (!protection.installed_managers.includes(manager)) {
-      return false;
-    }
-    if (protection.path_status === "restart_required") {
-      return false;
-    }
-    return true;
-  }).length;
-}
-function stagedManagerCount(protection) {
-  if (protection === void 0 || protection.path_status !== "restart_required") {
-    return 0;
-  }
-  return protection.supported_managers.filter(
-    (manager) => protection.installed_managers.includes(manager)
-  ).length;
-}
 function resolveSupplyChainPostureAlerts(snapshot) {
   const alerts = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
-  const repairRequiredManagers = repairRequiredManagerCount(protection);
-  const stagedManagers = stagedManagerCount(protection);
+  const stats = buildSupplyChainStats(snapshot);
   const protectionStatus = resolveHomeProtectionStatus(snapshot);
-  if (repairRequiredManagers > 0 || protection?.path_status === "missing_from_path") {
+  if (protection?.path_status === "missing_from_path") {
+    alerts.push({
+      kind: "path_repair",
+      title: "Guard shims are missing from PATH",
+      detail: "Package manager shims are not active in your shell PATH yet. Install or repair shims in the firewall panel, then open a new shell.",
+      tone: "attention"
+    });
+  } else if (stats.repairRequiredManagers > 0) {
     const managers = protection !== void 0 ? protection.installed_managers.filter(
       (manager) => !protection.protected_managers.includes(manager)
     ) : [];
-    const managerLabel = managers.length > 0 ? managers.join(", ") : `${repairRequiredManagers} manager(s)`;
+    const managerLabel = managers.length > 0 ? managers.join(", ") : "installed managers";
     alerts.push({
       kind: "path_repair",
       title: "PATH repair required before intercepts work",
       detail: `Guard installed shims for ${managerLabel}, but PATH order still needs repair. Use Fix PATH in the firewall panel, then restart your shell.`,
       tone: "attention"
     });
-  } else if (protection?.path_status === "restart_required" || stagedManagers > 0) {
+  } else if (protection?.path_status === "restart_required" || stats.stagedManagers > 0) {
     alerts.push({
       kind: "path_repair",
       title: "Restart shell to activate PATH protection",
@@ -2811,41 +2833,6 @@ function SupplyChainPostureBanners({ alerts }) {
       children: alerts.map((alert) => /* @__PURE__ */ jsxRuntimeExports.jsx(PostureBanner, { alert }, alert.kind))
     }
   );
-}
-function resolveManagerCoverageStatus(protection, manager) {
-  if (!protection) return "unprotected";
-  if (protection.protected_managers.includes(manager)) return "protected";
-  if (protection.installed_managers.includes(manager)) {
-    if (protection.path_status === "restart_required") return "restart_required";
-    return "path_repair";
-  }
-  return "unprotected";
-}
-function buildSupplyChainStats(snapshot) {
-  const managedInstalls = snapshot.managed_installs ?? [];
-  const protection = snapshot.supply_chain?.package_manager_protection;
-  const supportedManagers = protection?.supported_managers ?? [];
-  const protectedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "protected"
-  ).length;
-  const stagedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required"
-  ).length;
-  const repairRequiredManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair"
-  ).length;
-  const unprotectedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected"
-  ).length;
-  return {
-    totalApps: managedInstalls.length,
-    activeApps: managedInstalls.filter((i) => i.active).length,
-    preventedInstalls: managedInstalls.filter((i) => !i.active).length,
-    protectedManagers,
-    stagedManagers,
-    repairRequiredManagers,
-    unprotectedManagers
-  };
 }
 function StatCard({ label, value, tone = "slate" }) {
   const toneClass = tone === "green" ? "text-brand-green" : tone === "attention" ? "text-brand-attention" : tone === "blue" ? "text-brand-blue" : "text-brand-dark";

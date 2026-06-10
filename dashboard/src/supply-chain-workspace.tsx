@@ -17,6 +17,7 @@ import type {
   PackageManagerProtection,
   SupplyChainAuditSnapshot,
 } from "./guard-types";
+import { buildSupplyChainStats } from "./supply-chain-protection-stats";
 import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChainAuditSnapshot } from "./guard-api";
 import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
@@ -33,57 +34,7 @@ import {
 import { resolveSupplyChainPostureAlerts } from "./supply-chain-posture";
 import { SupplyChainPostureBanners } from "./supply-chain-posture-banners";
 
-type ManagerCoverageStatus = "protected" | "restart_required" | "path_repair" | "unprotected";
-
-function resolveManagerCoverageStatus(
-  protection: PackageManagerProtection | undefined,
-  manager: string,
-): ManagerCoverageStatus {
-  if (!protection) return "unprotected";
-  if (protection.protected_managers.includes(manager)) return "protected";
-  if (protection.installed_managers.includes(manager)) {
-    if (protection.path_status === "restart_required") return "restart_required";
-    return "path_repair";
-  }
-  return "unprotected";
-}
-
-export function buildSupplyChainStats(
-  snapshot: GuardRuntimeSnapshot,
-): {
-  totalApps: number;
-  activeApps: number;
-  preventedInstalls: number;
-  protectedManagers: number;
-  stagedManagers: number;
-  repairRequiredManagers: number;
-  unprotectedManagers: number;
-} {
-  const managedInstalls = snapshot.managed_installs ?? [];
-  const protection = snapshot.supply_chain?.package_manager_protection;
-  const supportedManagers = protection?.supported_managers ?? [];
-  const protectedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "protected",
-  ).length;
-  const stagedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required",
-  ).length;
-  const repairRequiredManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair",
-  ).length;
-  const unprotectedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected",
-  ).length;
-  return {
-    totalApps: managedInstalls.length,
-    activeApps: managedInstalls.filter((i) => i.active).length,
-    preventedInstalls: managedInstalls.filter((i) => !i.active).length,
-    protectedManagers,
-    stagedManagers,
-    repairRequiredManagers,
-    unprotectedManagers,
-  };
-}
+export { buildSupplyChainStats } from "./supply-chain-protection-stats";
 
 type StatCardProps = {
   label: string;

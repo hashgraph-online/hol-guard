@@ -1,6 +1,7 @@
 import { resolveFeedStaleness } from "./feed-health-workspace";
 import { resolveHomeProtectionStatus } from "./home-protection-module";
-import type { GuardRuntimeSnapshot, PackageManagerProtection } from "./guard-types";
+import { buildSupplyChainStats } from "./supply-chain-protection-stats";
+import type { GuardRuntimeSnapshot } from "./guard-types";
 
 export type SupplyChainPostureAlertKind =
   | "partial_protection"
@@ -14,58 +15,37 @@ export type SupplyChainPostureAlert = {
   tone: "attention" | "blue" | "slate";
 };
 
-function repairRequiredManagerCount(protection: PackageManagerProtection | undefined): number {
-  if (protection === undefined) {
-    return 0;
-  }
-  return protection.supported_managers.filter((manager) => {
-    if (protection.protected_managers.includes(manager)) {
-      return false;
-    }
-    if (!protection.installed_managers.includes(manager)) {
-      return false;
-    }
-    if (protection.path_status === "restart_required") {
-      return false;
-    }
-    return true;
-  }).length;
-}
-
-function stagedManagerCount(protection: PackageManagerProtection | undefined): number {
-  if (protection === undefined || protection.path_status !== "restart_required") {
-    return 0;
-  }
-  return protection.supported_managers.filter((manager) =>
-    protection.installed_managers.includes(manager),
-  ).length;
-}
-
 export function resolveSupplyChainPostureAlerts(
   snapshot: GuardRuntimeSnapshot,
 ): SupplyChainPostureAlert[] {
   const alerts: SupplyChainPostureAlert[] = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
-  const repairRequiredManagers = repairRequiredManagerCount(protection);
-  const stagedManagers = stagedManagerCount(protection);
+  const stats = buildSupplyChainStats(snapshot);
   const protectionStatus = resolveHomeProtectionStatus(snapshot);
 
-  if (repairRequiredManagers > 0 || protection?.path_status === "missing_from_path") {
+  if (protection?.path_status === "missing_from_path") {
+    alerts.push({
+      kind: "path_repair",
+      title: "Guard shims are missing from PATH",
+      detail:
+        "Package manager shims are not active in your shell PATH yet. Install or repair shims in the firewall panel, then open a new shell.",
+      tone: "attention",
+    });
+  } else if (stats.repairRequiredManagers > 0) {
     const managers =
       protection !== undefined
         ? protection.installed_managers.filter(
             (manager) => !protection.protected_managers.includes(manager),
           )
         : [];
-    const managerLabel =
-      managers.length > 0 ? managers.join(", ") : `${repairRequiredManagers} manager(s)`;
+    const managerLabel = managers.length > 0 ? managers.join(", ") : "installed managers";
     alerts.push({
       kind: "path_repair",
       title: "PATH repair required before intercepts work",
       detail: `Guard installed shims for ${managerLabel}, but PATH order still needs repair. Use Fix PATH in the firewall panel, then restart your shell.`,
       tone: "attention",
     });
-  } else if (protection?.path_status === "restart_required" || stagedManagers > 0) {
+  } else if (protection?.path_status === "restart_required" || stats.stagedManagers > 0) {
     alerts.push({
       kind: "path_repair",
       title: "Restart shell to activate PATH protection",
