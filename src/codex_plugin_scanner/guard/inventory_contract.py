@@ -13,6 +13,11 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 InventoryItemKind = Literal[
     "agent",
+    "daemon_plugin",
+    "harness",
+    "model_provider",
+    "package",
+    "prompt_pack",
     "skill",
     "mcp_server",
     "mcp_tool",
@@ -220,8 +225,21 @@ def inventory_snapshot_from_detection(
     runtime_version: str | None = None,
     cisco_runs: tuple[object, ...] = (),
 ) -> GuardAgentInventorySnapshot:
+    from .aibom_detection import discover_shared_workspace_aibom_artifacts
+
     harness = str(getattr(detection, "harness", "unknown"))
-    artifacts = tuple(getattr(detection, "artifacts", ()))
+    artifacts = list(getattr(detection, "artifacts", ()))
+    if workspace_dir is not None:
+        existing_ids = {str(getattr(artifact, "artifact_id", "")) for artifact in artifacts}
+        for artifact in discover_shared_workspace_aibom_artifacts(
+            harness,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        ):
+            if artifact.artifact_id not in existing_ids:
+                artifacts.append(artifact)
+                existing_ids.add(artifact.artifact_id)
+    artifacts = tuple(artifacts)
     items: list[GuardAgentInventoryItem] = []
     for artifact in artifacts:
         item = _item_from_artifact(
@@ -382,6 +400,11 @@ def _item_from_artifact(
     name = str(getattr(artifact, "name", artifact_id))
     safe_metadata = _safe_artifact_metadata(artifact, home_dir=home_dir, workspace_dir=workspace_dir)
     item_kind = _item_kind(artifact_type)
+    safe_metadata = _apply_aibom_metadata_enrichment(
+        artifact,
+        item_kind=item_kind,
+        metadata=safe_metadata,
+    )
     semantic_text = fingerprint_mapping(
         {
             "artifact_id": artifact_id,
@@ -390,12 +413,13 @@ def _item_from_artifact(
             "metadata": safe_metadata,
         }
     )
+    content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
     return GuardAgentInventoryItem(
         item_id=artifact_id,
         item_kind=item_kind,
         display_name=name,
         source_fingerprint=fingerprint_mapping({"harness": harness, "artifact_id": artifact_id}),
-        content_hash=semantic_text,
+        content_hash=content_hash,
         capability_categories=_capabilities_for_artifact(artifact_type, safe_metadata),
         risk_level=_risk_level(safe_metadata),
         scanner_sources=("hol-detector",),
@@ -717,15 +741,65 @@ def _agent_type(value: str) -> AgentInventoryType:
 
 
 def _item_kind(artifact_type: str) -> InventoryItemKind:
-    if artifact_type in {"skill", "skill_file"}:
-        return "skill"
-    if artifact_type == "mcp_server":
-        return "mcp_server"
-    if artifact_type == "channel":
-        return "channel"
-    if artifact_type in {"gateway_config", "config"}:
-        return "agent"
-    return "plugin"
+    mapping: dict[str, InventoryItemKind] = {
+        "skill": "skill",
+        "skill_file": "skill",
+        "mcp_server": "mcp_server",
+        "mcp_tool": "mcp_tool",
+        "channel": "channel",
+        "gateway_config": "agent",
+        "config": "agent",
+        "agent": "agent",
+        "hook": "hook",
+        "instruction": "overlay",
+        "overlay": "overlay",
+        "command": "prompt_pack",
+        "extension": "plugin",
+        "plugin": "plugin",
+        "plugin-file": "plugin",
+        "repository": "repository",
+        "container_image": "container_image",
+        "policy": "policy",
+        "secret_reference": "secret_reference",
+        "network_endpoint": "network_endpoint",
+        "guard_launcher_shim": "harness",
+        "package": "package",
+        "daemon_plugin": "daemon_plugin",
+        "model_provider": "model_provider",
+        "prompt_pack": "prompt_pack",
+    }
+    return mapping.get(artifact_type, "plugin")
+
+
+def _resolve_item_content_hash(metadata: dict[str, object], semantic_text: str) -> str:
+    for key in ("content_hash", "directory_hash"):
+        candidate = metadata.get(key)
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    version_info = metadata.get("versionInfo")
+    if isinstance(version_info, dict):
+        version_hash = version_info.get("contentHash")
+        if isinstance(version_hash, str) and version_hash:
+            return version_hash
+    return semantic_text
+
+
+def _apply_aibom_metadata_enrichment(
+    artifact: object,
+    *,
+    item_kind: InventoryItemKind,
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    from .aibom_detection import instruction_role_for_path
+
+    enriched = dict(metadata)
+    if item_kind == "overlay" and "instructionRole" not in enriched:
+        config_path = getattr(artifact, "config_path", None)
+        if isinstance(config_path, str):
+            role = instruction_role_for_path(Path(config_path))
+            if role is not None:
+                enriched["instructionRole"] = role
+    return enriched
 
 
 def _capabilities_for_artifact(
@@ -734,6 +808,8 @@ def _capabilities_for_artifact(
 ) -> tuple[InventoryCapability, ...]:
     capabilities: set[InventoryCapability] = set()
     if artifact_type in {"skill", "skill_file"}:
+        capabilities.add("reads_files")
+    if artifact_type in {"instruction", "overlay", "command"}:
         capabilities.add("reads_files")
     if artifact_type == "mcp_server":
         capabilities.add("network_egress")

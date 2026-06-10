@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 
 from ...path_support import iter_safe_matching_files, resolves_within_root
 from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
+from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.harness_attribution import cursor_hook_query_extras
 from ..shims import install_guard_shim, remove_guard_shim
@@ -473,13 +474,18 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                     )
                 )
         resolved_executable = self.resolved_executable(context)
-        return HarnessDetection(
+        detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or resolved_executable is not None,
             command_available=resolved_executable is not None,
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
+        )
+        return extend_detection_with_workspace_aibom(
+            detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
 
     @staticmethod

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 from ...ecosystems.opencode import _load_json_or_jsonc
+from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -150,13 +151,18 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             found_paths=found_paths,
             seen_artifact_ids=seen_artifact_ids,
         )
-        return HarnessDetection(
+        detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
             command_available=_command_available(self.executable),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
+        )
+        return extend_detection_with_workspace_aibom(
+            detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
 
     def install(self, context: HarnessContext) -> dict[str, object]:
