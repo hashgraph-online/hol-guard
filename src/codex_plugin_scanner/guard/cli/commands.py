@@ -2355,11 +2355,12 @@ def run_guard_command(
                 else:
                     print(message, file=sys.stderr)
                 return 1
-            except RuntimeError as error:
+            except (OSError, RuntimeError) as error:
+                message = str(error) if isinstance(error, RuntimeError) else "Guard Cloud AIBOM sync failed."
                 if getattr(args, "json", False):
-                    _emit("aibom.sync", {"synced": False, "error": str(error)}, True)
+                    _emit("aibom.sync", {"synced": False, "error": message}, True)
                 else:
-                    print(str(error), file=sys.stderr)
+                    print(message, file=sys.stderr)
                 return 1
             _emit("aibom.sync", payload, getattr(args, "json", False))
             return 0

@@ -88,9 +88,10 @@ def build_aibom_status_payload(
 ) -> dict[str, object]:
     snapshots = collect_aibom_snapshots(context, generated_at=generated_at, options=options)
     sync_summary = _sync_summary(store)
-    layer_summary = summarize_aibom_layers(snapshots, generated_at=generated_at)
-    trust_summary = summarize_aibom_trust(snapshots)
-    drift_summary = summarize_aibom_drift(snapshots)
+    layer_summary, trust_summary, drift_summary = summarize_aibom_layers(
+        snapshots,
+        generated_at=generated_at,
+    )
     return {
         "generated_at": generated_at,
         "status": _aibom_connection_status(store),
@@ -115,9 +116,10 @@ def build_aibom_export_payload(
     snapshots = collect_aibom_snapshots(context, generated_at=generated_at, options=options)
     serialized_snapshots = [serialize_inventory_snapshot(snapshot) for snapshot in snapshots]
     artifacts = _artifact_rows_from_store(store, snapshots)
-    layer_summary = summarize_aibom_layers(snapshots, generated_at=generated_at)
-    trust_summary = summarize_aibom_trust(snapshots)
-    drift_summary = summarize_aibom_drift(snapshots)
+    layer_summary, trust_summary, drift_summary = summarize_aibom_layers(
+        snapshots,
+        generated_at=generated_at,
+    )
     sync_summary = _sync_summary(store)
     payload: dict[str, object] = {
         "generated_at": generated_at,
@@ -185,7 +187,14 @@ def sync_aibom_snapshots(
         data=body,
         extra_headers=None,
     )
-    payload = _urlopen_json_with_timeout_retry(request=request, timeout_seconds=30, retry_timeout_seconds=60)
+    try:
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=30,
+            retry_timeout_seconds=60,
+        )
+    except OSError as error:
+        raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
     accepted = payload.get("accepted")
     synced_at = _sync_timestamp_from_payload(payload) or generated_at
     summary = {
@@ -204,7 +213,7 @@ def summarize_aibom_layers(
     snapshots: tuple[GuardAgentInventorySnapshot, ...],
     *,
     generated_at: str,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     counts = {
         "instructions": 0,
         "skills": 0,
@@ -214,10 +223,11 @@ def summarize_aibom_layers(
         "findings": 0,
         "trust": 0,
         "sources": 0,
+        "configSources": 0,
     }
     for snapshot in snapshots:
         counts["findings"] += len(snapshot.findings)
-        counts["sources"] += len(snapshot.sources)
+        counts["configSources"] += len(snapshot.sources)
         for item in snapshot.items:
             if item.item_kind in {"overlay", "prompt_pack"}:
                 counts["instructions"] += 1
@@ -239,7 +249,7 @@ def summarize_aibom_layers(
                 counts["sources"] += 1
     drift = summarize_aibom_drift(snapshots)
     trust = summarize_aibom_trust(snapshots)
-    return {
+    layer_summary = {
         **counts,
         "driftCount": drift.get("total", 0),
         "highRiskCount": drift.get("high_risk", 0),
@@ -247,6 +257,7 @@ def summarize_aibom_layers(
         "generatedAt": generated_at,
         "staleSnapshot": False,
     }
+    return layer_summary, trust, drift
 
 
 def summarize_aibom_trust(snapshots: tuple[GuardAgentInventorySnapshot, ...]) -> dict[str, object]:
