@@ -226,16 +226,16 @@ export function FirewallControlsView({
         <ActionResultPanel completed={lastCompleted} onDismiss={onDismissResult} />
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-          <HiMiniMagnifyingGlass className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 sm:flex-none sm:w-44">
+          <HiMiniMagnifyingGlass className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
           <input
             type="search"
-            placeholder="Filter by manager…"
+            placeholder="Search tools…"
             value={managerFilter}
             onChange={onManagerFilterChange}
             aria-label="Filter package managers"
-            className="bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-40"
+            className="min-w-0 flex-1 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
           />
         </div>
         {(["all", "protected", "actionable", "unprotected"] as const).map((s) => (

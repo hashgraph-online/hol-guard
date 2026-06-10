@@ -53,7 +53,7 @@ function PostureBanner({ alert }: { alert: SupplyChainPostureAlert }) {
     >
       <div className="flex items-start gap-2.5">
         <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${alertIconClass(alert.tone)}`} aria-hidden="true" />
-        <div>
+        <div className="min-w-0 break-words">
           <p className={`text-sm font-medium ${titleClass}`}>{alert.title}</p>
           <p className={`mt-1 text-xs leading-relaxed ${textClass}`}>{alert.detail}</p>
         </div>
