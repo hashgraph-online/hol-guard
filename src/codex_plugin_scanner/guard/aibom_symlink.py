@@ -222,6 +222,24 @@ def _is_within_safe_roots(path: Path, safe_roots: tuple[Path, ...]) -> bool:
     return any(resolves_within_root(root, path, require_exists=False) for root in safe_roots)
 
 
+def source_of_truth_metadata_from_inspection(
+    inspection: AibomSourceInspection,
+    *,
+    source_link_id: str,
+) -> dict[str, object]:
+    return {
+        "sourceLinkId": source_link_id,
+        "sourceFingerprint": inspection.source_fingerprint,
+        "linkKind": inspection.link_kind,
+        "validationState": inspection.validation_state,
+        "pathClass": inspection.path_class,
+        "redactionSummary": inspection.redaction_summary,
+        "metadata": {
+            "targetContentHash": inspection.target_content_hash,
+        },
+    }
+
+
 def _content_hash_for_target(path: Path, *, home_dir: Path) -> str | None:
     try:
         if path.is_dir():

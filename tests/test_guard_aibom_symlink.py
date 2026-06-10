@@ -8,6 +8,8 @@ from codex_plugin_scanner.guard.aibom_symlink import (
     fingerprint_redacted_path,
     inspect_aibom_source_path,
 )
+from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 def test_fingerprint_redacted_path_never_emits_raw_home(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     workspace.mkdir()
@@ -134,3 +136,71 @@ def test_inspection_serializes_without_raw_paths(tmp_path: Path) -> None:
 
     assert str(tmp_path) not in encoded
     assert "policy" not in encoded
+
+
+def test_inventory_snapshot_attaches_source_of_truth_for_symlink_items(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    shared = workspace / "shared-root"
+    shared.mkdir(parents=True)
+    (shared / "SKILL.md").write_text("name: shared\n", encoding="utf-8")
+    link = workspace / "skills" / "linked" / "SKILL.md"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(shared / "SKILL.md")
+
+    snapshot = inventory_snapshot_from_detection(
+        HarnessDetection(
+            harness="hermes",
+            installed=True,
+            command_available=False,
+            config_paths=(),
+            artifacts=(
+                GuardArtifact(
+                    artifact_id="hermes:skill:linked",
+                    name="linked",
+                    harness="hermes",
+                    artifact_type="skill",
+                    source_scope="project",
+                    config_path=str(link),
+                ),
+            ),
+        ),
+        generated_at="2026-06-10T00:00:00Z",
+        home_dir=tmp_path / "home",
+        workspace_dir=workspace,
+    )
+    item = snapshot.items[0]
+    source_of_truth = item.metadata.get("sourceOfTruth")
+    assert isinstance(source_of_truth, dict)
+    assert source_of_truth.get("validationState") == "valid"
+    assert source_of_truth.get("linkKind") == "symlink"
+
+
+def test_inventory_snapshot_emits_findings_for_broken_symlink_sources(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    broken = workspace / "broken-link"
+    broken.symlink_to(workspace / "missing-target")
+
+    snapshot = inventory_snapshot_from_detection(
+        HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=False,
+            config_paths=(),
+            artifacts=(
+                GuardArtifact(
+                    artifact_id="codex:instruction:broken",
+                    name="broken",
+                    harness="codex",
+                    artifact_type="instruction",
+                    source_scope="project",
+                    config_path=str(broken),
+                ),
+            ),
+        ),
+        generated_at="2026-06-10T00:00:00Z",
+        home_dir=tmp_path / "home",
+        workspace_dir=workspace,
+    )
+
+    assert any(finding.check_id == "aibom.symlink.broken" for finding in snapshot.findings)
