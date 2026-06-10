@@ -105,6 +105,7 @@ export type FirewallControlsViewProps = {
   onDismissResult: () => void;
   onOpenShell: () => void;
   onRefreshStatus: () => void;
+  onOpenManagerDetails: (manager: string) => void;
 };
 
 export function FirewallControlsView({
@@ -131,6 +132,7 @@ export function FirewallControlsView({
   onDismissResult,
   onOpenShell,
   onRefreshStatus,
+  onOpenManagerDetails,
 }: FirewallControlsViewProps) {
   const anyPending = pendingOp !== null;
   const nextAction = useMemo(() => resolvePackageFirewallNextAction(data), [data]);
@@ -318,6 +320,7 @@ export function FirewallControlsView({
                   onRemoveRequest={onRemoveRequest}
                   onRemoveConfirm={onRemoveConfirm}
                   onRemoveCancel={onRemoveCancel}
+                  onOpenDetails={onOpenManagerDetails}
                 />
               );
             })}
