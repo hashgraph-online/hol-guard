@@ -30,6 +30,8 @@ import {
   SupplyChainCloudDegradedBanner,
   SupplyChainEvidenceRail,
 } from "./supply-chain-evidence-rail-panel";
+import { resolveSupplyChainPostureAlerts } from "./supply-chain-posture";
+import { SupplyChainPostureBanners } from "./supply-chain-posture-banners";
 
 type ManagerCoverageStatus = "protected" | "restart_required" | "path_repair" | "unprotected";
 
@@ -203,6 +205,10 @@ export function SupplyChainWorkspace({
     () => resolveSupplyChainCloudDegradedState(snapshot),
     [snapshot],
   );
+  const postureAlerts = useMemo(
+    () => resolveSupplyChainPostureAlerts(snapshot),
+    [snapshot],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -254,6 +260,8 @@ export function SupplyChainWorkspace({
       </div>
 
       <SupplyChainCloudDegradedBanner state={cloudDegraded} />
+
+      <SupplyChainPostureBanners alerts={postureAlerts} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active apps" value={stats.activeApps} tone="green" />

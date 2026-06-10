@@ -1,6 +1,8 @@
-import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as HiMiniClock, az as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aA as HiMiniBeaker, ab as HiMiniMagnifyingGlass, p as EmptyState, aB as HiMiniBugAnt, v as HiMiniXMark, aC as fetchPackageFirewallStatus, aD as runPackageFirewallAction, am as GuardHarnessActionError, aE as runPackageAudit, aF as runPackageSync, aG as startPackageFirewallConnect, aH as openPackageFirewallShell, S as SectionLabel, aI as HiMiniArrowDown, aJ as HiMiniArrowUp, aK as fetchSupplyChainBundle, B as Badge, aL as HiMiniDocumentMagnifyingGlass, aM as HiMiniShieldExclamation, aN as fetchReceipts, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, a8 as Tag, A as ActionButton, am as HiMiniArrowPath, l as HiMiniShieldCheck, au as HiMiniArrowTopRightOnSquare, r as reactExports, d as HiMiniCheckCircle, v as HiMiniExclamationTriangle, m as formatRelativeTime, D as HiMiniXCircle, aw as HiMiniClock, ax as IconActionButton, an as HiMiniTrash, C as HiMiniWrenchScrewdriver, ay as HiMiniBeaker, a9 as HiMiniMagnifyingGlass, b as EmptyState, az as HiMiniBugAnt, o as HiMiniXMark, aA as fetchPackageFirewallStatus, aB as runPackageFirewallAction, ak as GuardHarnessActionError, aC as runPackageAudit, aD as runPackageSync, aE as startPackageFirewallConnect, aF as openPackageFirewallShell, S as SectionLabel, aG as HiMiniArrowDown, aH as HiMiniArrowUp, aI as fetchSupplyChainBundle, B as Badge, aJ as HiMiniDocumentMagnifyingGlass, aK as HiMiniShieldExclamation, aL as HiMiniInformationCircle, aM as fetchReceipts, h as harnessDisplayName, p as HiMiniChevronUp, q as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
+import { resolveFeedStaleness } from "./feed-health-workspace.js";
+import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -2678,6 +2680,138 @@ function SupplyChainCloudDegradedBanner({ state }) {
     }
   );
 }
+function repairRequiredManagerCount(protection) {
+  if (protection === void 0) {
+    return 0;
+  }
+  return protection.supported_managers.filter((manager) => {
+    if (protection.protected_managers.includes(manager)) {
+      return false;
+    }
+    if (!protection.installed_managers.includes(manager)) {
+      return false;
+    }
+    if (protection.path_status === "restart_required") {
+      return false;
+    }
+    return true;
+  }).length;
+}
+function stagedManagerCount(protection) {
+  if (protection === void 0 || protection.path_status !== "restart_required") {
+    return 0;
+  }
+  return protection.supported_managers.filter(
+    (manager) => protection.installed_managers.includes(manager)
+  ).length;
+}
+function resolveSupplyChainPostureAlerts(snapshot) {
+  const alerts = [];
+  const protection = snapshot.supply_chain?.package_manager_protection;
+  const repairRequiredManagers = repairRequiredManagerCount(protection);
+  const stagedManagers = stagedManagerCount(protection);
+  const protectionStatus = resolveHomeProtectionStatus(snapshot);
+  if (repairRequiredManagers > 0 || protection?.path_status === "missing_from_path") {
+    const managers = protection !== void 0 ? protection.installed_managers.filter(
+      (manager) => !protection.protected_managers.includes(manager)
+    ) : [];
+    const managerLabel = managers.length > 0 ? managers.join(", ") : `${repairRequiredManagers} manager(s)`;
+    alerts.push({
+      kind: "path_repair",
+      title: "PATH repair required before intercepts work",
+      detail: `Guard installed shims for ${managerLabel}, but PATH order still needs repair. Use Fix PATH in the firewall panel, then restart your shell.`,
+      tone: "attention"
+    });
+  } else if (protection?.path_status === "restart_required" || stagedManagers > 0) {
+    alerts.push({
+      kind: "path_repair",
+      title: "Restart shell to activate PATH protection",
+      detail: "Guard updated your shell profile. Open a new terminal or restart AI apps before testing intercept proof.",
+      tone: "blue"
+    });
+  }
+  if (protectionStatus === "partial" && protection !== void 0 && protection.protected_managers.length > 0 && protection.unprotected_managers.length > 0) {
+    alerts.push({
+      kind: "partial_protection",
+      title: "Some package managers are still unprotected",
+      detail: `${protection.protected_managers.length} protected, ${protection.unprotected_managers.length} still open: ${protection.unprotected_managers.join(", ")}. Install shims for the remaining managers to close the gap.`,
+      tone: "attention"
+    });
+  }
+  if (snapshot.cloud_state !== "local_only") {
+    const feedStaleness = resolveFeedStaleness(snapshot);
+    if (feedStaleness.stale) {
+      alerts.push({
+        kind: "stale_intel",
+        title: "Supply-chain intel looks stale on this device",
+        detail: `${feedStaleness.ageLabel}. Sync policy or run a workspace audit so Guard evaluates packages against current advisories.`,
+        tone: "attention"
+      });
+    }
+  }
+  return alerts;
+}
+function alertToneClass(tone) {
+  if (tone === "blue") {
+    return "border-brand-blue/20 bg-brand-blue/[0.04]";
+  }
+  if (tone === "attention") {
+    return "border-amber-200 bg-amber-50/70";
+  }
+  return "border-slate-200 bg-slate-50/80";
+}
+function alertIcon(alert) {
+  if (alert.kind === "partial_protection") {
+    return HiMiniShieldExclamation;
+  }
+  if (alert.kind === "path_repair") {
+    return alert.tone === "blue" ? HiMiniInformationCircle : HiMiniExclamationTriangle;
+  }
+  return HiMiniArrowPath;
+}
+function alertIconClass(tone) {
+  if (tone === "blue") {
+    return "text-brand-blue";
+  }
+  if (tone === "attention") {
+    return "text-amber-600";
+  }
+  return "text-slate-500";
+}
+function PostureBanner({ alert }) {
+  const Icon = alertIcon(alert);
+  const textClass = alert.tone === "attention" ? "text-amber-900/90" : "text-slate-600";
+  const titleClass = alert.tone === "attention" ? "text-amber-950" : "text-brand-dark";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: `rounded-2xl border px-4 py-3 ${alertToneClass(alert.tone)}`,
+      role: "status",
+      "data-testid": `supply-chain-posture-${alert.kind}`,
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-4 w-4 shrink-0 ${alertIconClass(alert.tone)}`, "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${titleClass}`, children: alert.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 text-xs leading-relaxed ${textClass}`, children: alert.detail })
+        ] })
+      ] })
+    }
+  );
+}
+function SupplyChainPostureBanners({ alerts }) {
+  if (alerts.length === 0) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "section",
+    {
+      className: "space-y-3",
+      "aria-label": "Supply chain posture alerts",
+      "data-testid": "supply-chain-posture-banners",
+      children: alerts.map((alert) => /* @__PURE__ */ jsxRuntimeExports.jsx(PostureBanner, { alert }, alert.kind))
+    }
+  );
+}
 function resolveManagerCoverageStatus(protection, manager) {
   if (!protection) return "unprotected";
   if (protection.protected_managers.includes(manager)) return "protected";
@@ -2784,6 +2918,10 @@ function SupplyChainWorkspace({
     () => resolveSupplyChainCloudDegradedState(snapshot),
     [snapshot]
   );
+  const postureAlerts = reactExports.useMemo(
+    () => resolveSupplyChainPostureAlerts(snapshot),
+    [snapshot]
+  );
   reactExports.useEffect(() => {
     let cancelled = false;
     const loadReceiptEvidence = async () => {
@@ -2822,6 +2960,7 @@ function SupplyChainWorkspace({
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onGoHome, children: "Back to Home" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudDegradedBanner, { state: cloudDegraded }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainPostureBanners, { alerts: postureAlerts }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Active apps", value: stats.activeApps, tone: "green" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Prevented installs", value: stats.preventedInstalls, tone: stats.preventedInstalls > 0 ? "attention" : "slate" }),
