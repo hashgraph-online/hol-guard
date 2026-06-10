@@ -88,7 +88,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_evidence import EvidenceRecord
 
 
-def _legacy_evidence_table(connection: sqlite3.Connection) -> None:
+def _incomplete_evidence_table(connection: sqlite3.Connection) -> None:
     connection.execute(
         """
         create table guard_evidence (
@@ -159,7 +159,7 @@ def test_guard_store_repairs_missing_evidence_table_when_schema_v4_is_applied(tm
     assert row[0] == "rule-123"
 
 
-def test_guard_store_repairs_legacy_evidence_table_missing_action_identity(tmp_path):
+def test_guard_store_repairs_incomplete_evidence_table_missing_action_identity(tmp_path):
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     database_path = guard_home / "guard.db"
@@ -170,7 +170,7 @@ def test_guard_store_repairs_legacy_evidence_table_missing_action_identity(tmp_p
         connection.execute(
             "insert into schema_migrations (version, applied_at) values (4, '2026-01-01T00:00:00Z')"
         )
-        _legacy_evidence_table(connection)
+        _incomplete_evidence_table(connection)
 
     store = GuardStore(guard_home)
     store.add_evidence(

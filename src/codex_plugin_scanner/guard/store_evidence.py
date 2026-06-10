@@ -86,15 +86,39 @@ def evidence_index_statements() -> list[str]:
     ]
 
 
+_EVIDENCE_SCHEMA_READY: set[str] = set()
+
+
+def _evidence_schema_cache_key(connection: sqlite3.Connection) -> str:
+    row = connection.execute("pragma database_list").fetchone()
+    if row is None:
+        return ":memory:"
+    file_path = row[2]
+    return str(file_path) if file_path else ":memory:"
+
+
 def ensure_evidence_schema(connection: sqlite3.Connection) -> None:
     """Create or repair the evidence table, columns, and indexes."""
+    cache_key = _evidence_schema_cache_key(connection)
+    if cache_key in _EVIDENCE_SCHEMA_READY:
+        row = connection.execute(
+            "select 1 from sqlite_master where type='table' and name='guard_evidence' limit 1"
+        ).fetchone()
+        if row is not None:
+            return
+        _EVIDENCE_SCHEMA_READY.discard(cache_key)
     connection.execute(evidence_schema_statement())
     rows = connection.execute("pragma table_info(guard_evidence)").fetchall()
-    existing = {str(row["name"]) for row in rows}
+    existing = {str(row[1]) for row in rows}
     if "action_identity" not in existing:
-        connection.execute("alter table guard_evidence add column action_identity text")
+        try:
+            connection.execute("alter table guard_evidence add column action_identity text")
+        except sqlite3.OperationalError as error:
+            if "duplicate column name" not in str(error).lower():
+                raise
     for statement in evidence_index_statements():
         connection.execute(statement)
+    _EVIDENCE_SCHEMA_READY.add(cache_key)
 
 
 def _row_to_record(row: sqlite3.Row) -> EvidenceRecord:
@@ -160,7 +184,6 @@ def list_evidence(
     before_cursor: str | None = None,
     limit: int = 100,
 ) -> list[EvidenceRecord]:
-    ensure_evidence_schema(conn)
     clauses: list[str] = []
     params: list[object] = []
 
@@ -198,7 +221,6 @@ def search_evidence(
     *,
     limit: int = 100,
 ) -> list[EvidenceRecord]:
-    ensure_evidence_schema(conn)
     pattern = f"%{query}%"
     rows = conn.execute(
         "select * from guard_evidence where lower(summary) like lower(?) order by created_at desc limit ?",
@@ -214,7 +236,6 @@ def count_evidence(
     category: str | None = None,
     severity: str | None = None,
 ) -> int:
-    ensure_evidence_schema(conn)
     clauses: list[str] = []
     params: list[object] = []
     if harness is not None:
@@ -328,14 +349,12 @@ def _sanitize_csv_formula_cell(value: object) -> object:
 
 
 def clear_evidence(conn: sqlite3.Connection) -> int:
-    ensure_evidence_schema(conn)
     cursor = conn.execute("delete from guard_evidence")
     conn.commit()
     return cursor.rowcount
 
 
 def compact_evidence(conn: sqlite3.Connection, *, retain_days: int = 90) -> int:
-    ensure_evidence_schema(conn)
     cutoff = (
         (datetime.now(timezone.utc) - timedelta(days=retain_days))
         .isoformat(timespec="microseconds")
