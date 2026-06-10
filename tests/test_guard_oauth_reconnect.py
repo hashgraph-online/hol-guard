@@ -100,3 +100,18 @@ def test_invalid_grant_refresh_uses_disconnect_reconnect_message(tmp_path, monke
 
     assert "hol-guard disconnect" in str(error.value)
     assert store.get_oauth_local_credentials(allow_primary=True) is None
+
+
+def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_path, monkeypatch) -> None:
+    store = _store_with_oauth_credentials(tmp_path)
+
+    def _fake_urlopen(request, timeout):
+        raise OSError("network unreachable")
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    result = guard_runner_module.prepare_guard_cloud_connect_authorization(store)
+
+    assert result["cleared_stale_sign_in"] is False
+    assert result["existing_sign_in_valid"] is True
+    assert store.get_oauth_local_credentials(allow_primary=True) is not None
