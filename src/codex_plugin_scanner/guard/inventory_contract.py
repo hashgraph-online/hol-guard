@@ -245,6 +245,7 @@ def inventory_snapshot_from_detection(
         item = _item_from_artifact(
             harness,
             artifact,
+            generated_at=generated_at,
             home_dir=home_dir,
             workspace_dir=workspace_dir,
         )
@@ -394,6 +395,7 @@ def _item_from_artifact(
     harness: str,
     artifact: object,
     *,
+    generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None,
 ) -> GuardAgentInventoryItem:
@@ -404,8 +406,10 @@ def _item_from_artifact(
     item_kind = _item_kind(artifact_type)
     safe_metadata = _apply_aibom_metadata_enrichment(
         artifact,
+        captured_at=generated_at,
         item_kind=item_kind,
         metadata=safe_metadata,
+        workspace_dir=workspace_dir,
     )
     safe_metadata = _apply_source_of_truth_metadata(
         artifact,
@@ -875,10 +879,13 @@ def _symlink_findings_from_items(
 def _apply_aibom_metadata_enrichment(
     artifact: object,
     *,
+    captured_at: str,
     item_kind: InventoryItemKind,
     metadata: dict[str, object],
+    workspace_dir: Path | None,
 ) -> dict[str, object]:
     from .aibom_detection import instruction_role_for_path
+    from .aibom_trust_metadata import apply_local_trust_metadata
 
     enriched = dict(metadata)
     if item_kind == "overlay" and "instructionRole" not in enriched:
@@ -887,7 +894,13 @@ def _apply_aibom_metadata_enrichment(
             role = instruction_role_for_path(Path(config_path))
             if role is not None:
                 enriched["instructionRole"] = role
-    return enriched
+    return apply_local_trust_metadata(
+        artifact,
+        captured_at=captured_at,
+        item_kind=item_kind,
+        metadata=enriched,
+        workspace_dir=workspace_dir,
+    )
 
 
 def _capabilities_for_artifact(
