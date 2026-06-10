@@ -33,6 +33,10 @@ import {
 } from "./supply-chain-evidence-rail-panel";
 import { resolveSupplyChainPostureAlerts } from "./supply-chain-posture";
 import { SupplyChainPostureBanners } from "./supply-chain-posture-banners";
+import {
+  resolveProtectedManagersStat,
+  SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS,
+} from "./supply-chain-workspace-layout";
 
 export { buildSupplyChainStats } from "./supply-chain-protection-stats";
 
@@ -160,6 +164,10 @@ export function SupplyChainWorkspace({
     () => resolveSupplyChainPostureAlerts(snapshot),
     [snapshot],
   );
+  const protectedManagersStat = useMemo(
+    () => resolveProtectedManagersStat(stats),
+    [stats],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -198,11 +206,12 @@ export function SupplyChainWorkspace({
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS} data-testid="supply-chain-workspace">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500">
-            Package manager firewall status, prevented installs, and feed health.
+        <div className="min-w-0">
+          <p className="text-sm leading-relaxed text-slate-500">
+            See which package installs Guard can block, which tools still need setup, and how fresh
+            your safety checks are.
           </p>
         </div>
         <ActionButton variant="ghost" onClick={onGoHome}>
@@ -218,29 +227,15 @@ export function SupplyChainWorkspace({
         <StatCard label="Active apps" value={stats.activeApps} tone="green" />
         <StatCard label="Prevented installs" value={stats.preventedInstalls} tone={stats.preventedInstalls > 0 ? "attention" : "slate"} />
         <StatCard
-          label={
-            stats.stagedManagers > 0
-              ? "Ready after restart"
-              : stats.repairRequiredManagers > 0
-              ? "Needs PATH repair"
-              : "Protected managers"
-          }
-          value={
-            stats.stagedManagers > 0
-              ? stats.stagedManagers
-              : stats.repairRequiredManagers > 0
-              ? stats.repairRequiredManagers
-              : stats.protectedManagers
-          }
-          tone={
-            stats.stagedManagers > 0
-              ? "blue"
-              : stats.repairRequiredManagers > 0
-              ? "attention"
-              : "green"
-          }
+          label={protectedManagersStat.label}
+          value={protectedManagersStat.value}
+          tone={protectedManagersStat.tone}
         />
-        <StatCard label="Unprotected managers" value={stats.unprotectedManagers} tone={stats.unprotectedManagers > 0 ? "attention" : "slate"} />
+        <StatCard
+          label="Still open"
+          value={stats.unprotectedManagers}
+          tone={stats.unprotectedManagers > 0 ? "attention" : "slate"}
+        />
       </div>
 
       {evidenceRail !== null ? <SupplyChainEvidenceRail rail={evidenceRail} /> : null}
@@ -263,9 +258,9 @@ export function SupplyChainWorkspace({
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <SectionLabel>App shim coverage</SectionLabel>
-          <p className="mt-1 text-sm text-slate-500">
-            Package manager hooks active per connected app.
+          <SectionLabel>Connected apps</SectionLabel>
+          <p className="mt-1 text-sm leading-relaxed text-slate-500">
+            Which package tools Guard is watching inside each connected app.
           </p>
         </div>
         {managedInstalls.length === 0 ? (
@@ -289,9 +284,9 @@ export function SupplyChainWorkspace({
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <SectionLabel>Feed health</SectionLabel>
-          <p className="mt-1 text-sm text-slate-500">
-            Intel feed source mode and freshness.
+          <SectionLabel>Safety check source</SectionLabel>
+          <p className="mt-1 text-sm leading-relaxed text-slate-500">
+            Whether this device uses sample data or live Guard Cloud updates.
           </p>
         </div>
         <FeedHealthPanel snapshot={snapshot} />
@@ -312,18 +307,18 @@ function FeedHealthPanel({ snapshot }: { snapshot: GuardRuntimeSnapshot }) {
       <div className="flex flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]">
-            Source mode:
+            Data source
           </span>
           <Tag tone={isSample ? "attention" : "green"}>
-            {isSample ? "Local-only (sample intel)" : "Live cloud feed"}
+            {isSample ? "On this device only" : "Live from Guard Cloud"}
           </Tag>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]">
-            Freshness:
+            Last update
           </span>
           <Tag tone={isStale ? "attention" : "green"}>
-            {isStale ? "Stale (7+ days)" : "Fresh"}
+            {isStale ? "Older than 7 days" : "Recent"}
           </Tag>
         </div>
       </div>
@@ -333,8 +328,9 @@ function FeedHealthPanel({ snapshot }: { snapshot: GuardRuntimeSnapshot }) {
             className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
             aria-hidden="true"
           />
-          <p className="text-xs text-amber-800">
-            Running on local-only (sample) intel. Connect this machine to Guard Cloud for live feed data and cross-device protection.
+          <p className="text-xs leading-relaxed text-amber-800">
+            This device is using sample safety data. Connect Guard Cloud for live package warnings and
+            protection across your machines.
           </p>
         </div>
       )}
@@ -344,8 +340,9 @@ function FeedHealthPanel({ snapshot }: { snapshot: GuardRuntimeSnapshot }) {
             className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
             aria-hidden="true"
           />
-          <p className="text-xs text-amber-800">
-            Feed data is stale. Guard has not processed new actions recently. Check that the daemon is running.
+          <p className="text-xs leading-relaxed text-amber-800">
+            Safety checks have not refreshed recently. Make sure Guard is running, then sync policy or
+            run an audit.
           </p>
         </div>
       )}

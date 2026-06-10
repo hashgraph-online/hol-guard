@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback } from "react";
 import type { GuardApprovalGatePublicConfig, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 import { WorkspacePageHeader } from "./workspace-page-header";
+import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
 
 const SupplyChainWorkspace = lazy(() =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
@@ -58,7 +59,7 @@ export function SupplyChainHubWorkspace(props: {
   );
 
   return (
-    <div className="space-y-6">
+    <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS}>
       <WorkspacePageHeader
         eyebrow="Supply chain"
         title={hubTitleForTab(tab)}
