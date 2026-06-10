@@ -17,8 +17,7 @@ export function insightsSharePublishErrorMessage(raw: string): string {
   if (
     lower.includes("invalid_grant") ||
     lower.includes("already consumed") ||
-    lower.includes("no longer valid") ||
-    lower.includes("hol-guard disconnect")
+    lower.includes("no longer valid")
   ) {
     return "Guard Cloud sign-in on this device expired. Run hol-guard disconnect, then hol-guard connect, and try again.";
   }
