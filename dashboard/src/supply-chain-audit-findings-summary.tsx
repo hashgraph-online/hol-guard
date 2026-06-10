@@ -41,6 +41,8 @@ function countByDecision(findings: SupplyChainAuditFinding[]): {
   block: number;
   warn: number;
   ask: number;
+  monitor: number;
+  allow: number;
 } {
   return findings.reduce(
     (counts, finding) => {
@@ -50,10 +52,14 @@ function countByDecision(findings: SupplyChainAuditFinding[]): {
         counts.warn += 1;
       } else if (finding.decision === "ask") {
         counts.ask += 1;
+      } else if (finding.decision === "monitor") {
+        counts.monitor += 1;
+      } else if (finding.decision === "allow") {
+        counts.allow += 1;
       }
       return counts;
     },
-    { block: 0, warn: 0, ask: 0 },
+    { block: 0, warn: 0, ask: 0, monitor: 0, allow: 0 },
   );
 }
 
@@ -61,15 +67,23 @@ type FindingSummaryRowProps = {
   finding: SupplyChainAuditFinding;
 };
 
+function findingDecisionTone(
+  decision: SupplyChainAuditFinding["decision"],
+): "destructive" | "attention" | "warning" | "default" {
+  if (decision === "block") {
+    return "destructive";
+  }
+  if (decision === "ask") {
+    return "attention";
+  }
+  if (decision === "warn") {
+    return "warning";
+  }
+  return "default";
+}
+
 function FindingSummaryRow({ finding }: FindingSummaryRowProps) {
-  const tone =
-    finding.decision === "block"
-      ? "destructive"
-      : finding.decision === "ask"
-      ? "attention"
-      : finding.decision === "warn"
-      ? "warning"
-      : "default";
+  const tone = findingDecisionTone(finding.decision);
 
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 last:border-b-0">
@@ -99,7 +113,7 @@ export function SupplyChainAuditFindingsSummary({
 
   const counts = useMemo(() => {
     if (auditSnapshot === null) {
-      return { block: 0, warn: 0, ask: 0 };
+      return { block: 0, warn: 0, ask: 0, monitor: 0, allow: 0 };
     }
     return countByDecision(auditSnapshot.findings);
   }, [auditSnapshot]);
@@ -118,7 +132,7 @@ export function SupplyChainAuditFindingsSummary({
         {auditSnapshot !== null ? (
           <p className="mt-2 text-xs text-slate-500">
             Last audit {formatRelativeTime(auditSnapshot.generatedAt)}
-            {auditSnapshot.source !== null ? ` · ${auditSnapshot.source} intel` : ""}
+            {auditSnapshot.source ? ` · ${auditSnapshot.source} intel` : ""}
           </p>
         ) : null}
       </div>
@@ -160,6 +174,8 @@ export function SupplyChainAuditFindingsSummary({
             ) : null}
             {counts.ask > 0 ? <Tag tone="attention">{counts.ask} ask</Tag> : null}
             {counts.warn > 0 ? <Tag tone="warning">{counts.warn} warn</Tag> : null}
+            {counts.monitor > 0 ? <Tag tone="info">{counts.monitor} monitor</Tag> : null}
+            {counts.allow > 0 ? <Tag tone="green">{counts.allow} allow</Tag> : null}
             <Tag tone="default">
               <HiMiniBugAnt className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
               {auditSnapshot.findings.length} total

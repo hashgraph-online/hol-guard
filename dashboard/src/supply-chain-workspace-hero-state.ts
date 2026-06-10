@@ -33,12 +33,12 @@ function protectionDetail(
   status: HomeProtectionStatus,
 ): string {
   const protection = snapshot.supply_chain?.package_manager_protection;
-  if (status === "protected" && protection !== undefined) {
+  if (status === "protected" && protection) {
     return `${protection.protected_managers.length} package tool${
       protection.protected_managers.length === 1 ? "" : "s"
     } active. Guard can block risky installs before they run.`;
   }
-  if (status === "partial" && protection !== undefined) {
+  if (status === "partial" && protection) {
     return `${protection.unprotected_managers.length} tool${
       protection.unprotected_managers.length === 1 ? "" : "s"
     } still open: ${protection.unprotected_managers.join(", ")}.`;
@@ -66,19 +66,14 @@ function protectionTone(status: HomeProtectionStatus): SupplyChainWorkspaceHeroS
 }
 
 function cloudLabel(snapshot: GuardRuntimeSnapshot): string {
+  const label = snapshot.cloud_state_label ?? "";
   if (snapshot.cloud_state === "paired_active") {
-    return snapshot.cloud_state_label.trim().length > 0
-      ? snapshot.cloud_state_label
-      : "Guard Cloud connected";
+    return label.trim().length > 0 ? label : "Guard Cloud connected";
   }
   if (snapshot.cloud_state === "paired_waiting") {
-    return snapshot.cloud_state_label.trim().length > 0
-      ? snapshot.cloud_state_label
-      : "Pairing in progress";
+    return label.trim().length > 0 ? label : "Pairing in progress";
   }
-  return snapshot.cloud_state_label.trim().length > 0
-    ? snapshot.cloud_state_label
-    : "On this device only";
+  return label.trim().length > 0 ? label : "On this device only";
 }
 
 export function resolveSupplyChainWorkspaceHero(

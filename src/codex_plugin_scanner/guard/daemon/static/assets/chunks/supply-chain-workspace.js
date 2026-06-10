@@ -1114,7 +1114,7 @@ function testedLabel(shim) {
   if (shim === void 0 || !shim.installed) {
     return { label: "Not protected yet", tone: "attention" };
   }
-  if (shim.last_intercept_proof_at !== null) {
+  if (shim.last_intercept_proof_at != null) {
     return {
       label: `Tested ${formatRelativeTime(shim.last_intercept_proof_at)}`,
       tone: "green"
@@ -2904,14 +2904,30 @@ function countByDecision(findings) {
         counts.warn += 1;
       } else if (finding.decision === "ask") {
         counts.ask += 1;
+      } else if (finding.decision === "monitor") {
+        counts.monitor += 1;
+      } else if (finding.decision === "allow") {
+        counts.allow += 1;
       }
       return counts;
     },
-    { block: 0, warn: 0, ask: 0 }
+    { block: 0, warn: 0, ask: 0, monitor: 0, allow: 0 }
   );
 }
+function findingDecisionTone(decision) {
+  if (decision === "block") {
+    return "destructive";
+  }
+  if (decision === "ask") {
+    return "attention";
+  }
+  if (decision === "warn") {
+    return "warning";
+  }
+  return "default";
+}
 function FindingSummaryRow({ finding }) {
-  const tone = finding.decision === "block" ? "destructive" : finding.decision === "ask" ? "attention" : finding.decision === "warn" ? "warning" : "default";
+  const tone = findingDecisionTone(finding.decision);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 last:border-b-0", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: finding.packageName }),
@@ -3168,10 +3184,10 @@ function protectionTitle(status) {
 }
 function protectionDetail(snapshot, status) {
   const protection = snapshot.supply_chain?.package_manager_protection;
-  if (status === "protected" && protection !== void 0) {
+  if (status === "protected" && protection) {
     return `${protection.protected_managers.length} package tool${protection.protected_managers.length === 1 ? "" : "s"} active. Guard can block risky installs before they run.`;
   }
-  if (status === "partial" && protection !== void 0) {
+  if (status === "partial" && protection) {
     return `${protection.unprotected_managers.length} tool${protection.unprotected_managers.length === 1 ? "" : "s"} still open: ${protection.unprotected_managers.join(", ")}.`;
   }
   if (status === "staged") {
@@ -3195,13 +3211,14 @@ function protectionTone(status) {
   return "slate";
 }
 function cloudLabel(snapshot) {
+  const label = snapshot.cloud_state_label ?? "";
   if (snapshot.cloud_state === "paired_active") {
-    return snapshot.cloud_state_label.trim().length > 0 ? snapshot.cloud_state_label : "Guard Cloud connected";
+    return label.trim().length > 0 ? label : "Guard Cloud connected";
   }
   if (snapshot.cloud_state === "paired_waiting") {
-    return snapshot.cloud_state_label.trim().length > 0 ? snapshot.cloud_state_label : "Pairing in progress";
+    return label.trim().length > 0 ? label : "Pairing in progress";
   }
-  return snapshot.cloud_state_label.trim().length > 0 ? snapshot.cloud_state_label : "On this device only";
+  return label.trim().length > 0 ? label : "On this device only";
 }
 function resolveSupplyChainWorkspaceHero(snapshot) {
   const protectionStatus = resolveHomeProtectionStatus(snapshot);

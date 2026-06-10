@@ -24,7 +24,7 @@ function testedLabel(shim: PackageShimEntry | undefined): { label: string; tone:
   if (shim === undefined || !shim.installed) {
     return { label: "Not protected yet", tone: "attention" };
   }
-  if (shim.last_intercept_proof_at !== null) {
+  if (shim.last_intercept_proof_at != null) {
     return {
       label: `Tested ${formatRelativeTime(shim.last_intercept_proof_at)}`,
       tone: "green",
