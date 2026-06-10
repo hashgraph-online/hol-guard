@@ -869,6 +869,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 store=store,
                 approval_center_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
+                include_items=self._query_bool(parsed.query, "include_items", default=True),
             )
             self._write_json({**snapshot, "security_level": config.security_level})
             return
@@ -3890,6 +3891,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if isinstance(value, str) and value.strip():
             return value.strip()
         return None
+
+    @staticmethod
+    def _query_bool(query_string: str, key: str, *, default: bool) -> bool:
+        value = parse_qs(query_string).get(key, [None])[-1]
+        if not isinstance(value, str):
+            return default
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        return default
 
     @staticmethod
     def _query_limit(query_string: str, *, default: int, maximum: int) -> int | None:
