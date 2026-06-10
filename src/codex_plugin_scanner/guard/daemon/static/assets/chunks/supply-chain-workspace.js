@@ -1,6 +1,336 @@
-import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as fetchPackageFirewallStatus, az as runPackageFirewallAction, am as GuardHarnessActionError, aA as runPackageAudit, aB as runPackageSync, aC as startPackageFirewallConnect, aD as openPackageFirewallShell, S as SectionLabel, ab as HiMiniMagnifyingGlass, p as EmptyState, aE as HiMiniBugAnt, aF as HiMiniClock, aG as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aH as HiMiniBeaker, aI as fetchSupplyChainBundle, B as Badge, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as HiMiniClock, az as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aA as HiMiniBeaker, ab as HiMiniMagnifyingGlass, p as EmptyState, aB as HiMiniBugAnt, aC as fetchPackageFirewallStatus, aD as runPackageFirewallAction, am as GuardHarnessActionError, aE as runPackageAudit, aF as runPackageSync, aG as startPackageFirewallConnect, aH as openPackageFirewallShell, S as SectionLabel, aI as HiMiniArrowDown, aJ as HiMiniArrowUp, aK as fetchSupplyChainBundle, B as Badge, aL as fetchReceipts, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
+const SEVERITY_RANK = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+  unknown: 0
+};
+const DECISION_RANK = {
+  block: 4,
+  ask: 3,
+  warn: 2,
+  monitor: 1,
+  allow: 0
+};
+function isRecord$1(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function readString$1(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+function readStringArray$1(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
+}
+function normalizeSeverity(value) {
+  const raw = readString$1(value)?.toLowerCase();
+  if (raw === "critical" || raw === "high" || raw === "medium" || raw === "low") {
+    return raw;
+  }
+  return "unknown";
+}
+function normalizeDecision(value) {
+  const raw = readString$1(value)?.toLowerCase();
+  if (raw === "block" || raw === "ask" || raw === "warn" || raw === "monitor" || raw === "allow") {
+    return raw;
+  }
+  return "monitor";
+}
+function normalizeInventory(record) {
+  if (record === null) {
+    return {
+      totalPackages: 0,
+      directPackageCount: 0,
+      transitivePackageCount: 0,
+      sbomPackageCount: 0
+    };
+  }
+  return {
+    totalPackages: typeof record.total_packages === "number" ? record.total_packages : 0,
+    directPackageCount: typeof record.direct_package_count === "number" ? record.direct_package_count : 0,
+    transitivePackageCount: typeof record.transitive_package_count === "number" ? record.transitive_package_count : 0,
+    sbomPackageCount: typeof record.sbom_package_count === "number" ? record.sbom_package_count : 0
+  };
+}
+function normalizeReasons(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const reasons = [];
+  for (const entry of value) {
+    if (!isRecord$1(entry)) {
+      continue;
+    }
+    const message = readString$1(entry.message) ?? readString$1(entry.summary) ?? "Flagged by Guard supply-chain policy.";
+    const advisoryId = readString$1(entry.advisoryId) ?? readString$1(entry.advisory_id);
+    if (advisoryId !== null && !message.includes(advisoryId)) {
+      reasons.push({
+        code: readString$1(entry.code) ?? "supply_chain",
+        message: `${message} (${advisoryId})`,
+        severity: normalizeSeverity(entry.severity)
+      });
+      continue;
+    }
+    reasons.push({
+      code: readString$1(entry.code) ?? "supply_chain",
+      message,
+      severity: normalizeSeverity(entry.severity)
+    });
+  }
+  return reasons;
+}
+function resolveFindingSeverity(packageRecord, reasons) {
+  const normalized = normalizeSeverity(packageRecord.normalized_severity);
+  if (normalized !== "unknown") {
+    return normalized;
+  }
+  let highest = "unknown";
+  for (const reason of reasons) {
+    if (SEVERITY_RANK[reason.severity] > SEVERITY_RANK[highest]) {
+      highest = reason.severity;
+    }
+  }
+  if (highest !== "unknown") {
+    return highest;
+  }
+  const decision = normalizeDecision(packageRecord.decision);
+  if (decision === "block") {
+    return "high";
+  }
+  if (decision === "ask") {
+    return "medium";
+  }
+  if (decision === "warn") {
+    return "medium";
+  }
+  return "low";
+}
+function addAdvisoryAlias(aliases, rawId) {
+  const trimmed = rawId.trim();
+  if (trimmed.length === 0) {
+    return;
+  }
+  if (trimmed.startsWith("GHSA-") || trimmed.startsWith("CVE-")) {
+    aliases.add(trimmed);
+    return;
+  }
+  aliases.add(`GHSA-${trimmed.slice(0, 8).toLowerCase()}`);
+}
+function readAdvisoryIdList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
+}
+function buildAdvisoryAliasStubs(packageRecord, reasons) {
+  const aliases = /* @__PURE__ */ new Set();
+  const packageAdvisoryId = readString$1(packageRecord.advisoryId) ?? readString$1(packageRecord.advisory_id);
+  if (packageAdvisoryId !== null) {
+    addAdvisoryAlias(aliases, packageAdvisoryId);
+  }
+  for (const entry of [
+    ...readAdvisoryIdList(packageRecord.related_advisory_ids),
+    ...readAdvisoryIdList(packageRecord.relatedAdvisoryIds)
+  ]) {
+    addAdvisoryAlias(aliases, entry);
+  }
+  for (const reason of reasons) {
+    const match = reason.message.match(/\b(CVE-\d{4}-\d+)\b/i);
+    if (match !== null) {
+      aliases.add(match[1].toUpperCase());
+    }
+    const ghsaMatch = reason.message.match(/\b(GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4})\b/i);
+    if (ghsaMatch !== null) {
+      aliases.add(ghsaMatch[1].toUpperCase());
+    }
+  }
+  if (aliases.size === 0) {
+    const severity = resolveFindingSeverity(packageRecord, reasons);
+    if (SEVERITY_RANK[severity] >= SEVERITY_RANK.medium) {
+      aliases.add("GHSA-alias-pending");
+      aliases.add("CVE-alias-pending");
+    }
+  }
+  return Array.from(aliases);
+}
+function normalizePackageFinding(packageRecord, index) {
+  const packageName = readString$1(packageRecord.name);
+  if (packageName === null) {
+    return null;
+  }
+  const ecosystem = readString$1(packageRecord.ecosystem) ?? "unknown";
+  const namespace = readString$1(packageRecord.namespace);
+  const reasons = normalizeReasons(packageRecord.reasons);
+  const decision = normalizeDecision(packageRecord.decision);
+  const severity = resolveFindingSeverity(packageRecord, reasons);
+  const slug = `${ecosystem}:${namespace ? `${namespace}/` : ""}${packageName}`;
+  return {
+    id: `${slug}:${index}`,
+    packageName,
+    ecosystem,
+    namespace,
+    decision,
+    severity,
+    reasons,
+    advisoryAliases: buildAdvisoryAliasStubs(packageRecord, reasons),
+    status: readString$1(packageRecord.status)
+  };
+}
+function normalizePackageFindings(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const findings = [];
+  let index = 0;
+  for (const entry of value) {
+    if (!isRecord$1(entry)) {
+      continue;
+    }
+    const finding = normalizePackageFinding(entry, index);
+    index += 1;
+    if (finding !== null) {
+      findings.push(finding);
+    }
+  }
+  return findings;
+}
+function packageRecordsFromEvaluation(evaluation) {
+  if (evaluation === null) {
+    return [];
+  }
+  const fromPackages = normalizePackageFindings(evaluation.packages);
+  if (fromPackages.length > 0) {
+    return fromPackages;
+  }
+  return normalizePackageFindings(evaluation.package_findings);
+}
+function isAuditEvidence(value) {
+  return isRecord$1(value) && value.operation === "audit";
+}
+function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
+  if (!isRecord$1(raw)) {
+    return null;
+  }
+  const evaluation = isRecord$1(raw.evaluation) ? raw.evaluation : null;
+  const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
+  const findings = findingsFromEvidence.length > 0 ? findingsFromEvidence : packageRecordsFromEvaluation(evaluation);
+  const generatedAt = readString$1(raw.generated_at) ?? readString$1(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
+  const inventory = normalizeInventory(isRecord$1(raw.inventory) ? raw.inventory : null);
+  const decision = normalizeDecision(evaluation?.decision ?? raw.audit_decision);
+  const manifestPaths = readStringArray$1(raw.manifest_paths);
+  const lockfilePaths = readStringArray$1(raw.lockfile_paths);
+  const hasAuditContext = findings.length > 0 || inventory.totalPackages > 0 || manifestPaths.length > 0 || lockfilePaths.length > 0 || evaluation !== null;
+  if (!hasAuditContext) {
+    return null;
+  }
+  return {
+    generatedAt,
+    source: readString$1(raw.source),
+    decision,
+    inventory,
+    findings,
+    manifestPaths,
+    lockfilePaths,
+    receiptId
+  };
+}
+function derivePackageWorkbenchFromReceipts(receipts) {
+  const auditReceipts = receipts.filter((receipt) => receipt.harness === "package-firewall").filter(
+    (receipt) => (receipt.scanner_evidence ?? []).some((entry) => isAuditEvidence(entry))
+  ).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
+  for (const receipt of auditReceipts) {
+    const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry));
+    if (evidenceRaw === void 0 || !isRecord$1(evidenceRaw)) {
+      continue;
+    }
+    const snapshot = normalizeSupplyChainAuditSnapshot(
+      {
+        generated_at: receipt.timestamp,
+        evaluation: {
+          decision: evidenceRaw.audit_decision,
+          packages: evidenceRaw.package_findings
+        },
+        inventory: {
+          total_packages: evidenceRaw.total_packages
+        },
+        manifest_paths: evidenceRaw.manifest_paths,
+        lockfile_paths: evidenceRaw.lockfile_paths
+      },
+      receipt.receipt_id
+    );
+    if (snapshot !== null) {
+      return snapshot;
+    }
+  }
+  return null;
+}
+function sortPackageWorkbenchFindings(findings, sortKey) {
+  const sorted = [...findings];
+  sorted.sort((left, right) => {
+    if (sortKey === "severity") {
+      const severityDelta = SEVERITY_RANK[right.severity] - SEVERITY_RANK[left.severity];
+      if (severityDelta !== 0) {
+        return severityDelta;
+      }
+      return left.packageName.localeCompare(right.packageName);
+    }
+    if (sortKey === "ecosystem") {
+      const ecosystemDelta = left.ecosystem.localeCompare(right.ecosystem);
+      if (ecosystemDelta !== 0) {
+        return ecosystemDelta;
+      }
+      return left.packageName.localeCompare(right.packageName);
+    }
+    if (sortKey === "decision") {
+      const decisionDelta = DECISION_RANK[right.decision] - DECISION_RANK[left.decision];
+      if (decisionDelta !== 0) {
+        return decisionDelta;
+      }
+      return left.packageName.localeCompare(right.packageName);
+    }
+    return left.packageName.localeCompare(right.packageName);
+  });
+  return sorted;
+}
+function filterPackageWorkbenchFindings(findings, filters) {
+  const query = filters.search.trim().toLowerCase();
+  return findings.filter((finding) => {
+    if (filters.ecosystem !== "all" && finding.ecosystem !== filters.ecosystem) {
+      return false;
+    }
+    if (filters.decision !== "all" && finding.decision !== filters.decision) {
+      return false;
+    }
+    if (filters.severity !== "all" && finding.severity !== filters.severity) {
+      return false;
+    }
+    if (query.length === 0) {
+      return true;
+    }
+    const haystack = [
+      finding.packageName,
+      finding.ecosystem,
+      finding.namespace ?? "",
+      finding.decision,
+      finding.severity,
+      ...finding.reasons.map((reason) => `${reason.code} ${reason.message}`),
+      ...finding.advisoryAliases
+    ].join(" ").toLowerCase();
+    return haystack.includes(query);
+  });
+}
+function packageWorkbenchEcosystems(findings) {
+  return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
+}
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -547,9 +877,6 @@ function resolveShimStatus(shim) {
 function actionIsAvailable(state) {
   return state === "available";
 }
-function actionLabel(op) {
-  return op.charAt(0).toUpperCase() + op.slice(1);
-}
 function ManagerRow({
   manager,
   shim,
@@ -682,75 +1009,24 @@ function ManagerRow({
     shim?.path_broken && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-attention", children: "Restart your shell after repair so PATH exports reload." }) })
   ] });
 }
-function LoadingRow({ width }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `h-4 animate-pulse rounded-md bg-slate-100 ${width}`, "aria-hidden": "true" });
-}
-function LoadingSkeleton() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "space-y-3 px-4 py-5",
-      "aria-label": "Loading package firewall status",
-      "aria-busy": "true",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/3" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-2/3" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/2" })
-      ]
-    }
-  );
-}
-function ErrorBanner({ message, onRetry }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        HiMiniExclamationTriangle,
-        {
-          className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
-          "aria-hidden": "true"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", children: message })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry" })
-  ] });
-}
 function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }) {
   const auditRunning = pendingOp?.op === "audit";
   const syncRunning = pendingOp?.op === "sync";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      ActionButton,
-      {
-        variant: "outline",
-        onClick: onAudit,
-        disabled: anyPending,
-        "aria-busy": auditRunning,
-        children: [
-          auditRunning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
-          "Audit"
-        ]
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      ActionButton,
-      {
-        variant: "outline",
-        onClick: onSync,
-        disabled: anyPending,
-        "aria-busy": syncRunning,
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            HiMiniArrowPath,
-            {
-              className: `mr-1.5 h-3.5 w-3.5 ${syncRunning ? "animate-spin" : ""}`,
-              "aria-hidden": "true"
-            }
-          ),
-          "Sync"
-        ]
-      }
-    )
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: onAudit, disabled: anyPending, "aria-busy": auditRunning, children: [
+      auditRunning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
+      "Audit"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: onSync, disabled: anyPending, "aria-busy": syncRunning, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniArrowPath,
+        {
+          className: `mr-1.5 h-3.5 w-3.5 ${syncRunning ? "animate-spin" : ""}`,
+          "aria-hidden": "true"
+        }
+      ),
+      "Sync"
+    ] })
   ] });
 }
 function FailureBanner({ failed }) {
@@ -761,13 +1037,7 @@ function FailureBanner({ failed }) {
       role: "alert",
       "aria-live": "assertive",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          HiMiniExclamationTriangle,
-          {
-            className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
-            "aria-hidden": "true"
-          }
-        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
             failed.op,
@@ -972,6 +1242,42 @@ function FirewallControlsView({
     ] })
   ] });
 }
+function actionLabel(op) {
+  return op.charAt(0).toUpperCase() + op.slice(1);
+}
+function LoadingRow({ width }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `h-4 animate-pulse rounded-md bg-slate-100 ${width}`, "aria-hidden": "true" });
+}
+function LoadingSkeleton() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "space-y-3 px-4 py-5",
+      "aria-label": "Loading package firewall status",
+      "aria-busy": "true",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/3" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-2/3" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/2" })
+      ]
+    }
+  );
+}
+function ErrorBanner({ message, onRetry }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniExclamationTriangle,
+        {
+          className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
+          "aria-hidden": "true"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", children: message })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry" })
+  ] });
+}
 function RefreshButton({ disabled, spinning, onRefresh }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ActionButton,
@@ -991,7 +1297,7 @@ function RefreshButton({ disabled, spinning, onRefresh }) {
   );
 }
 function PackageFirewallPanel(props) {
-  const { approvalGate, onStateChanged } = props;
+  const { approvalGate, onStateChanged, onAuditCompleted, onAuditRunningChange, runAuditRef } = props;
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
@@ -1071,19 +1377,28 @@ function PackageFirewallPanel(props) {
       setLastFailed(null);
       setConnectError(null);
       setActivationAssistError(null);
+      if (op === "audit") {
+        onAuditRunningChange?.(true);
+      }
       try {
         const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
         setLastCompleted({ op, manager: null, response });
+        if (op === "audit") {
+          onAuditCompleted?.(response.result_detail);
+        }
         await refreshAfterOp();
         await onStateChanged?.();
       } catch (err) {
         const message = err instanceof Error ? err.message : "Operation failed.";
         setLastFailed({ op, manager: null, message });
       } finally {
+        if (op === "audit") {
+          onAuditRunningChange?.(false);
+        }
         setPendingOp(null);
       }
     },
-    [onStateChanged, refreshAfterOp]
+    [onAuditCompleted, onAuditRunningChange, onStateChanged, refreshAfterOp]
   );
   const handleInstall = reactExports.useCallback(
     (manager) => void handleAction("install", manager),
@@ -1111,6 +1426,15 @@ function PackageFirewallPanel(props) {
   const handleRemoveCancel = reactExports.useCallback(() => setConfirmRemoveManager(null), []);
   const handleAudit = reactExports.useCallback(() => void handleGlobalOp("audit"), [handleGlobalOp]);
   const handleSync = reactExports.useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
+  reactExports.useEffect(() => {
+    if (runAuditRef === void 0) {
+      return;
+    }
+    runAuditRef.current = handleAudit;
+    return () => {
+      runAuditRef.current = null;
+    };
+  }, [handleAudit, runAuditRef]);
   const handleDismissResult = reactExports.useCallback(() => setLastCompleted(null), []);
   const handleRetry = reactExports.useCallback(() => void load(), [load]);
   const handleStartConnect = reactExports.useCallback(async () => {
@@ -1217,6 +1541,355 @@ function PackageFirewallPanel(props) {
         onConfirm: handleApprovalConfirm
       }
     )
+  ] });
+}
+const decisionTone = (decision) => {
+  if (decision === "block") {
+    return "destructive";
+  }
+  if (decision === "ask") {
+    return "attention";
+  }
+  if (decision === "warn") {
+    return "warning";
+  }
+  if (decision === "monitor") {
+    return "info";
+  }
+  if (decision === "allow") {
+    return "green";
+  }
+  return "default";
+};
+const severityTone = (severity) => {
+  if (severity === "critical") {
+    return "destructive";
+  }
+  if (severity === "high") {
+    return "attention";
+  }
+  if (severity === "medium") {
+    return "warning";
+  }
+  if (severity === "low") {
+    return "info";
+  }
+  return "default";
+};
+function WorkbenchHeader({ auditSnapshot }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 text-xs text-slate-500", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: decisionTone(auditSnapshot.decision), children: auditSnapshot.decision }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+      auditSnapshot.inventory.totalPackages,
+      " package",
+      auditSnapshot.inventory.totalPackages === 1 ? "" : "s",
+      " indexed"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "·" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+      "Last audit ",
+      formatRelativeTime(auditSnapshot.generatedAt)
+    ] }),
+    auditSnapshot.source !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "·" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "capitalize", children: [
+        auditSnapshot.source,
+        " intel"
+      ] })
+    ] })
+  ] });
+}
+function FindingDetailPanel({ finding }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: finding.packageName }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "default", children: finding.ecosystem }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: decisionTone(finding.decision), children: finding.decision }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: severityTone(finding.severity), children: finding.severity })
+    ] }),
+    finding.reasons.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-2", children: finding.reasons.map((reason) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "text-xs leading-relaxed text-slate-600", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-slate-700", children: reason.code }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-400", children: " · " }),
+      reason.message
+    ] }, `${finding.id}-${reason.code}`)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: "No advisory detail recorded for this package yet." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Advisory aliases" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 flex flex-wrap gap-1.5", children: finding.advisoryAliases.map((alias) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "span",
+        {
+          className: "rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-mono text-[11px] text-slate-600",
+          children: alias
+        },
+        `${finding.id}-${alias}`
+      )) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-[11px] text-slate-500", children: "CVE and GHSA aliases are stubbed here until linked advisory intel is available in Guard Cloud." })
+    ] })
+  ] });
+}
+function FindingRow({ finding, selected, onSelect }) {
+  const handleSelect = reactExports.useCallback(() => {
+    onSelect(finding.id);
+  }, [finding.id, onSelect]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleSelect,
+      "aria-pressed": selected,
+      className: `flex w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-slate-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-blue/30 ${selected ? "bg-brand-blue/[0.04]" : ""}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: finding.packageName }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 truncate text-xs text-slate-500", children: [
+            finding.ecosystem,
+            finding.namespace !== null ? ` · ${finding.namespace}` : ""
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: decisionTone(finding.decision), children: finding.decision }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: severityTone(finding.severity), children: finding.severity })
+        ] })
+      ]
+    }
+  );
+}
+function SortButton({ label, sortKey, activeSort, direction, onSort }) {
+  const handleClick = reactExports.useCallback(() => {
+    onSort(sortKey);
+  }, [onSort, sortKey]);
+  const active = activeSort === sortKey;
+  let sortIcon = null;
+  if (active) {
+    sortIcon = direction === "desc" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDown, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowUp, { className: "h-3 w-3", "aria-hidden": "true" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      "aria-pressed": active,
+      className: `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${active ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
+      children: [
+        label,
+        sortIcon
+      ]
+    }
+  );
+}
+function FilterChip({ label, active, onSelect }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      onClick: onSelect,
+      "aria-pressed": active,
+      className: `rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${active ? "bg-brand-dark text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
+      children: label
+    }
+  );
+}
+function WorkbenchControls({
+  filters,
+  ecosystems,
+  sortKey,
+  sortDirection,
+  onSearchChange,
+  onEcosystemChange,
+  onDecisionChange,
+  onSeverityChange,
+  onSortChange
+}) {
+  const handleEcosystemAll = reactExports.useCallback(() => onEcosystemChange("all"), [onEcosystemChange]);
+  const handleDecisionAll = reactExports.useCallback(() => onDecisionChange("all"), [onDecisionChange]);
+  const handleDecisionBlock = reactExports.useCallback(() => onDecisionChange("block"), [onDecisionChange]);
+  const handleDecisionAsk = reactExports.useCallback(() => onDecisionChange("ask"), [onDecisionChange]);
+  const handleDecisionWarn = reactExports.useCallback(() => onDecisionChange("warn"), [onDecisionChange]);
+  const handleSeverityAll = reactExports.useCallback(() => onSeverityChange("all"), [onSeverityChange]);
+  const handleSeverityCritical = reactExports.useCallback(() => onSeverityChange("critical"), [onSeverityChange]);
+  const handleSeverityHigh = reactExports.useCallback(() => onSeverityChange("high"), [onSeverityChange]);
+  const handleSeverityMedium = reactExports.useCallback(() => onSeverityChange("medium"), [onSeverityChange]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-3.5 w-3.5 text-slate-400", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "search",
+            placeholder: "Search packages…",
+            value: filters.search,
+            onChange: onSearchChange,
+            "aria-label": "Search package findings",
+            className: "w-44 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "All ecosystems", active: filters.ecosystem === "all", onSelect: handleEcosystemAll }),
+      ecosystems.map((ecosystem) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EcosystemChip,
+        {
+          ecosystem,
+          active: filters.ecosystem === ecosystem,
+          onSelect: onEcosystemChange
+        },
+        ecosystem
+      ))
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "All decisions", active: filters.decision === "all", onSelect: handleDecisionAll }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Block", active: filters.decision === "block", onSelect: handleDecisionBlock }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Ask", active: filters.decision === "ask", onSelect: handleDecisionAsk }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Warn", active: filters.decision === "warn", onSelect: handleDecisionWarn }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "All severities", active: filters.severity === "all", onSelect: handleSeverityAll }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Critical", active: filters.severity === "critical", onSelect: handleSeverityCritical }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "High", active: filters.severity === "high", onSelect: handleSeverityHigh }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: "Medium", active: filters.severity === "medium", onSelect: handleSeverityMedium })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Sort" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortButton, { label: "Severity", sortKey: "severity", activeSort: sortKey, direction: sortDirection, onSort: onSortChange }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortButton, { label: "Package", sortKey: "package", activeSort: sortKey, direction: sortDirection, onSort: onSortChange }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortButton, { label: "Ecosystem", sortKey: "ecosystem", activeSort: sortKey, direction: sortDirection, onSort: onSortChange }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SortButton, { label: "Decision", sortKey: "decision", activeSort: sortKey, direction: sortDirection, onSort: onSortChange })
+    ] })
+  ] });
+}
+function EcosystemChip({ ecosystem, active, onSelect }) {
+  const handleSelect = reactExports.useCallback(() => {
+    onSelect(ecosystem);
+  }, [ecosystem, onSelect]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(FilterChip, { label: ecosystem, active, onSelect: handleSelect });
+}
+function WorkbenchEmptyState({ onRunAudit, auditRunning }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    EmptyState,
+    {
+      title: "No workspace audit yet",
+      body: "Run a package audit from the firewall panel to index dependencies and surface flagged packages here.",
+      tone: "teach",
+      action: onRunAudit !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: onRunAudit, disabled: auditRunning, "aria-busy": auditRunning, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+        "Run audit"
+      ] }) : void 0
+    }
+  );
+}
+function PackageWorkbenchPanel({
+  auditSnapshot,
+  onRunAudit,
+  auditRunning = false
+}) {
+  const [filters, setFilters] = reactExports.useState({
+    ecosystem: "all",
+    decision: "all",
+    severity: "all",
+    search: ""
+  });
+  const [sortState, setSortState] = reactExports.useState({ sortKey: "severity", sortDirection: "desc" });
+  const { sortKey, sortDirection } = sortState;
+  const [selectedId, setSelectedId] = reactExports.useState("");
+  const findings = auditSnapshot?.findings ?? [];
+  const ecosystems = reactExports.useMemo(() => packageWorkbenchEcosystems(findings), [findings]);
+  const filteredFindings = reactExports.useMemo(
+    () => filterPackageWorkbenchFindings(findings, filters),
+    [findings, filters]
+  );
+  const sortedFindings = reactExports.useMemo(() => {
+    const sorted = sortPackageWorkbenchFindings(filteredFindings, sortKey);
+    if (sortDirection === "asc") {
+      return [...sorted].reverse();
+    }
+    return sorted;
+  }, [filteredFindings, sortDirection, sortKey]);
+  const selectedFinding = reactExports.useMemo(
+    () => sortedFindings.find((finding) => finding.id === selectedId) ?? null,
+    [selectedId, sortedFindings]
+  );
+  const handleSearchChange = reactExports.useCallback((event) => {
+    setFilters((prev) => ({ ...prev, search: event.target.value }));
+    setSelectedId("");
+  }, []);
+  const handleEcosystemChange = reactExports.useCallback((ecosystem) => {
+    setFilters((prev) => ({ ...prev, ecosystem }));
+    setSelectedId("");
+  }, []);
+  const handleDecisionChange = reactExports.useCallback((decision) => {
+    setFilters((prev) => ({ ...prev, decision }));
+    setSelectedId("");
+  }, []);
+  const handleSeverityChange = reactExports.useCallback((severity) => {
+    setFilters((prev) => ({ ...prev, severity }));
+    setSelectedId("");
+  }, []);
+  const handleSortChange = reactExports.useCallback((nextSortKey) => {
+    setSortState((prev) => {
+      if (prev.sortKey === nextSortKey) {
+        return {
+          sortKey: prev.sortKey,
+          sortDirection: prev.sortDirection === "desc" ? "asc" : "desc"
+        };
+      }
+      return { sortKey: nextSortKey, sortDirection: "desc" };
+    });
+  }, []);
+  const handleSelectFinding = reactExports.useCallback((id) => {
+    setSelectedId((prev) => prev === id ? "" : id);
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Package findings workbench" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-slate-500", children: "Review workspace audit inventory, filter flagged packages, and inspect advisory detail." }),
+      auditSnapshot !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchHeader, { auditSnapshot }) })
+    ] }),
+    auditSnapshot === null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { onRunAudit, auditRunning }) }),
+    auditSnapshot !== null && findings.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "No flagged packages",
+        body: "The latest workspace audit completed without packages that need review.",
+        tone: "teach"
+      }
+    ) }),
+    auditSnapshot !== null && findings.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        WorkbenchControls,
+        {
+          filters,
+          ecosystems,
+          sortKey,
+          sortDirection,
+          onSearchChange: handleSearchChange,
+          onEcosystemChange: handleEcosystemChange,
+          onDecisionChange: handleDecisionChange,
+          onSeverityChange: handleSeverityChange,
+          onSortChange: handleSortChange
+        }
+      ),
+      sortedFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-6 text-center text-sm text-slate-500", children: "No packages match the current filters." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl border border-slate-100", role: "table", "aria-label": "Package audit findings", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3",
+            role: "row",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Package" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", role: "columnheader", children: "Decision · Severity" })
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "rowgroup", children: sortedFindings.map((finding) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          FindingRow,
+          {
+            finding,
+            selected: selectedId === finding.id,
+            onSelect: handleSelectFinding
+          },
+          finding.id
+        )) })
+      ] }),
+      selectedFinding !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(FindingDetailPanel, { finding: selectedFinding })
+    ] })
   ] });
 }
 function SeverityBadge({ severity }) {
@@ -1497,6 +2170,39 @@ function SupplyChainWorkspace({
     () => snapshot.managed_installs ?? [],
     [snapshot.managed_installs]
   );
+  const [auditSnapshot, setAuditSnapshot] = reactExports.useState(null);
+  const [auditRunning, setAuditRunning] = reactExports.useState(false);
+  const runAuditRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    const loadAuditSnapshot = async () => {
+      try {
+        const receipts = await fetchReceipts();
+        if (cancelled) {
+          return;
+        }
+        setAuditSnapshot(derivePackageWorkbenchFromReceipts(receipts));
+      } catch {
+        if (!cancelled) {
+          setAuditSnapshot(null);
+        }
+      }
+    };
+    void loadAuditSnapshot();
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshot.generated_at, snapshot.receipt_count]);
+  const handleAuditCompleted = reactExports.useCallback((resultDetail) => {
+    const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
+    setAuditSnapshot(normalized);
+  }, []);
+  const handleAuditRunningChange = reactExports.useCallback((running) => {
+    setAuditRunning(running);
+  }, []);
+  const handleRunAudit = reactExports.useCallback(() => {
+    runAuditRef.current?.();
+  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Package manager firewall status, prevented installs, and feed health." }) }),
@@ -1516,7 +2222,24 @@ function SupplyChainWorkspace({
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Unprotected managers", value: stats.unprotectedManagers, tone: stats.unprotectedManagers > 0 ? "attention" : "slate" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainBundlePanel, {}),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(PackageFirewallPanel, { approvalGate, onStateChanged: onRuntimeRefresh }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PackageFirewallPanel,
+      {
+        approvalGate,
+        onStateChanged: onRuntimeRefresh,
+        onAuditCompleted: handleAuditCompleted,
+        onAuditRunningChange: handleAuditRunningChange,
+        runAuditRef
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PackageWorkbenchPanel,
+      {
+        auditSnapshot,
+        onRunAudit: handleRunAudit,
+        auditRunning
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "App shim coverage" }),
