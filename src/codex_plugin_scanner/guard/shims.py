@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .launcher import merge_guard_launcher_env
+from .package_shim_status import enrich_package_shim_status_payload
 from .shim_probe import (
     SHIM_PROBE_ENV_VALUE,
     SHIM_PROBE_ENV_VAR,
@@ -448,27 +449,30 @@ def package_shim_status(context: HarnessContext) -> dict[str, object]:
         path_contains_shim_dir=path_contains_shim_dir,
         shell_profile_configured=bool(profile_status["shell_profile_configured"]),
     )
-    return {
-        "active_managers": active_managers,
-        "detected_managers": detected_managers,
-        "installed_managers": installed_managers,
-        "last_test_at": normalized_last_tests,
-        "protected_managers": protected_managers,
-        "path_active": bool(installed_managers) and len(protected_managers) == len(installed_managers),
-        "path_contains_shim_dir": path_contains_shim_dir,
-        "path_status": activation_path_status,
-        "bypasses": bypasses,
-        "manager_details": manager_details,
-        "manifest_path": str(_package_shim_manifest_path(context)),
-        "missing_managers": missing_managers,
-        "restart_shell_required": activation_path_status == "restart_required",
-        "shell_profile_configured": bool(profile_status["shell_profile_configured"]),
-        "shell_profile_path": profile_status["shell_profile_path"],
-        "shell_hints": _path_export_hints(shim_dir),
-        "shim_dir": str(shim_dir),
-        "supported_managers": list(package_shim_supported_managers()),
-        "undetected_managers": undetected_managers,
-    }
+    return enrich_package_shim_status_payload(
+        {
+            "active_managers": active_managers,
+            "detected_managers": detected_managers,
+            "installed_managers": installed_managers,
+            "last_test_at": normalized_last_tests,
+            "protected_managers": protected_managers,
+            "path_active": bool(installed_managers) and len(protected_managers) == len(installed_managers),
+            "path_contains_shim_dir": path_contains_shim_dir,
+            "path_status": activation_path_status,
+            "bypasses": bypasses,
+            "manager_details": manager_details,
+            "manifest_path": str(_package_shim_manifest_path(context)),
+            "missing_managers": missing_managers,
+            "restart_shell_required": activation_path_status == "restart_required",
+            "shell_profile_configured": bool(profile_status["shell_profile_configured"]),
+            "shell_profile_path": profile_status["shell_profile_path"],
+            "shell_hints": _path_export_hints(shim_dir),
+            "shim_dir": str(shim_dir),
+            "supported_managers": list(package_shim_supported_managers()),
+            "undetected_managers": undetected_managers,
+        },
+        manifest,
+    )
 
 
 def package_shim_cloud_coverage(
