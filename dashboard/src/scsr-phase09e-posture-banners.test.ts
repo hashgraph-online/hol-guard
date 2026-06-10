@@ -134,7 +134,7 @@ assert(
       alert.title === "Package installs are not being checked yet" &&
       !alert.detail.includes("0 manager"),
   ),
-  "SCSR161-C: missing PATH with no installed managers uses shim-missing copy",
+  "SCSR161-C: missing PATH with no installed managers uses plain-language copy",
 );
 
 const restartAlerts = resolveSupplyChainPostureAlerts({

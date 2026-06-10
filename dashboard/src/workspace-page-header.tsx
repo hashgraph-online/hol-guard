@@ -29,7 +29,7 @@ export function WorkspacePageHeader<T extends string>({
         {description ? <p className="text-sm text-slate-500">{description}</p> : null}
       </div>
       <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-start sm:justify-end sm:gap-4">
-        <div className="w-full min-w-0 sm:w-auto [&>div]:flex-wrap">
+        <div className="w-full min-w-0 sm:w-auto">
           <TabBar tabs={tabs} active={activeTab} onChange={onTabChange} />
         </div>
         {actions ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div> : null}
