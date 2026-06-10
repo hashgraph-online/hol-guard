@@ -341,7 +341,7 @@ def redact_local_path(path: str | Path, *, home_dir: Path | None = None) -> str:
         return candidate.name
     try:
         relative = candidate.resolve().relative_to(home_dir.resolve())
-    except ValueError:
+    except (OSError, RuntimeError, ValueError):
         return candidate.name
     return f"{{home}}/{relative.as_posix()}"
 
