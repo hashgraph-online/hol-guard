@@ -90,11 +90,11 @@ from ..desktop_notifications import (
 from ..insights_share import publish_insights_share
 from ..local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE, build_local_dashboard_session_token
 from ..local_supply_chain import (
-    audit_receipt_metadata,
     build_workspace_audit_payload,
     resolve_package_firewall_entitlement_with_refresh,
     resolve_supply_chain_audit_workspace_dir,
 )
+from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
@@ -1869,6 +1869,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "manager": manager,
             **activation_result,
         }
+        receipt_overrides = package_firewall_receipt_metadata(
+            operation=action,
+            result=result,
+            managers=(manager,),
+            workspace_dir=context.workspace_dir,
+        )
         receipt = self._record_headless_receipt(
             harness="package-firewall",
             operation=action,
@@ -1876,6 +1882,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result=result,
             workspace_id=self._optional_string(payload.get("workspace_id"))
             or self.server.store.get_cloud_workspace_id(),  # type: ignore[attr-defined]
+            policy_decision=self._optional_string(receipt_overrides.get("policy_decision")),
+            capabilities_summary=self._optional_string(receipt_overrides.get("capabilities_summary")),
+            artifact_name=self._optional_string(receipt_overrides.get("artifact_name")),
+            scanner_evidence_extra=(
+                receipt_overrides.get("scanner_evidence")
+                if isinstance(receipt_overrides.get("scanner_evidence"), dict)
+                else None
+            ),
         )
         self._write_json(
             {
@@ -1963,9 +1977,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"error": str(error), "operation": operation}, status=400)
             return
-        receipt_overrides: dict[str, object] = {}
-        if operation == "audit":
-            receipt_overrides = audit_receipt_metadata(result)
+        receipt_overrides = package_firewall_receipt_metadata(
+            operation=operation,
+            result=result,
+            managers=managers,
+            workspace_dir=context.workspace_dir,
+        )
         receipt = self._record_headless_receipt(
             harness="package-firewall",
             operation=operation,
