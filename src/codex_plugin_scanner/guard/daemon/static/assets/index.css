@@ -96,6 +96,7 @@
     --color-amber-700: oklch(55.5% .163 48.998);
     --color-amber-800: oklch(47.3% .137 46.201);
     --color-amber-900: oklch(41.4% .112 45.904);
+    --color-amber-950: oklch(27.9% .077 45.635);
     --color-green-50: oklch(98.2% .018 155.826);
     --color-green-700: oklch(52.7% .154 150.069);
     --color-emerald-50: oklch(97.9% .021 166.113);
@@ -3786,6 +3787,20 @@
 
   .text-amber-900 {
     color: var(--color-amber-900);
+  }
+
+  .text-amber-900\/90 {
+    color: #7b3306e6;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-amber-900\/90 {
+      color: color-mix(in oklab, var(--color-amber-900) 90%, transparent);
+    }
+  }
+
+  .text-amber-950 {
+    color: var(--color-amber-950);
   }
 
   .text-blue-200 {

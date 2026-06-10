@@ -159,6 +159,7 @@ export function FirewallControlsView({
     [onInstall, onOpenShell, onRepair, onSync, onTest],
   );
 
+  const noDetectedManagers = data.detected_managers.length === 0;
   const filteredManagers = useMemo(() => {
     const shimsByManager = new Map(data.package_shims.map((s) => [s.manager, s]));
     const visibleManagers = data.package_shims
@@ -167,6 +168,8 @@ export function FirewallControlsView({
     let managers =
       visibleManagers.length > 0
         ? Array.from(new Set(visibleManagers)).sort()
+        : noDetectedManagers
+        ? []
         : data.supported_managers;
 
     if (managerFilter) {
@@ -186,7 +189,7 @@ export function FirewallControlsView({
     }
 
     return managers;
-  }, [data, managerFilter, statusFilter]);
+  }, [data, managerFilter, noDetectedManagers, statusFilter]);
 
   return (
     <div className="space-y-4 px-4 py-4">
@@ -256,8 +259,16 @@ export function FirewallControlsView({
 
       {filteredManagers.length === 0 ? (
         <EmptyState
-          title="No package managers found"
-          body="No package managers match the current filter, or Guard has not detected any on this machine."
+          title={
+            noDetectedManagers && managerFilter.length === 0 && statusFilter === "all"
+              ? "No package managers detected"
+              : "No package managers found"
+          }
+          body={
+            noDetectedManagers && managerFilter.length === 0 && statusFilter === "all"
+              ? "Guard did not find npm, pip, pnpm, or other supported managers on this PATH. Install a package manager, open a new shell, then refresh status."
+              : "No package managers match the current filter, or Guard has not detected any on this machine."
+          }
           tone="teach"
         />
       ) : (
