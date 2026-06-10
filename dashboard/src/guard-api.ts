@@ -2143,17 +2143,78 @@ function normalizePackageFirewallConnectFlow(
   };
 }
 
+function readPackageShimField(
+  status: Record<string, unknown>,
+  snakeKey: string,
+  camelKey: string,
+): unknown {
+  if (status[snakeKey] !== undefined) {
+    return status[snakeKey];
+  }
+  return status[camelKey];
+}
+
+function readPackageShimStringArray(
+  status: Record<string, unknown>,
+  snakeKey: string,
+  camelKey: string,
+): string[] {
+  return normalizeStringArray(readPackageShimField(status, snakeKey, camelKey));
+}
+
+function buildPackageShimPathSummary(detail: Record<string, unknown> | null): string | null {
+  if (detail === null) {
+    return null;
+  }
+  const shimPath = stringValue(detail.shim_path);
+  const realBinaryPath = stringValue(detail.real_binary_path);
+  if (shimPath !== null && realBinaryPath !== null) {
+    return `${shimPath} precedes ${realBinaryPath}`;
+  }
+  if (shimPath !== null) {
+    return shimPath;
+  }
+  return stringValue(detail.path_state);
+}
+
+function readLastInterceptProofAtByManager(status: Record<string, unknown>): Record<string, string> {
+  const merged: Record<string, string> = {};
+  const sources = [
+    readPackageShimField(status, "last_intercept_proof_at", "lastInterceptProofAt"),
+    readPackageShimField(status, "last_test_at", "lastTestAt"),
+  ];
+  for (const source of sources) {
+    if (!isRecord(source)) {
+      continue;
+    }
+    for (const [manager, timestamp] of Object.entries(source)) {
+      const normalized = stringValue(timestamp);
+      if (normalized !== null) {
+        merged[manager] = normalized;
+      }
+    }
+  }
+  return merged;
+}
+
 function normalizePackageShimEntry(
   manager: string,
   detail: Record<string, unknown> | null,
   pathStatus: PackageManagerProtection["path_status"],
+  coverage: {
+    detected: boolean;
+    pathBroken: boolean;
+    tested: boolean;
+    lastInterceptProofAt: string | null;
+  },
 ): PackageShimEntry {
   const integrity = stringValue(detail?.integrity) ?? "uninstalled";
   const installed = detail !== null && integrity !== "missing";
   const active = booleanValue(detail?.path_active);
+  const pathBroken = coverage.pathBroken || detail?.path_broken === true;
   const activation_state = !installed
     ? "uninstalled"
-    : integrity === "tampered"
+    : integrity === "tampered" || pathBroken
     ? "repair_required"
     : active
     ? "protected"
@@ -2163,14 +2224,19 @@ function normalizePackageShimEntry(
   return {
     active,
     activation_state,
+    detected: coverage.detected,
     installed,
     integrity,
+    last_intercept_proof_at: coverage.lastInterceptProofAt,
     manager,
+    path_broken: pathBroken,
     path_index: numberValue(detail?.path_index),
+    path_summary: buildPackageShimPathSummary(detail),
     real_binary_found: booleanValue(detail?.real_binary_found),
     real_binary_path: stringValue(detail?.real_binary_path),
     real_binary_path_index: numberValue(detail?.real_binary_path_index),
     shim_path: stringValue(detail?.shim_path),
+    tested: coverage.tested,
   };
 }
 
@@ -2180,9 +2246,8 @@ function normalizePackageShimEntries(
   pathStatus: PackageManagerProtection["path_status"],
 ): PackageShimEntry[] {
   const status = isRecord(value) ? value : {};
-  const detailRows = Array.isArray(status.manager_details)
-    ? status.manager_details.filter(isRecord)
-    : [];
+  const managerDetailsValue = readPackageShimField(status, "manager_details", "managerDetails");
+  const detailRows = Array.isArray(managerDetailsValue) ? managerDetailsValue.filter(isRecord) : [];
   const detailByManager = new Map<string, Record<string, unknown>>();
   for (const detail of detailRows) {
     const manager = stringValue(detail.manager);
@@ -2190,15 +2255,48 @@ function normalizePackageShimEntries(
       detailByManager.set(manager, detail);
     }
   }
+  const detectedManagers = readPackageShimStringArray(status, "detected_managers", "detectedManagers");
+  const installedManagers = readPackageShimStringArray(status, "installed_managers", "installedManagers");
+  const testedManagers = readPackageShimStringArray(status, "tested_managers", "testedManagers");
+  const pathBrokenManagers = new Set([
+    ...readPackageShimStringArray(status, "path_broken_managers", "pathBrokenManagers"),
+  ]);
+  const bypassesValue = readPackageShimField(status, "bypasses", "bypasses");
+  if (Array.isArray(bypassesValue)) {
+    for (const entry of bypassesValue) {
+      if (!isRecord(entry)) {
+        continue;
+      }
+      const manager = stringValue(entry.manager);
+      if (manager !== null) {
+        pathBrokenManagers.add(manager);
+      }
+    }
+  }
+  const lastInterceptProofAtByManager = readLastInterceptProofAtByManager(status);
+  const detectedSet = new Set(detectedManagers);
+  const installedSet = new Set(installedManagers);
+  const testedSet = new Set(testedManagers);
   const managers = new Set([
     ...supportedManagers,
-    ...normalizeStringArray(status.installed_managers),
+    ...detectedManagers,
+    ...installedManagers,
+    ...testedManagers,
     ...normalizeStringArray(status.active_managers),
+    ...readPackageShimStringArray(status, "active_managers", "activeManagers"),
     ...detailByManager.keys(),
   ]);
   return Array.from(managers)
+    .filter((manager) => detectedSet.has(manager) || installedSet.has(manager) || testedSet.has(manager))
     .sort()
-    .map((manager) => normalizePackageShimEntry(manager, detailByManager.get(manager) ?? null, pathStatus));
+    .map((manager) =>
+      normalizePackageShimEntry(manager, detailByManager.get(manager) ?? null, pathStatus, {
+        detected: detectedSet.has(manager),
+        pathBroken: pathBrokenManagers.has(manager),
+        tested: testedSet.has(manager),
+        lastInterceptProofAt: lastInterceptProofAtByManager[manager] ?? null,
+      }),
+    );
 }
 
 function actionResultSummary(operation: string, detail: Record<string, unknown>): string {
@@ -2216,17 +2314,19 @@ function actionResultSummary(operation: string, detail: Record<string, unknown>)
   return `${operation} completed.`;
 }
 
-function normalizePackageFirewallStatus(value: unknown): PackageFirewallStatusResponse {
+export function normalizePackageFirewallStatus(value: unknown): PackageFirewallStatusResponse {
   const record = isRecord(value) ? value : {};
   const supportedManagers = normalizeStringArray(record.supported_managers);
   const shimStatus = isRecord(record.package_shims) ? record.package_shims : {};
-  const installedManagers = normalizeStringArray(shimStatus.installed_managers);
-  const activeManagers = normalizeStringArray(shimStatus.active_managers);
-  const missingManagers = normalizeStringArray(shimStatus.missing_managers);
+  const installedManagers = readPackageShimStringArray(shimStatus, "installed_managers", "installedManagers");
+  const activeManagers = readPackageShimStringArray(shimStatus, "active_managers", "activeManagers");
+  const missingManagers = readPackageShimStringArray(shimStatus, "missing_managers", "missingManagers");
+  const detectedManagers = readPackageShimStringArray(shimStatus, "detected_managers", "detectedManagers");
+  const pathStatusValue = readPackageShimField(shimStatus, "path_status", "pathStatus");
   const rawPathStatus =
-    shimStatus["path_status"] === "in_path"
+    pathStatusValue === "in_path"
       ? "in_path"
-      : shimStatus["path_status"] === "restart_required"
+      : pathStatusValue === "restart_required"
       ? "restart_required"
       : "missing_from_path";
   const packageShims = normalizePackageShimEntries(record.package_shims, supportedManagers, rawPathStatus);
@@ -2234,13 +2334,20 @@ function normalizePackageFirewallStatus(value: unknown): PackageFirewallStatusRe
     .filter((shim) => shim.activation_state === "protected")
     .map((shim) => shim.manager);
   const protectedSet = new Set(protectedManagers);
+  const lastAuditProofAt =
+    stringValue(readPackageShimField(shimStatus, "last_audit_proof_at", "lastAuditProofAt")) ?? null;
   const protection: PackageManagerProtection = {
     path_status: rawPathStatus,
-    path_contains_shim_dir: shimStatus["path_contains_shim_dir"] === true,
-    restart_shell_required: shimStatus["restart_shell_required"] === true,
-    shell_profile_configured: shimStatus["shell_profile_configured"] === true,
-    shell_profile_path: isStringOrNull(shimStatus["shell_profile_path"]) ? shimStatus["shell_profile_path"] : null,
-    shim_dir: stringValue(shimStatus["shim_dir"]) ?? "",
+    path_contains_shim_dir:
+      readPackageShimField(shimStatus, "path_contains_shim_dir", "pathContainsShimDir") === true,
+    restart_shell_required:
+      readPackageShimField(shimStatus, "restart_shell_required", "restartShellRequired") === true,
+    shell_profile_configured:
+      readPackageShimField(shimStatus, "shell_profile_configured", "shellProfileConfigured") === true,
+    shell_profile_path: isStringOrNull(readPackageShimField(shimStatus, "shell_profile_path", "shellProfilePath"))
+      ? (readPackageShimField(shimStatus, "shell_profile_path", "shellProfilePath") as string | null)
+      : null,
+    shim_dir: stringValue(readPackageShimField(shimStatus, "shim_dir", "shimDir")) ?? "",
     supported_managers: supportedManagers,
     installed_managers: installedManagers,
     active_managers: activeManagers,
@@ -2252,7 +2359,9 @@ function normalizePackageFirewallStatus(value: unknown): PackageFirewallStatusRe
     actions: normalizePackageFirewallActions(record.actions),
     cli_fallback: normalizePackageFirewallCliFallback(record.cli_fallback),
     connect_flow: normalizePackageFirewallConnectFlow(record.connect_flow),
+    detected_managers: detectedManagers,
     entitlement: normalizePackageFirewallEntitlement(record.entitlement),
+    last_audit_proof_at: lastAuditProofAt,
     operation: stringValue(record.operation) ?? "status",
     package_shims: packageShims,
     protection,
