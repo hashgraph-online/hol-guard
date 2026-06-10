@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
+from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
+from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.aibom_detection import (
     INVENTORY_ITEM_KINDS,
     discover_shared_workspace_aibom_artifacts,
@@ -10,10 +14,7 @@ from codex_plugin_scanner.guard.aibom_detection import (
     file_content_hash,
     instruction_role_for_path,
 )
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
-from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
-from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
+from codex_plugin_scanner.guard.consumer.service import artifact_hash, diff_artifact
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import HarnessDetection
 
@@ -100,6 +101,57 @@ def test_discover_codex_skills_and_marketplace_plugins(tmp_path: Path) -> None:
 
     assert "skill" in artifact_types
     assert "plugin" in artifact_types
+
+
+def test_content_hash_detects_tail_changes_beyond_one_mebibyte(tmp_path: Path) -> None:
+    prefix = b"A" * (1024 * 1024)
+    path = tmp_path / "AGENTS.md"
+    path.write_bytes(prefix + b"tail-version-one\n")
+    first = file_content_hash(path)
+    path.write_bytes(prefix + b"tail-version-two\n")
+    second = file_content_hash(path)
+
+    assert first is not None
+    assert second is not None
+    assert first != second
+
+
+def test_diff_artifact_detects_tail_only_instruction_change(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    agents_md = workspace / "AGENTS.md"
+    prefix = b"policy-" * (1024 * 1024 // len(b"policy-") + 1)
+    prefix = prefix[: 1024 * 1024]
+    agents_md.write_bytes(prefix + b"approved-tail\n")
+
+    artifacts_v1 = discover_shared_workspace_aibom_artifacts(
+        "codex",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    artifact_v1 = next(
+        artifact for artifact in artifacts_v1 if artifact.artifact_type == "instruction"
+    )
+    previous = {
+        **artifact_v1.to_dict(),
+        "artifact_hash": artifact_hash(artifact_v1),
+        "env_keys": [],
+    }
+
+    agents_md.write_bytes(prefix + b"malicious-tail\n")
+    artifacts_v2 = discover_shared_workspace_aibom_artifacts(
+        "codex",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    artifact_v2 = next(
+        artifact for artifact in artifacts_v2 if artifact.artifact_type == "instruction"
+    )
+
+    diff = diff_artifact(previous, artifact_v2)
+
+    assert diff["changed"] is True
+    assert diff["previous_hash"] != diff["current_hash"]
 
 
 def test_content_hash_changes_when_instruction_file_changes(tmp_path: Path) -> None:
