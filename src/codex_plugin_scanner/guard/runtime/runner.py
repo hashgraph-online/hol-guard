@@ -2236,6 +2236,81 @@ def _guard_oauth_reauthorization_message() -> str:
     return "Guard authorization expired. Run `hol-guard connect` to sign in again."
 
 
+def _guard_oauth_reconnect_after_revoked_message() -> str:
+    return (
+        "Guard Cloud sign-in on this device is no longer valid. "
+        "Run `hol-guard disconnect` then `hol-guard connect` to sign in again."
+    )
+
+
+def _oauth_token_http_error_details(error: urllib.error.HTTPError) -> tuple[str | None, str | None]:
+    payload = _http_error_payload(error)
+    if isinstance(payload, dict):
+        return _optional_string(payload.get("error")), _optional_string(payload.get("error_description"))
+    return None, None
+
+
+def _invalid_grant_oauth_http_error(error: urllib.error.HTTPError) -> bool:
+    error_code, description = _oauth_token_http_error_details(error)
+    return _invalid_grant_oauth_error_details(error_code, description)
+
+
+def _invalid_grant_oauth_payload(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return _invalid_grant_oauth_error_details(
+        _optional_string(payload.get("error")),
+        _optional_string(payload.get("error_description")),
+    )
+
+
+def _invalid_grant_oauth_error_details(
+    error_code: str | None,
+    description: str | None,
+) -> bool:
+    if error_code == "invalid_grant":
+        return True
+    if description is not None and "missing, expired, or already consumed" in description.lower():
+        return True
+    return False
+
+
+def _oauth_authorization_error_requires_fresh_sign_in(error: Exception) -> bool:
+    message = str(error).strip().lower()
+    return (
+        "invalid_grant" in message
+        or "missing, expired, or already consumed" in message
+        or _guard_oauth_reconnect_after_revoked_message().lower() in message
+    )
+
+
+def clear_revoked_guard_oauth_sign_in(store: GuardStore) -> bool:
+    """Drop stale local OAuth material when refresh proves the grant is revoked."""
+    credentials = store.get_oauth_local_credentials(allow_primary=True)
+    if credentials is None:
+        return False
+    try:
+        _resolve_guard_sync_auth_context_from_oauth_credentials(store, credentials)
+    except GuardSyncAuthorizationExpiredError as error:
+        if not _oauth_authorization_error_requires_fresh_sign_in(error):
+            return False
+        store.clear_oauth_local_credentials()
+        return True
+    return False
+
+
+def prepare_guard_cloud_connect_authorization(store: GuardStore) -> dict[str, object]:
+    """Repair local OAuth storage and clear revoked sign-in before reconnect."""
+    repaired_storage = store.repair_oauth_local_credential_storage_from_primary()
+    cleared_stale_sign_in = clear_revoked_guard_oauth_sign_in(store)
+    existing_sign_in_valid = store.get_oauth_local_credentials(allow_primary=True) is not None
+    return {
+        "repaired_storage": repaired_storage,
+        "cleared_stale_sign_in": cleared_stale_sign_in,
+        "existing_sign_in_valid": existing_sign_in_valid,
+    }
+
+
 def _guard_sync_reconnect_message() -> str:
     return "Guard Cloud sync endpoint is not trusted. Run `hol-guard connect` to restore Cloud sync."
 
@@ -2286,17 +2361,20 @@ def _refresh_guard_oauth_access_token(
             with urllib.request.urlopen(request, timeout=_SYNC_HTTP_TIMEOUT_SECONDS) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            payload = _http_error_payload(error) if error.code in {400, 401} else None
+            payload = _http_error_payload(error) if error.code in {400, 401, 403} else None
             challenge_nonce = _dpop_nonce_from_http_error(error, payload)
             if challenge_nonce is not None and challenge_nonce != dpop_nonce and nonce_retry_count < 3:
                 dpop_nonce = challenge_nonce
                 nonce_retry_count += 1
                 continue
-            refresh_error_message = _oauth_refresh_error_message(error)
             if error.code in {400, 401, 403}:
+                if _invalid_grant_oauth_payload(payload):
+                    raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message()) from error
+                refresh_error_message = _oauth_refresh_error_message(error)
                 raise GuardSyncAuthorizationExpiredError(
                     f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
                 ) from error
+            refresh_error_message = _oauth_refresh_error_message(error)
             raise RuntimeError(f"Guard OAuth token refresh failed: {refresh_error_message}") from error
         except OSError as error:
             raise RuntimeError(_sync_url_error_message(error)) from error
@@ -2405,12 +2483,17 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         oauth_client = resolve_guard_oauth_client_config(issuer)
     except ValueError as error:
         raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
-    refreshed = _refresh_guard_oauth_access_token(
-        token_endpoint=oauth_client.token_endpoint,
-        client_id=client_id,
-        refresh_token=refresh_token,
-        dpop_key_material=dpop_key_material,
-    )
+    try:
+        refreshed = _refresh_guard_oauth_access_token(
+            token_endpoint=oauth_client.token_endpoint,
+            client_id=client_id,
+            refresh_token=refresh_token,
+            dpop_key_material=dpop_key_material,
+        )
+    except GuardSyncAuthorizationExpiredError as error:
+        if _oauth_authorization_error_requires_fresh_sign_in(error):
+            store.clear_oauth_local_credentials()
+        raise
     rotated_refresh_token = str(refreshed["refresh_token"])
     package_firewall_entitlement = (
         refreshed["package_firewall_entitlement"]
