@@ -103,7 +103,7 @@ def classify_path_class(
                 candidate = candidate.resolve()
         else:
             candidate = candidate.resolve()
-    except OSError:
+    except (OSError, RuntimeError):
         return "unknown"
 
     if workspace_dir is not None and resolves_within_root(workspace_dir, candidate, require_exists=False):
@@ -128,7 +128,7 @@ def fingerprint_redacted_path(
     if not path.is_symlink():
         try:
             candidate = path.resolve()
-        except OSError:
+        except (OSError, RuntimeError):
             candidate = path
     if workspace_dir is not None:
         try:
