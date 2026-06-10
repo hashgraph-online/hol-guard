@@ -1,0 +1,121 @@
+"""AIBOM local trust metadata tests."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+
+
+def _write_good_plugin(plugin_dir: Path) -> None:
+    manifest_dir = plugin_dir / ".codex-plugin"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "plugin.json").write_text(
+        json.dumps(
+            {
+                "name": "trust-demo",
+                "version": "1.0.0",
+                "description": "Trust scoring demo plugin",
+                "author": {"name": "Hashgraph Online"},
+                "homepage": "https://example.com/plugin",
+                "repository": "https://github.com/hashgraph-online/hol-guard",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (plugin_dir / "SECURITY.md").write_text("Report issues privately.\n", encoding="utf-8")
+    (plugin_dir / "LICENSE").write_text("MIT\n", encoding="utf-8")
+
+
+def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Path) -> None:
+    plugin_dir = tmp_path
+    _write_good_plugin(plugin_dir)
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(plugin_dir / ".codex-plugin" / "plugin.json"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:plugin:trust-demo",
+                name="trust-demo",
+                harness="codex",
+                artifact_type="plugin",
+                source_scope="project",
+                config_path=str(plugin_dir),
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+    plugin_item = next(item for item in snapshot.items if item.item_kind == "plugin")
+    trust = plugin_item.metadata.get("trustResolution")
+    assert isinstance(trust, dict)
+    assert trust.get("resolutionSource") == "local"
+    assert trust.get("status") == "local"
+    assert isinstance(trust.get("trustScore"), int)
+    assert trust.get("trustScore", 0) > 0
+    metadata = trust.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("trustDomain") == "plugin"
+    assert metadata.get("scorer") == "hol-guard-local"
+    components = trust.get("trustComponents")
+    assert isinstance(components, list)
+    assert components
+
+
+def test_inventory_snapshot_attaches_local_mcp_trust_resolution(tmp_path: Path) -> None:
+    plugin_dir = tmp_path
+    _write_good_plugin(plugin_dir)
+    (plugin_dir / ".mcp.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "local-demo": {
+                        "command": "python",
+                        "args": ["-m", "demo_server"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(plugin_dir / ".mcp.json"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:mcp:local-demo",
+                name="local-demo",
+                harness="codex",
+                artifact_type="mcp_server",
+                source_scope="project",
+                config_path=str(plugin_dir / ".mcp.json"),
+                transport="stdio",
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+    mcp_item = next(item for item in snapshot.items if item.item_kind == "mcp_server")
+    trust = mcp_item.metadata.get("trustResolution")
+    assert isinstance(trust, dict)
+    assert trust.get("resolutionSource") == "local"
+    metadata = trust.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("trustDomain") == "mcp"
