@@ -13,6 +13,7 @@ import type {
   PackageFirewallActionResponse,
   PackageFirewallEntitlement,
 } from "./guard-types";
+import { formatRelativeTime } from "./approval-center-utils";
 import { resolvePackageManagerProtectionCopy } from "./runtime-overview";
 
 type UpgradeCtaProps = {
@@ -386,6 +387,7 @@ function activationHeadline(protection: PackageManagerProtection | null): string
 
 type ActivationSummaryProps = {
   activationAssistError: string | null;
+  lastAuditProofAt?: string | null;
   openingShell: boolean;
   onOpenShell: () => void;
   onRefreshStatus: () => void;
@@ -394,6 +396,7 @@ type ActivationSummaryProps = {
 
 export function ActivationSummary({
   activationAssistError,
+  lastAuditProofAt = null,
   openingShell,
   onOpenShell,
   onRefreshStatus,
@@ -432,6 +435,11 @@ export function ActivationSummary({
         <div className="min-w-0">
           <p className="text-sm font-medium text-brand-dark">{activationHeadline(protection)}</p>
           <p className="mt-0.5 text-xs text-slate-600">{copy.pathDetail}</p>
+          {lastAuditProofAt !== null && (
+            <p className="mt-1 text-xs text-slate-500">
+              Last audit proof {formatRelativeTime(lastAuditProofAt)}
+            </p>
+          )}
           {protection.path_status === "restart_required" && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {canOpenShell && (
