@@ -11,6 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon.server import _build_snapshot_payload
 from codex_plugin_scanner.guard.shims import (
+    activate_package_shims,
     install_package_shims,
     package_shim_status,
     package_shim_supported_managers,
@@ -37,7 +38,11 @@ def _harness_context(tmp_path: Path) -> MagicMock:
 
 
 @pytest.mark.parametrize("manager", PHASE05_MANAGERS)
-def test_package_shim_lifecycle_install_status_remove(manager: str, tmp_path: Path) -> None:
+def test_package_shim_lifecycle_install_status_protect_test_remove(
+    manager: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     context = _harness_context(tmp_path)
     install_payload = install_package_shims(context, managers=(manager,))
     assert manager in install_payload["installed_managers"]
@@ -48,6 +53,35 @@ def test_package_shim_lifecycle_install_status_remove(manager: str, tmp_path: Pa
     detail = next(item for item in status["manager_details"] if item["manager"] == manager)
     assert detail["integrity"] == "ok"
     assert detail["shim_path"]
+
+    shim_dir = context.guard_home / "package-shims" / "bin"
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True)
+    write_fake_manager_script(
+        fake_bin=fake_bin,
+        manager=manager,
+        marker_path=tmp_path / f"{manager}-lifecycle-marker.json",
+        exit_code=0,
+    )
+    monkeypatch.setenv("PATH", os.pathsep.join([str(shim_dir), str(fake_bin)]))
+
+    protect_payload = activate_package_shims(context, managers=(manager,))
+    assert protect_payload["activation_state"] in {
+        "in_path",
+        "restart_required",
+        "missing_from_path",
+    }
+    protected_status = package_shim_status(context)
+    assert manager in protected_status["protected_managers"]
+
+    probe_result = probe_package_shim_intercepts(
+        context,
+        managers=(manager,),
+        workspace_dir=context.workspace_dir,
+    )
+    assert probe_result["intercept_proved"] is True
+    tested_status = package_shim_status(context)
+    assert isinstance(tested_status["last_test_at"].get(manager), str)
 
     remove_payload = uninstall_package_shims(context, managers=(manager,))
     assert manager in remove_payload["removed_managers"]
