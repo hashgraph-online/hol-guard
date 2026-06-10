@@ -21,6 +21,7 @@ def _write_good_plugin(plugin_dir: Path) -> None:
                 "author": {"name": "Hashgraph Online"},
                 "homepage": "https://example.com/plugin",
                 "repository": "https://github.com/hashgraph-online/hol-guard",
+                "skills": "skills",
             }
         ),
         encoding="utf-8",
@@ -70,6 +71,47 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
     components = trust.get("trustComponents")
     assert isinstance(components, list)
     assert components
+
+
+def test_inventory_snapshot_attaches_local_skill_trust_resolution(tmp_path: Path) -> None:
+    plugin_dir = tmp_path
+    _write_good_plugin(plugin_dir)
+    skills_dir = plugin_dir / "skills" / "demo-skill"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "SKILL.md").write_text("---\nname: demo-skill\ndescription: Demo\n---\n", encoding="utf-8")
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(skills_dir / "SKILL.md"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:skill:demo-skill",
+                name="demo-skill",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="project",
+                config_path=str(skills_dir / "SKILL.md"),
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+    skill_item = next(item for item in snapshot.items if item.item_kind == "skill")
+    trust = skill_item.metadata.get("trustResolution")
+    assert isinstance(trust, dict)
+    metadata = trust.get("metadata")
+    assert isinstance(metadata, dict)
+    assert metadata.get("trustDomain") == "skills"
+    components = trust.get("trustComponents")
+    assert isinstance(components, list)
+    assert len(components) > 0
+    assert all(isinstance(component.get("componentId"), str) for component in components)
 
 
 def test_inventory_snapshot_attaches_local_mcp_trust_resolution(tmp_path: Path) -> None:
