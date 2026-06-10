@@ -11,7 +11,10 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.aibom_symlink import inspect_aibom_source_path
-from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
+from codex_plugin_scanner.guard.inventory_contract import (
+    inventory_snapshot_from_detection,
+    serialize_inventory_snapshot,
+)
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 SCENARIO_MATRIX = (
@@ -98,16 +101,6 @@ def test_aibom_symlink_negative_matrix_fails_closed(
     )
     assert inspection.validation_state == validation_state
 
-    encoded = json.dumps(
-        {
-            "scenario_id": scenario_id,
-            "source_fingerprint": inspection.source_fingerprint,
-            "validation_state": inspection.validation_state,
-        }
-    )
-    assert str(tmp_path) not in encoded
-    assert "guard_live_should_not_escape" not in encoded
-
     snapshot = inventory_snapshot_from_detection(
         HarnessDetection(
             harness="hermes",
@@ -132,4 +125,10 @@ def test_aibom_symlink_negative_matrix_fails_closed(
     source_of_truth = snapshot.items[0].metadata.get("sourceOfTruth")
     assert isinstance(source_of_truth, dict)
     assert source_of_truth.get("validationState") == validation_state
+    assert source_of_truth.get("linkKind") == "symlink"
     assert any(finding.check_id == finding_check_id for finding in snapshot.findings)
+
+    serialized = json.dumps(serialize_inventory_snapshot(snapshot))
+    assert str(tmp_path) not in serialized
+    if fixture_name == "secret-like":
+        assert "guard_live_should_not_escape" not in serialized
