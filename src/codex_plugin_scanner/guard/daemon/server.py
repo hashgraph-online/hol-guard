@@ -94,7 +94,6 @@ from ..local_supply_chain import (
     resolve_package_firewall_entitlement_with_refresh,
     resolve_supply_chain_audit_workspace_dir,
 )
-from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES, PolicyDecision
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
@@ -103,6 +102,7 @@ from ..package_firewall_entitlement import (
     package_firewall_block_details,
     package_firewall_operation_allowed,
 )
+from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
