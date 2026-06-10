@@ -1,6 +1,6 @@
 # Harness Support Matrix
 
-Local harness protection works without Guard Cloud sign-in. Cloud adds synced
+Local harness protection works without signing in to Guard Cloud. Cloud adds synced
 history, visibility, and team controls around the same adapters. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md).
 

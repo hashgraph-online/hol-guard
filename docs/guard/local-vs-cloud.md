@@ -1,7 +1,7 @@
 # Local Guard vs Guard Cloud
 
-Guard protects your machine first. Guard Cloud is optional paid memory,
-visibility, sync, and management around that protection.
+Guard protects your machine first. Guard Cloud is optional paid service
+memory, visibility, sync, and management around that protection.
 
 ## Local Guard baseline
 
@@ -23,8 +23,8 @@ Available without a Cloud subscription or sign-in:
 - **Local approval and review paths** — inline harness approval, the local
   approval center on `127.0.0.1`, and `hol-guard approvals` resolve decisions
   without Cloud.
-- **Cloud-outage independence** — if Guard Cloud is unavailable, unsigned out,
-  or never connected, local interception, policy, blocking, receipts, and
+- **Cloud-outage independence** — if Guard Cloud is unavailable, you are signed
+  out, or never connected, local interception, policy, blocking, receipts, and
   approvals continue on the machine.
 
 Guard does not meter local safety features. You can detect harnesses, install
@@ -92,7 +92,7 @@ on top of the individual Cloud value:
 | Launch interception and local policy | Included | Included |
 | Local blocking/warnings on supported actions | Included | Included |
 | Local receipts and approvals | Included | Included |
-| Works when Cloud is offline | Yes | Local protection yes; sync pauses |
+| Works when Cloud is offline | Yes | Local protection continues; sync pauses |
 | Cross-device history and search | Device-local only | Included on paid plans |
 | Decision memory across machines | No | Included on paid plans |
 | Cloud Firewall UI and exports | No | Included on paid plans |
