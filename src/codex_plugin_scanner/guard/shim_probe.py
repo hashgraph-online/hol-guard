@@ -58,8 +58,16 @@ def protect_evaluator_evidence(payload: dict[str, Any]) -> dict[str, object]:
     normalized_evidence_ids = (
         [str(item) for item in evidence_ids if item is not None] if isinstance(evidence_ids, list) else []
     )
+    evaluator_source = supply_chain_dict.get("source")
+    if not isinstance(evaluator_source, str) or not evaluator_source.strip():
+        evaluator_source = supply_chain_dict.get("decision_source")
+    if not isinstance(evaluator_source, str) or not evaluator_source.strip():
+        evaluator_source = verdict_dict.get("source")
+    if not isinstance(evaluator_source, str) or not evaluator_source.strip():
+        evaluator_source = "local-heuristic"
     return {
         "evaluator_invoked": "supply_chain_evaluation" in payload or "verdict" in payload,
+        "evaluator_source": evaluator_source,
         "protect_decision": verdict_dict.get("action"),
         "evidence_ids": normalized_evidence_ids,
         "dry_run": payload.get("dry_run"),

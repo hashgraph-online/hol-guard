@@ -21,6 +21,7 @@ from .shim_probe import (
     parse_protect_json_stdout,
     protect_evaluator_evidence,
 )
+from .stable_digest import stable_digest_hex
 
 if TYPE_CHECKING:
     from .adapters.base import HarnessContext
@@ -950,9 +951,14 @@ def probe_package_shim_intercepts(
             continue
         protect_payload = parse_protect_json_stdout(result.stdout)
         evaluator_evidence = protect_evaluator_evidence(protect_payload)
+        command_hash = stable_digest_hex(
+            json.dumps([manager, *probe_args]).encode("utf-8"),
+        )
         manager_results.append(
             {
+                "command_hash": command_hash,
                 "evaluator_invoked": evaluator_evidence["evaluator_invoked"],
+                "evaluator_source": evaluator_evidence["evaluator_source"],
                 "evidence_ids": evaluator_evidence["evidence_ids"],
                 "intercept_ran": bool(evaluator_evidence["evaluator_invoked"]),
                 "manager": manager,
