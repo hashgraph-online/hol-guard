@@ -1,5 +1,7 @@
-import { parsePackageFirewallActionResult } from "./supply-chain-firewall-action-result";
-import { parseInterceptProofSnapshot } from "./supply-chain-intercept-proof";
+import {
+  parseInterceptProofSnapshot,
+  parsePackageFirewallActionResult,
+} from "./supply-chain-firewall-action-result";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {

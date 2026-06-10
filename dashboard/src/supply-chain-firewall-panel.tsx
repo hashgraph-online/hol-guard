@@ -26,7 +26,7 @@ import {
   type FirewallStatusFilter,
 } from "./supply-chain-firewall-controls";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
-import { parseInterceptProofSnapshot, type InterceptProofSnapshot } from "./supply-chain-intercept-proof";
+import { parseInterceptProofSnapshot, type InterceptProofSnapshot } from "./supply-chain-firewall-action-result";
 import { InterceptProofModal } from "./supply-chain-intercept-proof-modal";
 import { SupplyChainManagerDrawer } from "./supply-chain-manager-drawer";
 
@@ -196,6 +196,7 @@ export function PackageFirewallPanel(props: {
         if (op === "test") {
           const proof = parseInterceptProofSnapshot(response);
           if (proof !== null) {
+            setManagerDrawerTarget(null);
             setInterceptProof(proof);
           }
         }
@@ -425,10 +426,6 @@ export function PackageFirewallPanel(props: {
         />
       )}
 
-      {interceptProof !== null && (
-        <InterceptProofModal proof={interceptProof} onClose={handleCloseInterceptProof} />
-      )}
-
       {panelLoad.phase === "loaded" && managerDrawerTarget !== null && (
         <SupplyChainManagerDrawer
           manager={managerDrawerTarget}
@@ -444,6 +441,10 @@ export function PackageFirewallPanel(props: {
           }}
           onClose={handleCloseManagerDrawer}
         />
+      )}
+
+      {interceptProof !== null && (
+        <InterceptProofModal proof={interceptProof} onClose={handleCloseInterceptProof} />
       )}
     </div>
   );

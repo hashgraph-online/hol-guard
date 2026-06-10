@@ -5,7 +5,7 @@ import {
 } from "react-icons/hi2";
 import { ActionButton, Tag } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
-import type { InterceptProofSnapshot } from "./supply-chain-intercept-proof";
+import type { InterceptProofSnapshot } from "./supply-chain-firewall-action-result";
 
 type InterceptProofModalProps = {
   proof: InterceptProofSnapshot;

@@ -15,31 +15,31 @@ const DECISION_RANK = {
   monitor: 1,
   allow: 0
 };
-function isRecord$3(value) {
+function isRecord$2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function readString$2(value) {
+function readString$1(value) {
   if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
-function readStringArray$2(value) {
+function readStringArray$1(value) {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
 }
 function normalizeSeverity(value) {
-  const raw = readString$2(value)?.toLowerCase();
+  const raw = readString$1(value)?.toLowerCase();
   if (raw === "critical" || raw === "high" || raw === "medium" || raw === "low") {
     return raw;
   }
   return "unknown";
 }
 function normalizeDecision(value) {
-  const raw = readString$2(value)?.toLowerCase();
+  const raw = readString$1(value)?.toLowerCase();
   if (raw === "block" || raw === "ask" || raw === "warn" || raw === "monitor" || raw === "allow") {
     return raw;
   }
@@ -67,21 +67,21 @@ function normalizeReasons(value) {
   }
   const reasons = [];
   for (const entry of value) {
-    if (!isRecord$3(entry)) {
+    if (!isRecord$2(entry)) {
       continue;
     }
-    const message = readString$2(entry.message) ?? readString$2(entry.summary) ?? "Flagged by Guard supply-chain policy.";
-    const advisoryId = readString$2(entry.advisoryId) ?? readString$2(entry.advisory_id);
+    const message = readString$1(entry.message) ?? readString$1(entry.summary) ?? "Flagged by Guard supply-chain policy.";
+    const advisoryId = readString$1(entry.advisoryId) ?? readString$1(entry.advisory_id);
     if (advisoryId !== null && !message.includes(advisoryId)) {
       reasons.push({
-        code: readString$2(entry.code) ?? "supply_chain",
+        code: readString$1(entry.code) ?? "supply_chain",
         message: `${message} (${advisoryId})`,
         severity: normalizeSeverity(entry.severity)
       });
       continue;
     }
     reasons.push({
-      code: readString$2(entry.code) ?? "supply_chain",
+      code: readString$1(entry.code) ?? "supply_chain",
       message,
       severity: normalizeSeverity(entry.severity)
     });
@@ -133,7 +133,7 @@ function readAdvisoryIdList(value) {
 }
 function buildAdvisoryAliasStubs(packageRecord, reasons) {
   const aliases = /* @__PURE__ */ new Set();
-  const packageAdvisoryId = readString$2(packageRecord.advisoryId) ?? readString$2(packageRecord.advisory_id);
+  const packageAdvisoryId = readString$1(packageRecord.advisoryId) ?? readString$1(packageRecord.advisory_id);
   if (packageAdvisoryId !== null) {
     addAdvisoryAlias(aliases, packageAdvisoryId);
   }
@@ -163,12 +163,12 @@ function buildAdvisoryAliasStubs(packageRecord, reasons) {
   return Array.from(aliases);
 }
 function normalizePackageFinding(packageRecord, index) {
-  const packageName = readString$2(packageRecord.name);
+  const packageName = readString$1(packageRecord.name);
   if (packageName === null) {
     return null;
   }
-  const ecosystem = readString$2(packageRecord.ecosystem) ?? "unknown";
-  const namespace = readString$2(packageRecord.namespace);
+  const ecosystem = readString$1(packageRecord.ecosystem) ?? "unknown";
+  const namespace = readString$1(packageRecord.namespace);
   const reasons = normalizeReasons(packageRecord.reasons);
   const decision = normalizeDecision(packageRecord.decision);
   const severity = resolveFindingSeverity(packageRecord, reasons);
@@ -182,7 +182,7 @@ function normalizePackageFinding(packageRecord, index) {
     severity,
     reasons,
     advisoryAliases: buildAdvisoryAliasStubs(packageRecord, reasons),
-    status: readString$2(packageRecord.status)
+    status: readString$1(packageRecord.status)
   };
 }
 function normalizePackageFindings(value) {
@@ -192,7 +192,7 @@ function normalizePackageFindings(value) {
   const findings = [];
   let index = 0;
   for (const entry of value) {
-    if (!isRecord$3(entry)) {
+    if (!isRecord$2(entry)) {
       continue;
     }
     const finding = normalizePackageFinding(entry, index);
@@ -214,27 +214,27 @@ function packageRecordsFromEvaluation(evaluation) {
   return normalizePackageFindings(evaluation.package_findings);
 }
 function isAuditEvidence(value) {
-  return isRecord$3(value) && value.operation === "audit";
+  return isRecord$2(value) && value.operation === "audit";
 }
 function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
-  if (!isRecord$3(raw)) {
+  if (!isRecord$2(raw)) {
     return null;
   }
-  const evaluation = isRecord$3(raw.evaluation) ? raw.evaluation : null;
+  const evaluation = isRecord$2(raw.evaluation) ? raw.evaluation : null;
   const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
   const findings = findingsFromEvidence.length > 0 ? findingsFromEvidence : packageRecordsFromEvaluation(evaluation);
-  const generatedAt = readString$2(raw.generated_at) ?? readString$2(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
-  const inventory = normalizeInventory(isRecord$3(raw.inventory) ? raw.inventory : null);
+  const generatedAt = readString$1(raw.generated_at) ?? readString$1(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
+  const inventory = normalizeInventory(isRecord$2(raw.inventory) ? raw.inventory : null);
   const decision = normalizeDecision(evaluation?.decision ?? raw.audit_decision);
-  const manifestPaths = readStringArray$2(raw.manifest_paths);
-  const lockfilePaths = readStringArray$2(raw.lockfile_paths);
+  const manifestPaths = readStringArray$1(raw.manifest_paths);
+  const lockfilePaths = readStringArray$1(raw.lockfile_paths);
   const hasAuditContext = findings.length > 0 || inventory.totalPackages > 0 || manifestPaths.length > 0 || lockfilePaths.length > 0 || evaluation !== null;
   if (!hasAuditContext) {
     return null;
   }
   return {
     generatedAt,
-    source: readString$2(raw.source),
+    source: readString$1(raw.source),
     decision,
     inventory,
     findings,
@@ -249,7 +249,7 @@ function derivePackageWorkbenchFromReceipts(receipts) {
   ).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
   for (const receipt of auditReceipts) {
     const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry));
-    if (evidenceRaw === void 0 || !isRecord$3(evidenceRaw)) {
+    if (evidenceRaw === void 0 || !isRecord$2(evidenceRaw)) {
       continue;
     }
     const snapshot = normalizeSupplyChainAuditSnapshot(
@@ -331,30 +331,30 @@ function filterPackageWorkbenchFindings(findings, filters) {
 function packageWorkbenchEcosystems(findings) {
   return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
 }
-function isRecord$2(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function readString$1(value) {
+function readString(value) {
   if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
-function readStringArray$1(value) {
+function readStringArray(value) {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
 }
 function parseAuditActionResult(result) {
-  const evaluation = isRecord$2(result.evaluation) ? result.evaluation : null;
-  const decision = readString$1(evaluation?.decision) ?? readString$1(result.decision) ?? "monitor";
-  const manifestPaths = readStringArray$1(result.manifest_paths);
-  const lockfilePaths = readStringArray$1(result.lockfile_paths);
-  const inventory = isRecord$2(result.inventory) ? result.inventory : null;
+  const evaluation = isRecord$1(result.evaluation) ? result.evaluation : null;
+  const decision = readString(evaluation?.decision) ?? readString(result.decision) ?? "monitor";
+  const manifestPaths = readStringArray(result.manifest_paths);
+  const lockfilePaths = readStringArray(result.lockfile_paths);
+  const inventory = isRecord$1(result.inventory) ? result.inventory : null;
   const packageCount = typeof inventory?.packages === "number" ? inventory.packages : null;
-  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord$2) : [];
+  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord$1) : [];
   const lines = [];
   if (manifestPaths.length > 0) {
     lines.push(`Manifests scanned: ${manifestPaths.join(", ")}.`);
@@ -366,7 +366,7 @@ function parseAuditActionResult(result) {
     lines.push(`${packageCount} dependency ${packageCount === 1 ? "entry" : "entries"} indexed.`);
   }
   for (const warning of lockfileWarnings.slice(0, 3)) {
-    const message = readString$1(warning.message);
+    const message = readString(warning.message);
     if (message !== null) {
       lines.push(message);
     }
@@ -383,10 +383,10 @@ function parseAuditActionResult(result) {
   };
 }
 function parseSyncActionResult(result) {
-  const syncedAt = readString$1(result.synced_at) ?? readString$1(result.generated_at) ?? readString$1(result.updated_at);
+  const syncedAt = readString(result.synced_at) ?? readString(result.generated_at) ?? readString(result.updated_at);
   const receiptsStored = typeof result.receipts_stored === "number" ? result.receipts_stored : null;
-  const bundleVersion = readString$1(result.bundle_version);
-  const tier = readString$1(result.tier);
+  const bundleVersion = readString(result.bundle_version);
+  const tier = readString(result.tier);
   const lines = [];
   if (syncedAt !== null) {
     lines.push(`Cloud sync marker: ${syncedAt}.`);
@@ -406,19 +406,19 @@ function parseSyncActionResult(result) {
 }
 function parseTestActionResult(result) {
   const interceptProved = result.intercept_proved === true;
-  const testedManagers = readStringArray$1(result.tested_managers);
-  const pathRepairRequired = readStringArray$1(result.path_repair_required);
-  const managerResults = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$2) : [];
+  const testedManagers = readStringArray(result.tested_managers);
+  const pathRepairRequired = readStringArray(result.path_repair_required);
+  const managerResults = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
   const lines = [];
   for (const entry of managerResults) {
-    const manager = readString$1(entry.manager) ?? "manager";
+    const manager = readString(entry.manager) ?? "manager";
     if (entry.intercept_ran === true) {
       lines.push(
         `${manager}: intercept probe ran${entry.evaluator_invoked === true ? " with evaluator proof" : ""}.`
       );
       continue;
     }
-    const skippedReason = readString$1(entry.skipped_reason);
+    const skippedReason = readString(entry.skipped_reason);
     if (skippedReason !== null) {
       lines.push(`${manager}: skipped (${skippedReason.replaceAll("_", " ")}).`);
       continue;
@@ -442,18 +442,18 @@ function parseTestActionResult(result) {
   };
 }
 function parsePackageFirewallActionResult(op, body) {
-  if (!isRecord$2(body)) {
+  if (!isRecord$1(body)) {
     return null;
   }
   let result;
-  if (isRecord$2(body.result)) {
+  if (isRecord$1(body.result)) {
     result = body.result;
-  } else if (isRecord$2(body.result_detail)) {
+  } else if (isRecord$1(body.result_detail)) {
     result = body.result_detail;
   } else {
     result = body;
   }
-  if (!isRecord$2(result)) {
+  if (!isRecord$1(result)) {
     return null;
   }
   if (op === "audit") {
@@ -466,6 +466,66 @@ function parsePackageFirewallActionResult(op, body) {
     return parseTestActionResult(result);
   }
   return null;
+}
+function readActionResultRecord(body) {
+  if (!isRecord$1(body)) {
+    return null;
+  }
+  if (isRecord$1(body.result_detail)) {
+    return body.result_detail;
+  }
+  if (isRecord$1(body.result)) {
+    return body.result;
+  }
+  return body;
+}
+function buildInterceptProofManagerResult(entry) {
+  const manager = readString(entry.manager) ?? "manager";
+  const interceptRan = entry.intercept_ran === true;
+  const evaluatorInvoked = entry.evaluator_invoked === true;
+  const skippedReason = readString(entry.skipped_reason);
+  let detail = `${manager}: no intercept proof recorded.`;
+  if (interceptRan) {
+    detail = evaluatorInvoked ? `${manager}: intercept probe ran with evaluator proof.` : `${manager}: intercept probe ran.`;
+  } else if (skippedReason !== null) {
+    detail = `${manager}: skipped (${skippedReason.replaceAll("_", " ")}).`;
+  }
+  return {
+    manager,
+    interceptRan,
+    evaluatorInvoked,
+    skippedReason,
+    detail
+  };
+}
+function parseInterceptProofSnapshot(body) {
+  const result = readActionResultRecord(body);
+  if (result === null) {
+    return null;
+  }
+  const managerResultsRaw = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
+  const testedManagers = readStringArray(result.tested_managers);
+  const pathRepairRequired = readStringArray(result.path_repair_required);
+  const interceptProved = result.intercept_proved === true;
+  const managerResults = managerResultsRaw.map(buildInterceptProofManagerResult);
+  const hasProofContext = managerResults.length > 0 || testedManagers.length > 0 || pathRepairRequired.length > 0;
+  if (!hasProofContext && result.intercept_proved === void 0) {
+    return null;
+  }
+  const receipt = isRecord$1(body) && isRecord$1(body.receipt) ? body.receipt : null;
+  const receiptId = receipt !== null ? readString(receipt.id) : null;
+  const timestamp = receipt !== null ? readString(receipt.timestamp) : null;
+  const summary = interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.";
+  return {
+    interceptProved,
+    testedManagers,
+    pathRepairRequired,
+    managerResults,
+    receiptId,
+    timestamp,
+    summary,
+    tone: interceptProved ? "success" : "warning"
+  };
 }
 function UpgradeCta({ entitlement }) {
   const reconnectRequired = entitlement.reason === "guard_cloud_reconnect_required";
@@ -1290,85 +1350,6 @@ function FirewallControlsView({
     ] })
   ] });
 }
-function isRecord$1(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function readString(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-function readStringArray(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
-}
-function readResultRecord(body) {
-  if (!isRecord$1(body)) {
-    return null;
-  }
-  if (isRecord$1(body.result_detail)) {
-    return body.result_detail;
-  }
-  if (isRecord$1(body.result)) {
-    return body.result;
-  }
-  return body;
-}
-function formatSkippedReason(raw) {
-  return raw.replaceAll("_", " ");
-}
-function buildManagerResultDetail(entry) {
-  const manager = readString(entry.manager) ?? "manager";
-  const interceptRan = entry.intercept_ran === true;
-  const evaluatorInvoked = entry.evaluator_invoked === true;
-  const skippedReason = readString(entry.skipped_reason);
-  let detail = `${manager}: no intercept proof recorded.`;
-  if (interceptRan) {
-    detail = evaluatorInvoked ? `${manager}: intercept probe ran with evaluator proof.` : `${manager}: intercept probe ran.`;
-  } else if (skippedReason !== null) {
-    detail = `${manager}: skipped (${formatSkippedReason(skippedReason)}).`;
-  }
-  return {
-    manager,
-    interceptRan,
-    evaluatorInvoked,
-    skippedReason,
-    detail
-  };
-}
-function parseInterceptProofSnapshot(body) {
-  const result = readResultRecord(body);
-  if (result === null) {
-    return null;
-  }
-  const managerResultsRaw = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
-  const testedManagers = readStringArray(result.tested_managers);
-  const pathRepairRequired = readStringArray(result.path_repair_required);
-  const interceptProved = result.intercept_proved === true;
-  const managerResults = managerResultsRaw.map(buildManagerResultDetail);
-  const hasProofContext = managerResults.length > 0 || testedManagers.length > 0 || pathRepairRequired.length > 0;
-  if (!hasProofContext && result.intercept_proved === void 0) {
-    return null;
-  }
-  const receipt = isRecord$1(body) && isRecord$1(body.receipt) ? body.receipt : null;
-  const receiptId = receipt !== null ? readString(receipt.id) : null;
-  const timestamp = receipt !== null ? readString(receipt.timestamp) : null;
-  const summary = interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.";
-  return {
-    interceptProved,
-    testedManagers,
-    pathRepairRequired,
-    managerResults,
-    receiptId,
-    timestamp,
-    summary,
-    tone: interceptProved ? "success" : "warning"
-  };
-}
 function ManagerProofRow({
   manager,
   detail,
@@ -1714,6 +1695,7 @@ function PackageFirewallPanel(props) {
         if (op === "test") {
           const proof = parseInterceptProofSnapshot(response);
           if (proof !== null) {
+            setManagerDrawerTarget(null);
             setInterceptProof(proof);
           }
         }
@@ -1914,7 +1896,6 @@ function PackageFirewallPanel(props) {
         onConfirm: handleApprovalConfirm
       }
     ),
-    interceptProof !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(InterceptProofModal, { proof: interceptProof, onClose: handleCloseInterceptProof }),
     panelLoad.phase === "loaded" && managerDrawerTarget !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       SupplyChainManagerDrawer,
       {
@@ -1931,7 +1912,8 @@ function PackageFirewallPanel(props) {
         },
         onClose: handleCloseManagerDrawer
       }
-    )
+    ),
+    interceptProof !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(InterceptProofModal, { proof: interceptProof, onClose: handleCloseInterceptProof })
   ] });
 }
 const decisionTone = (decision) => {
