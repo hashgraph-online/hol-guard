@@ -9,9 +9,11 @@ import {
   HiMiniBeaker,
   HiMiniTrash,
   HiMiniCheckCircle,
+  HiMiniClock,
   HiMiniMagnifyingGlass,
   HiMiniXCircle,
 } from "react-icons/hi2";
+import { formatRelativeTime } from "./approval-center-utils";
 import { ApprovalProofModal } from "./approval-proof-modal";
 import { SectionLabel, Tag, ActionButton, IconActionButton, EmptyState } from "./approval-center-primitives";
 import type {
@@ -63,8 +65,17 @@ function resolveShimStatus(shim: PackageShimEntry | undefined): {
   tone: "green" | "blue" | "attention" | "slate";
   icon: "check" | "restart" | "warning" | "none";
 } {
-  if (!shim || !shim.installed) {
+  if (!shim) {
     return { label: "Unprotected", tone: "attention", icon: "warning" };
+  }
+  if (!shim.installed && shim.detected) {
+    return { label: "Detected, not protected", tone: "slate", icon: "warning" };
+  }
+  if (!shim.installed) {
+    return { label: "Unprotected", tone: "attention", icon: "warning" };
+  }
+  if (shim.path_broken) {
+    return { label: "PATH broken", tone: "attention", icon: "warning" };
   }
   if (shim.activation_state === "protected") {
     return { label: "Protected", tone: "green", icon: "check" };
@@ -126,7 +137,10 @@ function ManagerRow({
   const removeAvailable = actionIsAvailable(removeState);
 
   const showInstall = (!shim || !shim.installed) && installAvailable;
-  const showRepair = shim?.installed && shim.activation_state === "repair_required" && repairAvailable;
+  const showRepair =
+    shim?.installed &&
+    (shim.activation_state === "repair_required" || shim.path_broken) &&
+    repairAvailable;
   const showTest = shim?.installed && shim.activation_state === "protected" && testAvailable;
   const showRemove = shim?.installed && removeAvailable;
 
@@ -139,21 +153,42 @@ function ManagerRow({
   return (
     <div className="border-b border-slate-100 last:border-b-0" role="row">
       <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-2" role="cell">
-          {status.icon === "check" ? (
-            <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
-          ) : status.icon === "restart" ? (
-            <HiMiniArrowPath className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
-          ) : (
-            <HiMiniExclamationTriangle className="h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
+        <div className="flex min-w-0 flex-col gap-1 sm:flex-1" role="cell">
+          <div className="flex min-w-0 items-center gap-2">
+            {status.icon === "check" ? (
+              <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+            ) : status.icon === "restart" ? (
+              <HiMiniArrowPath className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
+            ) : (
+              <HiMiniExclamationTriangle className="h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
+            )}
+            <span className="truncate font-mono text-sm font-semibold text-brand-dark">{manager}</span>
+            {shim?.detected && (
+              <Tag tone="green">Detected</Tag>
+            )}
+            {isMine && (
+              <HiMiniArrowPath
+                className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-blue"
+                aria-label="Running…"
+              />
+            )}
+          </div>
+          {shim?.path_summary !== null && shim?.path_summary !== undefined && (
+            <p className="break-all pl-6 font-mono text-[11px] leading-relaxed text-slate-500">
+              PATH: {shim.path_summary}
+            </p>
           )}
-          <span className="truncate font-mono text-sm font-semibold text-brand-dark">{manager}</span>
-          {isMine && (
-            <HiMiniArrowPath
-              className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-blue"
-              aria-label="Running…"
-            />
-          )}
+          {shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== undefined ? (
+            <p className="flex items-center gap-1.5 pl-6 text-[11px] text-slate-500">
+              <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-brand-green" aria-hidden="true" />
+              Last intercept proof {formatRelativeTime(shim.last_intercept_proof_at)}
+            </p>
+          ) : shim?.installed ? (
+            <p className="flex items-center gap-1.5 pl-6 text-[11px] text-slate-500">
+              <HiMiniClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              No intercept proof recorded yet
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3" role="cell">
@@ -161,7 +196,7 @@ function ManagerRow({
             <Tag tone={status.tone}>{status.label}</Tag>
           </div>
 
-          <div className="shrink-0">
+          <div className="shrink-0 [&_button]:min-h-11 [&_button]:h-11">
             {isConfirmingRemove ? (
               <div className="flex items-center gap-1.5">
                 <IconActionButton
@@ -239,9 +274,11 @@ function ManagerRow({
         </div>
       )}
 
-      {shim?.shim_path !== null && shim?.shim_path !== undefined && (
+      {shim?.path_broken && (
         <div className="px-4 pb-2">
-          <p className="break-all font-mono text-[10px] text-slate-400">{shim.shim_path}</p>
+          <p className="text-xs text-brand-attention">
+            Restart your shell after repair so PATH exports reload.
+          </p>
         </div>
       )}
     </div>
@@ -413,7 +450,13 @@ function FirewallControlsView({
 
   const filteredManagers = useMemo(() => {
     const shimsByManager = new Map(data.package_shims.map((s) => [s.manager, s]));
-    let managers = data.supported_managers;
+    const visibleManagers = data.package_shims
+      .filter((shim) => shim.detected || shim.installed || shim.tested)
+      .map((shim) => shim.manager);
+    let managers =
+      visibleManagers.length > 0
+        ? Array.from(new Set(visibleManagers)).sort()
+        : data.supported_managers;
 
     if (managerFilter) {
       const q = managerFilter.toLowerCase();
@@ -450,6 +493,7 @@ function FirewallControlsView({
 
       <ActivationSummary
         activationAssistError={activationAssistError}
+        lastAuditProofAt={data.last_audit_proof_at}
         openingShell={openingShell}
         onOpenShell={onOpenShell}
         onRefreshStatus={onRefreshStatus}
