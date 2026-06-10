@@ -464,15 +464,19 @@ function FirewallControlsView({
         onRepair(manager);
         return;
       }
-      if (op === "test" && manager !== null) {
-        onTest(manager);
+      if (op === "test") {
+        if (manager !== null) {
+          onTest(manager);
+          return;
+        }
+        onOpenShell();
         return;
       }
       if (op === "sync") {
         onSync();
       }
     },
-    [onInstall, onRepair, onSync, onTest],
+    [onInstall, onOpenShell, onRepair, onSync, onTest],
   );
 
   const filteredManagers = useMemo(() => {

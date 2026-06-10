@@ -88,7 +88,14 @@ function parsePackageFirewallActionResult(op, body) {
   if (!isRecord(body)) {
     return null;
   }
-  const result = isRecord(body.result) ? body.result : isRecord(body.result_detail) ? body.result_detail : body;
+  let result;
+  if (isRecord(body.result)) {
+    result = body.result;
+  } else if (isRecord(body.result_detail)) {
+    result = body.result_detail;
+  } else {
+    result = body;
+  }
   if (!isRecord(result)) {
     return null;
   }
@@ -398,7 +405,16 @@ function ActionResultPanel({ completed, onDismiss }) {
   const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
   const detail = response.result_detail;
   const parsed = parsePackageFirewallActionResult(completed.op, response);
-  const resultMessage = parsed?.summary ?? (detail["activation_state"] === "restart_required" ? "Guard installed the shim and updated your shell profile. Open a new shell or restart AI apps to route package-manager commands through Guard." : detail["activation_state"] === "in_path" ? "Guard installed the shim and protection is live in this session." : response.result);
+  let resultMessage;
+  if (parsed?.summary != null) {
+    resultMessage = parsed.summary;
+  } else if (detail["activation_state"] === "restart_required") {
+    resultMessage = "Guard installed the shim and updated your shell profile. Open a new shell or restart AI apps to route package-manager commands through Guard.";
+  } else if (detail["activation_state"] === "in_path") {
+    resultMessage = "Guard installed the shim and protection is live in this session.";
+  } else {
+    resultMessage = response.result;
+  }
   const resultLines = parsed?.lines ?? [];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -428,7 +444,7 @@ function ActionResultPanel({ completed, onDismiss }) {
                 completed.manager !== null ? ` — ${completed.manager}` : ""
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-600", children: resultMessage }),
-              resultLines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs text-slate-600", children: resultLines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: line }, line)) })
+              resultLines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs text-slate-600", children: resultLines.map((line, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: line }, index)) })
             ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DismissButton, { onDismiss })
@@ -801,15 +817,19 @@ function FirewallControlsView({
         onRepair(manager);
         return;
       }
-      if (op === "test" && manager !== null) {
-        onTest(manager);
+      if (op === "test") {
+        if (manager !== null) {
+          onTest(manager);
+          return;
+        }
+        onOpenShell();
         return;
       }
       if (op === "sync") {
         onSync();
       }
     },
-    [onInstall, onRepair, onSync, onTest]
+    [onInstall, onOpenShell, onRepair, onSync, onTest]
   );
   const filteredManagers = reactExports.useMemo(() => {
     const shimsByManager = new Map(data.package_shims.map((s) => [s.manager, s]));

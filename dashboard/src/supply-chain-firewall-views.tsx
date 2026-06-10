@@ -558,13 +558,17 @@ export function ActionResultPanel({ completed, onDismiss }: ActionResultPanelPro
   const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
   const detail = response.result_detail;
   const parsed = parsePackageFirewallActionResult(completed.op, response);
-  const resultMessage =
-    parsed?.summary ??
-    (detail["activation_state"] === "restart_required"
-      ? "Guard installed the shim and updated your shell profile. Open a new shell or restart AI apps to route package-manager commands through Guard."
-      : detail["activation_state"] === "in_path"
-      ? "Guard installed the shim and protection is live in this session."
-      : response.result);
+  let resultMessage: string;
+  if (parsed?.summary != null) {
+    resultMessage = parsed.summary;
+  } else if (detail["activation_state"] === "restart_required") {
+    resultMessage =
+      "Guard installed the shim and updated your shell profile. Open a new shell or restart AI apps to route package-manager commands through Guard.";
+  } else if (detail["activation_state"] === "in_path") {
+    resultMessage = "Guard installed the shim and protection is live in this session.";
+  } else {
+    resultMessage = response.result;
+  }
   const resultLines = parsed?.lines ?? [];
   return (
     <div
@@ -597,8 +601,8 @@ export function ActionResultPanel({ completed, onDismiss }: ActionResultPanelPro
             <p className="mt-0.5 text-xs text-slate-600">{resultMessage}</p>
             {resultLines.length > 0 && (
               <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                {resultLines.map((line) => (
-                  <li key={line}>{line}</li>
+                {resultLines.map((line, index) => (
+                  <li key={index}>{line}</li>
                 ))}
               </ul>
             )}

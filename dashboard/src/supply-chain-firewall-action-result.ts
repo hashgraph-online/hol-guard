@@ -118,7 +118,14 @@ export function parsePackageFirewallActionResult(
   if (!isRecord(body)) {
     return null;
   }
-  const result = isRecord(body.result) ? body.result : isRecord(body.result_detail) ? body.result_detail : body;
+  let result: Record<string, unknown>;
+  if (isRecord(body.result)) {
+    result = body.result;
+  } else if (isRecord(body.result_detail)) {
+    result = body.result_detail;
+  } else {
+    result = body;
+  }
   if (!isRecord(result)) {
     return null;
   }
