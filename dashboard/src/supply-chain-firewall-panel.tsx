@@ -31,7 +31,13 @@ import {
   runPackageSync,
   startPackageFirewallConnect,
 } from "./guard-api";
-import { EntitlementNotice, ActionResultPanel, ActivationSummary } from "./supply-chain-firewall-views";
+import {
+  EntitlementNotice,
+  ActionResultPanel,
+  ActivationSummary,
+  NextActionHero,
+} from "./supply-chain-firewall-views";
+import { resolvePackageFirewallNextAction } from "./supply-chain-firewall-next-action";
 import type { CompletedOp } from "./supply-chain-firewall-views";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 
@@ -447,6 +453,31 @@ function FirewallControlsView({
   onRefreshStatus,
 }: FirewallControlsViewProps) {
   const anyPending = pendingOp !== null;
+  const nextAction = useMemo(() => resolvePackageFirewallNextAction(data), [data]);
+  const handleNextAction = useCallback(
+    (op: "install" | "repair" | "test" | "sync", manager: string | null) => {
+      if (op === "install" && manager !== null) {
+        onInstall(manager);
+        return;
+      }
+      if (op === "repair" && manager !== null) {
+        onRepair(manager);
+        return;
+      }
+      if (op === "test") {
+        if (manager !== null) {
+          onTest(manager);
+          return;
+        }
+        onOpenShell();
+        return;
+      }
+      if (op === "sync") {
+        onSync();
+      }
+    },
+    [onInstall, onOpenShell, onRepair, onSync, onTest],
+  );
 
   const filteredManagers = useMemo(() => {
     const shimsByManager = new Map(data.package_shims.map((s) => [s.manager, s]));
@@ -479,6 +510,8 @@ function FirewallControlsView({
 
   return (
     <div className="space-y-4 px-4 py-4">
+      <NextActionHero action={nextAction} anyPending={anyPending} onRunAction={handleNextAction} />
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-brand-dark">Per-manager controls</p>
         {showGlobalActions && (
