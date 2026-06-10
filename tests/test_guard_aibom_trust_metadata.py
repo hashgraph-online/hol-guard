@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 from pathlib import Path
 
@@ -71,6 +72,77 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
     components = trust.get("trustComponents")
     assert isinstance(components, list)
     assert components
+
+
+def test_inventory_skill_trust_enrichment_disables_cisco_scan(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path
+    _write_good_plugin(plugin_dir)
+    skills_dir = plugin_dir / "skills" / "demo-skill"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "SKILL.md").write_text("---\nname: demo-skill\ndescription: Demo\n---\n", encoding="utf-8")
+    cisco_modes: list[str] = []
+    original_import = builtins.__import__
+
+    def _guard_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "skill_scanner" or name.startswith("skill_scanner."):
+            raise AssertionError("inventory trust enrichment must not import skill_scanner")
+        return original_import(name, *args, **kwargs)
+
+    def _record_cisco_mode(**kwargs: object) -> object:
+        mode = kwargs.get("mode")
+        assert isinstance(mode, str)
+        cisco_modes.append(mode)
+        from codex_plugin_scanner.integrations.cisco_skill_scanner import run_cisco_skill_scan
+
+        skills_dir = kwargs.get("skills_dir")
+        policy_name = kwargs.get("policy_name", "balanced")
+        timeout_seconds = kwargs.get("timeout_seconds")
+        assert isinstance(skills_dir, Path)
+        assert isinstance(policy_name, str)
+        return run_cisco_skill_scan(
+            skills_dir,
+            mode=mode,
+            policy_name=policy_name,
+            timeout_seconds=timeout_seconds if isinstance(timeout_seconds, (int, float)) else None,
+        )
+
+    monkeypatch.setattr(builtins, "__import__", _guard_import)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.checks.skill_security.run_cisco_skill_scan",
+        _record_cisco_mode,
+    )
+
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(str(skills_dir / "SKILL.md"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="codex:project:skill:demo-skill",
+                name="demo-skill",
+                harness="codex",
+                artifact_type="skill",
+                source_scope="project",
+                config_path=str(skills_dir / "SKILL.md"),
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-06-10T12:00:00+00:00",
+        home_dir=tmp_path,
+        workspace_dir=plugin_dir,
+    )
+    skill_item = next(item for item in snapshot.items if item.item_kind == "skill")
+    trust = skill_item.metadata.get("trustResolution")
+    assert isinstance(trust, dict)
+    assert trust.get("resolutionSource") == "local"
+    assert cisco_modes == ["off"]
 
 
 def test_inventory_snapshot_attaches_local_skill_trust_resolution(tmp_path: Path) -> None:
