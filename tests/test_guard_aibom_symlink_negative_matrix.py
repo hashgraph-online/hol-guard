@@ -1,4 +1,7 @@
-"""Parametric negative symlink matrix aligned with portal scenario IDs D-07 through D-12."""
+"""Parametric negative symlink matrix for portal scenarios D-07, D-08, D-09, and D-12-secret-like.
+
+D-10 and D-11 are registry/local trust-score scenarios, not symlink negatives.
+"""
 
 from __future__ import annotations
 
