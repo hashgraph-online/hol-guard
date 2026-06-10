@@ -263,6 +263,7 @@ export function App() {
       }
       refreshInFlight = true;
       const queueErrorMessage = "Unable to load the local approval queue.";
+      const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
       const pendingRequests = fetchAllPendingRequests()
         .then((items) => {
           if (!cancelled && !resolutionInFlight.current) {
@@ -283,7 +284,7 @@ export function App() {
         })
         .catch((error: unknown) => {
           if (!cancelled && !resolutionInFlight.current) {
-            const message = error instanceof Error ? error.message : queueErrorMessage;
+            const message = error instanceof Error ? error.message : runtimeErrorMessage;
             setRuntime({ kind: "error", message });
           }
         });
