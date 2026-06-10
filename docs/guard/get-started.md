@@ -11,6 +11,9 @@ protection. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md) for the full subscription
 boundary.
 
+For security reviews, sales conversations, and GRC packets, see the
+[Enterprise packet](./enterprise-packet.md).
+
 ## The everyday flow
 
 1. Start the guided first-run setup:
