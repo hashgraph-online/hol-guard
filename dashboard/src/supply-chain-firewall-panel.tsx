@@ -26,6 +26,9 @@ import {
   type FirewallStatusFilter,
 } from "./supply-chain-firewall-controls";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
+import { parseInterceptProofSnapshot, type InterceptProofSnapshot } from "./supply-chain-firewall-action-result";
+import { InterceptProofModal } from "./supply-chain-intercept-proof-modal";
+import { SupplyChainManagerDrawer } from "./supply-chain-manager-drawer";
 
 type PanelLoadState =
   | { phase: "loading" }
@@ -132,6 +135,8 @@ export function PackageFirewallPanel(props: {
   const [pendingApprovalOp, setPendingApprovalOp] = useState<ApprovalOp | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [managerFilter, setManagerFilter] = useState("");
+  const [interceptProof, setInterceptProof] = useState<InterceptProofSnapshot | null>(null);
+  const [managerDrawerTarget, setManagerDrawerTarget] = useState<string | null>(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
 
   const load = useCallback(async () => {
@@ -188,6 +193,13 @@ export function PackageFirewallPanel(props: {
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
+        if (op === "test") {
+          const proof = parseInterceptProofSnapshot(response);
+          if (proof !== null) {
+            setManagerDrawerTarget(null);
+            setInterceptProof(proof);
+          }
+        }
         await refreshAfterOp();
         await onStateChanged?.();
       } catch (err) {
@@ -324,6 +336,23 @@ export function PackageFirewallPanel(props: {
     setManagerFilter(e.target.value);
   }, []);
 
+  const handleOpenManagerDetails = useCallback((manager: string) => {
+    setManagerDrawerTarget(manager);
+  }, []);
+
+  const handleCloseManagerDrawer = useCallback(() => {
+    setManagerDrawerTarget(null);
+  }, []);
+
+  const handleCloseInterceptProof = useCallback(() => {
+    setInterceptProof(null);
+  }, []);
+
+  const managerDrawerShim =
+    panelLoad.phase === "loaded" && managerDrawerTarget !== null
+      ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget)
+      : undefined;
+
   const anyPending = pendingOp !== null;
   return (
     <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -379,6 +408,7 @@ export function PackageFirewallPanel(props: {
             onDismissResult={handleDismissResult}
             onOpenShell={handleOpenShell}
             onRefreshStatus={handleRetry}
+            onOpenManagerDetails={handleOpenManagerDetails}
             openingShell={openingShell}
             activationAssistError={activationAssistError}
           />
@@ -394,6 +424,27 @@ export function PackageFirewallPanel(props: {
           onCancel={handleApprovalCancel}
           onConfirm={handleApprovalConfirm}
         />
+      )}
+
+      {panelLoad.phase === "loaded" && managerDrawerTarget !== null && (
+        <SupplyChainManagerDrawer
+          manager={managerDrawerTarget}
+          shim={managerDrawerShim}
+          actions={panelLoad.data.actions}
+          anyPending={anyPending}
+          isMine={pendingOp?.manager === managerDrawerTarget}
+          actionHandlers={{
+            install: handleInstall,
+            repair: handleRepair,
+            test: handleTest,
+            removeRequest: handleRemoveRequest,
+          }}
+          onClose={handleCloseManagerDrawer}
+        />
+      )}
+
+      {interceptProof !== null && (
+        <InterceptProofModal proof={interceptProof} onClose={handleCloseInterceptProof} />
       )}
     </div>
   );
