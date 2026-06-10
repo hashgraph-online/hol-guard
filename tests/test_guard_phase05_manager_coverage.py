@@ -66,11 +66,7 @@ def test_package_shim_lifecycle_install_status_protect_test_remove(
     monkeypatch.setenv("PATH", os.pathsep.join([str(shim_dir), str(fake_bin)]))
 
     protect_payload = activate_package_shims(context, managers=(manager,))
-    assert protect_payload["activation_state"] in {
-        "in_path",
-        "restart_required",
-        "missing_from_path",
-    }
+    assert protect_payload["activation_state"] == "in_path"
     protected_status = package_shim_status(context)
     assert manager in protected_status["protected_managers"]
 
