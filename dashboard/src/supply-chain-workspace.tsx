@@ -1,6 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
-  HiMiniShieldCheck,
   HiMiniExclamationTriangle,
   HiMiniCheckCircle,
   HiMiniXCircle,
@@ -17,7 +16,6 @@ import type {
   PackageManagerProtection,
   SupplyChainAuditSnapshot,
 } from "./guard-types";
-import { buildSupplyChainStats } from "./supply-chain-protection-stats";
 import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChainAuditSnapshot } from "./guard-api";
 import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
@@ -33,37 +31,14 @@ import {
 } from "./supply-chain-evidence-rail-panel";
 import { resolveSupplyChainCloudCapabilities } from "./supply-chain-cloud-capabilities";
 import { SupplyChainCloudCapabilitiesPanel } from "./supply-chain-cloud-capabilities-panel";
+import { SupplyChainAuditFindingsSummary } from "./supply-chain-audit-findings-summary";
 import { resolveSupplyChainPostureAlerts } from "./supply-chain-posture";
 import { SupplyChainPostureBanners } from "./supply-chain-posture-banners";
-import {
-  resolveProtectedManagersStat,
-  SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS,
-} from "./supply-chain-workspace-layout";
+import { resolveSupplyChainWorkspaceHero } from "./supply-chain-workspace-hero-state";
+import { SupplyChainWorkspaceHero } from "./supply-chain-workspace-hero";
+import { SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-workspace-layout";
 
 export { buildSupplyChainStats } from "./supply-chain-protection-stats";
-
-type StatCardProps = {
-  label: string;
-  value: number | string;
-  tone?: "green" | "attention" | "slate" | "blue";
-};
-
-function StatCard({ label, value, tone = "slate" }: StatCardProps) {
-  const toneClass =
-    tone === "green"
-      ? "text-brand-green"
-      : tone === "attention"
-      ? "text-brand-attention"
-      : tone === "blue"
-      ? "text-brand-blue"
-      : "text-brand-dark";
-  return (
-    <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className={`mt-1.5 text-2xl font-bold tabular-nums ${toneClass}`}>{value}</p>
-    </div>
-  );
-}
 
 type AppFirewallRowProps = {
   install: GuardManagedInstall;
@@ -148,7 +123,6 @@ export function SupplyChainWorkspace({
   onGoHome,
   onRuntimeRefresh,
 }: SupplyChainWorkspaceProps) {
-  const stats = useMemo(() => buildSupplyChainStats(snapshot), [snapshot]);
   const protection = snapshot.supply_chain?.package_manager_protection;
   const managedInstalls = useMemo(
     () => snapshot.managed_installs ?? [],
@@ -166,13 +140,10 @@ export function SupplyChainWorkspace({
     () => resolveSupplyChainPostureAlerts(snapshot),
     [snapshot],
   );
+  const workspaceHero = useMemo(() => resolveSupplyChainWorkspaceHero(snapshot), [snapshot]);
   const cloudCapabilities = useMemo(
     () => resolveSupplyChainCloudCapabilities(snapshot),
     [snapshot],
-  );
-  const protectedManagersStat = useMemo(
-    () => resolveProtectedManagersStat(stats),
-    [stats],
   );
 
   useEffect(() => {
@@ -213,17 +184,13 @@ export function SupplyChainWorkspace({
 
   return (
     <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS} data-testid="supply-chain-workspace">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm leading-relaxed text-slate-500">
-            See which package installs Guard can block, which tools still need setup, and how fresh
-            your safety checks are.
-          </p>
-        </div>
+      <div className="flex flex-wrap items-start justify-end gap-3">
         <ActionButton variant="ghost" onClick={onGoHome}>
           Back to Home
         </ActionButton>
       </div>
+
+      <SupplyChainWorkspaceHero hero={workspaceHero} />
 
       <SupplyChainCloudDegradedBanner state={cloudDegraded} />
 
@@ -231,22 +198,13 @@ export function SupplyChainWorkspace({
 
       <SupplyChainCloudCapabilitiesPanel state={cloudCapabilities} />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Active apps" value={stats.activeApps} tone="green" />
-        <StatCard label="Prevented installs" value={stats.preventedInstalls} tone={stats.preventedInstalls > 0 ? "attention" : "slate"} />
-        <StatCard
-          label={protectedManagersStat.label}
-          value={protectedManagersStat.value}
-          tone={protectedManagersStat.tone}
-        />
-        <StatCard
-          label="Still open"
-          value={stats.unprotectedManagers}
-          tone={stats.unprotectedManagers > 0 ? "attention" : "slate"}
-        />
-      </div>
-
       {evidenceRail !== null ? <SupplyChainEvidenceRail rail={evidenceRail} /> : null}
+
+      <SupplyChainAuditFindingsSummary
+        auditSnapshot={auditSnapshot}
+        auditRunning={auditRunning}
+        onRunAudit={handleRunAudit}
+      />
 
       <SupplyChainBundlePanel />
 
