@@ -14,6 +14,14 @@ export function insightsSharePublishErrorMessage(raw: string): string {
     return "Reconnect Guard Cloud to grant insights sharing permission, then try again.";
   }
 
+  if (
+    lower.includes("invalid_grant") ||
+    lower.includes("already consumed") ||
+    lower.includes("no longer valid")
+  ) {
+    return "Guard Cloud sign-in on this device expired. Run hol-guard disconnect, then hol-guard connect, and try again.";
+  }
+
   if (lower.includes("unauthorized") || lower.includes("401")) {
     return "Guard Cloud session expired. Reconnect from Settings, then try again.";
   }

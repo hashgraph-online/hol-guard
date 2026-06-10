@@ -215,6 +215,7 @@ from .connect_flow import (
     connect_recovery_command,
     resolve_connect_url,
     run_guard_browser_connect_command,
+    run_guard_connect_repair_command,
     run_guard_device_connect_command,
     run_guard_disconnect_command,
 )
@@ -2723,13 +2724,22 @@ def run_guard_command(
 
     if args.guard_command == "connect":
         connect_subcommand = getattr(args, "connect_command", None)
-        if connect_subcommand in {"status", "repair", "re-pair"}:
+        if connect_subcommand == "repair":
+            payload = run_guard_connect_repair_command(
+                store=store,
+                sync_url=args.sync_url,
+                connect_url=args.connect_url,
+            )
+        elif connect_subcommand in {"status", "re-pair"}:
             payload = build_connect_status_payload(
                 store=store,
                 sync_url=args.sync_url,
                 connect_url=args.connect_url,
                 action=str(connect_subcommand),
             )
+        else:
+            payload = None
+        if connect_subcommand in {"status", "repair", "re-pair"}:
             _emit("connect", payload, getattr(args, "json", False))
             return 0
         try:
