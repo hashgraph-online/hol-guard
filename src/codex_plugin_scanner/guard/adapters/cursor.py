@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
+from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from ..shims import ensure_guard_shim_path_in_shell_profile, install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
 from .cursor_cli import (
@@ -88,30 +89,32 @@ class CursorHarnessAdapter(HarnessAdapter):
                 environment_payload = server_config.get("environment")
                 environment = env_payload if isinstance(env_payload, dict) else environment_payload
                 artifacts.append(
-                    GuardArtifact(
-                        artifact_id=f"cursor:{scope}:{name}",
-                        name=name,
-                        harness=self.harness,
-                        artifact_type="mcp_server",
-                        source_scope=scope,
-                        config_path=str(config_path),
-                        command=command if isinstance(command, str) else None,
-                        args=args,
-                        url=server_config.get("url") if isinstance(server_config.get("url"), str) else None,
-                        transport="http" if isinstance(server_config.get("url"), str) else "stdio",
-                        metadata={
-                            "env": {
-                                str(key): str(value)
-                                for key, value in environment.items()
-                                if isinstance(key, str) and isinstance(value, str)
-                            }
-                            if isinstance(environment, dict)
-                            else {},
-                            "guard_managed_proxy": is_guard_proxy_command(
-                                command if isinstance(command, str) else None,
-                                args,
-                            ),
-                        },
+                    enrich_artifact_with_mcp_skill_firewall(
+                        GuardArtifact(
+                            artifact_id=f"cursor:{scope}:{name}",
+                            name=name,
+                            harness=self.harness,
+                            artifact_type="mcp_server",
+                            source_scope=scope,
+                            config_path=str(config_path),
+                            command=command if isinstance(command, str) else None,
+                            args=args,
+                            url=server_config.get("url") if isinstance(server_config.get("url"), str) else None,
+                            transport="http" if isinstance(server_config.get("url"), str) else "stdio",
+                            metadata={
+                                "env": {
+                                    str(key): str(value)
+                                    for key, value in environment.items()
+                                    if isinstance(key, str) and isinstance(value, str)
+                                }
+                                if isinstance(environment, dict)
+                                else {},
+                                "guard_managed_proxy": is_guard_proxy_command(
+                                    command if isinstance(command, str) else None,
+                                    args,
+                                ),
+                            },
+                        )
                     )
                 )
         cli_available = cursor_cli_command_available(context)
