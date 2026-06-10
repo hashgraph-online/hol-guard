@@ -123,6 +123,7 @@ from ..shims import (
     package_shim_status,
     package_shim_supported_managers,
     probe_package_shim_intercepts,
+    record_package_shim_audit_result,
     uninstall_package_shims,
 )
 from ..stable_digest import stable_digest_hex
@@ -2027,6 +2028,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace_dir=context.workspace_dir,
             )
             audit_payload["exit_code"] = exit_code
+            if exit_code == 0:
+                record_package_shim_audit_result(context, audited_at=now)
             return audit_payload
         if operation == "sync":
             return sync_supply_chain_bundle(self.server.store)  # type: ignore[attr-defined]
