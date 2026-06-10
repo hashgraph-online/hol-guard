@@ -22873,6 +22873,58 @@ const scopeOptions = [
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
 const advancedScopeValues = /* @__PURE__ */ new Set(["global"]);
 const queuePageSize = 8;
+function renderInboxContent(props) {
+  if (props.requests.kind === "loading") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-64" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-32 w-full" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-48 w-full" })
+    ] });
+  }
+  if (props.requests.kind === "error") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QueueWorkspace,
+      {
+        requests: props.requests,
+        detail: props.detail,
+        runtime: props.runtime,
+        activeRequestId: props.activeRequestId,
+        resolutionMessage: props.resolutionMessage,
+        codexResume: props.codexResume,
+        approvalGate: props.approvalGate ?? null,
+        onOpenRequest: props.onOpenRequest,
+        onGoHome: props.onGoHome,
+        onResolve: props.onResolve,
+        onBulkApprove: props.onBulkApprove,
+        onBulkBlock: props.onBulkBlock,
+        onRetry: props.onRetry,
+        onRepair: props.onRepair,
+        onRetryResume: props.onRetryResume
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ReviewWorkspace,
+    {
+      requests: props.requests.items,
+      activeRequestId: props.activeRequestId,
+      detail: props.detail.kind === "ready" ? {
+        item: props.detail.item,
+        diff: props.detail.diff,
+        receipt: props.detail.receipt,
+        policy: props.detail.policy
+      } : null,
+      runtime: props.runtime.kind === "ready" ? props.runtime.snapshot : null,
+      resolutionMessage: props.resolutionMessage,
+      codexResume: props.codexResume,
+      approvalGate: props.approvalGate ?? null,
+      onOpenRequest: props.onOpenRequest,
+      onResolve: props.onResolve,
+      onGoHome: props.onGoHome,
+      onRetryResume: props.onRetryResume
+    }
+  );
+}
 function ApprovalCenterLayout(props) {
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = reactExports.useState(() => {
@@ -22948,50 +23000,7 @@ function ApprovalCenterLayout(props) {
         onClearEvidence: props.onClearEvidence,
         onNavigate: props.onNavigate
       }
-    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? props.requests.kind === "loading" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-64" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-32 w-full" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-48 w-full" })
-    ] }) : props.requests.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      QueueWorkspace,
-      {
-        requests: props.requests,
-        detail: props.detail,
-        runtime: props.runtime,
-        activeRequestId: props.activeRequestId,
-        resolutionMessage: props.resolutionMessage,
-        codexResume: props.codexResume,
-        approvalGate: props.approvalGate ?? null,
-        onOpenRequest: props.onOpenRequest,
-        onGoHome: props.onGoHome,
-        onResolve: props.onResolve,
-        onBulkApprove: props.onBulkApprove,
-        onBulkBlock: props.onBulkBlock,
-        onRetry: props.onRetry,
-        onRepair: props.onRepair,
-        onRetryResume: props.onRetryResume
-      }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ReviewWorkspace,
-      {
-        requests: props.requests.items,
-        activeRequestId: props.activeRequestId,
-        detail: props.detail.kind === "ready" ? {
-          item: props.detail.item,
-          diff: props.detail.diff,
-          receipt: props.detail.receipt,
-          policy: props.detail.policy
-        } : null,
-        runtime: props.runtime.kind === "ready" ? props.runtime.snapshot : null,
-        resolutionMessage: props.resolutionMessage,
-        codexResume: props.codexResume,
-        approvalGate: props.approvalGate ?? null,
-        onOpenRequest: props.onOpenRequest,
-        onResolve: props.onResolve,
-        onGoHome: props.onGoHome,
-        onRetryResume: props.onRetryResume
-      }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? renderInboxContent(props) : /* @__PURE__ */ jsxRuntimeExports.jsx(
       QueueWorkspace,
       {
         requests: props.requests,
@@ -24832,6 +24841,7 @@ function App() {
       }
       refreshInFlight = true;
       const queueErrorMessage = "Unable to load the local approval queue.";
+      const runtimeErrorMessage = "Unable to load the local runtime snapshot.";
       const pendingRequests = fetchAllPendingRequests().then((items) => {
         if (!cancelled && !resolutionInFlight.current) {
           setRequests({ kind: "ready", items });
@@ -24848,7 +24858,7 @@ function App() {
         }
       }).catch((error) => {
         if (!cancelled && !resolutionInFlight.current) {
-          const message = error instanceof Error ? error.message : queueErrorMessage;
+          const message = error instanceof Error ? error.message : runtimeErrorMessage;
           setRuntime({ kind: "error", message });
         }
       });
