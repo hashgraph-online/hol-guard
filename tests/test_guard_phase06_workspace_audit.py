@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.local_supply_chain import (
+    audit_receipt_metadata,
     build_workspace_audit_payload,
     resolve_supply_chain_audit_workspace_dir,
 )
@@ -527,3 +528,37 @@ def test_daemon_workspace_audit_requires_workspace_when_uninferable(
 
     assert status == 400
     assert payload["error"] == "workspace_dir_required"
+
+
+def test_audit_receipt_metadata_includes_prioritized_package_findings() -> None:
+    metadata = audit_receipt_metadata(
+        {
+            "lockfile_paths": ["package-lock.json"],
+            "manifest_paths": ["package.json"],
+            "inventory": {"total_packages": 3},
+            "evaluation": {
+                "decision": "warn",
+                "packages": [
+                    {
+                        "name": "clean-lib",
+                        "ecosystem": "npm",
+                        "decision": "monitor",
+                        "reasons": [],
+                    },
+                    {
+                        "name": "risky-lib",
+                        "ecosystem": "npm",
+                        "decision": "block",
+                        "reasons": [{"code": "known_malware", "message": "known malware", "severity": "critical"}],
+                    },
+                ],
+            },
+        }
+    )
+
+    evidence = metadata["scanner_evidence"]
+    assert isinstance(evidence, dict)
+    findings = evidence.get("package_findings")
+    assert isinstance(findings, list)
+    assert len(findings) == 1
+    assert findings[0]["name"] == "risky-lib"
