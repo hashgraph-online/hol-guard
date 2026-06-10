@@ -107,6 +107,18 @@ class SkillIdentity:
         return sha256(payload.encode()).hexdigest()
 
 
+def skill_identity_metadata(
+    identity: SkillIdentity,
+    *,
+    publisher: str | None = None,
+) -> dict[str, object]:
+    """Serialize a skill identity for Guard metadata and Cloud firewall sync."""
+
+    from .mcp_skill_firewall import skill_identity_metadata as export_skill_identity_metadata
+
+    return export_skill_identity_metadata(identity, publisher=publisher)
+
+
 def build_skill_identity(
     skill_content: str,
     *,

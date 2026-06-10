@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from ..models import GuardArtifact
+from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from .base import HarnessContext
 
 CONFIG_FILENAMES = ("opencode.json", "opencode.jsonc")
@@ -202,13 +203,14 @@ def append_artifact(
     seen_artifact_ids: set[str],
     artifact: GuardArtifact,
 ) -> None:
-    if artifact.artifact_id in seen_artifact_ids:
+    enriched = enrich_artifact_with_mcp_skill_firewall(artifact)
+    if enriched.artifact_id in seen_artifact_ids:
         for index, existing_artifact in enumerate(artifacts):
-            if existing_artifact.artifact_id == artifact.artifact_id:
-                artifacts[index] = artifact
+            if existing_artifact.artifact_id == enriched.artifact_id:
+                artifacts[index] = enriched
                 return
-    seen_artifact_ids.add(artifact.artifact_id)
-    artifacts.append(artifact)
+    seen_artifact_ids.add(enriched.artifact_id)
+    artifacts.append(enriched)
 
 
 def append_found_path(found_paths: list[str], path: Path) -> None:

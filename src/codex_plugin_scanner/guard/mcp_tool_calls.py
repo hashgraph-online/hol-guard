@@ -19,6 +19,7 @@ from .runtime.mcp_protection import (
     mcp_server_identity_metadata,
     mcp_tool_identity_metadata,
 )
+from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
 from .store import GuardStore
 
 
@@ -71,16 +72,18 @@ def build_tool_call_artifact(
         metadata["tool_schema"] = tool_schema
     if isinstance(tool_description, str) and tool_description.strip():
         metadata["tool_description"] = tool_description.strip()
-    return GuardArtifact(
-        artifact_id=f"{harness}:runtime:{source_scope}:{server_name}:{tool_name}",
-        name=f"{server_name}:{tool_name}",
-        harness=harness,
-        artifact_type="tool_call",
-        source_scope=source_scope,
-        config_path=config_path,
-        command=tool_name,
-        transport=transport,
-        metadata=metadata,
+    return enrich_artifact_with_mcp_skill_firewall(
+        GuardArtifact(
+            artifact_id=f"{harness}:runtime:{source_scope}:{server_name}:{tool_name}",
+            name=f"{server_name}:{tool_name}",
+            harness=harness,
+            artifact_type="tool_call",
+            source_scope=source_scope,
+            config_path=config_path,
+            command=tool_name,
+            transport=transport,
+            metadata=metadata,
+        )
     )
 
 
@@ -634,6 +637,12 @@ def allow_tool_call(
         source_scope=artifact.source_scope,
         user_override="inline-approve" if decision_source == "inline-approved" else None,
         approval_source=_map_approval_source(decision_source),
+        scanner_evidence=(
+            scanner_evidence_for_mcp_skill_firewall(
+                artifact,
+                risk_categories=risk_categories,
+            ),
+        ),
     )
     store.add_receipt(receipt)
     store.add_event(
@@ -680,6 +689,12 @@ def block_tool_call(
         source_scope=artifact.source_scope,
         user_override="inline-deny" if decision_source == "inline-denied" else None,
         approval_source=_map_approval_source(decision_source),
+        scanner_evidence=(
+            scanner_evidence_for_mcp_skill_firewall(
+                artifact,
+                risk_categories=risk_categories,
+            ),
+        ),
     )
     store.add_receipt(receipt)
     store.add_event(
