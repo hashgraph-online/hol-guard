@@ -210,6 +210,8 @@ def _resolve_symlink_chain(
             next_path = current.parent / next_path
         try:
             current = next_path.resolve()
+        except RuntimeError:
+            return None, "loop", hop_fingerprints
         except OSError:
             return None, "broken", hop_fingerprints
 
