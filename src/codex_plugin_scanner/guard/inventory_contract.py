@@ -227,11 +227,7 @@ def serialize_inventory_snapshot(snapshot: GuardAgentInventorySnapshot) -> dict[
 def extract_aibom_metadata_extensions(metadata: dict[str, object]) -> dict[str, object]:
     """Return redacted AIBOM metadata extensions for CLI and inventory JSON output."""
 
-    extensions = {
-        key: _safe_json(metadata[key])
-        for key in _AIBOM_METADATA_KEYS
-        if key in metadata
-    }
+    extensions = {key: _safe_json(metadata[key]) for key in _AIBOM_METADATA_KEYS if key in metadata}
     source_of_truth = extensions.get("sourceOfTruth")
     if "sourceLinks" not in extensions and isinstance(source_of_truth, dict):
         extensions["sourceLinks"] = [_safe_json(source_of_truth)]
@@ -295,9 +291,7 @@ def inventory_snapshot_from_detection(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-    symlink_findings = (
-        _symlink_findings_from_items(harness, item_tuple) if include_symlinks else ()
-    )
+    symlink_findings = _symlink_findings_from_items(harness, item_tuple) if include_symlinks else ()
     sources = (*config_sources, *_cisco_inventory_sources(cisco_runs))
     snapshot_hash = fingerprint_mapping(
         {
