@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import {
   HiMiniArrowDown,
   HiMiniArrowUp,
@@ -187,6 +187,15 @@ function SortButton({ label, sortKey, activeSort, direction, onSort }: SortButto
     onSort(sortKey);
   }, [onSort, sortKey]);
   const active = activeSort === sortKey;
+  let sortIcon: ReactNode = null;
+  if (active) {
+    sortIcon =
+      direction === "desc" ? (
+        <HiMiniArrowDown className="h-3 w-3" aria-hidden="true" />
+      ) : (
+        <HiMiniArrowUp className="h-3 w-3" aria-hidden="true" />
+      );
+  }
   return (
     <button
       type="button"
@@ -199,13 +208,7 @@ function SortButton({ label, sortKey, activeSort, direction, onSort }: SortButto
       }`}
     >
       {label}
-      {active ? (
-        direction === "desc" ? (
-          <HiMiniArrowDown className="h-3 w-3" aria-hidden="true" />
-        ) : (
-          <HiMiniArrowUp className="h-3 w-3" aria-hidden="true" />
-        )
-      ) : null}
+      {sortIcon}
     </button>
   );
 }
@@ -359,8 +362,11 @@ export function PackageWorkbenchPanel({
     severity: "all",
     search: "",
   });
-  const [sortKey, setSortKey] = useState<PackageWorkbenchSortKey>("severity");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [sortState, setSortState] = useState<{
+    sortKey: PackageWorkbenchSortKey;
+    sortDirection: "asc" | "desc";
+  }>({ sortKey: "severity", sortDirection: "desc" });
+  const { sortKey, sortDirection } = sortState;
   const [selectedId, setSelectedId] = useState("");
 
   const findings = auditSnapshot?.findings ?? [];
@@ -402,13 +408,14 @@ export function PackageWorkbenchPanel({
   }, []);
 
   const handleSortChange = useCallback((nextSortKey: PackageWorkbenchSortKey) => {
-    setSortKey((prevKey) => {
-      if (prevKey === nextSortKey) {
-        setSortDirection((prevDirection) => (prevDirection === "desc" ? "asc" : "desc"));
-        return prevKey;
+    setSortState((prev) => {
+      if (prev.sortKey === nextSortKey) {
+        return {
+          sortKey: prev.sortKey,
+          sortDirection: prev.sortDirection === "desc" ? "asc" : "desc",
+        };
       }
-      setSortDirection("desc");
-      return nextSortKey;
+      return { sortKey: nextSortKey, sortDirection: "desc" };
     });
   }, []);
 
@@ -430,11 +437,12 @@ export function PackageWorkbenchPanel({
         )}
       </div>
 
-      {auditSnapshot === null ? (
+      {auditSnapshot === null && (
         <div className="px-4 py-6">
           <WorkbenchEmptyState onRunAudit={onRunAudit} auditRunning={auditRunning} />
         </div>
-      ) : findings.length === 0 ? (
+      )}
+      {auditSnapshot !== null && findings.length === 0 && (
         <div className="px-4 py-6">
           <EmptyState
             title="No flagged packages"
@@ -442,7 +450,8 @@ export function PackageWorkbenchPanel({
             tone="teach"
           />
         </div>
-      ) : (
+      )}
+      {auditSnapshot !== null && findings.length > 0 && (
         <div className="space-y-4 px-4 py-4">
           <WorkbenchControls
             filters={filters}
@@ -458,7 +467,7 @@ export function PackageWorkbenchPanel({
           {sortedFindings.length === 0 ? (
             <p className="py-6 text-center text-sm text-slate-500">No packages match the current filters.</p>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-100">
+            <div className="overflow-hidden rounded-xl border border-slate-100" role="table" aria-label="Package audit findings">
               <div
                 className="hidden border-b border-slate-100 bg-slate-50 px-4 py-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
                 role="row"

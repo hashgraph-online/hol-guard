@@ -92,6 +92,15 @@ function normalizeReasons(value: unknown): SupplyChainAuditFindingReason[] {
       continue;
     }
     const message = readString(entry.message) ?? readString(entry.summary) ?? "Flagged by Guard supply-chain policy.";
+    const advisoryId = readString(entry.advisoryId) ?? readString(entry.advisory_id);
+    if (advisoryId !== null && !message.includes(advisoryId)) {
+      reasons.push({
+        code: readString(entry.code) ?? "supply_chain",
+        message: `${message} (${advisoryId})`,
+        severity: normalizeSeverity(entry.severity),
+      });
+      continue;
+    }
     reasons.push({
       code: readString(entry.code) ?? "supply_chain",
       message,
@@ -131,24 +140,41 @@ function resolveFindingSeverity(
   return "low";
 }
 
+function addAdvisoryAlias(aliases: Set<string>, rawId: string): void {
+  const trimmed = rawId.trim();
+  if (trimmed.length === 0) {
+    return;
+  }
+  if (trimmed.startsWith("GHSA-") || trimmed.startsWith("CVE-")) {
+    aliases.add(trimmed);
+    return;
+  }
+  aliases.add(`GHSA-${trimmed.slice(0, 8).toLowerCase()}`);
+}
+
+function readAdvisoryIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => entry.trim());
+}
+
 function buildAdvisoryAliasStubs(
   packageRecord: Record<string, unknown>,
   reasons: SupplyChainAuditFindingReason[],
 ): string[] {
   const aliases = new Set<string>();
-  const advisoryIds = packageRecord.related_advisory_ids;
-  if (Array.isArray(advisoryIds)) {
-    for (const entry of advisoryIds) {
-      if (typeof entry !== "string" || entry.trim().length === 0) {
-        continue;
-      }
-      const trimmed = entry.trim();
-      if (trimmed.startsWith("GHSA-") || trimmed.startsWith("CVE-")) {
-        aliases.add(trimmed);
-        continue;
-      }
-      aliases.add(`GHSA-${trimmed.slice(0, 8).toLowerCase()}`);
-    }
+  const packageAdvisoryId = readString(packageRecord.advisoryId) ?? readString(packageRecord.advisory_id);
+  if (packageAdvisoryId !== null) {
+    addAdvisoryAlias(aliases, packageAdvisoryId);
+  }
+  for (const entry of [
+    ...readAdvisoryIdList(packageRecord.related_advisory_ids),
+    ...readAdvisoryIdList(packageRecord.relatedAdvisoryIds),
+  ]) {
+    addAdvisoryAlias(aliases, entry);
   }
   for (const reason of reasons) {
     const match = reason.message.match(/\b(CVE-\d{4}-\d+)\b/i);

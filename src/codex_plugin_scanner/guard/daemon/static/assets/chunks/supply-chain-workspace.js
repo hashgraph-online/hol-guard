@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as fetchPackageFirewallStatus, az as runPackageFirewallAction, am as GuardHarnessActionError, aA as runPackageAudit, aB as runPackageSync, aC as startPackageFirewallConnect, aD as openPackageFirewallShell, S as SectionLabel, ab as HiMiniMagnifyingGlass, p as EmptyState, aE as HiMiniBugAnt, aF as HiMiniClock, aG as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aH as HiMiniBeaker, aI as HiMiniArrowDown, aJ as HiMiniArrowUp, aK as fetchSupplyChainBundle, B as Badge, aL as fetchReceipts, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as HiMiniClock, az as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aA as HiMiniBeaker, ab as HiMiniMagnifyingGlass, p as EmptyState, aB as HiMiniBugAnt, aC as fetchPackageFirewallStatus, aD as runPackageFirewallAction, am as GuardHarnessActionError, aE as runPackageAudit, aF as runPackageSync, aG as startPackageFirewallConnect, aH as openPackageFirewallShell, S as SectionLabel, aI as HiMiniArrowDown, aJ as HiMiniArrowUp, aK as fetchSupplyChainBundle, B as Badge, aL as fetchReceipts, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 const SEVERITY_RANK = {
@@ -71,6 +71,15 @@ function normalizeReasons(value) {
       continue;
     }
     const message = readString$1(entry.message) ?? readString$1(entry.summary) ?? "Flagged by Guard supply-chain policy.";
+    const advisoryId = readString$1(entry.advisoryId) ?? readString$1(entry.advisory_id);
+    if (advisoryId !== null && !message.includes(advisoryId)) {
+      reasons.push({
+        code: readString$1(entry.code) ?? "supply_chain",
+        message: `${message} (${advisoryId})`,
+        severity: normalizeSeverity(entry.severity)
+      });
+      continue;
+    }
     reasons.push({
       code: readString$1(entry.code) ?? "supply_chain",
       message,
@@ -105,21 +114,34 @@ function resolveFindingSeverity(packageRecord, reasons) {
   }
   return "low";
 }
+function addAdvisoryAlias(aliases, rawId) {
+  const trimmed = rawId.trim();
+  if (trimmed.length === 0) {
+    return;
+  }
+  if (trimmed.startsWith("GHSA-") || trimmed.startsWith("CVE-")) {
+    aliases.add(trimmed);
+    return;
+  }
+  aliases.add(`GHSA-${trimmed.slice(0, 8).toLowerCase()}`);
+}
+function readAdvisoryIdList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
+}
 function buildAdvisoryAliasStubs(packageRecord, reasons) {
   const aliases = /* @__PURE__ */ new Set();
-  const advisoryIds = packageRecord.related_advisory_ids;
-  if (Array.isArray(advisoryIds)) {
-    for (const entry of advisoryIds) {
-      if (typeof entry !== "string" || entry.trim().length === 0) {
-        continue;
-      }
-      const trimmed = entry.trim();
-      if (trimmed.startsWith("GHSA-") || trimmed.startsWith("CVE-")) {
-        aliases.add(trimmed);
-        continue;
-      }
-      aliases.add(`GHSA-${trimmed.slice(0, 8).toLowerCase()}`);
-    }
+  const packageAdvisoryId = readString$1(packageRecord.advisoryId) ?? readString$1(packageRecord.advisory_id);
+  if (packageAdvisoryId !== null) {
+    addAdvisoryAlias(aliases, packageAdvisoryId);
+  }
+  for (const entry of [
+    ...readAdvisoryIdList(packageRecord.related_advisory_ids),
+    ...readAdvisoryIdList(packageRecord.relatedAdvisoryIds)
+  ]) {
+    addAdvisoryAlias(aliases, entry);
   }
   for (const reason of reasons) {
     const match = reason.message.match(/\b(CVE-\d{4}-\d+)\b/i);
@@ -855,9 +877,6 @@ function resolveShimStatus(shim) {
 function actionIsAvailable(state) {
   return state === "available";
 }
-function actionLabel(op) {
-  return op.charAt(0).toUpperCase() + op.slice(1);
-}
 function ManagerRow({
   manager,
   shim,
@@ -990,76 +1009,24 @@ function ManagerRow({
     shim?.path_broken && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-attention", children: "Restart your shell after repair so PATH exports reload." }) })
   ] });
 }
-function LoadingRow({ width }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `h-4 animate-pulse rounded-md bg-slate-100 ${width}`, "aria-hidden": "true" });
-}
-function LoadingSkeleton() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "space-y-3 px-4 py-5",
-      "aria-label": "Loading package firewall status",
-      "aria-busy": "true",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/3" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-2/3" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/2" })
-      ]
-    }
-  );
-}
-function ErrorBanner({ message, onRetry }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        HiMiniExclamationTriangle,
-        {
-          className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
-          "aria-hidden": "true"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", children: message })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry" })
-  ] });
-}
 function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }) {
   const auditRunning = pendingOp?.op === "audit";
   const syncRunning = pendingOp?.op === "sync";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      ActionButton,
-      {
-        variant: "outline",
-        onClick: onAudit,
-        disabled: anyPending,
-        "aria-busy": auditRunning,
-        "data-package-firewall-audit": "true",
-        children: [
-          auditRunning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
-          "Audit"
-        ]
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      ActionButton,
-      {
-        variant: "outline",
-        onClick: onSync,
-        disabled: anyPending,
-        "aria-busy": syncRunning,
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            HiMiniArrowPath,
-            {
-              className: `mr-1.5 h-3.5 w-3.5 ${syncRunning ? "animate-spin" : ""}`,
-              "aria-hidden": "true"
-            }
-          ),
-          "Sync"
-        ]
-      }
-    )
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: onAudit, disabled: anyPending, "aria-busy": auditRunning, children: [
+      auditRunning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "mr-1.5 h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1.5 h-3.5 w-3.5", "aria-hidden": "true" }),
+      "Audit"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: onSync, disabled: anyPending, "aria-busy": syncRunning, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniArrowPath,
+        {
+          className: `mr-1.5 h-3.5 w-3.5 ${syncRunning ? "animate-spin" : ""}`,
+          "aria-hidden": "true"
+        }
+      ),
+      "Sync"
+    ] })
   ] });
 }
 function FailureBanner({ failed }) {
@@ -1070,13 +1037,7 @@ function FailureBanner({ failed }) {
       role: "alert",
       "aria-live": "assertive",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          HiMiniExclamationTriangle,
-          {
-            className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
-            "aria-hidden": "true"
-          }
-        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
             failed.op,
@@ -1281,6 +1242,42 @@ function FirewallControlsView({
     ] })
   ] });
 }
+function actionLabel(op) {
+  return op.charAt(0).toUpperCase() + op.slice(1);
+}
+function LoadingRow({ width }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `h-4 animate-pulse rounded-md bg-slate-100 ${width}`, "aria-hidden": "true" });
+}
+function LoadingSkeleton() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "space-y-3 px-4 py-5",
+      "aria-label": "Loading package firewall status",
+      "aria-busy": "true",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/3" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-2/3" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingRow, { width: "w-1/2" })
+      ]
+    }
+  );
+}
+function ErrorBanner({ message, onRetry }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 px-4 py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HiMiniExclamationTriangle,
+        {
+          className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention",
+          "aria-hidden": "true"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", children: message })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRetry, children: "Retry" })
+  ] });
+}
 function RefreshButton({ disabled, spinning, onRefresh }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ActionButton,
@@ -1300,7 +1297,7 @@ function RefreshButton({ disabled, spinning, onRefresh }) {
   );
 }
 function PackageFirewallPanel(props) {
-  const { approvalGate, onStateChanged, onAuditCompleted, onAuditRunningChange } = props;
+  const { approvalGate, onStateChanged, onAuditCompleted, onAuditRunningChange, runAuditRef } = props;
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [pendingOp, setPendingOp] = reactExports.useState(null);
   const [lastCompleted, setLastCompleted] = reactExports.useState(null);
@@ -1429,6 +1426,15 @@ function PackageFirewallPanel(props) {
   const handleRemoveCancel = reactExports.useCallback(() => setConfirmRemoveManager(null), []);
   const handleAudit = reactExports.useCallback(() => void handleGlobalOp("audit"), [handleGlobalOp]);
   const handleSync = reactExports.useCallback(() => void handleGlobalOp("sync"), [handleGlobalOp]);
+  reactExports.useEffect(() => {
+    if (runAuditRef === void 0) {
+      return;
+    }
+    runAuditRef.current = handleAudit;
+    return () => {
+      runAuditRef.current = null;
+    };
+  }, [handleAudit, runAuditRef]);
   const handleDismissResult = reactExports.useCallback(() => setLastCompleted(null), []);
   const handleRetry = reactExports.useCallback(() => void load(), [load]);
   const handleStartConnect = reactExports.useCallback(async () => {
@@ -1652,6 +1658,10 @@ function SortButton({ label, sortKey, activeSort, direction, onSort }) {
     onSort(sortKey);
   }, [onSort, sortKey]);
   const active = activeSort === sortKey;
+  let sortIcon = null;
+  if (active) {
+    sortIcon = direction === "desc" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDown, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowUp, { className: "h-3 w-3", "aria-hidden": "true" });
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "button",
     {
@@ -1661,7 +1671,7 @@ function SortButton({ label, sortKey, activeSort, direction, onSort }) {
       className: `inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${active ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`,
       children: [
         label,
-        active ? direction === "desc" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDown, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowUp, { className: "h-3 w-3", "aria-hidden": "true" }) : null
+        sortIcon
       ]
     }
   );
@@ -1776,8 +1786,8 @@ function PackageWorkbenchPanel({
     severity: "all",
     search: ""
   });
-  const [sortKey, setSortKey] = reactExports.useState("severity");
-  const [sortDirection, setSortDirection] = reactExports.useState("desc");
+  const [sortState, setSortState] = reactExports.useState({ sortKey: "severity", sortDirection: "desc" });
+  const { sortKey, sortDirection } = sortState;
   const [selectedId, setSelectedId] = reactExports.useState("");
   const findings = auditSnapshot?.findings ?? [];
   const ecosystems = reactExports.useMemo(() => packageWorkbenchEcosystems(findings), [findings]);
@@ -1813,13 +1823,14 @@ function PackageWorkbenchPanel({
     setSelectedId("");
   }, []);
   const handleSortChange = reactExports.useCallback((nextSortKey) => {
-    setSortKey((prevKey) => {
-      if (prevKey === nextSortKey) {
-        setSortDirection((prevDirection) => prevDirection === "desc" ? "asc" : "desc");
-        return prevKey;
+    setSortState((prev) => {
+      if (prev.sortKey === nextSortKey) {
+        return {
+          sortKey: prev.sortKey,
+          sortDirection: prev.sortDirection === "desc" ? "asc" : "desc"
+        };
       }
-      setSortDirection("desc");
-      return nextSortKey;
+      return { sortKey: nextSortKey, sortDirection: "desc" };
     });
   }, []);
   const handleSelectFinding = reactExports.useCallback((id) => {
@@ -1831,14 +1842,16 @@ function PackageWorkbenchPanel({
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-slate-500", children: "Review workspace audit inventory, filter flagged packages, and inspect advisory detail." }),
       auditSnapshot !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchHeader, { auditSnapshot }) })
     ] }),
-    auditSnapshot === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { onRunAudit, auditRunning }) }) : findings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+    auditSnapshot === null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(WorkbenchEmptyState, { onRunAudit, auditRunning }) }),
+    auditSnapshot !== null && findings.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
         title: "No flagged packages",
         body: "The latest workspace audit completed without packages that need review.",
         tone: "teach"
       }
-    ) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
+    ) }),
+    auditSnapshot !== null && findings.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         WorkbenchControls,
         {
@@ -1853,7 +1866,7 @@ function PackageWorkbenchPanel({
           onSortChange: handleSortChange
         }
       ),
-      sortedFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-6 text-center text-sm text-slate-500", children: "No packages match the current filters." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl border border-slate-100", children: [
+      sortedFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "py-6 text-center text-sm text-slate-500", children: "No packages match the current filters." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-xl border border-slate-100", role: "table", "aria-label": "Package audit findings", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
@@ -2159,6 +2172,7 @@ function SupplyChainWorkspace({
   );
   const [auditSnapshot, setAuditSnapshot] = reactExports.useState(null);
   const [auditRunning, setAuditRunning] = reactExports.useState(false);
+  const runAuditRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     let cancelled = false;
     const loadAuditSnapshot = async () => {
@@ -2181,18 +2195,13 @@ function SupplyChainWorkspace({
   }, [snapshot.generated_at, snapshot.receipt_count]);
   const handleAuditCompleted = reactExports.useCallback((resultDetail) => {
     const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
-    if (normalized !== null) {
-      setAuditSnapshot(normalized);
-    }
+    setAuditSnapshot(normalized);
   }, []);
   const handleAuditRunningChange = reactExports.useCallback((running) => {
     setAuditRunning(running);
   }, []);
   const handleRunAudit = reactExports.useCallback(() => {
-    const auditButton = document.querySelector(
-      '[data-package-firewall-audit="true"]'
-    );
-    auditButton?.click();
+    runAuditRef.current?.();
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
@@ -2219,7 +2228,8 @@ function SupplyChainWorkspace({
         approvalGate,
         onStateChanged: onRuntimeRefresh,
         onAuditCompleted: handleAuditCompleted,
-        onAuditRunningChange: handleAuditRunningChange
+        onAuditRunningChange: handleAuditRunningChange,
+        runAuditRef
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(

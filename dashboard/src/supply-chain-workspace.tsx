@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniExclamationTriangle,
@@ -188,6 +188,7 @@ export function SupplyChainWorkspace({
   );
   const [auditSnapshot, setAuditSnapshot] = useState<SupplyChainAuditSnapshot | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
+  const runAuditRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,9 +213,7 @@ export function SupplyChainWorkspace({
 
   const handleAuditCompleted = useCallback((resultDetail: Record<string, unknown>) => {
     const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
-    if (normalized !== null) {
-      setAuditSnapshot(normalized);
-    }
+    setAuditSnapshot(normalized);
   }, []);
 
   const handleAuditRunningChange = useCallback((running: boolean) => {
@@ -222,10 +221,7 @@ export function SupplyChainWorkspace({
   }, []);
 
   const handleRunAudit = useCallback(() => {
-    const auditButton = document.querySelector<HTMLButtonElement>(
-      '[data-package-firewall-audit="true"]',
-    );
-    auditButton?.click();
+    runAuditRef.current?.();
   }, []);
 
   return (
@@ -277,6 +273,7 @@ export function SupplyChainWorkspace({
         onStateChanged={onRuntimeRefresh}
         onAuditCompleted={handleAuditCompleted}
         onAuditRunningChange={handleAuditRunningChange}
+        runAuditRef={runAuditRef}
       />
 
       <PackageWorkbenchPanel

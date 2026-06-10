@@ -82,6 +82,32 @@ assert(
   "SCSR173: GHSA alias stub surfaces from advisory ids",
 );
 
+const camelCaseAliases = normalizeSupplyChainAuditSnapshot({
+  generated_at: "2026-06-09T12:00:00.000Z",
+  evaluation: {
+    decision: "block",
+    packages: [
+      {
+        name: "lodash",
+        ecosystem: "npm",
+        decision: "block",
+        relatedAdvisoryIds: ["GHSA-xx99-yy88-zz77"],
+        reasons: [{ code: "advisory", message: "Known issue", severity: "high", advisoryId: "CVE-2024-12345" }],
+      },
+    ],
+  },
+});
+const lodashFinding = camelCaseAliases?.findings.find((finding) => finding.packageName === "lodash");
+assert(lodashFinding !== undefined, "SCSR173-B: camelCase advisory ids normalize");
+assert(
+  lodashFinding!.advisoryAliases.includes("GHSA-xx99-yy88-zz77"),
+  "SCSR173-B: relatedAdvisoryIds preserved",
+);
+assert(
+  lodashFinding!.advisoryAliases.includes("CVE-2024-12345"),
+  "SCSR173-B: reason advisoryId preserved",
+);
+
 const receipt: GuardReceipt = {
   receipt_id: "receipt-audit-1",
   harness: "package-firewall",
