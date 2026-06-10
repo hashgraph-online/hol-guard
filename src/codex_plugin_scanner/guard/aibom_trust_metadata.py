@@ -7,9 +7,9 @@ from typing import Literal
 
 from ..checks.skill_security import resolve_skill_security_context
 from ..trust_mcp_scoring import build_mcp_domain
+from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainScore
 from ..trust_plugin_scoring import build_plugin_domain
 from ..trust_skill_scoring import build_skill_domain
-from ..trust_models import TrustAdapterScore, TrustComponentScore, TrustDomainScore
 
 InventoryItemKind = Literal[
     "agent",
@@ -41,7 +41,7 @@ def trust_resolution_from_domain(
     return {
         "resolutionSource": "local",
         "status": "local",
-        "trustScore": int(round(domain.score)),
+        "trustScore": round(domain.score),
         "trustComponents": _trust_components_from_domain(domain),
         "capturedAt": captured_at,
         "metadata": {
@@ -157,7 +157,7 @@ def _trust_component_row(
     adapter: TrustAdapterScore,
     component: TrustComponentScore,
 ) -> dict[str, object]:
-    score = int(round(component.score))
+    score = round(component.score)
     status = "positive"
     if score < 40:
         status = "critical"
