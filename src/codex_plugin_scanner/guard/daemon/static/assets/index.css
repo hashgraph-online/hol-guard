@@ -5138,11 +5138,6 @@
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .motion-safe\:translate-y-6 {
-      --tw-translate-y: calc(var(--spacing) * 6);
-      translate: var(--tw-translate-x) var(--tw-translate-y);
-    }
-
     .motion-safe\:transition-\[opacity\,transform\] {
       transition-property: opacity, transform;
       transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));

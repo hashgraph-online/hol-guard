@@ -611,28 +611,31 @@ function AboutFooter() {
 }
 function useEditorialVisibility(threshold = 0.08) {
   const ref = reactExports.useRef(null);
-  const [state, setState] = reactExports.useState("idle");
+  const [revealed, setRevealed] = reactExports.useState(
+    typeof IntersectionObserver === "undefined"
+  );
   reactExports.useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") {
-      setState("visible");
+    if (revealed) {
       return;
     }
-    setState("hidden");
     const el = ref.current;
-    if (!el) return;
+    if (!el) {
+      setRevealed(true);
+      return;
+    }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setState("visible");
+          setRevealed(true);
           observer.disconnect();
         }
       },
-      { threshold }
+      { threshold, rootMargin: "0px 0px 10% 0px" }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [threshold]);
-  return { ref, state };
+  }, [threshold, revealed]);
+  return { ref, revealed };
 }
 function SectionShell({
   children,
@@ -640,7 +643,7 @@ function SectionShell({
   threshold = 0.08,
   id
 }) {
-  const { ref, state } = useEditorialVisibility(threshold);
+  const { ref, revealed } = useEditorialVisibility(threshold);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
     {
@@ -648,8 +651,8 @@ function SectionShell({
       ref,
       className: [
         className,
-        state === "idle" ? "" : "motion-safe:transition-[opacity,transform] transition-opacity duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]",
-        state === "idle" || state === "visible" ? "opacity-100 translate-y-0" : "opacity-0 motion-safe:translate-y-6"
+        "opacity-100 translate-y-0",
+        revealed ? "motion-safe:transition-[opacity,transform] transition-opacity duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]" : ""
       ].join(" "),
       children
     }
