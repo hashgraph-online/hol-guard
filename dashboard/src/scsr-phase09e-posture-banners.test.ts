@@ -131,7 +131,7 @@ assert(
   missingPathAlerts.some(
     (alert) =>
       alert.kind === "path_repair" &&
-      alert.title === "Guard shims are missing from PATH" &&
+      alert.title === "Package installs are not being checked yet" &&
       !alert.detail.includes("0 manager"),
   ),
   "SCSR161-C: missing PATH with no installed managers uses shim-missing copy",

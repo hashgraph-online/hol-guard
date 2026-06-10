@@ -83,9 +83,9 @@ export function SupplyChainEvidenceRail({ rail }: SupplyChainEvidenceRailProps) 
       data-testid="supply-chain-evidence-rail"
     >
       <div className="border-b border-slate-100 px-4 py-3">
-        <SectionLabel>Recent evidence</SectionLabel>
-        <p className="mt-1 text-sm text-slate-500">
-          Latest block, audit, and policy sync recorded on this machine.
+        <SectionLabel>Recent activity</SectionLabel>
+        <p className="mt-1 text-sm leading-relaxed text-slate-500">
+          The latest blocked install, project audit, and policy sync on this device.
         </p>
       </div>
       <div className="divide-y divide-slate-100">

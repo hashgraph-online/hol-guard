@@ -1044,7 +1044,7 @@ function ManagerRow({
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 last:border-b-0", role: "row", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-col gap-1 sm:flex-1", role: "cell", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-wrap items-center gap-2", children: [
           status.icon === "check" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }) : status.icon === "restart" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
@@ -1065,17 +1065,17 @@ function ManagerRow({
             }
           )
         ] }),
-        shim?.path_summary !== null && shim?.path_summary !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all pl-6 font-mono text-[11px] leading-relaxed text-slate-500", children: [
-          "PATH: ",
+        shim?.path_summary !== null && shim?.path_summary !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all font-mono text-[11px] leading-relaxed text-slate-500 sm:pl-6", children: [
+          "Shell path: ",
           shim.path_summary
         ] }),
-        shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-1.5 pl-6 text-[11px] text-slate-500", children: [
+        shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 sm:pl-6", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-brand-green", "aria-hidden": "true" }),
-          "Last intercept proof ",
+          "Last protection test ",
           formatRelativeTime(shim.last_intercept_proof_at)
-        ] }) : shim?.installed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-1.5 pl-6 text-[11px] text-slate-500", children: [
+        ] }) : shim?.installed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 sm:pl-6", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "h-3.5 w-3.5 shrink-0", "aria-hidden": "true" }),
-          "No intercept proof recorded yet"
+          "No protection test recorded yet"
         ] }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 sm:gap-3", role: "cell", children: [
@@ -1298,18 +1298,18 @@ function FirewallControlsView({
     ),
     lastFailed !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(FailureBanner, { failed: lastFailed }),
     lastCompleted !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionResultPanel, { completed: lastCompleted, onDismiss: onDismissResult }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-3.5 w-3.5 text-slate-400", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 sm:flex-none sm:w-44", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-3.5 w-3.5 shrink-0 text-slate-400", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
           {
             type: "search",
-            placeholder: "Filter by manager…",
+            placeholder: "Search tools…",
             value: managerFilter,
             onChange: onManagerFilterChange,
             "aria-label": "Filter package managers",
-            className: "bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none w-40"
+            className: "min-w-0 flex-1 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
           }
         )
       ] }),
@@ -2692,8 +2692,8 @@ function SupplyChainEvidenceRail({ rail }) {
       "data-testid": "supply-chain-evidence-rail",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent evidence" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Latest block, audit, and policy sync recorded on this machine." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent activity" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-500", children: "The latest blocked install, project audit, and policy sync on this device." })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-100", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceRailRow, { item: rail.block }),
@@ -2729,34 +2729,34 @@ function resolveSupplyChainPostureAlerts(snapshot) {
   if (protection?.path_status === "missing_from_path") {
     alerts.push({
       kind: "path_repair",
-      title: "Guard shims are missing from PATH",
-      detail: "Package manager shims are not active in your shell PATH yet. Install or repair shims in the firewall panel, then open a new shell.",
+      title: "Package installs are not being checked yet",
+      detail: "Guard has not hooked into your shell path yet. Turn on protection in the firewall panel below, then open a new terminal.",
       tone: "attention"
     });
   } else if (stats.repairRequiredManagers > 0) {
     const managers = protection !== void 0 ? protection.installed_managers.filter(
       (manager) => !protection.protected_managers.includes(manager)
     ) : [];
-    const managerLabel = managers.length > 0 ? managers.join(", ") : "installed managers";
+    const managerLabel = managers.length > 0 ? managers.join(", ") : "installed tools";
     alerts.push({
       kind: "path_repair",
-      title: "PATH repair required before intercepts work",
-      detail: `Guard installed shims for ${managerLabel}, but PATH order still needs repair. Use Fix PATH in the firewall panel, then restart your shell.`,
+      title: "Fix your shell path before installs can be blocked",
+      detail: `Guard set up protection for ${managerLabel}, but your shell path still needs a quick repair. Tap Fix PATH in the firewall panel, then open a new terminal.`,
       tone: "attention"
     });
   } else if (protection?.path_status === "restart_required" || stats.stagedManagers > 0) {
     alerts.push({
       kind: "path_repair",
-      title: "Restart shell to activate PATH protection",
-      detail: "Guard updated your shell profile. Open a new terminal or restart AI apps before testing intercept proof.",
+      title: "Open a new terminal to finish setup",
+      detail: "Guard updated your shell profile. Open a new terminal or restart your AI apps before running a protection test.",
       tone: "blue"
     });
   }
   if (protectionStatus === "partial" && protection !== void 0 && protection.protected_managers.length > 0 && protection.unprotected_managers.length > 0) {
     alerts.push({
       kind: "partial_protection",
-      title: "Some package managers are still unprotected",
-      detail: `${protection.protected_managers.length} protected, ${protection.unprotected_managers.length} still open: ${protection.unprotected_managers.join(", ")}. Install shims for the remaining managers to close the gap.`,
+      title: "Some package tools are still open",
+      detail: `${protection.protected_managers.length} protected, ${protection.unprotected_managers.length} still open: ${protection.unprotected_managers.join(", ")}. Turn on protection for the remaining tools to close the gap.`,
       tone: "attention"
     });
   }
@@ -2765,8 +2765,8 @@ function resolveSupplyChainPostureAlerts(snapshot) {
     if (feedStaleness.stale) {
       alerts.push({
         kind: "stale_intel",
-        title: "Supply-chain intel looks stale on this device",
-        detail: `${feedStaleness.ageLabel}. Sync policy or run a workspace audit so Guard evaluates packages against current advisories.`,
+        title: "Safety check data looks old on this device",
+        detail: `${feedStaleness.ageLabel}. Sync policy or run a workspace audit so Guard evaluates packages against current warnings.`,
         tone: "attention"
       });
     }
@@ -2812,7 +2812,7 @@ function PostureBanner({ alert }) {
       "data-testid": `supply-chain-posture-${alert.kind}`,
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-4 w-4 shrink-0 ${alertIconClass(alert.tone)}`, "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 break-words", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${titleClass}`, children: alert.title }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 text-xs leading-relaxed ${textClass}`, children: alert.detail })
         ] })
@@ -2833,6 +2833,28 @@ function SupplyChainPostureBanners({ alerts }) {
       children: alerts.map((alert) => /* @__PURE__ */ jsxRuntimeExports.jsx(PostureBanner, { alert }, alert.kind))
     }
   );
+}
+const SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS = "min-w-0 max-w-full space-y-6 overflow-x-hidden";
+function resolveProtectedManagersStat(stats) {
+  if (stats.stagedManagers > 0) {
+    return {
+      label: "Ready after restart",
+      value: stats.stagedManagers,
+      tone: "blue"
+    };
+  }
+  if (stats.repairRequiredManagers > 0) {
+    return {
+      label: "Needs path fix",
+      value: stats.repairRequiredManagers,
+      tone: "attention"
+    };
+  }
+  return {
+    label: "Protected tools",
+    value: stats.protectedManagers,
+    tone: "green"
+  };
 }
 function StatCard({ label, value, tone = "slate" }) {
   const toneClass = tone === "green" ? "text-brand-green" : tone === "attention" ? "text-brand-attention" : tone === "blue" ? "text-brand-blue" : "text-brand-dark";
@@ -2909,6 +2931,10 @@ function SupplyChainWorkspace({
     () => resolveSupplyChainPostureAlerts(snapshot),
     [snapshot]
   );
+  const protectedManagersStat = reactExports.useMemo(
+    () => resolveProtectedManagersStat(stats),
+    [stats]
+  );
   reactExports.useEffect(() => {
     let cancelled = false;
     const loadReceiptEvidence = async () => {
@@ -2941,9 +2967,9 @@ function SupplyChainWorkspace({
   const handleRunAudit = reactExports.useCallback(() => {
     runAuditRef.current?.();
   }, []);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS, "data-testid": "supply-chain-workspace", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Package manager firewall status, prevented installs, and feed health." }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-slate-500", children: "See which package installs Guard can block, which tools still need setup, and how fresh your safety checks are." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onGoHome, children: "Back to Home" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudDegradedBanner, { state: cloudDegraded }),
@@ -2954,12 +2980,19 @@ function SupplyChainWorkspace({
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         StatCard,
         {
-          label: stats.stagedManagers > 0 ? "Ready after restart" : stats.repairRequiredManagers > 0 ? "Needs PATH repair" : "Protected managers",
-          value: stats.stagedManagers > 0 ? stats.stagedManagers : stats.repairRequiredManagers > 0 ? stats.repairRequiredManagers : stats.protectedManagers,
-          tone: stats.stagedManagers > 0 ? "blue" : stats.repairRequiredManagers > 0 ? "attention" : "green"
+          label: protectedManagersStat.label,
+          value: protectedManagersStat.value,
+          tone: protectedManagersStat.tone
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Unprotected managers", value: stats.unprotectedManagers, tone: stats.unprotectedManagers > 0 ? "attention" : "slate" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        StatCard,
+        {
+          label: "Still open",
+          value: stats.unprotectedManagers,
+          tone: stats.unprotectedManagers > 0 ? "attention" : "slate"
+        }
+      )
     ] }),
     evidenceRail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainEvidenceRail, { rail: evidenceRail }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainBundlePanel, {}),
@@ -2983,8 +3016,8 @@ function SupplyChainWorkspace({
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "App shim coverage" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Package manager hooks active per connected app." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Connected apps" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-500", children: "Which package tools Guard is watching inside each connected app." })
       ] }),
       managedInstalls.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         EmptyState,
@@ -3004,8 +3037,8 @@ function SupplyChainWorkspace({
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Feed health" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Intel feed source mode and freshness." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Safety check source" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-500", children: "Whether this device uses sample data or live Guard Cloud updates." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(FeedHealthPanel, { snapshot })
     ] })
@@ -3018,12 +3051,12 @@ function FeedHealthPanel({ snapshot }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 py-4 space-y-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]", children: "Source mode:" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isSample ? "attention" : "green", children: isSample ? "Local-only (sample intel)" : "Live cloud feed" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]", children: "Data source" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isSample ? "attention" : "green", children: isSample ? "On this device only" : "Live from Guard Cloud" })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]", children: "Freshness:" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isStale ? "attention" : "green", children: isStale ? "Stale (7+ days)" : "Fresh" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]", children: "Last update" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: isStale ? "attention" : "green", children: isStale ? "Older than 7 days" : "Recent" })
       ] })
     ] }),
     isSample && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5", children: [
@@ -3034,7 +3067,7 @@ function FeedHealthPanel({ snapshot }) {
           "aria-hidden": "true"
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-amber-800", children: "Running on local-only (sample) intel. Connect this machine to Guard Cloud for live feed data and cross-device protection." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-amber-800", children: "This device is using sample safety data. Connect Guard Cloud for live package warnings and protection across your machines." })
     ] }),
     isStale && !isSample && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -3044,7 +3077,7 @@ function FeedHealthPanel({ snapshot }) {
           "aria-hidden": "true"
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-amber-800", children: "Feed data is stale. Guard has not processed new actions recently. Check that the daemon is running." })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-amber-800", children: "Safety checks have not refreshed recently. Make sure Guard is running, then sync policy or run an audit." })
     ] })
   ] });
 }

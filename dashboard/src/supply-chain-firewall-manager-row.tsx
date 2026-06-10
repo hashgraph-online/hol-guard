@@ -107,7 +107,7 @@ export function ManagerRow({
     <div className="border-b border-slate-100 last:border-b-0" role="row">
       <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1 sm:flex-1" role="cell">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {status.icon === "check" ? (
               <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
             ) : status.icon === "restart" ? (
@@ -132,19 +132,19 @@ export function ManagerRow({
             )}
           </div>
           {shim?.path_summary !== null && shim?.path_summary !== undefined && (
-            <p className="break-all pl-6 font-mono text-[11px] leading-relaxed text-slate-500">
-              PATH: {shim.path_summary}
+            <p className="break-all font-mono text-[11px] leading-relaxed text-slate-500 sm:pl-6">
+              Shell path: {shim.path_summary}
             </p>
           )}
           {shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== undefined ? (
-            <p className="flex items-center gap-1.5 pl-6 text-[11px] text-slate-500">
+            <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 sm:pl-6">
               <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-brand-green" aria-hidden="true" />
-              Last intercept proof {formatRelativeTime(shim.last_intercept_proof_at)}
+              Last protection test {formatRelativeTime(shim.last_intercept_proof_at)}
             </p>
           ) : shim?.installed ? (
-            <p className="flex items-center gap-1.5 pl-6 text-[11px] text-slate-500">
+            <p className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 sm:pl-6">
               <HiMiniClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              No intercept proof recorded yet
+              No protection test recorded yet
             </p>
           ) : null}
         </div>
