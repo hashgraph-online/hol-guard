@@ -1306,6 +1306,44 @@ class TestGuardApprovals:
         assert snapshot_payload["pending_count"] == 205
         assert len(snapshot_payload["items"]) == 200
 
+    def test_guard_daemon_runtime_snapshot_can_omit_queue_items_for_dashboard_perf(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        for index in range(3):
+            store.add_approval_request(
+                GuardApprovalRequest(
+                    request_id=f"req-lite-{index}",
+                    harness="codex",
+                    artifact_id=f"codex:project:item-{index}",
+                    artifact_name=f"item-{index}",
+                    artifact_hash=f"hash-{index}",
+                    policy_action="require-reapproval",
+                    recommended_scope="artifact",
+                    changed_fields=("args",),
+                    source_scope="project",
+                    config_path=str(tmp_path / "workspace" / "guard-config.toml"),
+                    review_command=f"hol-guard approvals approve req-lite-{index}",
+                    approval_url="http://127.0.0.1/pending",
+                ),
+                "2026-04-11T00:00:00+00:00",
+            )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/runtime?include_items=0",
+                headers=_guard_json_headers(daemon._server.auth_token),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                snapshot_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert snapshot_payload["pending_count"] == 3
+        assert snapshot_payload["items"] == []
+        assert snapshot_payload["queue_summary"]["remaining_pending_count"] == 3
+
     def test_guard_daemon_updates_runtime_heartbeat_while_serving_requests(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
         heartbeat_values = [

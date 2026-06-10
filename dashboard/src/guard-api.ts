@@ -980,6 +980,17 @@ export async function fetchAllPendingRequests(): Promise<GuardApprovalRequest[]>
   return items;
 }
 
+function runtimeSnapshotSearchParams(input: { activeRequestId?: string; includeItems?: boolean } = {}): URLSearchParams {
+  const params = new URLSearchParams();
+  if (input.activeRequestId) {
+    params.set("active_request_id", input.activeRequestId);
+  }
+  if (input.includeItems === false) {
+    params.set("include_items", "0");
+  }
+  return params;
+}
+
 export async function fetchInboxState(input: { activeRequestId?: string } = {}): Promise<{
   snapshot: GuardRuntimeSnapshot;
   items: GuardApprovalRequest[];
@@ -988,12 +999,10 @@ export async function fetchInboxState(input: { activeRequestId?: string } = {}):
     const snapshot = buildDemoRuntimeSnapshot();
     return { snapshot, items: snapshot.items };
   }
-  const params = new URLSearchParams();
-  if (input.activeRequestId) {
-    params.set("active_request_id", input.activeRequestId);
-  }
   const [snapshotPayload, items] = await Promise.all([
-    readJson<RuntimeSnapshotPayload>(queuePath("/v1/runtime", params)),
+    readJson<RuntimeSnapshotPayload>(
+      queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false })),
+    ),
     fetchAllPendingRequests(),
   ]);
   return {
@@ -1021,11 +1030,14 @@ export async function fetchApprovalPage(input: GuardApprovalPageFilters = {}): P
   return normalizeApprovalPage(payload, input.status ?? "pending");
 }
 
-export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
+export async function fetchRuntimeSnapshot(input: { includeItems?: boolean } = {}): Promise<GuardRuntimeSnapshot> {
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
-  const snapshot = await readJson<RuntimeSnapshotPayload>("/v1/runtime");
+  const params = runtimeSnapshotSearchParams(input);
+  const query = params.toString();
+  const path = query.length > 0 ? `/v1/runtime?${query}` : "/v1/runtime";
+  const snapshot = await readJson<RuntimeSnapshotPayload>(path);
   return normalizeRuntimeSnapshot(snapshot);
 }
 

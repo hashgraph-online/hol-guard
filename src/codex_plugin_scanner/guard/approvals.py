@@ -595,10 +595,12 @@ def build_runtime_snapshot(
     request_limit: int = 200,
     receipt_limit: int = 25,
     active_request_id: str | None = None,
+    include_items: bool = True,
 ) -> dict[str, object]:
-    pending_requests = store.list_approval_requests(limit=request_limit)
     queue_page = store.list_pending_approval_summaries(limit=1)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
+    pending_count = int(queue_page["total_pending_count"])
+    pending_requests = store.list_approval_requests(limit=request_limit) if include_items else []
     active_request = store.get_approval_request(active_request_id) if active_request_id else None
     active_is_pending = active_request is not None and active_request.get("status") == "pending"
     first_request_id = str(queue_items[0]["request_id"]) if queue_items else None
@@ -614,7 +616,7 @@ def build_runtime_snapshot(
         oauth_storage_health=oauth_storage_health,
     )
     headline_state = _resolve_runtime_headline_state(
-        pending_count=store.count_approval_requests(),
+        pending_count=pending_count,
         runtime_state=store.get_runtime_state(),
         cloud_state=str(cloud_context["cloud_state"]),
     )
@@ -626,11 +628,11 @@ def build_runtime_snapshot(
         "device": _build_runtime_device_context(store),
         "latest_connect_state": latest_connect_state,
         "proof_status": _build_runtime_proof_status(latest_connect_state),
-        "pending_count": store.count_approval_requests(),
+        "pending_count": pending_count,
         "queue_summary": {
             "active_request_id": active_request_id if active_is_pending else None,
             "next_request_id": next_request_id,
-            "remaining_pending_count": int(queue_page["total_pending_count"]),
+            "remaining_pending_count": pending_count,
             "next_selectable_request_id": next_request_id,
         },
         "next_request_id": next_request_id,
