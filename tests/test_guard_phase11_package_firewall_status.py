@@ -34,6 +34,8 @@ def _harness_context(tmp_path: Path) -> MagicMock:
 def test_package_shim_status_exposes_phase11_alias_fields(tmp_path: Path) -> None:
     context = _harness_context(tmp_path)
     install_package_shims(context, managers=("npm",))
+    status_before = package_shim_status(context)
+    assert status_before["lastAuditProofAt"] is None
     record_package_shim_audit_result(context, audited_at="2026-06-10T01:00:00+00:00")
 
     status = package_shim_status(context)
