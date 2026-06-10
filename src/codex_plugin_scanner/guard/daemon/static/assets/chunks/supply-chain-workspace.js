@@ -404,7 +404,7 @@ function ActionResultPanel({ completed, onDismiss }) {
   const { response } = completed;
   const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
   const detail = response.result_detail;
-  const parsed = parsePackageFirewallActionResult(completed.op, response);
+  const parsed = isOk ? parsePackageFirewallActionResult(completed.op, response) : null;
   let resultMessage;
   if (parsed?.summary != null) {
     resultMessage = parsed.summary;
