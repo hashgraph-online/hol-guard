@@ -2952,7 +2952,7 @@ function SupplyChainAuditFindingsSummary({
   }, [auditSnapshot]);
   const counts = reactExports.useMemo(() => {
     if (auditSnapshot === null) {
-      return { block: 0, warn: 0, ask: 0 };
+      return { block: 0, warn: 0, ask: 0, monitor: 0, allow: 0 };
     }
     return countByDecision(auditSnapshot.findings);
   }, [auditSnapshot]);
@@ -2969,7 +2969,7 @@ function SupplyChainAuditFindingsSummary({
           auditSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
             "Last audit ",
             formatRelativeTime(auditSnapshot.generatedAt),
-            auditSnapshot.source !== null ? ` · ${auditSnapshot.source} intel` : ""
+            auditSnapshot.source ? ` · ${auditSnapshot.source} intel` : ""
           ] }) : null
         ] }),
         auditSnapshot === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -3000,6 +3000,14 @@ function SupplyChainAuditFindingsSummary({
             counts.warn > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "warning", children: [
               counts.warn,
               " warn"
+            ] }) : null,
+            counts.monitor > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "info", children: [
+              counts.monitor,
+              " monitor"
+            ] }) : null,
+            counts.allow > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "green", children: [
+              counts.allow,
+              " allow"
             ] }) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "default", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }),

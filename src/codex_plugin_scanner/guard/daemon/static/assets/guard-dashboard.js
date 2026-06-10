@@ -14643,17 +14643,25 @@ async function fetchAllPendingRequests() {
   }
   return items;
 }
+function runtimeSnapshotSearchParams(input = {}) {
+  const params = new URLSearchParams();
+  if (input.activeRequestId) {
+    params.set("active_request_id", input.activeRequestId);
+  }
+  if (input.includeItems === false) {
+    params.set("include_items", "0");
+  }
+  return params;
+}
 async function fetchInboxState(input = {}) {
   if (isGuardDemoMode()) {
     const snapshot = buildDemoRuntimeSnapshot();
     return { snapshot, items: snapshot.items };
   }
-  const params = new URLSearchParams();
-  if (input.activeRequestId) {
-    params.set("active_request_id", input.activeRequestId);
-  }
   const [snapshotPayload, items] = await Promise.all([
-    readJson(queuePath("/v1/runtime", params)),
+    readJson(
+      queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false }))
+    ),
     fetchAllPendingRequests()
   ]);
   return {
@@ -14675,11 +14683,14 @@ async function fetchApprovalPage(input = {}) {
   const payload = await readJson(queuePath("/v1/requests", queueSearchParams(input)));
   return normalizeApprovalPage(payload, input.status ?? "pending");
 }
-async function fetchRuntimeSnapshot() {
+async function fetchRuntimeSnapshot(input = {}) {
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
-  const snapshot = await readJson("/v1/runtime");
+  const params = runtimeSnapshotSearchParams(input);
+  const query = params.toString();
+  const path = query.length > 0 ? `/v1/runtime?${query}` : "/v1/runtime";
+  const snapshot = await readJson(path);
   return normalizeRuntimeSnapshot(snapshot);
 }
 function buildDemoRuntimeSnapshot() {
@@ -22937,10 +22948,33 @@ function ApprovalCenterLayout(props) {
         onClearEvidence: props.onClearEvidence,
         onNavigate: props.onNavigate
       }
-    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "about" ? props.aboutContent ?? null : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? props.supplyChainHubContent ?? null : props.view === "inbox" ? props.requests.kind === "loading" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-live": "polite", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-64" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-32 w-full" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-48 w-full" })
+    ] }) : props.requests.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QueueWorkspace,
+      {
+        requests: props.requests,
+        detail: props.detail,
+        runtime: props.runtime,
+        activeRequestId: props.activeRequestId,
+        resolutionMessage: props.resolutionMessage,
+        codexResume: props.codexResume,
+        approvalGate: props.approvalGate ?? null,
+        onOpenRequest: props.onOpenRequest,
+        onGoHome: props.onGoHome,
+        onResolve: props.onResolve,
+        onBulkApprove: props.onBulkApprove,
+        onBulkBlock: props.onBulkBlock,
+        onRetry: props.onRetry,
+        onRepair: props.onRepair,
+        onRetryResume: props.onRetryResume
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewWorkspace,
       {
-        requests: props.requests.kind === "ready" ? props.requests.items : [],
+        requests: props.requests.items,
         activeRequestId: props.activeRequestId,
         detail: props.detail.kind === "ready" ? {
           item: props.detail.item,
@@ -24791,22 +24825,39 @@ function App() {
   reactExports.useEffect(() => {
     let cancelled = false;
     let pollId;
-    const loadRuntimeSnapshot = () => {
-      fetchInboxState().then(({ snapshot, items }) => {
+    let refreshInFlight = false;
+    const loadApprovalQueue = () => {
+      if (refreshInFlight || cancelled || resolutionInFlight.current) {
+        return;
+      }
+      refreshInFlight = true;
+      const queueErrorMessage = "Unable to load the local approval queue.";
+      const pendingRequests = fetchAllPendingRequests().then((items) => {
         if (!cancelled && !resolutionInFlight.current) {
-          setRuntime({ kind: "ready", snapshot });
           setRequests({ kind: "ready", items });
         }
       }).catch((error) => {
         if (!cancelled && !resolutionInFlight.current) {
-          const message = error instanceof Error ? error.message : "Unable to load the local approval queue.";
-          setRuntime({ kind: "error", message });
+          const message = error instanceof Error ? error.message : queueErrorMessage;
           setRequests({ kind: "error", message });
         }
       });
+      const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false }).then((snapshot) => {
+        if (!cancelled && !resolutionInFlight.current) {
+          setRuntime({ kind: "ready", snapshot });
+        }
+      }).catch((error) => {
+        if (!cancelled && !resolutionInFlight.current) {
+          const message = error instanceof Error ? error.message : queueErrorMessage;
+          setRuntime({ kind: "error", message });
+        }
+      });
+      void Promise.allSettled([pendingRequests, runtimeSnapshot]).finally(() => {
+        refreshInFlight = false;
+      });
     };
-    loadRuntimeSnapshot();
-    pollId = window.setInterval(loadRuntimeSnapshot, 4e3);
+    loadApprovalQueue();
+    pollId = window.setInterval(loadApprovalQueue, 4e3);
     return () => {
       cancelled = true;
       if (pollId !== void 0) {
