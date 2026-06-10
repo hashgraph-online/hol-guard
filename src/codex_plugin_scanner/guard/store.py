@@ -86,8 +86,7 @@ from .store_connect import (
 )
 from .store_evidence import (
     EvidenceRecord,
-    evidence_index_statements,
-    evidence_schema_statement,
+    ensure_evidence_schema,
 )
 from .store_evidence import (
     list_evidence as _list_evidence_impl,
@@ -1221,7 +1220,6 @@ class GuardStore:
             connect_request_schema_statement(),
             connect_state_schema_statement(),
             approval_schema_statement(),
-            evidence_schema_statement(),
             supply_chain_bundle_schema_statement(),
             supply_chain_eval_cache_schema_statement(),
             threat_intel_bundle_schema_statement(),
@@ -1230,11 +1228,9 @@ class GuardStore:
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
+            ensure_evidence_schema(connection)
             if not self._schema_version_applied(connection, version=4):
-                self._ensure_column(connection, "guard_evidence", "action_identity", "text")
                 self._record_schema_version(connection, version=4)
-            for idx_stmt in evidence_index_statements():
-                connection.execute(idx_stmt)
             for idx_stmt in supply_chain_index_statements():
                 connection.execute(idx_stmt)
             for idx_stmt in threat_intel_index_statements():

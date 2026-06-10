@@ -86,6 +86,17 @@ def evidence_index_statements() -> list[str]:
     ]
 
 
+def ensure_evidence_schema(connection: sqlite3.Connection) -> None:
+    """Create or repair the evidence table, columns, and indexes."""
+    connection.execute(evidence_schema_statement())
+    rows = connection.execute("pragma table_info(guard_evidence)").fetchall()
+    existing = {str(row["name"]) for row in rows}
+    if "action_identity" not in existing:
+        connection.execute("alter table guard_evidence add column action_identity text")
+    for statement in evidence_index_statements():
+        connection.execute(statement)
+
+
 def _row_to_record(row: sqlite3.Row) -> EvidenceRecord:
     try:
         details: dict[str, object] = json.loads(row["details_json"])
@@ -110,6 +121,7 @@ def _row_to_record(row: sqlite3.Row) -> EvidenceRecord:
 
 
 def store_evidence(conn: sqlite3.Connection, record: EvidenceRecord) -> EvidenceRecord:
+    ensure_evidence_schema(conn)
     conn.execute(
         """
         insert or replace into guard_evidence
@@ -148,6 +160,7 @@ def list_evidence(
     before_cursor: str | None = None,
     limit: int = 100,
 ) -> list[EvidenceRecord]:
+    ensure_evidence_schema(conn)
     clauses: list[str] = []
     params: list[object] = []
 
@@ -185,6 +198,7 @@ def search_evidence(
     *,
     limit: int = 100,
 ) -> list[EvidenceRecord]:
+    ensure_evidence_schema(conn)
     pattern = f"%{query}%"
     rows = conn.execute(
         "select * from guard_evidence where lower(summary) like lower(?) order by created_at desc limit ?",
@@ -200,6 +214,7 @@ def count_evidence(
     category: str | None = None,
     severity: str | None = None,
 ) -> int:
+    ensure_evidence_schema(conn)
     clauses: list[str] = []
     params: list[object] = []
     if harness is not None:
@@ -313,12 +328,14 @@ def _sanitize_csv_formula_cell(value: object) -> object:
 
 
 def clear_evidence(conn: sqlite3.Connection) -> int:
+    ensure_evidence_schema(conn)
     cursor = conn.execute("delete from guard_evidence")
     conn.commit()
     return cursor.rowcount
 
 
 def compact_evidence(conn: sqlite3.Connection, *, retain_days: int = 90) -> int:
+    ensure_evidence_schema(conn)
     cutoff = (
         (datetime.now(timezone.utc) - timedelta(days=retain_days))
         .isoformat(timespec="microseconds")

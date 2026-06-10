@@ -84,6 +84,153 @@ def _clear_oauth_process_caches() -> None:
     guard_store_module._OAUTH_HEALTH_RESULT_PROCESS_CACHE.clear()
 
 
+from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_evidence import EvidenceRecord
+
+
+def _legacy_evidence_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        create table guard_evidence (
+          evidence_id text primary key,
+          action_id text,
+          request_id text,
+          harness text,
+          workspace text,
+          signal_id text,
+          category text,
+          severity text,
+          confidence real,
+          summary text,
+          details_json text,
+          created_at text
+        )
+        """
+    )
+
+
+def test_guard_store_repairs_missing_evidence_table_when_schema_v4_is_applied(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    database_path = guard_home / "guard.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "create table schema_migrations (version integer primary key, applied_at text not null)"
+        )
+        connection.execute(
+            "insert into schema_migrations (version, applied_at) values (4, '2026-01-01T00:00:00Z')"
+        )
+        connection.execute(
+            """
+            create table harness_installations (
+              harness text primary key,
+              active integer not null,
+              workspace text,
+              config_path text,
+              metadata_json text not null default '{}',
+              updated_at text not null
+            )
+            """
+        )
+
+    store = GuardStore(guard_home)
+    store.add_evidence(
+        EvidenceRecord(
+            evidence_id="evidence-1",
+            action_id="action-1",
+            request_id="request-1",
+            harness="codex",
+            workspace="/workspace",
+            signal_id="block",
+            category="supply-chain",
+            severity="high",
+            confidence=1.0,
+            summary="blocked package install",
+            action_identity="rule-123",
+        )
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        row = connection.execute(
+            "select action_identity from guard_evidence where evidence_id = 'evidence-1'"
+        ).fetchone()
+
+    assert row is not None
+    assert row[0] == "rule-123"
+
+
+def test_guard_store_repairs_legacy_evidence_table_missing_action_identity(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    database_path = guard_home / "guard.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "create table schema_migrations (version integer primary key, applied_at text not null)"
+        )
+        connection.execute(
+            "insert into schema_migrations (version, applied_at) values (4, '2026-01-01T00:00:00Z')"
+        )
+        _legacy_evidence_table(connection)
+
+    store = GuardStore(guard_home)
+    store.add_evidence(
+        EvidenceRecord(
+            evidence_id="evidence-legacy",
+            action_id="action-legacy",
+            request_id="request-legacy",
+            harness="codex",
+            workspace="/workspace",
+            signal_id="ask",
+            category="supply-chain",
+            severity="medium",
+            confidence=0.8,
+            summary="package install requires review",
+            action_identity="exception-456",
+        )
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        columns = {
+            str(row[1])
+            for row in connection.execute("pragma table_info(guard_evidence)").fetchall()
+        }
+        row = connection.execute(
+            "select action_identity from guard_evidence where evidence_id = 'evidence-legacy'"
+        ).fetchone()
+
+    assert "action_identity" in columns
+    assert row is not None
+    assert row[0] == "exception-456"
+
+
+def test_add_evidence_self_repairs_dropped_evidence_table(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("drop table guard_evidence")
+
+    store.add_evidence(
+        EvidenceRecord(
+            evidence_id="evidence-repair",
+            action_id="action-repair",
+            request_id="request-repair",
+            harness="codex",
+            workspace="/workspace",
+            signal_id="monitor",
+            category="supply-chain",
+            severity="low",
+            confidence=0.5,
+            summary="monitored package install",
+        )
+    )
+
+    with sqlite3.connect(store.path) as connection:
+        row = connection.execute(
+            "select evidence_id from guard_evidence where evidence_id = 'evidence-repair'"
+        ).fetchone()
+
+    assert row is not None
+
+
 def test_oauth_secret_store_skips_system_keyring_when_macos_default_keychain_is_missing(tmp_path, monkeypatch):
     _install_fake_system_keyring(monkeypatch, usable_macos_keychain=False)
     monkeypatch.setattr(guard_store_module.sys, "platform", "darwin", raising=False)
