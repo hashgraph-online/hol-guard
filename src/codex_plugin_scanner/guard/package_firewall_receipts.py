@@ -109,8 +109,7 @@ def package_firewall_receipt_metadata(
             if isinstance(proof, dict) and proof.get("evaluator_invoked") is True
         )
         capabilities_summary = (
-            f"Intercept test recorded evaluator proof for {proved_count} of "
-            f"{len(manager_subset)} manager(s)."
+            f"Intercept test recorded evaluator proof for {proved_count} of {len(manager_subset)} manager(s)."
         )
 
     return {
