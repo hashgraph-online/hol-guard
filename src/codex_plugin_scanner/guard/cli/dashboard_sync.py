@@ -2,15 +2,19 @@ from pathlib import Path
 
 from ..redaction import redact_sensitive_text
 
+_DASHBOARD_SYNC_SOURCE_ENV = "HOL_GUARD_DASHBOARD_SYNC_SOURCE"
+
 
 def sync_dashboard_assets() -> dict[str, object] | None:
-    """Copy pre-built dashboard assets from a local source checkout to the installed package.
+    """Copy pre-built dashboard assets from an explicitly configured source checkout.
 
-    When HOL Guard is installed from PyPI/uv/pipx, the wheel may not include the latest
-    dashboard Vite build. This function detects a local source checkout and copies the
-    already-built assets into the installed package's static directory so the running
-    daemon serves fresh UI. No build step is performed; run ``npm run build`` in the
-    dashboard directory first if assets are stale.
+    When HOL Guard is installed from PyPI/uv/pipx, the wheel may not include a local
+    dashboard Vite build that a developer wants to test. This function only uses a
+    source checkout when the operator explicitly points to one with
+    ``HOL_GUARD_DASHBOARD_SYNC_SOURCE``. It intentionally does not discover sources
+    from the current working directory: update commands can be run from untrusted
+    projects, and copying executable dashboard assets from an implicit checkout would
+    let those projects poison the installed local approval-center UI.
     """
     import importlib.util
     import shutil
@@ -26,7 +30,6 @@ def sync_dashboard_assets() -> dict[str, object] | None:
     except OSError:
         return None
 
-    # Find a local source checkout by walking up from cwd looking for hol-guard/dashboard
     try:
         source_checkout = find_source_checkout()
     except OSError:
@@ -110,70 +113,39 @@ def sync_dashboard_assets() -> dict[str, object] | None:
 
 
 def find_source_checkout() -> Path | None:
-    """Return a local hol-guard source checkout if one is detected nearby.
+    """Return an explicitly configured hol-guard source checkout, if any.
 
-    Security: Only returns a directory after VCS verification proves it is the
-    real hashgraph-online/hol-guard repository. Trivial directory markers like
-    dashboard/package.json and src/codex_plugin_scanner are NOT sufficient on
-    their own because any untrusted project can create them.
+    The sync source must be supplied with ``HOL_GUARD_DASHBOARD_SYNC_SOURCE``.
+    Earlier versions walked up from the current working directory and inspected
+    nearby git repositories, but update commands commonly run inside arbitrary
+    workspaces. CWD-based discovery turns a spoofable local repository into a
+    source of executable dashboard assets, so it is deliberately disabled.
     """
+    import os
+
+    source = os.environ.get(_DASHBOARD_SYNC_SOURCE_ENV)
+    if source is None or not source.strip():
+        return None
     try:
-        cwd = Path.cwd().resolve()
+        path = Path(source).expanduser().resolve()
     except OSError:
         return None
-    candidates = [cwd, *cwd.parents]
-    for candidate in candidates:
-        checkout = verify_source_checkout(candidate)
-        if checkout is not None:
-            return checkout
-    # Check one level deeper for repo roots that may contain hol-guard as a sub-project
-    for candidate in candidates:
-        try:
-            for sub in candidate.iterdir():
-                try:
-                    checkout = verify_source_checkout(sub)
-                    if checkout is not None:
-                        return checkout
-                except OSError:
-                    continue
-        except OSError:
-            continue
-    return None
-
-
-_TRUSTED_REPO_KEYWORDS = ("hashgraph-online/hol-guard",)
+    return verify_source_checkout(path)
 
 
 def verify_source_checkout(path: Path) -> Path | None:
-    """Verify a candidate directory is the real hol-guard source checkout.
+    """Verify a user-selected directory has the expected hol-guard source shape.
 
-    Returns *path* only when:
-    - It contains the expected source tree markers.
-    - It is a git repository whose remotes reference the trusted upstream.
-
-    Security: This function reads ``.git/config`` directly instead of executing
-    ``git`` in the candidate directory to avoid triggering repository-local Git
-    hooks or configuration that could lead to arbitrary code execution.
+    This is a sanity check for the explicit sync path, not a trust decision for
+    ambient directories. It intentionally avoids reading ``.git/config`` because
+    repository metadata is attacker-controlled and cannot prove that uncommitted
+    dashboard build outputs are safe to install.
     """
     try:
         if not (path / "dashboard" / "package.json").is_file():
             return None
         if not (path / "src" / "codex_plugin_scanner").is_dir():
             return None
-        if not (path / ".git").is_dir():
-            return None
     except OSError:
         return None
-
-    try:
-        config_path = path / ".git" / "config"
-        if not config_path.is_file():
-            return None
-        remote_text = config_path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
-        return None
-
-    if not any(kw in remote_text for kw in _TRUSTED_REPO_KEYWORDS):
-        return None
-
     return path
