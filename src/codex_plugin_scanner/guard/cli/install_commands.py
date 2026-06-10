@@ -11,7 +11,8 @@ from ..adapters.base import HarnessAdapter, HarnessContext
 from ..adapters.contracts import contract_for
 from ..adapters.cursor import CursorHarnessAdapter
 from ..consumer import detect_all
-from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk
+from ..runtime.mcp_skill_firewall import build_mcp_skill_firewall_fingerprints, portal_skill_identity
+from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk, skill_identity_metadata
 from ..store import GuardStore
 from .cursor_actions import (
     cursor_install_surface,
@@ -377,13 +378,22 @@ def scan_workspace_skills(
             artifact_id = f"skill-path:{skill_path}"
             stored = store.get_snapshot("skill_scan", artifact_id)
             stored_hash = stored.get("identity_hash") if stored else None
+            skill_metadata = skill_identity_metadata(identity)
+            firewall = build_mcp_skill_firewall_fingerprints(
+                skill=portal_skill_identity(identity),
+            )
             if stored_hash == identity.identity_hash:
                 continue
             signals = detect_skill_content_risk(content, skill_path=str(skill_path))
             store.save_snapshot(
                 "skill_scan",
                 artifact_id,
-                {"identity_hash": identity.identity_hash, "skill_path": str(skill_path)},
+                {
+                    "identity_hash": identity.identity_hash,
+                    "skill_path": str(skill_path),
+                    "mcp_skill_identity": skill_metadata,
+                    "mcpSkillFirewall": firewall,
+                },
                 identity.identity_hash,
                 now,
             )
