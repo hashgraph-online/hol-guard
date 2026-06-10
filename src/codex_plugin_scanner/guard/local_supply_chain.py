@@ -464,7 +464,24 @@ def _audit_package_findings_for_receipt(
     return [item for _, _, item in ranked[:limit]]
 
 
-def audit_receipt_metadata(result: dict[str, object]) -> dict[str, object]:
+def workspace_audit_path_hashes(
+    workspace_dir: Path | None,
+    manifest_paths: Sequence[str],
+    lockfile_paths: Sequence[str],
+) -> dict[str, list[str]]:
+    if workspace_dir is None:
+        return {"manifest_hashes": [], "lockfile_hashes": []}
+    return {
+        "manifest_hashes": _hash_existing_paths(workspace_dir, manifest_paths),
+        "lockfile_hashes": _hash_existing_paths(workspace_dir, lockfile_paths),
+    }
+
+
+def audit_receipt_metadata(
+    result: dict[str, object],
+    *,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
     evaluation = result.get("evaluation")
     if not isinstance(evaluation, dict):
         return {}
@@ -480,6 +497,9 @@ def audit_receipt_metadata(result: dict[str, object]) -> dict[str, object]:
         policy_decision = "ask"
     inventory = result.get("inventory")
     inventory_summary = inventory if isinstance(inventory, dict) else {}
+    manifest_paths = [str(path) for path in result.get("manifest_paths") or () if isinstance(path, str)]
+    lockfile_paths = [str(path) for path in result.get("lockfile_paths") or () if isinstance(path, str)]
+    path_hashes = workspace_audit_path_hashes(workspace_dir, manifest_paths, lockfile_paths)
     return {
         "policy_decision": policy_decision,
         "capabilities_summary": (
@@ -491,8 +511,10 @@ def audit_receipt_metadata(result: dict[str, object]) -> dict[str, object]:
             "operation": "audit",
             "audit_decision": decision,
             "blocked_package_count": len(blocked_packages),
-            "lockfile_paths": list(result.get("lockfile_paths") or ()),
-            "manifest_paths": list(result.get("manifest_paths") or ()),
+            "lockfile_paths": lockfile_paths,
+            "manifest_paths": manifest_paths,
+            "manifest_hashes": path_hashes["manifest_hashes"],
+            "lockfile_hashes": path_hashes["lockfile_hashes"],
             "total_packages": inventory_summary.get("total_packages", len(package_items)),
             "package_findings": package_findings,
         },
