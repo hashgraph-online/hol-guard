@@ -212,7 +212,9 @@ def _resolve_symlink_chain(
             current = next_path.resolve()
         except RuntimeError:
             return None, "loop", hop_fingerprints
-        except OSError:
+        except OSError as exc:
+            if getattr(exc, "errno", None) == 40:
+                return None, "loop", hop_fingerprints
             return None, "broken", hop_fingerprints
 
     return None, "loop", hop_fingerprints

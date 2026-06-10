@@ -68,7 +68,7 @@ def _build_workspace(tmp_path: Path, scenario: str) -> tuple[Path, Path]:
         outside = tmp_path / "outside"
         outside.mkdir()
         if scenario == "secret-like":
-            (outside / ".env").write_text("API_KEY=guard_live_should_not_escape\n", encoding="utf-8")
+            (outside / ".env").write_text("API_KEY=hol_test_secret_should_not_escape\n", encoding="utf-8")
             target = outside / ".env"
         else:
             (outside / "secret.txt").write_text("outside\n", encoding="utf-8")
@@ -131,4 +131,4 @@ def test_aibom_symlink_negative_matrix_fails_closed(
     serialized = json.dumps(serialize_inventory_snapshot(snapshot))
     assert str(tmp_path) not in serialized
     if fixture_name == "secret-like":
-        assert "guard_live_should_not_escape" not in serialized
+        assert "hol_test_secret_should_not_escape" not in serialized
