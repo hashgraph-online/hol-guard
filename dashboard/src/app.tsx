@@ -9,7 +9,9 @@ import {
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
+  fetchAllPendingRequests,
   fetchInboxState,
+  fetchRuntimeSnapshot,
   fetchSettings,
   fetchGuardUpdateStatus,
   guardAwareHref,
@@ -254,25 +256,43 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     let pollId: number | undefined;
-    const loadRuntimeSnapshot = () => {
-      fetchInboxState()
-        .then(({ snapshot, items }) => {
+    let refreshInFlight = false;
+    const loadApprovalQueue = () => {
+      if (refreshInFlight || cancelled || resolutionInFlight.current) {
+        return;
+      }
+      refreshInFlight = true;
+      const queueErrorMessage = "Unable to load the local approval queue.";
+      const pendingRequests = fetchAllPendingRequests()
+        .then((items) => {
           if (!cancelled && !resolutionInFlight.current) {
-            setRuntime({ kind: "ready", snapshot });
             setRequests({ kind: "ready", items });
           }
         })
         .catch((error: unknown) => {
           if (!cancelled && !resolutionInFlight.current) {
-            const message =
-              error instanceof Error ? error.message : "Unable to load the local approval queue.";
-            setRuntime({ kind: "error", message });
+            const message = error instanceof Error ? error.message : queueErrorMessage;
             setRequests({ kind: "error", message });
           }
         });
+      const runtimeSnapshot = fetchRuntimeSnapshot({ includeItems: false })
+        .then((snapshot) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            setRuntime({ kind: "ready", snapshot });
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            const message = error instanceof Error ? error.message : queueErrorMessage;
+            setRuntime({ kind: "error", message });
+          }
+        });
+      void Promise.allSettled([pendingRequests, runtimeSnapshot]).finally(() => {
+        refreshInFlight = false;
+      });
     };
-    loadRuntimeSnapshot();
-    pollId = window.setInterval(loadRuntimeSnapshot, 4000);
+    loadApprovalQueue();
+    pollId = window.setInterval(loadApprovalQueue, 4000);
     return () => {
       cancelled = true;
       if (pollId !== undefined) {

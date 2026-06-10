@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, f as formatRelativeTime } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, a8 as Tag, m as formatRelativeTime } from "../guard-dashboard.js";
 function resolveProtectionLevelCopy(level) {
   if (level === "gentle") {
     return "Monitors quietly, asks only for high-risk actions";

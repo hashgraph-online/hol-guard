@@ -283,24 +283,50 @@ export function ApprovalCenterLayout(props: LayoutProps) {
             ) : props.view === "supply-chain" || props.view === "audit" || props.view === "policy" || props.view === "feed-health" ? (
               props.supplyChainHubContent ?? null
             ) : props.view === "inbox" ? (
-              <ReviewWorkspace
-                requests={props.requests.kind === "ready" ? props.requests.items : []}
-                activeRequestId={props.activeRequestId}
-                detail={props.detail.kind === "ready" ? {
-                  item: props.detail.item,
-                  diff: props.detail.diff,
-                  receipt: props.detail.receipt,
-                  policy: props.detail.policy,
-                } : null}
-                runtime={props.runtime.kind === "ready" ? props.runtime.snapshot : null}
-                resolutionMessage={props.resolutionMessage}
-                codexResume={props.codexResume}
-                approvalGate={props.approvalGate ?? null}
-                onOpenRequest={props.onOpenRequest}
-                onResolve={props.onResolve}
-                onGoHome={props.onGoHome}
-                onRetryResume={props.onRetryResume}
-              />
+              props.requests.kind === "loading" ? (
+                <div className="space-y-4" aria-busy="true" aria-live="polite">
+                  <div className="guard-skeleton h-8 w-64" />
+                  <div className="guard-skeleton h-32 w-full" />
+                  <div className="guard-skeleton h-48 w-full" />
+                </div>
+              ) : props.requests.kind === "error" ? (
+                <QueueWorkspace
+                  requests={props.requests}
+                  detail={props.detail}
+                  runtime={props.runtime}
+                  activeRequestId={props.activeRequestId}
+                  resolutionMessage={props.resolutionMessage}
+                  codexResume={props.codexResume}
+                  approvalGate={props.approvalGate ?? null}
+                  onOpenRequest={props.onOpenRequest}
+                  onGoHome={props.onGoHome}
+                  onResolve={props.onResolve}
+                  onBulkApprove={props.onBulkApprove}
+                  onBulkBlock={props.onBulkBlock}
+                  onRetry={props.onRetry}
+                  onRepair={props.onRepair}
+                  onRetryResume={props.onRetryResume}
+                />
+              ) : (
+                <ReviewWorkspace
+                  requests={props.requests.items}
+                  activeRequestId={props.activeRequestId}
+                  detail={props.detail.kind === "ready" ? {
+                    item: props.detail.item,
+                    diff: props.detail.diff,
+                    receipt: props.detail.receipt,
+                    policy: props.detail.policy,
+                  } : null}
+                  runtime={props.runtime.kind === "ready" ? props.runtime.snapshot : null}
+                  resolutionMessage={props.resolutionMessage}
+                  codexResume={props.codexResume}
+                  approvalGate={props.approvalGate ?? null}
+                  onOpenRequest={props.onOpenRequest}
+                  onResolve={props.onResolve}
+                  onGoHome={props.onGoHome}
+                  onRetryResume={props.onRetryResume}
+                />
+              )
             ) : (
               <QueueWorkspace
                 requests={props.requests}
