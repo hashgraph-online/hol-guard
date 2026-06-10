@@ -21,6 +21,15 @@ import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChain
 import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
 import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { SupplyChainBundlePanel } from "./supply-chain-bundle-panel";
+import {
+  deriveSupplyChainEvidenceRail,
+  resolveSupplyChainCloudDegradedState,
+  type SupplyChainEvidenceRailSnapshot,
+} from "./supply-chain-evidence-rail";
+import {
+  SupplyChainCloudDegradedBanner,
+  SupplyChainEvidenceRail,
+} from "./supply-chain-evidence-rail-panel";
 
 type ManagerCoverageStatus = "protected" | "restart_required" | "path_repair" | "unprotected";
 
@@ -187,25 +196,32 @@ export function SupplyChainWorkspace({
     [snapshot.managed_installs],
   );
   const [auditSnapshot, setAuditSnapshot] = useState<SupplyChainAuditSnapshot | null>(null);
+  const [evidenceRail, setEvidenceRail] = useState<SupplyChainEvidenceRailSnapshot | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
   const runAuditRef = useRef<(() => void) | null>(null);
+  const cloudDegraded = useMemo(
+    () => resolveSupplyChainCloudDegradedState(snapshot),
+    [snapshot],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    const loadAuditSnapshot = async () => {
+    const loadReceiptEvidence = async () => {
       try {
         const receipts = await fetchReceipts();
         if (cancelled) {
           return;
         }
         setAuditSnapshot(derivePackageWorkbenchFromReceipts(receipts));
+        setEvidenceRail(deriveSupplyChainEvidenceRail(receipts));
       } catch {
         if (!cancelled) {
           setAuditSnapshot(null);
+          setEvidenceRail(null);
         }
       }
     };
-    void loadAuditSnapshot();
+    void loadReceiptEvidence();
     return () => {
       cancelled = true;
     };
@@ -237,6 +253,8 @@ export function SupplyChainWorkspace({
         </ActionButton>
       </div>
 
+      <SupplyChainCloudDegradedBanner state={cloudDegraded} />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active apps" value={stats.activeApps} tone="green" />
         <StatCard label="Prevented installs" value={stats.preventedInstalls} tone={stats.preventedInstalls > 0 ? "attention" : "slate"} />
@@ -265,6 +283,8 @@ export function SupplyChainWorkspace({
         />
         <StatCard label="Unprotected managers" value={stats.unprotectedManagers} tone={stats.unprotectedManagers > 0 ? "attention" : "slate"} />
       </div>
+
+      {evidenceRail !== null ? <SupplyChainEvidenceRail rail={evidenceRail} /> : null}
 
       <SupplyChainBundlePanel />
 
