@@ -8,11 +8,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_plugin_scanner.guard.package_shim_status import record_package_shim_audit_result
 from codex_plugin_scanner.guard.shims import (
     install_package_shims,
     package_shim_status,
     probe_package_shim_intercepts,
-    record_package_shim_audit_result,
 )
 from tests.shim_execution_helpers import write_fake_manager_script
 

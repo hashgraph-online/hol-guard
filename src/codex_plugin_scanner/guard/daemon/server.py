@@ -103,6 +103,7 @@ from ..package_firewall_entitlement import (
     package_firewall_block_details,
     package_firewall_operation_allowed,
 )
+from ..package_shim_status import record_package_shim_audit_result
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -123,7 +124,6 @@ from ..shims import (
     package_shim_status,
     package_shim_supported_managers,
     probe_package_shim_intercepts,
-    record_package_shim_audit_result,
     uninstall_package_shims,
 )
 from ..stable_digest import stable_digest_hex

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .launcher import merge_guard_launcher_env
-from .package_shim_status import enrich_package_shim_status_payload, record_package_shim_audit_result
+from .package_shim_status import enrich_package_shim_status_payload
 from .shim_probe import (
     SHIM_PROBE_ENV_VALUE,
     SHIM_PROBE_ENV_VAR,
