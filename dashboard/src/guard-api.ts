@@ -2278,12 +2278,9 @@ function normalizePackageShimEntries(
   const installedSet = new Set(installedManagers);
   const testedSet = new Set(testedManagers);
   const managers = new Set([
-    ...supportedManagers,
     ...detectedManagers,
     ...installedManagers,
     ...testedManagers,
-    ...normalizeStringArray(status.active_managers),
-    ...readPackageShimStringArray(status, "active_managers", "activeManagers"),
     ...detailByManager.keys(),
   ]);
   return Array.from(managers)
@@ -2336,6 +2333,7 @@ export function normalizePackageFirewallStatus(value: unknown): PackageFirewallS
   const protectedSet = new Set(protectedManagers);
   const lastAuditProofAt =
     stringValue(readPackageShimField(shimStatus, "last_audit_proof_at", "lastAuditProofAt")) ?? null;
+  const shellProfilePath = readPackageShimField(shimStatus, "shell_profile_path", "shellProfilePath");
   const protection: PackageManagerProtection = {
     path_status: rawPathStatus,
     path_contains_shim_dir:
@@ -2344,9 +2342,7 @@ export function normalizePackageFirewallStatus(value: unknown): PackageFirewallS
       readPackageShimField(shimStatus, "restart_shell_required", "restartShellRequired") === true,
     shell_profile_configured:
       readPackageShimField(shimStatus, "shell_profile_configured", "shellProfileConfigured") === true,
-    shell_profile_path: isStringOrNull(readPackageShimField(shimStatus, "shell_profile_path", "shellProfilePath"))
-      ? (readPackageShimField(shimStatus, "shell_profile_path", "shellProfilePath") as string | null)
-      : null,
+    shell_profile_path: isStringOrNull(shellProfilePath) ? (shellProfilePath as string | null) : null,
     shim_dir: stringValue(readPackageShimField(shimStatus, "shim_dir", "shimDir")) ?? "",
     supported_managers: supportedManagers,
     installed_managers: installedManagers,
