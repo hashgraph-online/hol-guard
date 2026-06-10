@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 from .launcher import merge_guard_launcher_env
 from .package_shim_status import enrich_package_shim_status_payload
-from .stable_digest import stable_digest_hex
 from .shim_probe import (
     SHIM_PROBE_ENV_VALUE,
     SHIM_PROBE_ENV_VAR,
@@ -22,6 +21,7 @@ from .shim_probe import (
     parse_protect_json_stdout,
     protect_evaluator_evidence,
 )
+from .stable_digest import stable_digest_hex
 
 if TYPE_CHECKING:
     from .adapters.base import HarnessContext
@@ -952,7 +952,7 @@ def probe_package_shim_intercepts(
         protect_payload = parse_protect_json_stdout(result.stdout)
         evaluator_evidence = protect_evaluator_evidence(protect_payload)
         command_hash = stable_digest_hex(
-            json.dumps([manager, *probe_args], sort_keys=True).encode("utf-8"),
+            json.dumps([manager, *probe_args]).encode("utf-8"),
         )
         manager_results.append(
             {

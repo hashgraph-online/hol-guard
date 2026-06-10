@@ -4,7 +4,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .local_supply_chain import audit_receipt_metadata, workspace_audit_path_hashes
+from .local_supply_chain import audit_receipt_metadata
+
+
+def _read_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(manager) for manager in value if isinstance(manager, str)]
+
+
+def _audit_installed_managers(result: dict[str, object]) -> list[str]:
+    supply_chain = result.get("supply_chain")
+    if not isinstance(supply_chain, dict):
+        return []
+    protection = supply_chain.get("package_manager_protection")
+    if not isinstance(protection, dict):
+        return []
+    return _read_string_list(protection.get("installed_managers"))
 
 
 def _resolve_manager_subset(
@@ -13,19 +29,22 @@ def _resolve_manager_subset(
     operation: str,
 ) -> list[str]:
     if managers:
-        return list(managers)
+        return [str(manager) for manager in managers if isinstance(manager, str)]
     tested_managers = result.get("tested_managers")
     if isinstance(tested_managers, list):
-        return [str(manager) for manager in tested_managers if isinstance(manager, str)]
+        return _read_string_list(tested_managers)
     if operation == "audit":
+        installed = _audit_installed_managers(result)
+        if installed:
+            return installed
         package_shims = result.get("package_shims")
         if isinstance(package_shims, dict):
-            detected = package_shims.get("detected_managers")
-            if isinstance(detected, list):
-                return [str(manager) for manager in detected if isinstance(manager, str)]
+            detected = _read_string_list(package_shims.get("detected_managers"))
+            if detected:
+                return detected
     installed_managers = result.get("installed_managers")
     if isinstance(installed_managers, list):
-        return [str(manager) for manager in installed_managers if isinstance(manager, str)]
+        return _read_string_list(installed_managers)
     return []
 
 

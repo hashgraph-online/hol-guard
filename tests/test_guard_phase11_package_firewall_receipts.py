@@ -40,6 +40,26 @@ def test_protect_evaluator_evidence_includes_evaluator_source() -> None:
     assert evidence["evaluator_source"] == "guard-cloud"
 
 
+def test_package_firewall_receipt_metadata_records_audit_manager_subset_from_posture() -> None:
+    metadata = package_firewall_receipt_metadata(
+        operation="audit",
+        result={
+            "manifest_paths": ["package.json"],
+            "lockfile_paths": ["package-lock.json"],
+            "inventory": {"total_packages": 1},
+            "evaluation": {"decision": "monitor", "packages": []},
+            "supply_chain": {
+                "package_manager_protection": {
+                    "installed_managers": ["npm", "pnpm"],
+                },
+            },
+        },
+    )
+    evidence = metadata["scanner_evidence"]
+    assert isinstance(evidence, dict)
+    assert evidence["manager_subset"] == ["npm", "pnpm"]
+
+
 def test_package_firewall_receipt_metadata_records_manager_subset_for_test() -> None:
     metadata = package_firewall_receipt_metadata(
         operation="test",
