@@ -15,6 +15,7 @@ try:  # pragma: no cover - Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
+from ..aibom_detection import enrich_mcp_server_metadata, extend_detection_with_workspace_aibom
 from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
 from ..launcher import merge_guard_launcher_env
@@ -626,6 +627,23 @@ class CodexHarnessAdapter(HarnessAdapter):
                         continue
                     url = server_config.get("url")
                     env = server_config.get("env")
+                    mcp_metadata = enrich_mcp_server_metadata(
+                        {
+                            "name": name,
+                            "env": {
+                                str(key): str(value)
+                                for key, value in env.items()
+                                if isinstance(key, str) and isinstance(value, str)
+                            }
+                            if isinstance(env, dict)
+                            else {},
+                            "env_keys": sorted(env.keys()) if isinstance(env, dict) else [],
+                        },
+                        command=command if isinstance(command, str) else None,
+                        args=args,
+                        url=url if isinstance(url, str) else None,
+                        transport="http" if isinstance(url, str) else "stdio",
+                    )
                     artifacts.append(
                         GuardArtifact(
                             artifact_id=f"codex:{scope}:{name}",
@@ -638,16 +656,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                             args=args,
                             url=url if isinstance(url, str) else None,
                             transport="http" if isinstance(url, str) else "stdio",
-                            metadata={
-                                "env": {
-                                    str(key): str(value)
-                                    for key, value in env.items()
-                                    if isinstance(key, str) and isinstance(value, str)
-                                }
-                                if isinstance(env, dict)
-                                else {},
-                                "env_keys": sorted(env.keys()) if isinstance(env, dict) else [],
-                            },
+                            metadata=mcp_metadata,
                         )
                     )
         hooks_paths = [context.home_dir / ".codex" / "hooks.json"]
@@ -684,13 +693,18 @@ class CodexHarnessAdapter(HarnessAdapter):
                             command=command if isinstance(command, str) else None,
                         )
                     )
-        return HarnessDetection(
+        detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
             command_available=_command_available(self.executable),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
+        )
+        return extend_detection_with_workspace_aibom(
+            detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
 
     def install(self, context: HarnessContext) -> dict[str, object]:

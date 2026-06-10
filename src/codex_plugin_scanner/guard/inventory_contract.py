@@ -13,6 +13,11 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 InventoryItemKind = Literal[
     "agent",
+    "daemon_plugin",
+    "harness",
+    "model_provider",
+    "package",
+    "prompt_pack",
     "skill",
     "mcp_server",
     "mcp_tool",
@@ -220,8 +225,21 @@ def inventory_snapshot_from_detection(
     runtime_version: str | None = None,
     cisco_runs: tuple[object, ...] = (),
 ) -> GuardAgentInventorySnapshot:
+    from .aibom_detection import discover_shared_workspace_aibom_artifacts
+
     harness = str(getattr(detection, "harness", "unknown"))
-    artifacts = tuple(getattr(detection, "artifacts", ()))
+    artifacts = list(getattr(detection, "artifacts", ()))
+    if workspace_dir is not None:
+        existing_ids = {str(getattr(artifact, "artifact_id", "")) for artifact in artifacts}
+        for artifact in discover_shared_workspace_aibom_artifacts(
+            harness,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        ):
+            if artifact.artifact_id not in existing_ids:
+                artifacts.append(artifact)
+                existing_ids.add(artifact.artifact_id)
+    artifacts = tuple(artifacts)
     items: list[GuardAgentInventoryItem] = []
     for artifact in artifacts:
         item = _item_from_artifact(
@@ -243,12 +261,14 @@ def inventory_snapshot_from_detection(
         )
         for path in config_paths
     )
+    item_tuple = tuple(items)
     cisco_findings = _cisco_inventory_findings(
         cisco_runs,
-        items=tuple(items),
+        items=item_tuple,
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
+    symlink_findings = _symlink_findings_from_items(harness, item_tuple)
     sources = (*config_sources, *_cisco_inventory_sources(cisco_runs))
     snapshot_hash = fingerprint_mapping(
         {
@@ -264,8 +284,8 @@ def inventory_snapshot_from_detection(
         agent_type=_agent_type(harness),
         generated_at=generated_at,
         runtime_version=runtime_version,
-        items=tuple(items),
-        findings=cisco_findings,
+        items=item_tuple,
+        findings=(*cisco_findings, *symlink_findings),
         sources=sources,
         redaction_report={
             "rawSecretsIncluded": False,
@@ -382,6 +402,19 @@ def _item_from_artifact(
     name = str(getattr(artifact, "name", artifact_id))
     safe_metadata = _safe_artifact_metadata(artifact, home_dir=home_dir, workspace_dir=workspace_dir)
     item_kind = _item_kind(artifact_type)
+    safe_metadata = _apply_aibom_metadata_enrichment(
+        artifact,
+        item_kind=item_kind,
+        metadata=safe_metadata,
+    )
+    safe_metadata = _apply_source_of_truth_metadata(
+        artifact,
+        harness=harness,
+        item_kind=item_kind,
+        metadata=safe_metadata,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
     semantic_text = fingerprint_mapping(
         {
             "artifact_id": artifact_id,
@@ -390,12 +423,13 @@ def _item_from_artifact(
             "metadata": safe_metadata,
         }
     )
+    content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
     return GuardAgentInventoryItem(
         item_id=artifact_id,
         item_kind=item_kind,
         display_name=name,
         source_fingerprint=fingerprint_mapping({"harness": harness, "artifact_id": artifact_id}),
-        content_hash=semantic_text,
+        content_hash=content_hash,
         capability_categories=_capabilities_for_artifact(artifact_type, safe_metadata),
         risk_level=_risk_level(safe_metadata),
         scanner_sources=("hol-detector",),
@@ -717,15 +751,143 @@ def _agent_type(value: str) -> AgentInventoryType:
 
 
 def _item_kind(artifact_type: str) -> InventoryItemKind:
-    if artifact_type in {"skill", "skill_file"}:
-        return "skill"
-    if artifact_type == "mcp_server":
-        return "mcp_server"
-    if artifact_type == "channel":
-        return "channel"
-    if artifact_type in {"gateway_config", "config"}:
-        return "agent"
-    return "plugin"
+    mapping: dict[str, InventoryItemKind] = {
+        "skill": "skill",
+        "skill_file": "skill",
+        "mcp_server": "mcp_server",
+        "mcp_tool": "mcp_tool",
+        "channel": "channel",
+        "gateway_config": "agent",
+        "config": "agent",
+        "agent": "agent",
+        "hook": "hook",
+        "instruction": "overlay",
+        "overlay": "overlay",
+        "command": "prompt_pack",
+        "extension": "plugin",
+        "plugin": "plugin",
+        "plugin-file": "plugin",
+        "repository": "repository",
+        "container_image": "container_image",
+        "policy": "policy",
+        "secret_reference": "secret_reference",
+        "network_endpoint": "network_endpoint",
+        "guard_launcher_shim": "harness",
+        "package": "package",
+        "daemon_plugin": "daemon_plugin",
+        "model_provider": "model_provider",
+        "prompt_pack": "prompt_pack",
+    }
+    return mapping.get(artifact_type, "plugin")
+
+
+def _resolve_item_content_hash(metadata: dict[str, object], semantic_text: str) -> str:
+    for key in ("content_hash", "directory_hash"):
+        candidate = metadata.get(key)
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    version_info = metadata.get("versionInfo")
+    if isinstance(version_info, dict):
+        version_hash = version_info.get("contentHash")
+        if isinstance(version_hash, str) and version_hash:
+            return version_hash
+    return semantic_text
+
+
+def _safe_roots_for_inspection(
+    *,
+    home_dir: Path,
+    workspace_dir: Path | None,
+) -> tuple[Path, ...]:
+    roots: list[Path] = [home_dir]
+    if workspace_dir is not None:
+        roots.insert(0, workspace_dir)
+    return tuple(roots)
+
+
+def _apply_source_of_truth_metadata(
+    artifact: object,
+    *,
+    harness: str,
+    item_kind: InventoryItemKind,
+    metadata: dict[str, object],
+    home_dir: Path,
+    workspace_dir: Path | None,
+) -> dict[str, object]:
+    from .aibom_symlink import inspect_aibom_source_path, source_of_truth_metadata_from_inspection
+
+    config_path = getattr(artifact, "config_path", None)
+    if not isinstance(config_path, str) or not config_path:
+        return metadata
+    path = Path(config_path)
+    if not path.is_symlink():
+        return metadata
+    inspection = inspect_aibom_source_path(
+        path,
+        safe_roots=_safe_roots_for_inspection(home_dir=home_dir, workspace_dir=workspace_dir),
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
+    source_link_id = f"{harness}:{item_kind}:{inspection.source_fingerprint[:24]}"
+    enriched = dict(metadata)
+    enriched["sourceOfTruth"] = source_of_truth_metadata_from_inspection(
+        inspection,
+        source_link_id=source_link_id,
+    )
+    return enriched
+
+
+def _symlink_findings_from_items(
+    harness: str,
+    items: tuple[GuardAgentInventoryItem, ...],
+) -> tuple[GuardAgentInventoryFinding, ...]:
+    findings: list[GuardAgentInventoryFinding] = []
+    for item in items:
+        source_of_truth = item.metadata.get("sourceOfTruth")
+        if not isinstance(source_of_truth, dict):
+            continue
+        validation_state = source_of_truth.get("validationState")
+        if validation_state == "valid":
+            continue
+        if not isinstance(validation_state, str):
+            continue
+        severity: InventorySeverity = "high" if validation_state in {"loop", "escape_blocked"} else "medium"
+        findings.append(
+            GuardAgentInventoryFinding(
+                finding_id=f"{harness}:symlink:{item.item_id}:{validation_state}",
+                source="hol-detector",
+                severity=severity,
+                confidence="high",
+                title=f"Symlink source {validation_state.replace('_', ' ')}",
+                artifact_id=item.item_id,
+                check_id=f"aibom.symlink.{validation_state}",
+                summary=f"Inventory item references a symlink source in state {validation_state}.",
+                evidence={
+                    "validationState": validation_state,
+                    "sourceFingerprint": source_of_truth.get("sourceFingerprint"),
+                    "pathClass": source_of_truth.get("pathClass"),
+                },
+            )
+        )
+    return tuple(findings)
+
+
+def _apply_aibom_metadata_enrichment(
+    artifact: object,
+    *,
+    item_kind: InventoryItemKind,
+    metadata: dict[str, object],
+) -> dict[str, object]:
+    from .aibom_detection import instruction_role_for_path
+
+    enriched = dict(metadata)
+    if item_kind == "overlay" and "instructionRole" not in enriched:
+        config_path = getattr(artifact, "config_path", None)
+        if isinstance(config_path, str):
+            role = instruction_role_for_path(Path(config_path))
+            if role is not None:
+                enriched["instructionRole"] = role
+    return enriched
 
 
 def _capabilities_for_artifact(
@@ -734,6 +896,8 @@ def _capabilities_for_artifact(
 ) -> tuple[InventoryCapability, ...]:
     capabilities: set[InventoryCapability] = set()
     if artifact_type in {"skill", "skill_file"}:
+        capabilities.add("reads_files")
+    if artifact_type in {"instruction", "overlay", "command"}:
         capabilities.add("reads_files")
     if artifact_type == "mcp_server":
         capabilities.add("network_egress")

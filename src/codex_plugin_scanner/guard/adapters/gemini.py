@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload
 
@@ -70,13 +71,18 @@ class GeminiHarnessAdapter(HarnessAdapter):
                 self._append_found_path(found_paths, settings_path)
                 self._append_settings_artifacts(artifacts, settings_path, payload, scope)
             self._append_skill_artifacts(artifacts, found_paths, skill_root, scope)
-        return HarnessDetection(
+        detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
             command_available=_command_available(self.executable),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
+        )
+        return extend_detection_with_workspace_aibom(
+            detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
 
     def _append_extension_artifacts(
