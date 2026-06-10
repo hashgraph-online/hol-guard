@@ -2283,6 +2283,8 @@ def clear_revoked_guard_oauth_sign_in(store: GuardStore) -> bool:
         if _oauth_authorization_error_requires_fresh_sign_in(error):
             return store.get_oauth_local_credentials(allow_primary=True) is None
         return False
+    except (RuntimeError, OSError):
+        return False
     return False
 
 
