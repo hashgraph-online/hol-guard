@@ -32,7 +32,7 @@ Avoid broad or permanent exceptions.
 
 ## 5. Package firewall recovery
 
-Use the local dashboard Package Firewall panel first when the daemon is paired. It can protect, repair, test, audit, sync, or remove package manager shims with proof receipts.
+Use the local dashboard Package Firewall panel first when the daemon is paired. It can protect, repair, test, audit, sync, or remove package manager shims with signed receipts.
 
 CLI fallback:
 

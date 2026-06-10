@@ -23,6 +23,24 @@ This matrix exists so local Guard, Cloud Guard, and CI wrapper behavior stay ali
 - Beta: package ecosystems where Guard can inspect and explain risk but still needs more live coverage.
 - Monitor-only: package managers or platforms where Guard records evidence and receipts without claiming enforcement.
 
+### Ecosystem labels (current Local manager list)
+
+| Ecosystem | Support label | Shim-supported managers |
+| :--- | :--- | :--- |
+| npm | Protected | `npm`, `npx`, `pnpm`, `yarn`, `bun` |
+| PyPI | Protected | `pip`, `pip3`, `pipenv`, `pipx`, `poetry`, `uv`, `uvx` |
+| Cargo | Beta | `cargo` |
+| Go modules | Beta | `go` |
+| Maven/Gradle | Beta | `mvn`, `gradle` |
+| Composer | Beta | `composer` |
+| RubyGems | Beta | `bundle` |
+| Docker base images | Monitor-only | not shim-managed |
+| GitHub Actions | Monitor-only | not shim-managed |
+| System packages | Monitor-only | not shim-managed |
+| NuGet | Monitor-only | not shim-managed |
+
+`package_shim_supported_managers()` in Local Guard is the source of truth for shim-supported package managers.
+
 Use `hol-guard cloud sync-intel` before production rollout so local policy uses the latest cloud intelligence.
 
 ## CI Wrapper Examples
