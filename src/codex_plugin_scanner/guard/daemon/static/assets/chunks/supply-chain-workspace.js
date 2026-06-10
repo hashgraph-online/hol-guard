@@ -3,7 +3,7 @@ import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-res
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
-import { r as resolveProtectedManagersStat, S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
+import { S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -333,47 +333,6 @@ function filterPackageWorkbenchFindings(findings, filters) {
 }
 function packageWorkbenchEcosystems(findings) {
   return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
-}
-function resolveManagerCoverageStatus(protection, manager) {
-  if (protection === void 0) {
-    return "unprotected";
-  }
-  if (protection.protected_managers.includes(manager)) {
-    return "protected";
-  }
-  if (protection.installed_managers.includes(manager)) {
-    if (protection.path_status === "restart_required") {
-      return "restart_required";
-    }
-    return "path_repair";
-  }
-  return "unprotected";
-}
-function buildSupplyChainStats(snapshot) {
-  const managedInstalls = snapshot.managed_installs ?? [];
-  const protection = snapshot.supply_chain?.package_manager_protection;
-  const supportedManagers = protection?.supported_managers ?? [];
-  const protectedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "protected"
-  ).length;
-  const stagedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required"
-  ).length;
-  const repairRequiredManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair"
-  ).length;
-  const unprotectedManagers = supportedManagers.filter(
-    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected"
-  ).length;
-  return {
-    totalApps: managedInstalls.length,
-    activeApps: managedInstalls.filter((install) => install.active).length,
-    preventedInstalls: managedInstalls.filter((install) => !install.active).length,
-    protectedManagers,
-    stagedManagers,
-    repairRequiredManagers,
-    unprotectedManagers
-  };
 }
 function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -1151,6 +1110,78 @@ function ManagerRow({
     shim?.path_broken && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 pb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-attention", children: "Restart your shell after repair so PATH exports reload." }) })
   ] });
 }
+function testedLabel(shim) {
+  if (shim === void 0 || !shim.installed) {
+    return { label: "Not protected yet", tone: "attention" };
+  }
+  if (shim.last_intercept_proof_at != null) {
+    return {
+      label: `Tested ${formatRelativeTime(shim.last_intercept_proof_at)}`,
+      tone: "green"
+    };
+  }
+  if (shim.tested) {
+    return { label: "Test recorded", tone: "green" };
+  }
+  return { label: "Not tested yet", tone: "slate" };
+}
+function ManagerCard({ manager, shim }) {
+  const status = resolveShimStatus(shim);
+  const tested = testedLabel(shim);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "article",
+    {
+      className: "min-w-0 rounded-xl border border-slate-100 bg-white p-4 shadow-sm",
+      "data-testid": `supply-chain-manager-card-${manager}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate font-mono text-sm font-semibold text-brand-dark", children: manager }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: status.tone, children: status.label })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 space-y-2 text-xs text-slate-600", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "sr-only", children: "Detected" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-3.5 w-3.5 shrink-0 text-slate-400", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: shim?.detected ? "Detected on this device" : "Not detected on PATH" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "sr-only", children: "Protected" }),
+            status.tone === "green" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-brand-green", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-3.5 w-3.5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: shim?.installed ? status.label : "Install protection to block risky package commands" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "sr-only", children: "Tested" }),
+            tested.tone === "green" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-3.5 w-3.5 shrink-0 text-brand-green", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "h-3.5 w-3.5 shrink-0 text-slate-400", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: tested.tone === "attention" ? "text-brand-attention" : void 0, children: tested.label })
+          ] })
+        ] })
+      ]
+    }
+  );
+}
+function SupplyChainManagerCards({ managers, shims }) {
+  if (managers.length === 0) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: "space-y-3",
+      "aria-label": "Package tool status cards",
+      "data-testid": "supply-chain-manager-cards",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Package tools on this device" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-slate-500", children: "Detected, protected, and tested status for each manager Guard can watch." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3", children: managers.map((manager) => {
+          const shim = shims.find((entry) => entry.manager === manager);
+          return /* @__PURE__ */ jsxRuntimeExports.jsx(ManagerCard, { manager, shim }, manager);
+        }) })
+      ]
+    }
+  );
+}
 function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }) {
   const auditRunning = pendingOp?.op === "audit";
   const syncRunning = pendingOp?.op === "sync";
@@ -1295,6 +1326,13 @@ function FirewallControlsView({
         onOpenShell,
         onRefreshStatus,
         protection: data.protection
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SupplyChainManagerCards,
+      {
+        managers: data.supported_managers.length > 0 ? data.supported_managers : data.detected_managers,
+        shims: data.package_shims
       }
     ),
     lastFailed !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(FailureBanner, { failed: lastFailed }),
@@ -2834,6 +2872,188 @@ function SupplyChainCloudCapabilitiesPanel({ state }) {
     }
   );
 }
+const decisionPriority = {
+  block: 0,
+  ask: 1,
+  warn: 2,
+  monitor: 3,
+  allow: 4
+};
+const severityPriority = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  unknown: 4
+};
+function sortFindings(findings) {
+  return [...findings].sort((left, right) => {
+    const decisionDelta = (decisionPriority[left.decision] ?? 9) - (decisionPriority[right.decision] ?? 9);
+    if (decisionDelta !== 0) {
+      return decisionDelta;
+    }
+    return (severityPriority[left.severity] ?? 9) - (severityPriority[right.severity] ?? 9);
+  });
+}
+function countByDecision(findings) {
+  return findings.reduce(
+    (counts, finding) => {
+      if (finding.decision === "block") {
+        counts.block += 1;
+      } else if (finding.decision === "warn") {
+        counts.warn += 1;
+      } else if (finding.decision === "ask") {
+        counts.ask += 1;
+      } else if (finding.decision === "monitor") {
+        counts.monitor += 1;
+      } else if (finding.decision === "allow") {
+        counts.allow += 1;
+      }
+      return counts;
+    },
+    { block: 0, warn: 0, ask: 0, monitor: 0, allow: 0 }
+  );
+}
+function findingDecisionTone(decision) {
+  if (decision === "block") {
+    return "destructive";
+  }
+  if (decision === "ask") {
+    return "attention";
+  }
+  if (decision === "warn") {
+    return "warning";
+  }
+  return "default";
+}
+function FindingSummaryRow({ finding }) {
+  const tone = findingDecisionTone(finding.decision);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5 last:border-b-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: finding.packageName }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-xs text-slate-500", children: finding.ecosystem })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-center gap-1.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone, children: finding.decision }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "default", children: finding.severity })
+    ] })
+  ] });
+}
+function SupplyChainAuditFindingsSummary({
+  auditSnapshot,
+  auditRunning,
+  onRunAudit
+}) {
+  const topFindings = reactExports.useMemo(() => {
+    if (auditSnapshot === null) {
+      return [];
+    }
+    return sortFindings(auditSnapshot.findings).slice(0, 5);
+  }, [auditSnapshot]);
+  const counts = reactExports.useMemo(() => {
+    if (auditSnapshot === null) {
+      return { block: 0, warn: 0, ask: 0 };
+    }
+    return countByDecision(auditSnapshot.findings);
+  }, [auditSnapshot]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: "overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm",
+      "aria-label": "Local audit findings",
+      "data-testid": "supply-chain-audit-findings",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Audit findings" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-500", children: "Packages flagged the last time Guard audited this workspace." }),
+          auditSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
+            "Last audit ",
+            formatRelativeTime(auditSnapshot.generatedAt),
+            auditSnapshot.source !== null ? ` · ${auditSnapshot.source} intel` : ""
+          ] }) : null
+        ] }),
+        auditSnapshot === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          EmptyState,
+          {
+            title: auditRunning ? "Audit running" : "No audit findings yet",
+            body: auditRunning ? "Guard is scanning installed packages on this device." : "Run an audit from the firewall panel to see package risks here.",
+            tone: "teach",
+            action: auditRunning || onRunAudit === void 0 ? void 0 : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onRunAudit, children: "Run audit" })
+          }
+        ) }) : topFindings.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          EmptyState,
+          {
+            title: "No risky packages found",
+            body: "The last audit did not flag packages that need action on this device."
+          }
+        ) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2 border-b border-slate-100 px-4 py-3", children: [
+            counts.block > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "destructive", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }),
+              counts.block,
+              " block"
+            ] }) : null,
+            counts.ask > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "attention", children: [
+              counts.ask,
+              " ask"
+            ] }) : null,
+            counts.warn > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "warning", children: [
+              counts.warn,
+              " warn"
+            ] }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "default", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBugAnt, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }),
+              auditSnapshot.findings.length,
+              " total"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: topFindings.map((finding) => /* @__PURE__ */ jsxRuntimeExports.jsx(FindingSummaryRow, { finding }, finding.id)) })
+        ] })
+      ]
+    }
+  );
+}
+function resolveManagerCoverageStatus(protection, manager) {
+  if (protection === void 0) {
+    return "unprotected";
+  }
+  if (protection.protected_managers.includes(manager)) {
+    return "protected";
+  }
+  if (protection.installed_managers.includes(manager)) {
+    if (protection.path_status === "restart_required") {
+      return "restart_required";
+    }
+    return "path_repair";
+  }
+  return "unprotected";
+}
+function buildSupplyChainStats(snapshot) {
+  const managedInstalls = snapshot.managed_installs ?? [];
+  const protection = snapshot.supply_chain?.package_manager_protection;
+  const supportedManagers = protection?.supported_managers ?? [];
+  const protectedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "protected"
+  ).length;
+  const stagedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "restart_required"
+  ).length;
+  const repairRequiredManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "path_repair"
+  ).length;
+  const unprotectedManagers = supportedManagers.filter(
+    (manager) => resolveManagerCoverageStatus(protection, manager) === "unprotected"
+  ).length;
+  return {
+    totalApps: managedInstalls.length,
+    activeApps: managedInstalls.filter((install) => install.active).length,
+    preventedInstalls: managedInstalls.filter((install) => !install.active).length,
+    protectedManagers,
+    stagedManagers,
+    repairRequiredManagers,
+    unprotectedManagers
+  };
+}
 function resolveSupplyChainPostureAlerts(snapshot) {
   const alerts = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -2947,12 +3167,145 @@ function SupplyChainPostureBanners({ alerts }) {
     }
   );
 }
-function StatCard({ label, value, tone = "slate" }) {
-  const toneClass = tone === "green" ? "text-brand-green" : tone === "attention" ? "text-brand-attention" : tone === "blue" ? "text-brand-blue" : "text-brand-dark";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-400", children: label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1.5 text-2xl font-bold tabular-nums ${toneClass}`, children: value })
-  ] });
+function protectionTitle(status) {
+  if (status === "protected") {
+    return "Package installs are protected on this device";
+  }
+  if (status === "partial") {
+    return "Protection is only partly set up";
+  }
+  if (status === "staged") {
+    return "Finish setup in a new terminal";
+  }
+  if (status === "unprotected") {
+    return "Package installs are not protected yet";
+  }
+  return "Checking package protection on this device";
+}
+function protectionDetail(snapshot, status) {
+  const protection = snapshot.supply_chain?.package_manager_protection;
+  if (status === "protected" && protection) {
+    return `${protection.protected_managers.length} package tool${protection.protected_managers.length === 1 ? "" : "s"} active. Guard can block risky installs before they run.`;
+  }
+  if (status === "partial" && protection) {
+    return `${protection.unprotected_managers.length} tool${protection.unprotected_managers.length === 1 ? "" : "s"} still open: ${protection.unprotected_managers.join(", ")}.`;
+  }
+  if (status === "staged") {
+    return "Guard updated your shell profile. Open a new terminal, then run a protection test.";
+  }
+  if (status === "unprotected") {
+    return "Turn on protection for npm, pip, and other tools in the firewall panel below.";
+  }
+  return "Refresh status after installing package tools on this machine.";
+}
+function protectionTone(status) {
+  if (status === "protected") {
+    return "green";
+  }
+  if (status === "staged") {
+    return "blue";
+  }
+  if (status === "partial" || status === "unprotected") {
+    return "attention";
+  }
+  return "slate";
+}
+function cloudLabel(snapshot) {
+  const label = snapshot.cloud_state_label ?? "";
+  if (snapshot.cloud_state === "paired_active") {
+    return label.trim().length > 0 ? label : "Guard Cloud connected";
+  }
+  if (snapshot.cloud_state === "paired_waiting") {
+    return label.trim().length > 0 ? label : "Pairing in progress";
+  }
+  return label.trim().length > 0 ? label : "On this device only";
+}
+function resolveSupplyChainWorkspaceHero(snapshot) {
+  const protectionStatus = resolveHomeProtectionStatus(snapshot);
+  const stats = buildSupplyChainStats(snapshot);
+  const preventedLabel = stats.preventedInstalls > 0 ? `${stats.preventedInstalls} blocked install${stats.preventedInstalls === 1 ? "" : "s"}` : "No blocked installs yet";
+  return {
+    cloudMode: snapshot.cloud_state,
+    cloudLabel: cloudLabel(snapshot),
+    protectionStatus,
+    title: protectionTitle(protectionStatus),
+    detail: protectionDetail(snapshot, protectionStatus),
+    tone: protectionTone(protectionStatus),
+    statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`
+  };
+}
+function heroSurfaceClass(tone) {
+  if (tone === "green") {
+    return "border-brand-green/20 bg-brand-green/[0.04]";
+  }
+  if (tone === "blue") {
+    return "border-brand-blue/20 bg-brand-blue/[0.04]";
+  }
+  if (tone === "attention") {
+    return "border-amber-200 bg-amber-50/70";
+  }
+  return "border-slate-200 bg-slate-50/80";
+}
+function heroIcon(hero) {
+  if (hero.protectionStatus === "protected") {
+    return HiMiniCheckCircle;
+  }
+  if (hero.protectionStatus === "staged") {
+    return HiMiniArrowPath;
+  }
+  if (hero.protectionStatus === "partial" || hero.protectionStatus === "unprotected") {
+    return HiMiniExclamationTriangle;
+  }
+  return HiMiniComputerDesktop;
+}
+function heroIconClass(tone) {
+  if (tone === "green") {
+    return "text-brand-green";
+  }
+  if (tone === "blue") {
+    return "text-brand-blue";
+  }
+  if (tone === "attention") {
+    return "text-amber-600";
+  }
+  return "text-slate-500";
+}
+function cloudTagTone(mode) {
+  if (mode === "paired_active") {
+    return "green";
+  }
+  if (mode === "paired_waiting") {
+    return "blue";
+  }
+  return "attention";
+}
+function SupplyChainWorkspaceHero({ hero }) {
+  const Icon = heroIcon(hero);
+  const titleClass = hero.tone === "attention" ? "text-amber-950" : "text-brand-dark";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: `rounded-2xl border px-4 py-4 sm:px-5 sm:py-5 ${heroSurfaceClass(hero.tone)}`,
+      "aria-label": "Supply chain protection status",
+      "data-testid": "supply-chain-workspace-hero",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: cloudTagTone(hero.cloudMode), children: [
+            hero.cloudMode === "local_only" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniComputerDesktop, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "mr-1 inline h-3.5 w-3.5", "aria-hidden": "true" }),
+            hero.cloudLabel
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: hero.statLine })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-2.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-5 w-5 shrink-0 ${heroIconClass(hero.tone)}`, "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: `text-lg font-semibold tracking-tight ${titleClass}`, children: hero.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-relaxed text-slate-600", children: hero.detail })
+          ] })
+        ] })
+      ]
+    }
+  );
 }
 function AppFirewallRow({ install, protection }) {
   const [open, setOpen] = reactExports.useState(false);
@@ -3004,7 +3357,6 @@ function SupplyChainWorkspace({
   onGoHome,
   onRuntimeRefresh
 }) {
-  const stats = reactExports.useMemo(() => buildSupplyChainStats(snapshot), [snapshot]);
   const protection = snapshot.supply_chain?.package_manager_protection;
   const managedInstalls = reactExports.useMemo(
     () => snapshot.managed_installs ?? [],
@@ -3022,13 +3374,10 @@ function SupplyChainWorkspace({
     () => resolveSupplyChainPostureAlerts(snapshot),
     [snapshot]
   );
+  const workspaceHero = reactExports.useMemo(() => resolveSupplyChainWorkspaceHero(snapshot), [snapshot]);
   const cloudCapabilities = reactExports.useMemo(
     () => resolveSupplyChainCloudCapabilities(snapshot),
     [snapshot]
-  );
-  const protectedManagersStat = reactExports.useMemo(
-    () => resolveProtectedManagersStat(stats),
-    [stats]
   );
   reactExports.useEffect(() => {
     let cancelled = false;
@@ -3063,34 +3412,20 @@ function SupplyChainWorkspace({
     runAuditRef.current?.();
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS, "data-testid": "supply-chain-workspace", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-slate-500", children: "See which package installs Guard can block, which tools still need setup, and how fresh your safety checks are." }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onGoHome, children: "Back to Home" })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-start justify-end gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onGoHome, children: "Back to Home" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainWorkspaceHero, { hero: workspaceHero }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudDegradedBanner, { state: cloudDegraded }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainPostureBanners, { alerts: postureAlerts }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudCapabilitiesPanel, { state: cloudCapabilities }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Active apps", value: stats.activeApps, tone: "green" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Prevented installs", value: stats.preventedInstalls, tone: stats.preventedInstalls > 0 ? "attention" : "slate" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        StatCard,
-        {
-          label: protectedManagersStat.label,
-          value: protectedManagersStat.value,
-          tone: protectedManagersStat.tone
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        StatCard,
-        {
-          label: "Still open",
-          value: stats.unprotectedManagers,
-          tone: stats.unprotectedManagers > 0 ? "attention" : "slate"
-        }
-      )
-    ] }),
     evidenceRail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainEvidenceRail, { rail: evidenceRail }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SupplyChainAuditFindingsSummary,
+      {
+        auditSnapshot,
+        auditRunning,
+        onRunAudit: handleRunAudit
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainBundlePanel, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PackageFirewallPanel,
