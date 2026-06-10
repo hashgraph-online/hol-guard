@@ -228,9 +228,7 @@ def build_runtime_action_record(
     claimed = _claimed_capabilities(artifact)
     observed = _observed_capabilities(risk_categories, artifact)
     sensitive = [
-        category
-        for category in (*risk_categories, *claimed, *observed)
-        if _SENSITIVE_CLASS_PATTERN.search(category)
+        category for category in (*risk_categories, *claimed, *observed) if _SENSITIVE_CLASS_PATTERN.search(category)
     ]
     for subprocess in subprocesses:
         match = _PACKAGE_MANAGER_PATTERN.search(subprocess)
@@ -393,7 +391,8 @@ def _portal_tool_from_legacy(record: dict[str, object], metadata: dict[str, obje
     description = metadata.get("tool_description")
     return {
         "descriptionHash": record.get("description_hash") or record.get("descriptionHash"),
-        "descriptorHash": record.get("descriptor_hash") or record.get("descriptorHash")
+        "descriptorHash": record.get("descriptor_hash")
+        or record.get("descriptorHash")
         or record.get("description_hash")
         or record.get("descriptionHash"),
         "hashScope": "full" if schema is not None or description else "manifest",
