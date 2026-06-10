@@ -5,8 +5,9 @@ Install `plugin-scanner` separately when you want maintainer or CI checks for pl
 
 Use it when you want to protect a harness before local MCP servers, skills, hooks, or plugin surfaces run.
 
-Local Guard protects your machine without requiring sign-in. Guard Cloud is optional paid
-service memory, visibility, sync, and management on top of that protection. See
+Local Guard protects your machine without requiring sign-in. Guard Cloud is an optional
+paid service providing cloud history, visibility, sync, and management on top of that
+protection. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md) for the full subscription
 boundary.
 

@@ -1,7 +1,7 @@
 # Local Guard vs Guard Cloud
 
-Guard protects your machine first. Guard Cloud is optional paid service
-memory, visibility, sync, and management around that protection.
+Guard protects your machine first. Guard Cloud is an optional paid service
+providing cloud history, visibility, sync, and management around that protection.
 
 ## Local Guard baseline
 
