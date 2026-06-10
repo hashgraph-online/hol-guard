@@ -33,18 +33,31 @@ INVENTORY_ITEM_KINDS: tuple[str, ...] = (
     "network_endpoint",
 )
 
-_MAX_FILE_BYTES = 1024 * 1024
+_READ_CHUNK_BYTES = 65536
 _CURSOR_RULE_PATTERNS = ("*.mdc", "*.md")
 _CODEX_SKILL_ROOTS = (".agents/skills",)
 
 
-def file_content_hash(path: Path, *, max_bytes: int = _MAX_FILE_BYTES) -> str | None:
+def file_content_hash(path: Path, *, max_bytes: int | None = None) -> str | None:
+    """Return a SHA-256 digest of the full file bytes used for approval drift detection.
+
+    When ``max_bytes`` is set, only that prefix is hashed. Production callers must
+    leave ``max_bytes`` unset so tail edits cannot bypass change detection.
+    """
     try:
+        digest = hashlib.sha256()
         with path.open("rb") as handle:
-            payload = handle.read(max_bytes)
+            if max_bytes is None:
+                while True:
+                    chunk = handle.read(_READ_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+            else:
+                digest.update(handle.read(max_bytes))
+        return digest.hexdigest()
     except OSError:
         return None
-    return fingerprint_text(payload.decode("utf-8", errors="replace"))
 
 
 def directory_content_hash(root: Path, *, home_dir: Path) -> str:
