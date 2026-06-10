@@ -92,21 +92,24 @@ def test_inventory_skill_trust_enrichment_disables_cisco_scan(
         return original_import(name, *args, **kwargs)
 
     def _record_cisco_mode(**kwargs: object) -> object:
+        from codex_plugin_scanner.integrations.cisco_skill_scanner import (
+            CiscoIntegrationStatus,
+            CiscoSkillScanSummary,
+        )
+
         mode = kwargs.get("mode")
         assert isinstance(mode, str)
         cisco_modes.append(mode)
-        from codex_plugin_scanner.integrations.cisco_skill_scanner import run_cisco_skill_scan
-
-        skills_dir = kwargs.get("skills_dir")
-        policy_name = kwargs.get("policy_name", "balanced")
-        timeout_seconds = kwargs.get("timeout_seconds")
-        assert isinstance(skills_dir, Path)
-        assert isinstance(policy_name, str)
-        return run_cisco_skill_scan(
-            skills_dir,
-            mode=mode,
-            policy_name=policy_name,
-            timeout_seconds=timeout_seconds if isinstance(timeout_seconds, (int, float)) else None,
+        return CiscoSkillScanSummary(
+            status=CiscoIntegrationStatus.SKIPPED,
+            message="Cisco skill scanning disabled by configuration.",
+            findings=(),
+            skills_scanned=0,
+            skills_skipped=(),
+            analyzers_used=(),
+            policy_name="balanced",
+            total_findings=0,
+            findings_by_severity={"critical": 0, "high": 0, "medium": 0, "low": 0},
         )
 
     monkeypatch.setattr(builtins, "__import__", _guard_import)
