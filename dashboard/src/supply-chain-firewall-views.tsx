@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniArrowTopRightOnSquare,
@@ -14,6 +15,8 @@ import type {
   PackageFirewallEntitlement,
 } from "./guard-types";
 import { formatRelativeTime } from "./approval-center-utils";
+import { parsePackageFirewallActionResult } from "./supply-chain-firewall-action-result";
+import type { PackageFirewallNextAction } from "./supply-chain-firewall-next-action";
 import { resolvePackageManagerProtectionCopy } from "./runtime-overview";
 
 type UpgradeCtaProps = {
@@ -515,6 +518,36 @@ export type CompletedOp = {
   response: PackageFirewallActionResponse;
 };
 
+type NextActionHeroProps = {
+  action: PackageFirewallNextAction;
+  anyPending: boolean;
+  onRunAction: (op: NonNullable<PackageFirewallNextAction["op"]>, manager: string | null) => void;
+};
+
+export function NextActionHero({ action, anyPending, onRunAction }: NextActionHeroProps) {
+  const handleClick = useCallback(() => {
+    if (action.op === null) {
+      return;
+    }
+    onRunAction(action.op, action.manager);
+  }, [action.manager, action.op, onRunAction]);
+
+  return (
+    <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.05] to-white px-4 py-4 sm:px-5 sm:py-5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-blue">Next step</p>
+      <p className="mt-2 text-lg font-semibold text-brand-dark">{action.label}</p>
+      <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">{action.detail}</p>
+      {action.op !== null && (
+        <div className="mt-4">
+          <ActionButton variant="primary" onClick={handleClick} disabled={anyPending}>
+            {action.label}
+          </ActionButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type ActionResultPanelProps = {
   completed: CompletedOp;
   onDismiss: () => void;
@@ -524,12 +557,15 @@ export function ActionResultPanel({ completed, onDismiss }: ActionResultPanelPro
   const { response } = completed;
   const isOk = ["completed", "ok", "success", "succeeded"].includes(response.status);
   const detail = response.result_detail;
+  const parsed = parsePackageFirewallActionResult(completed.op, response);
   const resultMessage =
-    detail["activation_state"] === "restart_required"
+    parsed?.summary ??
+    (detail["activation_state"] === "restart_required"
       ? "Guard installed the shim and updated your shell profile. Open a new shell or restart AI apps to route package-manager commands through Guard."
       : detail["activation_state"] === "in_path"
       ? "Guard installed the shim and protection is live in this session."
-      : response.result;
+      : response.result);
+  const resultLines = parsed?.lines ?? [];
   return (
     <div
       className={`rounded-xl border px-4 py-3 ${
@@ -559,6 +595,13 @@ export function ActionResultPanel({ completed, onDismiss }: ActionResultPanelPro
               {completed.manager !== null ? ` — ${completed.manager}` : ""}
             </p>
             <p className="mt-0.5 text-xs text-slate-600">{resultMessage}</p>
+            {resultLines.length > 0 && (
+              <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                {resultLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
         <DismissButton onDismiss={onDismiss} />

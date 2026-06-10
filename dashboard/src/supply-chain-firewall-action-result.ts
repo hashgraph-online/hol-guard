@@ -1,0 +1,136 @@
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => entry.trim());
+}
+
+export type PackageFirewallActionResultDetail = {
+  emptyState: boolean;
+  lines: string[];
+  summary: string;
+  tone: "success" | "warning" | "neutral";
+};
+
+function parseAuditActionResult(result: Record<string, unknown>): PackageFirewallActionResultDetail {
+  const evaluation = isRecord(result.evaluation) ? result.evaluation : null;
+  const decision = readString(evaluation?.decision) ?? readString(result.decision) ?? "monitor";
+  const manifestPaths = readStringArray(result.manifest_paths);
+  const lockfilePaths = readStringArray(result.lockfile_paths);
+  const inventory = isRecord(result.inventory) ? result.inventory : null;
+  const packageCount = typeof inventory?.packages === "number" ? inventory.packages : null;
+  const lockfileWarnings = Array.isArray(result.lockfile_warnings)
+    ? result.lockfile_warnings.filter(isRecord)
+    : [];
+
+  const lines: string[] = [];
+  if (manifestPaths.length > 0) {
+    lines.push(`Manifests scanned: ${manifestPaths.join(", ")}.`);
+  }
+  if (lockfilePaths.length > 0) {
+    lines.push(`Lockfiles scanned: ${lockfilePaths.join(", ")}.`);
+  }
+  if (packageCount !== null) {
+    lines.push(`${packageCount} dependency ${packageCount === 1 ? "entry" : "entries"} indexed.`);
+  }
+  for (const warning of lockfileWarnings.slice(0, 3)) {
+    const message = readString(warning.message);
+    if (message !== null) {
+      lines.push(message);
+    }
+  }
+
+  const emptyState = manifestPaths.length === 0 && lockfilePaths.length === 0;
+  if (emptyState) {
+    lines.push("No workspace manifests or lockfiles were found for this audit scope.");
+  }
+
+  return {
+    emptyState,
+    lines,
+    summary: `Workspace audit completed with ${decision} decision.`,
+    tone: decision === "block" || decision === "ask" ? "warning" : "success",
+  };
+}
+
+function parseSyncActionResult(result: Record<string, unknown>): PackageFirewallActionResultDetail {
+  const syncedAt =
+    readString(result.synced_at) ??
+    readString(result.generated_at) ??
+    readString(result.updated_at);
+  const receiptsStored = typeof result.receipts_stored === "number" ? result.receipts_stored : null;
+  const bundleVersion = readString(result.bundle_version);
+  const tier = readString(result.tier);
+
+  const lines: string[] = [];
+  if (syncedAt !== null) {
+    lines.push(`Cloud sync marker: ${syncedAt}.`);
+  }
+  if (receiptsStored !== null) {
+    lines.push(`${receiptsStored} receipt${receiptsStored === 1 ? "" : "s"} stored locally.`);
+  }
+  if (bundleVersion !== null) {
+    lines.push(`Advisory bundle ${bundleVersion}${tier ? ` (${tier})` : ""} is now active.`);
+  }
+
+  return {
+    emptyState: lines.length === 0,
+    lines,
+    summary: syncedAt
+      ? "Cloud intel sync completed. Feed freshness should update on the next status refresh."
+      : "Cloud intel sync completed.",
+    tone: "success",
+  };
+}
+
+function parseTestActionResult(result: Record<string, unknown>): PackageFirewallActionResultDetail {
+  const testedManagers = readStringArray(result.tested_managers);
+  const lines =
+    testedManagers.length > 0
+      ? [`Intercept proof recorded for ${testedManagers.join(", ")}.`]
+      : ["Intercept test completed."];
+  return {
+    emptyState: false,
+    lines,
+    summary: "Intercept test completed.",
+    tone: "success",
+  };
+}
+
+export function parsePackageFirewallActionResult(
+  op: string,
+  body: unknown,
+): PackageFirewallActionResultDetail | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+  const result = isRecord(body.result) ? body.result : isRecord(body.result_detail) ? body.result_detail : body;
+  if (!isRecord(result)) {
+    return null;
+  }
+
+  if (op === "audit") {
+    return parseAuditActionResult(result);
+  }
+  if (op === "sync") {
+    return parseSyncActionResult(result);
+  }
+  if (op === "test") {
+    return parseTestActionResult(result);
+  }
+  return null;
+}
