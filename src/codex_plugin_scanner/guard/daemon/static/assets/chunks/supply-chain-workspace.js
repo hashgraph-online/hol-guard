@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as HiMiniClock, az as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aA as HiMiniBeaker, ab as HiMiniMagnifyingGlass, p as EmptyState, aB as HiMiniBugAnt, aC as fetchPackageFirewallStatus, aD as runPackageFirewallAction, am as GuardHarnessActionError, aE as runPackageAudit, aF as runPackageSync, aG as startPackageFirewallConnect, aH as openPackageFirewallShell, S as SectionLabel, aI as HiMiniArrowDown, aJ as HiMiniArrowUp, aK as fetchSupplyChainBundle, B as Badge, aL as fetchReceipts, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as HiMiniClock, az as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aA as HiMiniBeaker, ab as HiMiniMagnifyingGlass, p as EmptyState, aB as HiMiniBugAnt, aC as fetchPackageFirewallStatus, aD as runPackageFirewallAction, am as GuardHarnessActionError, aE as runPackageAudit, aF as runPackageSync, aG as startPackageFirewallConnect, aH as openPackageFirewallShell, S as SectionLabel, aI as HiMiniArrowDown, aJ as HiMiniArrowUp, aK as fetchSupplyChainBundle, B as Badge, aL as HiMiniDocumentMagnifyingGlass, aM as HiMiniShieldExclamation, aN as fetchReceipts, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 const SEVERITY_RANK = {
@@ -15,7 +15,7 @@ const DECISION_RANK = {
   monitor: 1,
   allow: 0
 };
-function isRecord$1(value) {
+function isRecord$2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function readString$1(value) {
@@ -67,7 +67,7 @@ function normalizeReasons(value) {
   }
   const reasons = [];
   for (const entry of value) {
-    if (!isRecord$1(entry)) {
+    if (!isRecord$2(entry)) {
       continue;
     }
     const message = readString$1(entry.message) ?? readString$1(entry.summary) ?? "Flagged by Guard supply-chain policy.";
@@ -192,7 +192,7 @@ function normalizePackageFindings(value) {
   const findings = [];
   let index = 0;
   for (const entry of value) {
-    if (!isRecord$1(entry)) {
+    if (!isRecord$2(entry)) {
       continue;
     }
     const finding = normalizePackageFinding(entry, index);
@@ -214,17 +214,17 @@ function packageRecordsFromEvaluation(evaluation) {
   return normalizePackageFindings(evaluation.package_findings);
 }
 function isAuditEvidence(value) {
-  return isRecord$1(value) && value.operation === "audit";
+  return isRecord$2(value) && value.operation === "audit";
 }
 function normalizeSupplyChainAuditSnapshot(raw, receiptId = null) {
-  if (!isRecord$1(raw)) {
+  if (!isRecord$2(raw)) {
     return null;
   }
-  const evaluation = isRecord$1(raw.evaluation) ? raw.evaluation : null;
+  const evaluation = isRecord$2(raw.evaluation) ? raw.evaluation : null;
   const findingsFromEvidence = normalizePackageFindings(raw.package_findings);
   const findings = findingsFromEvidence.length > 0 ? findingsFromEvidence : packageRecordsFromEvaluation(evaluation);
   const generatedAt = readString$1(raw.generated_at) ?? readString$1(raw.generatedAt) ?? (/* @__PURE__ */ new Date(0)).toISOString();
-  const inventory = normalizeInventory(isRecord$1(raw.inventory) ? raw.inventory : null);
+  const inventory = normalizeInventory(isRecord$2(raw.inventory) ? raw.inventory : null);
   const decision = normalizeDecision(evaluation?.decision ?? raw.audit_decision);
   const manifestPaths = readStringArray$1(raw.manifest_paths);
   const lockfilePaths = readStringArray$1(raw.lockfile_paths);
@@ -249,7 +249,7 @@ function derivePackageWorkbenchFromReceipts(receipts) {
   ).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
   for (const receipt of auditReceipts) {
     const evidenceRaw = (receipt.scanner_evidence ?? []).find((entry) => isAuditEvidence(entry));
-    if (evidenceRaw === void 0 || !isRecord$1(evidenceRaw)) {
+    if (evidenceRaw === void 0 || !isRecord$2(evidenceRaw)) {
       continue;
     }
     const snapshot = normalizeSupplyChainAuditSnapshot(
@@ -331,7 +331,7 @@ function filterPackageWorkbenchFindings(findings, filters) {
 function packageWorkbenchEcosystems(findings) {
   return Array.from(new Set(findings.map((finding) => finding.ecosystem))).sort();
 }
-function isRecord(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function readString(value) {
@@ -348,13 +348,13 @@ function readStringArray(value) {
   return value.filter((entry) => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim());
 }
 function parseAuditActionResult(result) {
-  const evaluation = isRecord(result.evaluation) ? result.evaluation : null;
+  const evaluation = isRecord$1(result.evaluation) ? result.evaluation : null;
   const decision = readString(evaluation?.decision) ?? readString(result.decision) ?? "monitor";
   const manifestPaths = readStringArray(result.manifest_paths);
   const lockfilePaths = readStringArray(result.lockfile_paths);
-  const inventory = isRecord(result.inventory) ? result.inventory : null;
+  const inventory = isRecord$1(result.inventory) ? result.inventory : null;
   const packageCount = typeof inventory?.packages === "number" ? inventory.packages : null;
-  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord) : [];
+  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord$1) : [];
   const lines = [];
   if (manifestPaths.length > 0) {
     lines.push(`Manifests scanned: ${manifestPaths.join(", ")}.`);
@@ -415,18 +415,18 @@ function parseTestActionResult(result) {
   };
 }
 function parsePackageFirewallActionResult(op, body) {
-  if (!isRecord(body)) {
+  if (!isRecord$1(body)) {
     return null;
   }
   let result;
-  if (isRecord(body.result)) {
+  if (isRecord$1(body.result)) {
     result = body.result;
-  } else if (isRecord(body.result_detail)) {
+  } else if (isRecord$1(body.result_detail)) {
     result = body.result_detail;
   } else {
     result = body;
   }
-  if (!isRecord(result)) {
+  if (!isRecord$1(result)) {
     return null;
   }
   if (op === "audit") {
@@ -1101,10 +1101,18 @@ function FirewallControlsView({
     },
     [onInstall, onOpenShell, onRepair, onSync, onTest]
   );
+  const noDetectedManagers = data.detected_managers.length === 0;
   const filteredManagers = reactExports.useMemo(() => {
     const shimsByManager = new Map(data.package_shims.map((s) => [s.manager, s]));
     const visibleManagers = data.package_shims.filter((shim) => shim.detected || shim.installed || shim.tested).map((shim) => shim.manager);
-    let managers = visibleManagers.length > 0 ? Array.from(new Set(visibleManagers)).sort() : data.supported_managers;
+    let managers;
+    if (visibleManagers.length > 0) {
+      managers = Array.from(new Set(visibleManagers)).sort();
+    } else if (noDetectedManagers) {
+      managers = [];
+    } else {
+      managers = data.supported_managers;
+    }
     if (managerFilter) {
       const q = managerFilter.toLowerCase();
       managers = managers.filter((m) => m.toLowerCase().includes(q));
@@ -1120,7 +1128,7 @@ function FirewallControlsView({
       });
     }
     return managers;
-  }, [data, managerFilter, statusFilter]);
+  }, [data, managerFilter, noDetectedManagers, statusFilter]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 px-4 py-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(NextActionHero, { action: nextAction, anyPending, onRunAction: handleNextAction }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
@@ -1178,8 +1186,8 @@ function FirewallControlsView({
     filteredManagers.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
-        title: "No package managers found",
-        body: "No package managers match the current filter, or Guard has not detected any on this machine.",
+        title: noDetectedManagers && managerFilter.length === 0 && statusFilter === "all" ? "No package managers detected" : "No package managers found",
+        body: noDetectedManagers && managerFilter.length === 0 && statusFilter === "all" ? "Guard did not find npm, pip, pnpm, or other supported managers on this PATH. Install a package manager, open a new shell, then refresh status." : "No package managers match the current filter, or Guard has not detected any on this machine.",
         tone: "teach"
       }
     ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "table", "aria-label": "Package manager firewall status", children: [
@@ -2072,6 +2080,239 @@ function SupplyChainBundlePanel() {
     ] })
   ] });
 }
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function readOperation(value) {
+  if (!isRecord(value) || typeof value.operation !== "string") {
+    return null;
+  }
+  const trimmed = value.operation.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+function receiptEvidenceOperations(receipt) {
+  const operations = [];
+  for (const entry of receipt.scanner_evidence ?? []) {
+    const operation = readOperation(entry);
+    if (operation !== null) {
+      operations.push(operation);
+    }
+  }
+  return operations;
+}
+function isPackageBlockReceipt(receipt) {
+  if (receipt.policy_decision !== "block") {
+    return false;
+  }
+  const operations = receiptEvidenceOperations(receipt);
+  if (operations.includes("audit") || operations.includes("sync")) {
+    return false;
+  }
+  if (receipt.harness === "package-firewall") {
+    return true;
+  }
+  const artifactName = receipt.artifact_name?.toLowerCase() ?? "";
+  const artifactId = receipt.artifact_id.toLowerCase();
+  const summary = receipt.capabilities_summary.toLowerCase();
+  return artifactName.includes("package") || artifactId.includes("package") || summary.includes("install") || summary.includes("package");
+}
+function emptyRailItem(kind) {
+  const labels = {
+    block: {
+      title: "No blocked installs yet",
+      detail: "Guard will record the last prevented package install here."
+    },
+    audit: {
+      title: "No workspace audit yet",
+      detail: "Run an audit to scan lockfiles and manifest paths on this machine."
+    },
+    sync: {
+      title: "No policy sync yet",
+      detail: "Sync pulls the latest Guard supply-chain policy to this device."
+    }
+  };
+  return {
+    kind,
+    timestamp: null,
+    title: labels[kind].title,
+    detail: labels[kind].detail,
+    receiptId: null,
+    harness: null,
+    tone: "slate"
+  };
+}
+function blockRailItem(receipt) {
+  const label = receipt.artifact_name?.trim();
+  return {
+    kind: "block",
+    timestamp: receipt.timestamp,
+    title: label !== void 0 && label.length > 0 ? `Blocked: ${label}` : "Blocked package install",
+    detail: receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : "Guard blocked a package install before it completed.",
+    receiptId: receipt.receipt_id,
+    harness: receipt.harness,
+    tone: "attention"
+  };
+}
+function auditRailItem(receipt) {
+  const evidence = (receipt.scanner_evidence ?? []).find(
+    (entry) => readOperation(entry) === "audit"
+  );
+  const decision = isRecord(evidence) && typeof evidence.audit_decision === "string" ? evidence.audit_decision : receipt.policy_decision;
+  const blockedCount = isRecord(evidence) && typeof evidence.blocked_package_count === "number" ? evidence.blocked_package_count : 0;
+  const totalPackages = isRecord(evidence) && typeof evidence.total_packages === "number" ? evidence.total_packages : blockedCount;
+  const detail = receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : `Workspace audit returned ${decision} across ${totalPackages} package(s).`;
+  return {
+    kind: "audit",
+    timestamp: receipt.timestamp,
+    title: blockedCount > 0 ? `Audit flagged ${blockedCount} package(s)` : "Workspace audit completed",
+    detail,
+    receiptId: receipt.receipt_id,
+    harness: receipt.harness,
+    tone: blockedCount > 0 || decision === "block" ? "attention" : "green"
+  };
+}
+function syncRailItem(receipt) {
+  return {
+    kind: "sync",
+    timestamp: receipt.timestamp,
+    title: "Policy sync completed",
+    detail: receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : "Guard refreshed local supply-chain policy from the connected source.",
+    receiptId: receipt.receipt_id,
+    harness: receipt.harness,
+    tone: "green"
+  };
+}
+function latestReceiptMatching(receipts, predicate) {
+  const matches = receipts.filter(predicate).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
+  return matches[0] ?? null;
+}
+function deriveSupplyChainEvidenceRail(receipts) {
+  const blockReceipt = latestReceiptMatching(receipts, isPackageBlockReceipt);
+  const auditReceipt = latestReceiptMatching(receipts, (receipt) => {
+    if (receipt.harness !== "package-firewall") {
+      return false;
+    }
+    return receiptEvidenceOperations(receipt).includes("audit");
+  });
+  const syncReceipt = latestReceiptMatching(receipts, (receipt) => {
+    if (receipt.harness !== "package-firewall") {
+      return false;
+    }
+    return receiptEvidenceOperations(receipt).includes("sync");
+  });
+  return {
+    block: blockReceipt !== null ? blockRailItem(blockReceipt) : emptyRailItem("block"),
+    audit: auditReceipt !== null ? auditRailItem(auditReceipt) : emptyRailItem("audit"),
+    sync: syncReceipt !== null ? syncRailItem(syncReceipt) : emptyRailItem("sync")
+  };
+}
+function resolveSupplyChainCloudDegradedState(snapshot) {
+  if (snapshot.cloud_state !== "local_only") {
+    return {
+      active: false,
+      title: "",
+      detail: ""
+    };
+  }
+  return {
+    active: true,
+    title: "Guard Cloud unavailable on this device",
+    detail: snapshot.cloud_state_detail.trim().length > 0 ? snapshot.cloud_state_detail : "Local protection still runs, but live intel, fleet sync, and cross-device evidence stay offline until you connect Guard Cloud."
+  };
+}
+function supplyChainEvidenceHref(receiptId, harness) {
+  if (receiptId === null) {
+    return null;
+  }
+  const params = new URLSearchParams();
+  if (harness !== null && harness.trim().length > 0) {
+    params.set("harness", harness);
+  }
+  params.set("search", receiptId);
+  return `/evidence?${params.toString()}`;
+}
+const kindLabels = {
+  block: "Last block",
+  audit: "Last audit",
+  sync: "Last sync"
+};
+const kindIcons = {
+  block: HiMiniShieldExclamation,
+  audit: HiMiniDocumentMagnifyingGlass,
+  sync: HiMiniArrowPath
+};
+function EvidenceRailRow({ item }) {
+  const Icon = kindIcons[item.kind];
+  const href = supplyChainEvidenceHref(item.receiptId, item.harness);
+  const tagTone = item.tone === "green" ? "green" : item.tone === "attention" ? "attention" : "slate";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-500",
+        "aria-hidden": "true",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4" })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-1.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400", children: kindLabels[item.kind] }),
+        item.timestamp !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: tagTone, children: formatRelativeTime(item.timestamp) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: "Waiting" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: item.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: item.detail }),
+      href !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "a",
+        {
+          href,
+          className: "inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded",
+          children: [
+            "Open evidence",
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+          ]
+        }
+      ) : null
+    ] })
+  ] }) });
+}
+function SupplyChainEvidenceRail({ rail }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: "overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm",
+      "aria-label": "Recent supply chain evidence",
+      "data-testid": "supply-chain-evidence-rail",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 px-4 py-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent evidence" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Latest block, audit, and policy sync recorded on this machine." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "divide-y divide-slate-100", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceRailRow, { item: rail.block }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceRailRow, { item: rail.audit }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceRailRow, { item: rail.sync })
+        ] })
+      ]
+    }
+  );
+}
+function SupplyChainCloudDegradedBanner({ state }) {
+  if (!state.active) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3",
+      role: "status",
+      "data-testid": "supply-chain-cloud-degraded",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-amber-950", children: state.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-amber-900/90", children: state.detail })
+      ]
+    }
+  );
+}
 function resolveManagerCoverageStatus(protection, manager) {
   if (!protection) return "unprotected";
   if (protection.protected_managers.includes(manager)) return "protected";
@@ -2171,24 +2412,31 @@ function SupplyChainWorkspace({
     [snapshot.managed_installs]
   );
   const [auditSnapshot, setAuditSnapshot] = reactExports.useState(null);
+  const [evidenceRail, setEvidenceRail] = reactExports.useState(null);
   const [auditRunning, setAuditRunning] = reactExports.useState(false);
   const runAuditRef = reactExports.useRef(null);
+  const cloudDegraded = reactExports.useMemo(
+    () => resolveSupplyChainCloudDegradedState(snapshot),
+    [snapshot]
+  );
   reactExports.useEffect(() => {
     let cancelled = false;
-    const loadAuditSnapshot = async () => {
+    const loadReceiptEvidence = async () => {
       try {
         const receipts = await fetchReceipts();
         if (cancelled) {
           return;
         }
         setAuditSnapshot(derivePackageWorkbenchFromReceipts(receipts));
+        setEvidenceRail(deriveSupplyChainEvidenceRail(receipts));
       } catch {
         if (!cancelled) {
           setAuditSnapshot(null);
+          setEvidenceRail(null);
         }
       }
     };
-    void loadAuditSnapshot();
+    void loadReceiptEvidence();
     return () => {
       cancelled = true;
     };
@@ -2208,6 +2456,7 @@ function SupplyChainWorkspace({
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Package manager firewall status, prevented installs, and feed health." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onGoHome, children: "Back to Home" })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainCloudDegradedBanner, { state: cloudDegraded }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Active apps", value: stats.activeApps, tone: "green" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Prevented installs", value: stats.preventedInstalls, tone: stats.preventedInstalls > 0 ? "attention" : "slate" }),
@@ -2221,6 +2470,7 @@ function SupplyChainWorkspace({
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(StatCard, { label: "Unprotected managers", value: stats.unprotectedManagers, tone: stats.unprotectedManagers > 0 ? "attention" : "slate" })
     ] }),
+    evidenceRail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainEvidenceRail, { rail: evidenceRail }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainBundlePanel, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       PackageFirewallPanel,
