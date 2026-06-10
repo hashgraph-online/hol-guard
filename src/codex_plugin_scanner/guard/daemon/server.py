@@ -103,6 +103,7 @@ from ..package_firewall_entitlement import (
     package_firewall_block_details,
     package_firewall_operation_allowed,
 )
+from ..package_shim_status import record_package_shim_audit_result
 from ..receipts.manager import build_receipt
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -2027,6 +2028,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace_dir=context.workspace_dir,
             )
             audit_payload["exit_code"] = exit_code
+            if exit_code == 0:
+                record_package_shim_audit_result(context, audited_at=now)
             return audit_payload
         if operation == "sync":
             return sync_supply_chain_bundle(self.server.store)  # type: ignore[attr-defined]
