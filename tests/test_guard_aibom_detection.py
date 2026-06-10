@@ -130,8 +130,10 @@ def test_diff_artifact_detects_tail_only_instruction_change(tmp_path: Path) -> N
         workspace_dir=workspace,
     )
     artifact_v1 = next(
-        artifact for artifact in artifacts_v1 if artifact.artifact_type == "instruction"
+        (artifact for artifact in artifacts_v1 if artifact.artifact_type == "instruction"),
+        None,
     )
+    assert artifact_v1 is not None, "Expected an instruction artifact in v1 discovery"
     previous = {
         **artifact_v1.to_dict(),
         "artifact_hash": artifact_hash(artifact_v1),
@@ -145,8 +147,10 @@ def test_diff_artifact_detects_tail_only_instruction_change(tmp_path: Path) -> N
         workspace_dir=workspace,
     )
     artifact_v2 = next(
-        artifact for artifact in artifacts_v2 if artifact.artifact_type == "instruction"
+        (artifact for artifact in artifacts_v2 if artifact.artifact_type == "instruction"),
+        None,
     )
+    assert artifact_v2 is not None, "Expected an instruction artifact in v2 discovery"
 
     diff = diff_artifact(previous, artifact_v2)
 
