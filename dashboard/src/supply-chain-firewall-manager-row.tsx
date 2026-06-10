@@ -60,6 +60,7 @@ type ManagerRowProps = {
   onRemoveRequest: (manager: string) => void;
   onRemoveConfirm: (manager: string) => void;
   onRemoveCancel: () => void;
+  onOpenDetails: (manager: string) => void;
 };
 
 export function ManagerRow({
@@ -75,6 +76,7 @@ export function ManagerRow({
   onRemoveRequest,
   onRemoveConfirm,
   onRemoveCancel,
+  onOpenDetails,
 }: ManagerRowProps) {
   const status = resolveShimStatus(shim);
   const installState = actions.install ?? "disabled";
@@ -99,6 +101,7 @@ export function ManagerRow({
   const handleTest = useCallback(() => onTest(manager), [onTest, manager]);
   const handleRemoveRequest = useCallback(() => onRemoveRequest(manager), [onRemoveRequest, manager]);
   const handleRemoveConfirm = useCallback(() => onRemoveConfirm(manager), [onRemoveConfirm, manager]);
+  const handleOpenDetails = useCallback(() => onOpenDetails(manager), [onOpenDetails, manager]);
 
   return (
     <div className="border-b border-slate-100 last:border-b-0" role="row">
@@ -112,7 +115,14 @@ export function ManagerRow({
             ) : (
               <HiMiniExclamationTriangle className="h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
             )}
-            <span className="truncate font-mono text-sm font-semibold text-brand-dark">{manager}</span>
+            <button
+              type="button"
+              onClick={handleOpenDetails}
+              className="truncate text-left font-mono text-sm font-semibold text-brand-dark hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded"
+              aria-label={`Open ${manager} manager details`}
+            >
+              {manager}
+            </button>
             {shim?.detected && <Tag tone="green">Detected</Tag>}
             {isMine && (
               <HiMiniArrowPath

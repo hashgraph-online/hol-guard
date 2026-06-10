@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as HiMiniClock, az as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aA as HiMiniBeaker, ab as HiMiniMagnifyingGlass, p as EmptyState, aB as HiMiniBugAnt, aC as fetchPackageFirewallStatus, aD as runPackageFirewallAction, am as GuardHarnessActionError, aE as runPackageAudit, aF as runPackageSync, aG as startPackageFirewallConnect, aH as openPackageFirewallShell, S as SectionLabel, aI as HiMiniArrowDown, aJ as HiMiniArrowUp, aK as fetchSupplyChainBundle, B as Badge, aL as HiMiniDocumentMagnifyingGlass, aM as HiMiniShieldExclamation, aN as fetchReceipts, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, A as ActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck, aw as HiMiniArrowTopRightOnSquare, r as reactExports, g as HiMiniCheckCircle, b as HiMiniExclamationTriangle, f as formatRelativeTime, h as HiMiniXCircle, ay as HiMiniClock, az as IconActionButton, ap as HiMiniTrash, I as HiMiniWrenchScrewdriver, aA as HiMiniBeaker, ab as HiMiniMagnifyingGlass, p as EmptyState, aB as HiMiniBugAnt, v as HiMiniXMark, aC as fetchPackageFirewallStatus, aD as runPackageFirewallAction, am as GuardHarnessActionError, aE as runPackageAudit, aF as runPackageSync, aG as startPackageFirewallConnect, aH as openPackageFirewallShell, S as SectionLabel, aI as HiMiniArrowDown, aJ as HiMiniArrowUp, aK as fetchSupplyChainBundle, B as Badge, aL as HiMiniDocumentMagnifyingGlass, aM as HiMiniShieldExclamation, aN as fetchReceipts, n as harnessDisplayName, d as HiMiniChevronUp, e as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
 import { b as resolvePackageManagerProtectionCopy } from "./runtime-overview.js";
 const SEVERITY_RANK = {
@@ -405,13 +405,40 @@ function parseSyncActionResult(result) {
   };
 }
 function parseTestActionResult(result) {
+  const interceptProved = result.intercept_proved === true;
   const testedManagers = readStringArray(result.tested_managers);
-  const lines = testedManagers.length > 0 ? [`Intercept proof recorded for ${testedManagers.join(", ")}.`] : ["Intercept test completed."];
+  const pathRepairRequired = readStringArray(result.path_repair_required);
+  const managerResults = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
+  const lines = [];
+  for (const entry of managerResults) {
+    const manager = readString(entry.manager) ?? "manager";
+    if (entry.intercept_ran === true) {
+      lines.push(
+        `${manager}: intercept probe ran${entry.evaluator_invoked === true ? " with evaluator proof" : ""}.`
+      );
+      continue;
+    }
+    const skippedReason = readString(entry.skipped_reason);
+    if (skippedReason !== null) {
+      lines.push(`${manager}: skipped (${skippedReason.replaceAll("_", " ")}).`);
+      continue;
+    }
+    lines.push(`${manager}: no intercept proof recorded.`);
+  }
+  if (pathRepairRequired.length > 0) {
+    lines.push(`PATH repair still required for ${pathRepairRequired.join(", ")}.`);
+  }
+  if (lines.length === 0 && testedManagers.length > 0) {
+    lines.push(`Tested ${testedManagers.join(", ")}.`);
+  }
+  if (lines.length === 0) {
+    lines.push("Intercept test completed.");
+  }
   return {
     emptyState: false,
     lines,
-    summary: "Intercept test completed.",
-    tone: "success"
+    summary: interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.",
+    tone: interceptProved ? "success" : "warning"
   };
 }
 function parsePackageFirewallActionResult(op, body) {
@@ -439,6 +466,66 @@ function parsePackageFirewallActionResult(op, body) {
     return parseTestActionResult(result);
   }
   return null;
+}
+function readActionResultRecord(body) {
+  if (!isRecord$1(body)) {
+    return null;
+  }
+  if (isRecord$1(body.result_detail)) {
+    return body.result_detail;
+  }
+  if (isRecord$1(body.result)) {
+    return body.result;
+  }
+  return body;
+}
+function buildInterceptProofManagerResult(entry) {
+  const manager = readString(entry.manager) ?? "manager";
+  const interceptRan = entry.intercept_ran === true;
+  const evaluatorInvoked = entry.evaluator_invoked === true;
+  const skippedReason = readString(entry.skipped_reason);
+  let detail = `${manager}: no intercept proof recorded.`;
+  if (interceptRan) {
+    detail = evaluatorInvoked ? `${manager}: intercept probe ran with evaluator proof.` : `${manager}: intercept probe ran.`;
+  } else if (skippedReason !== null) {
+    detail = `${manager}: skipped (${skippedReason.replaceAll("_", " ")}).`;
+  }
+  return {
+    manager,
+    interceptRan,
+    evaluatorInvoked,
+    skippedReason,
+    detail
+  };
+}
+function parseInterceptProofSnapshot(body) {
+  const result = readActionResultRecord(body);
+  if (result === null) {
+    return null;
+  }
+  const managerResultsRaw = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
+  const testedManagers = readStringArray(result.tested_managers);
+  const pathRepairRequired = readStringArray(result.path_repair_required);
+  const interceptProved = result.intercept_proved === true;
+  const managerResults = managerResultsRaw.map(buildInterceptProofManagerResult);
+  const hasProofContext = managerResults.length > 0 || testedManagers.length > 0 || pathRepairRequired.length > 0;
+  if (!hasProofContext && result.intercept_proved === void 0) {
+    return null;
+  }
+  const receipt = isRecord$1(body) && isRecord$1(body.receipt) ? body.receipt : null;
+  const receiptId = receipt !== null ? readString(receipt.id) : null;
+  const timestamp = receipt !== null ? readString(receipt.timestamp) : null;
+  const summary = interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.";
+  return {
+    interceptProved,
+    testedManagers,
+    pathRepairRequired,
+    managerResults,
+    receiptId,
+    timestamp,
+    summary,
+    tone: interceptProved ? "success" : "warning"
+  };
 }
 function UpgradeCta({ entitlement }) {
   const reconnectRequired = entitlement.reason === "guard_cloud_reconnect_required";
@@ -874,7 +961,7 @@ function resolveShimStatus(shim) {
   }
   return { label: "Unprotected", tone: "attention", icon: "warning" };
 }
-function actionIsAvailable(state) {
+function actionIsAvailable$1(state) {
   return state === "available";
 }
 function ManagerRow({
@@ -889,17 +976,18 @@ function ManagerRow({
   onTest,
   onRemoveRequest,
   onRemoveConfirm,
-  onRemoveCancel
+  onRemoveCancel,
+  onOpenDetails
 }) {
   const status = resolveShimStatus(shim);
   const installState = actions.install ?? "disabled";
   const repairState = actions.repair ?? "disabled";
   const testState = actions.test ?? "disabled";
   const removeState = actions.remove ?? "disabled";
-  const installAvailable = actionIsAvailable(installState);
-  const repairAvailable = actionIsAvailable(repairState);
-  const testAvailable = actionIsAvailable(testState);
-  const removeAvailable = actionIsAvailable(removeState);
+  const installAvailable = actionIsAvailable$1(installState);
+  const repairAvailable = actionIsAvailable$1(repairState);
+  const testAvailable = actionIsAvailable$1(testState);
+  const removeAvailable = actionIsAvailable$1(removeState);
   const showInstall = (!shim || !shim.installed) && installAvailable;
   const showRepair = shim?.installed && (shim.activation_state === "repair_required" || shim.path_broken) && repairAvailable;
   const showTest = shim?.installed && shim.activation_state === "protected" && testAvailable;
@@ -909,12 +997,22 @@ function ManagerRow({
   const handleTest = reactExports.useCallback(() => onTest(manager), [onTest, manager]);
   const handleRemoveRequest = reactExports.useCallback(() => onRemoveRequest(manager), [onRemoveRequest, manager]);
   const handleRemoveConfirm = reactExports.useCallback(() => onRemoveConfirm(manager), [onRemoveConfirm, manager]);
+  const handleOpenDetails = reactExports.useCallback(() => onOpenDetails(manager), [onOpenDetails, manager]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 last:border-b-0", role: "row", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-col gap-1 sm:flex-1", role: "cell", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
           status.icon === "check" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }) : status.icon === "restart" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate font-mono text-sm font-semibold text-brand-dark", children: manager }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: handleOpenDetails,
+              className: "truncate text-left font-mono text-sm font-semibold text-brand-dark hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded",
+              "aria-label": `Open ${manager} manager details`,
+              children: manager
+            }
+          ),
           shim?.detected && /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Detected" }),
           isMine && /* @__PURE__ */ jsxRuntimeExports.jsx(
             HiMiniArrowPath,
@@ -1073,7 +1171,8 @@ function FirewallControlsView({
   onSync,
   onDismissResult,
   onOpenShell,
-  onRefreshStatus
+  onRefreshStatus,
+  onOpenManagerDetails
 }) {
   const anyPending = pendingOp !== null;
   const nextAction = reactExports.useMemo(() => resolvePackageFirewallNextAction(data), [data]);
@@ -1242,13 +1341,241 @@ function FirewallControlsView({
             onTest,
             onRemoveRequest,
             onRemoveConfirm,
-            onRemoveCancel
+            onRemoveCancel,
+            onOpenDetails: onOpenManagerDetails
           },
           manager
         );
       }) })
     ] })
   ] });
+}
+function ManagerProofRow({
+  manager,
+  detail,
+  interceptRan
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-sm font-semibold text-brand-dark", children: manager }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: interceptRan ? "green" : "attention", children: interceptRan ? "Proof recorded" : "Needs attention" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs leading-relaxed text-slate-600", children: detail })
+  ] });
+}
+function InterceptProofModal({ proof, onClose }) {
+  const toneClass = proof.interceptProved ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-brand-attention/20 bg-brand-attention/[0.04]";
+  const Icon = proof.interceptProved ? HiMiniCheckCircle : HiMiniExclamationTriangle;
+  const iconClass = proof.interceptProved ? "text-brand-green" : "text-brand-attention";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "dialog",
+      "aria-label": "Intercept proof details",
+      "aria-modal": "true",
+      className: "fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4",
+      "data-testid": "intercept-proof-modal",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute inset-0 bg-black/30 backdrop-blur-sm", onClick: onClose, "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-base font-semibold text-brand-dark", children: "Intercept proof" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Guard ran a controlled package-manager call to verify shim interception." })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: onClose,
+                "aria-label": "Close intercept proof modal",
+                className: "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 overflow-y-auto px-5 py-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `rounded-xl border px-4 py-3 ${toneClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: `mt-0.5 h-4 w-4 shrink-0 ${iconClass}`, "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: proof.summary }),
+                proof.timestamp !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-500", children: [
+                  "Recorded ",
+                  formatRelativeTime(proof.timestamp)
+                ] })
+              ] })
+            ] }) }),
+            proof.managerResults.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400", children: "Manager results" }),
+              proof.managerResults.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ManagerProofRow,
+                {
+                  manager: entry.manager,
+                  detail: entry.detail,
+                  interceptRan: entry.interceptRan
+                },
+                entry.manager
+              ))
+            ] }) : null,
+            proof.pathRepairRequired.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-amber-950", children: "PATH repair still required" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-amber-900/90", children: [
+                proof.pathRepairRequired.join(", "),
+                " need repair before intercept proof can complete."
+              ] })
+            ] }) : null,
+            proof.receiptId !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400", children: "Proof receipt" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 break-all font-mono text-xs text-brand-dark", children: proof.receiptId })
+            ] }) : null
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-5 py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onClose, children: "Done" }) })
+        ] })
+      ]
+    }
+  );
+}
+function DetailRow({ label, value }) {
+  if (value === null || value === void 0 || value.trim().length === 0) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-start", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400", children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "break-all font-mono text-xs text-brand-dark", children: value })
+  ] });
+}
+function actionIsAvailable(state) {
+  return state === "available";
+}
+function SupplyChainManagerDrawer({
+  manager,
+  shim,
+  actions,
+  anyPending,
+  isMine,
+  actionHandlers,
+  onClose
+}) {
+  const status = resolveShimStatus(shim);
+  const installAvailable = actionIsAvailable(actions.install);
+  const repairAvailable = actionIsAvailable(actions.repair);
+  const testAvailable = actionIsAvailable(actions.test);
+  const removeAvailable = actionIsAvailable(actions.remove);
+  const showInstall = (!shim || !shim.installed) && installAvailable;
+  const showRepair = shim?.installed && (shim.activation_state === "repair_required" || shim.path_broken) && repairAvailable;
+  const showTest = shim?.installed && shim.activation_state === "protected" && testAvailable;
+  const showRemove = shim?.installed && removeAvailable;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "dialog",
+      "aria-label": `${manager} manager details`,
+      "aria-modal": "true",
+      className: "fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end",
+      "data-testid": "supply-chain-manager-drawer",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute inset-0 bg-black/30 backdrop-blur-sm", onClick: onClose, "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative flex h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:h-full sm:rounded-none", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-lg font-semibold text-brand-dark", children: manager }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap items-center gap-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: status.tone, children: status.label }),
+                shim?.detected ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Detected" }) : null,
+                shim?.tested ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: "Tested" }) : null
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: onClose,
+                "aria-label": "Close manager details drawer",
+                className: "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-5 overflow-y-auto px-5 py-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Manager coverage", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400", children: "Coverage" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "space-y-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Activation", value: shim?.activation_state ?? "uninstalled" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Integrity", value: shim?.integrity }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "PATH order", value: shim?.path_summary }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Shim path", value: shim?.shim_path }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Real binary", value: shim?.real_binary_path })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Intercept proof", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400", children: "Intercept proof" }),
+              shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-xl border border-brand-green/20 bg-brand-green/[0.04] px-3 py-2.5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-600", children: [
+                  "Last intercept proof ",
+                  formatRelativeTime(shim.last_intercept_proof_at)
+                ] })
+              ] }) : shim?.installed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-amber-600", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-amber-900/90", children: "No intercept proof recorded yet. Run a test after PATH protection is active." })
+              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Install Guard shims before recording intercept proof." })
+            ] }),
+            shim?.activation_state === "restart_required" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-600", children: "Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim." }) }),
+            shim?.path_broken && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-amber-900/90", children: "PATH order is broken. Repair routing, then restart your shell before testing intercepts." }) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-5 py-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+              showInstall && actionHandlers.install !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                IconActionButton,
+                {
+                  variant: "primary",
+                  label: "Protect",
+                  icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4" }),
+                  onClick: () => actionHandlers.install?.(manager),
+                  disabled: anyPending
+                }
+              ) : null,
+              showRepair && actionHandlers.repair !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                IconActionButton,
+                {
+                  variant: "primary",
+                  label: "Fix PATH",
+                  icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4" }),
+                  onClick: () => actionHandlers.repair?.(manager),
+                  disabled: anyPending
+                }
+              ) : null,
+              showTest && actionHandlers.test !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                IconActionButton,
+                {
+                  variant: "outline",
+                  label: "Test",
+                  icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBeaker, { className: "h-4 w-4" }),
+                  onClick: () => actionHandlers.test?.(manager),
+                  disabled: anyPending
+                }
+              ) : null,
+              showRemove && actionHandlers.removeRequest !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                IconActionButton,
+                {
+                  variant: "danger",
+                  label: "Remove",
+                  icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4" }),
+                  onClick: () => actionHandlers.removeRequest?.(manager),
+                  disabled: anyPending
+                }
+              ) : null,
+              isMine ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5 text-xs font-medium text-brand-blue", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-3.5 w-3.5 animate-spin", "aria-hidden": "true" }),
+                "Running…"
+              ] }) : null
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: onClose, children: "Close" }) })
+          ] })
+        ] })
+      ]
+    }
+  );
 }
 function actionLabel(op) {
   return op.charAt(0).toUpperCase() + op.slice(1);
@@ -1318,6 +1645,8 @@ function PackageFirewallPanel(props) {
   const [pendingApprovalOp, setPendingApprovalOp] = reactExports.useState(null);
   const [statusFilter, setStatusFilter] = reactExports.useState("all");
   const [managerFilter, setManagerFilter] = reactExports.useState("");
+  const [interceptProof, setInterceptProof] = reactExports.useState(null);
+  const [managerDrawerTarget, setManagerDrawerTarget] = reactExports.useState(null);
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(approvalGate);
   const load = reactExports.useCallback(async () => {
     setPanelLoad({ phase: "loading" });
@@ -1363,6 +1692,13 @@ function PackageFirewallPanel(props) {
       try {
         const response = await runPackageFirewallAction(op, manager, credentials);
         setLastCompleted({ op, manager, response });
+        if (op === "test") {
+          const proof = parseInterceptProofSnapshot(response);
+          if (proof !== null) {
+            setManagerDrawerTarget(null);
+            setInterceptProof(proof);
+          }
+        }
         await refreshAfterOp();
         await onStateChanged?.();
       } catch (err) {
@@ -1488,6 +1824,16 @@ function PackageFirewallPanel(props) {
   const handleManagerFilterChange = reactExports.useCallback((e) => {
     setManagerFilter(e.target.value);
   }, []);
+  const handleOpenManagerDetails = reactExports.useCallback((manager) => {
+    setManagerDrawerTarget(manager);
+  }, []);
+  const handleCloseManagerDrawer = reactExports.useCallback(() => {
+    setManagerDrawerTarget(null);
+  }, []);
+  const handleCloseInterceptProof = reactExports.useCallback(() => {
+    setInterceptProof(null);
+  }, []);
+  const managerDrawerShim = panelLoad.phase === "loaded" && managerDrawerTarget !== null ? panelLoad.data.package_shims.find((entry) => entry.manager === managerDrawerTarget) : void 0;
   const anyPending = pendingOp !== null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3", children: [
@@ -1533,6 +1879,7 @@ function PackageFirewallPanel(props) {
           onDismissResult: handleDismissResult,
           onOpenShell: handleOpenShell,
           onRefreshStatus: handleRetry,
+          onOpenManagerDetails: handleOpenManagerDetails,
           openingShell,
           activationAssistError
         }
@@ -1548,7 +1895,25 @@ function PackageFirewallPanel(props) {
         onCancel: handleApprovalCancel,
         onConfirm: handleApprovalConfirm
       }
-    )
+    ),
+    panelLoad.phase === "loaded" && managerDrawerTarget !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SupplyChainManagerDrawer,
+      {
+        manager: managerDrawerTarget,
+        shim: managerDrawerShim,
+        actions: panelLoad.data.actions,
+        anyPending,
+        isMine: pendingOp?.manager === managerDrawerTarget,
+        actionHandlers: {
+          install: handleInstall,
+          repair: handleRepair,
+          test: handleTest,
+          removeRequest: handleRemoveRequest
+        },
+        onClose: handleCloseManagerDrawer
+      }
+    ),
+    interceptProof !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(InterceptProofModal, { proof: interceptProof, onClose: handleCloseInterceptProof })
   ] });
 }
 const decisionTone = (decision) => {
