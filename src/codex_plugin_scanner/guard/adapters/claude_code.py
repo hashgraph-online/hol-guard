@@ -13,8 +13,8 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from ...path_support import iter_safe_matching_files, resolves_within_root
-from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
 from ..aibom_detection import extend_detection_with_workspace_aibom
+from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.harness_attribution import cursor_hook_query_extras
 from ..shims import install_guard_shim, remove_guard_shim

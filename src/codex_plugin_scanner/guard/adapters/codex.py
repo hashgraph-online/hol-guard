@@ -15,10 +15,10 @@ try:  # pragma: no cover - Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
+from ..aibom_detection import enrich_mcp_server_metadata, extend_detection_with_workspace_aibom
 from ..codex_config import dump_toml, read_toml_payload, write_toml_payload
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config
 from ..launcher import merge_guard_launcher_env
-from ..aibom_detection import enrich_mcp_server_metadata, extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _warnings_include_setup_failure
