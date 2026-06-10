@@ -35,7 +35,7 @@ type EvidenceRailRowProps = {
 
 function EvidenceRailRow({ item }: EvidenceRailRowProps) {
   const Icon = kindIcons[item.kind];
-  const href = supplyChainEvidenceHref(item.receiptId);
+  const href = supplyChainEvidenceHref(item.receiptId, item.harness);
   const tagTone = item.tone === "green" ? "green" : item.tone === "attention" ? "attention" : "slate";
 
   return (

@@ -1105,7 +1105,14 @@ function FirewallControlsView({
   const filteredManagers = reactExports.useMemo(() => {
     const shimsByManager = new Map(data.package_shims.map((s) => [s.manager, s]));
     const visibleManagers = data.package_shims.filter((shim) => shim.detected || shim.installed || shim.tested).map((shim) => shim.manager);
-    let managers = visibleManagers.length > 0 ? Array.from(new Set(visibleManagers)).sort() : noDetectedManagers ? [] : data.supported_managers;
+    let managers;
+    if (visibleManagers.length > 0) {
+      managers = Array.from(new Set(visibleManagers)).sort();
+    } else if (noDetectedManagers) {
+      managers = [];
+    } else {
+      managers = data.supported_managers;
+    }
     if (managerFilter) {
       const q = managerFilter.toLowerCase();
       managers = managers.filter((m) => m.toLowerCase().includes(q));
@@ -2097,6 +2104,10 @@ function isPackageBlockReceipt(receipt) {
   if (receipt.policy_decision !== "block") {
     return false;
   }
+  const operations = receiptEvidenceOperations(receipt);
+  if (operations.includes("audit") || operations.includes("sync")) {
+    return false;
+  }
   if (receipt.harness === "package-firewall") {
     return true;
   }
@@ -2126,6 +2137,7 @@ function emptyRailItem(kind) {
     title: labels[kind].title,
     detail: labels[kind].detail,
     receiptId: null,
+    harness: null,
     tone: "slate"
   };
 }
@@ -2137,6 +2149,7 @@ function blockRailItem(receipt) {
     title: label !== void 0 && label.length > 0 ? `Blocked: ${label}` : "Blocked package install",
     detail: receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : "Guard blocked a package install before it completed.",
     receiptId: receipt.receipt_id,
+    harness: receipt.harness,
     tone: "attention"
   };
 }
@@ -2154,6 +2167,7 @@ function auditRailItem(receipt) {
     title: blockedCount > 0 ? `Audit flagged ${blockedCount} package(s)` : "Workspace audit completed",
     detail,
     receiptId: receipt.receipt_id,
+    harness: receipt.harness,
     tone: blockedCount > 0 || decision === "block" ? "attention" : "green"
   };
 }
@@ -2164,6 +2178,7 @@ function syncRailItem(receipt) {
     title: "Policy sync completed",
     detail: receipt.capabilities_summary.trim().length > 0 ? receipt.capabilities_summary : "Guard refreshed local supply-chain policy from the connected source.",
     receiptId: receipt.receipt_id,
+    harness: receipt.harness,
     tone: "green"
   };
 }
@@ -2205,11 +2220,16 @@ function resolveSupplyChainCloudDegradedState(snapshot) {
     detail: snapshot.cloud_state_detail.trim().length > 0 ? snapshot.cloud_state_detail : "Local protection still runs, but live intel, fleet sync, and cross-device evidence stay offline until you connect Guard Cloud."
   };
 }
-function supplyChainEvidenceHref(receiptId) {
+function supplyChainEvidenceHref(receiptId, harness) {
   if (receiptId === null) {
     return null;
   }
-  return `/evidence?harness=package-firewall&search=${encodeURIComponent(receiptId)}`;
+  const params = new URLSearchParams();
+  if (harness !== null && harness.trim().length > 0) {
+    params.set("harness", harness);
+  }
+  params.set("search", receiptId);
+  return `/evidence?${params.toString()}`;
 }
 const kindLabels = {
   block: "Last block",
@@ -2223,7 +2243,7 @@ const kindIcons = {
 };
 function EvidenceRailRow({ item }) {
   const Icon = kindIcons[item.kind];
-  const href = supplyChainEvidenceHref(item.receiptId);
+  const href = supplyChainEvidenceHref(item.receiptId, item.harness);
   const tagTone = item.tone === "green" ? "green" : item.tone === "attention" ? "attention" : "slate";
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(

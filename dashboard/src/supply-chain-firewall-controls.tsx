@@ -165,12 +165,14 @@ export function FirewallControlsView({
     const visibleManagers = data.package_shims
       .filter((shim) => shim.detected || shim.installed || shim.tested)
       .map((shim) => shim.manager);
-    let managers =
-      visibleManagers.length > 0
-        ? Array.from(new Set(visibleManagers)).sort()
-        : noDetectedManagers
-        ? []
-        : data.supported_managers;
+    let managers: string[];
+    if (visibleManagers.length > 0) {
+      managers = Array.from(new Set(visibleManagers)).sort();
+    } else if (noDetectedManagers) {
+      managers = [];
+    } else {
+      managers = data.supported_managers;
+    }
 
     if (managerFilter) {
       const q = managerFilter.toLowerCase();

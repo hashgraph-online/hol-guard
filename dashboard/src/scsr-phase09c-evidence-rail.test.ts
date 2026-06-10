@@ -151,7 +151,27 @@ assert(
 const pairedSnapshot = { ...baseSnapshot, cloud_state: "paired_active" as const };
 assert(!resolveSupplyChainCloudDegradedState(pairedSnapshot).active, "SCSR163-B: paired cloud clears degraded banner");
 
-const href = supplyChainEvidenceHref("receipt-audit-1");
+const href = supplyChainEvidenceHref("receipt-audit-1", "package-firewall");
 assert(href !== null && href.includes("receipt-audit-1"), "SCSR154-C: evidence href encodes receipt id");
+assert(href !== null && href.includes("harness=package-firewall"), "SCSR154-D: audit evidence href keeps harness");
+
+const blockedHref = supplyChainEvidenceHref("receipt-block-1", "claude");
+assert(blockedHref !== null && blockedHref.includes("harness=claude"), "SCSR154-E: block evidence href uses receipt harness");
+
+const blockedAuditReceipt: GuardReceipt = {
+  ...auditReceipt,
+  receipt_id: "receipt-audit-block-1",
+  policy_decision: "block",
+  timestamp: "2026-06-09T15:00:00.000Z",
+};
+const mixedRail = deriveSupplyChainEvidenceRail([blockedAuditReceipt, blockReceipt]);
+assert(
+  mixedRail.block.receiptId === "receipt-block-1",
+  "SCSR154-F: blocked audit receipts stay in audit slot, not block slot",
+);
+assert(
+  mixedRail.audit.receiptId === "receipt-audit-block-1",
+  "SCSR154-G: blocked audit receipts still surface in audit slot",
+);
 
 console.log("scsr-phase09c-evidence-rail.test.ts: all assertions passed");

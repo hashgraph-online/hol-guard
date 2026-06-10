@@ -8,6 +8,7 @@ export type SupplyChainEvidenceRailItem = {
   title: string;
   detail: string;
   receiptId: string | null;
+  harness: string | null;
   tone: "green" | "attention" | "slate";
 };
 
@@ -50,6 +51,10 @@ function isPackageBlockReceipt(receipt: GuardReceipt): boolean {
   if (receipt.policy_decision !== "block") {
     return false;
   }
+  const operations = receiptEvidenceOperations(receipt);
+  if (operations.includes("audit") || operations.includes("sync")) {
+    return false;
+  }
   if (receipt.harness === "package-firewall") {
     return true;
   }
@@ -85,6 +90,7 @@ function emptyRailItem(kind: SupplyChainEvidenceRailKind): SupplyChainEvidenceRa
     title: labels[kind].title,
     detail: labels[kind].detail,
     receiptId: null,
+    harness: null,
     tone: "slate",
   };
 }
@@ -100,6 +106,7 @@ function blockRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
         ? receipt.capabilities_summary
         : "Guard blocked a package install before it completed.",
     receiptId: receipt.receipt_id,
+    harness: receipt.harness,
     tone: "attention",
   };
 }
@@ -130,6 +137,7 @@ function auditRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
     title: blockedCount > 0 ? `Audit flagged ${blockedCount} package(s)` : "Workspace audit completed",
     detail,
     receiptId: receipt.receipt_id,
+    harness: receipt.harness,
     tone: blockedCount > 0 || decision === "block" ? "attention" : "green",
   };
 }
@@ -144,6 +152,7 @@ function syncRailItem(receipt: GuardReceipt): SupplyChainEvidenceRailItem {
         ? receipt.capabilities_summary
         : "Guard refreshed local supply-chain policy from the connected source.",
     receiptId: receipt.receipt_id,
+    harness: receipt.harness,
     tone: "green",
   };
 }
@@ -202,9 +211,17 @@ export function resolveSupplyChainCloudDegradedState(
   };
 }
 
-export function supplyChainEvidenceHref(receiptId: string | null): string | null {
+export function supplyChainEvidenceHref(
+  receiptId: string | null,
+  harness: string | null,
+): string | null {
   if (receiptId === null) {
     return null;
   }
-  return `/evidence?harness=package-firewall&search=${encodeURIComponent(receiptId)}`;
+  const params = new URLSearchParams();
+  if (harness !== null && harness.trim().length > 0) {
+    params.set("harness", harness);
+  }
+  params.set("search", receiptId);
+  return `/evidence?${params.toString()}`;
 }
