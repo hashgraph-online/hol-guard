@@ -352,6 +352,7 @@ function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }: GlobalActi
         onClick={onAudit}
         disabled={anyPending}
         aria-busy={auditRunning}
+        data-package-firewall-audit="true"
       >
         {auditRunning ? (
           <HiMiniArrowPath className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -660,8 +661,10 @@ function RefreshButton({ disabled, spinning, onRefresh }: RefreshButtonProps) {
 export function PackageFirewallPanel(props: {
   approvalGate: GuardApprovalGatePublicConfig | null;
   onStateChanged?: () => Promise<void> | void;
+  onAuditCompleted?: (resultDetail: Record<string, unknown>) => void;
+  onAuditRunningChange?: (running: boolean) => void;
 }) {
-  const { approvalGate, onStateChanged } = props;
+  const { approvalGate, onStateChanged, onAuditCompleted, onAuditRunningChange } = props;
   const [panelLoad, setPanelLoad] = useState<PanelLoadState>({ phase: "loading" });
   const [pendingOp, setPendingOp] = useState<PendingOp | null>(null);
   const [lastCompleted, setLastCompleted] = useState<CompletedOp | null>(null);
@@ -758,19 +761,28 @@ export function PackageFirewallPanel(props: {
       setLastFailed(null);
       setConnectError(null);
       setActivationAssistError(null);
+      if (op === "audit") {
+        onAuditRunningChange?.(true);
+      }
       try {
         const response = op === "audit" ? await runPackageAudit() : await runPackageSync();
         setLastCompleted({ op, manager: null, response });
+        if (op === "audit") {
+          onAuditCompleted?.(response.result_detail);
+        }
         await refreshAfterOp();
         await onStateChanged?.();
       } catch (err) {
         const message = err instanceof Error ? err.message : "Operation failed.";
         setLastFailed({ op, manager: null, message });
       } finally {
+        if (op === "audit") {
+          onAuditRunningChange?.(false);
+        }
         setPendingOp(null);
       }
     },
-    [onStateChanged, refreshAfterOp],
+    [onAuditCompleted, onAuditRunningChange, onStateChanged, refreshAfterOp],
   );
 
   const handleInstall = useCallback(

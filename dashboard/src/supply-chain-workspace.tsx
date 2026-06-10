@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniExclamationTriangle,
@@ -15,8 +15,11 @@ import type {
   GuardManagedInstall,
   GuardRuntimeSnapshot,
   PackageManagerProtection,
+  SupplyChainAuditSnapshot,
 } from "./guard-types";
+import { derivePackageWorkbenchFromReceipts, fetchReceipts, normalizeSupplyChainAuditSnapshot } from "./guard-api";
 import { PackageFirewallPanel } from "./supply-chain-firewall-panel";
+import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { SupplyChainBundlePanel } from "./supply-chain-bundle-panel";
 
 type ManagerCoverageStatus = "protected" | "restart_required" | "path_repair" | "unprotected";
@@ -183,6 +186,47 @@ export function SupplyChainWorkspace({
     () => snapshot.managed_installs ?? [],
     [snapshot.managed_installs],
   );
+  const [auditSnapshot, setAuditSnapshot] = useState<SupplyChainAuditSnapshot | null>(null);
+  const [auditRunning, setAuditRunning] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAuditSnapshot = async () => {
+      try {
+        const receipts = await fetchReceipts();
+        if (cancelled) {
+          return;
+        }
+        setAuditSnapshot(derivePackageWorkbenchFromReceipts(receipts));
+      } catch {
+        if (!cancelled) {
+          setAuditSnapshot(null);
+        }
+      }
+    };
+    void loadAuditSnapshot();
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshot.generated_at, snapshot.receipt_count]);
+
+  const handleAuditCompleted = useCallback((resultDetail: Record<string, unknown>) => {
+    const normalized = normalizeSupplyChainAuditSnapshot(resultDetail);
+    if (normalized !== null) {
+      setAuditSnapshot(normalized);
+    }
+  }, []);
+
+  const handleAuditRunningChange = useCallback((running: boolean) => {
+    setAuditRunning(running);
+  }, []);
+
+  const handleRunAudit = useCallback(() => {
+    const auditButton = document.querySelector<HTMLButtonElement>(
+      '[data-package-firewall-audit="true"]',
+    );
+    auditButton?.click();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -228,7 +272,18 @@ export function SupplyChainWorkspace({
 
       <SupplyChainBundlePanel />
 
-      <PackageFirewallPanel approvalGate={approvalGate} onStateChanged={onRuntimeRefresh} />
+      <PackageFirewallPanel
+        approvalGate={approvalGate}
+        onStateChanged={onRuntimeRefresh}
+        onAuditCompleted={handleAuditCompleted}
+        onAuditRunningChange={handleAuditRunningChange}
+      />
+
+      <PackageWorkbenchPanel
+        auditSnapshot={auditSnapshot}
+        onRunAudit={handleRunAudit}
+        auditRunning={auditRunning}
+      />
 
       <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">

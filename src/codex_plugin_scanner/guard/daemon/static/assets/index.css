@@ -1189,6 +1189,10 @@
     width: calc(var(--spacing) * 40);
   }
 
+  .w-44 {
+    width: calc(var(--spacing) * 44);
+  }
+
   .w-48 {
     width: calc(var(--spacing) * 48);
   }
@@ -4650,6 +4654,16 @@
       }
     }
 
+    .hover\:bg-slate-50\/70:hover {
+      background-color: #f8fafcb3;
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-slate-50\/70:hover {
+        background-color: color-mix(in oklab, var(--color-slate-50) 70%, transparent);
+      }
+    }
+
     .hover\:bg-slate-100:hover {
       background-color: var(--color-slate-100);
     }
@@ -5122,6 +5136,10 @@
       display: flex;
     }
 
+    .sm\:grid {
+      display: grid;
+    }
+
     .sm\:hidden {
       display: none;
     }
@@ -5160,6 +5178,10 @@
 
     .sm\:grid-cols-4 {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .sm\:grid-cols-\[minmax\(0\,1fr\)_auto\] {
+      grid-template-columns: minmax(0, 1fr) auto;
     }
 
     .sm\:flex-row {

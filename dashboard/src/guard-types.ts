@@ -717,6 +717,55 @@ export type PackageFirewallActionResponse = {
   entitlement: PackageFirewallEntitlement;
 };
 
+export type SupplyChainAuditDecision = "allow" | "monitor" | "warn" | "ask" | "block";
+
+export type SupplyChainAuditSeverity = "critical" | "high" | "medium" | "low" | "unknown";
+
+export type SupplyChainAuditFindingReason = {
+  code: string;
+  message: string;
+  severity: SupplyChainAuditSeverity;
+};
+
+export type SupplyChainAuditFinding = {
+  id: string;
+  packageName: string;
+  ecosystem: string;
+  namespace: string | null;
+  decision: SupplyChainAuditDecision;
+  severity: SupplyChainAuditSeverity;
+  reasons: SupplyChainAuditFindingReason[];
+  advisoryAliases: string[];
+  status: string | null;
+};
+
+export type SupplyChainAuditInventory = {
+  totalPackages: number;
+  directPackageCount: number;
+  transitivePackageCount: number;
+  sbomPackageCount: number;
+};
+
+export type SupplyChainAuditSnapshot = {
+  generatedAt: string;
+  source: string | null;
+  decision: SupplyChainAuditDecision;
+  inventory: SupplyChainAuditInventory;
+  findings: SupplyChainAuditFinding[];
+  manifestPaths: string[];
+  lockfilePaths: string[];
+  receiptId: string | null;
+};
+
+export type PackageWorkbenchSortKey = "severity" | "package" | "ecosystem" | "decision";
+
+export type PackageWorkbenchFilters = {
+  ecosystem: string;
+  decision: SupplyChainAuditDecision | "all";
+  severity: SupplyChainAuditSeverity | "all";
+  search: string;
+};
+
 export type GuardUpdateVersionCheck = {
   source: string;
   status: string;

@@ -2559,3 +2559,11 @@ export async function loadFeedPage(): Promise<FeedPageData> {
   const snapshot = await fetchRuntimeSnapshot();
   return { snapshot };
 }
+
+export {
+  derivePackageWorkbenchFromReceipts,
+  filterPackageWorkbenchFindings,
+  normalizeSupplyChainAuditSnapshot,
+  packageWorkbenchEcosystems,
+  sortPackageWorkbenchFindings,
+} from "./supply-chain-audit-normalize";

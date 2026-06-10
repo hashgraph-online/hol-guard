@@ -446,6 +446,24 @@ def _audit_lockfile_warnings(
     return tuple(warnings)
 
 
+def _audit_package_findings_for_receipt(
+    package_items: list[dict[str, object]],
+    *,
+    limit: int = 100,
+) -> list[dict[str, object]]:
+    decision_rank_map = {"block": 4, "ask": 3, "warn": 2, "monitor": 1, "allow": 0}
+    ranked: list[tuple[int, int, dict[str, object]]] = []
+    for item in package_items:
+        decision = str(item.get("decision") or "monitor")
+        if decision in {"allow", "monitor"} and not item.get("reasons"):
+            continue
+        severity_rank = _package_severity_rank(item)
+        decision_rank = decision_rank_map.get(decision, 0)
+        ranked.append((decision_rank, severity_rank, item))
+    ranked.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+    return [item for _, _, item in ranked[:limit]]
+
+
 def audit_receipt_metadata(result: dict[str, object]) -> dict[str, object]:
     evaluation = result.get("evaluation")
     if not isinstance(evaluation, dict):
@@ -454,6 +472,7 @@ def audit_receipt_metadata(result: dict[str, object]) -> dict[str, object]:
     packages = evaluation.get("packages")
     package_items = [item for item in packages if isinstance(item, dict)] if isinstance(packages, list) else []
     blocked_packages = [item for item in package_items if str(item.get("decision") or "") == "block"]
+    package_findings = _audit_package_findings_for_receipt(package_items)
     policy_decision = "allow"
     if decision == "block":
         policy_decision = "block"
@@ -475,6 +494,7 @@ def audit_receipt_metadata(result: dict[str, object]) -> dict[str, object]:
             "lockfile_paths": list(result.get("lockfile_paths") or ()),
             "manifest_paths": list(result.get("manifest_paths") or ()),
             "total_packages": inventory_summary.get("total_packages", len(package_items)),
+            "package_findings": package_findings,
         },
     }
 
