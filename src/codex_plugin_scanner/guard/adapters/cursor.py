@@ -7,6 +7,7 @@ import sys
 from hashlib import sha256
 from pathlib import Path
 
+from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
@@ -118,13 +119,18 @@ class CursorHarnessAdapter(HarnessAdapter):
                     )
                 )
         cli_available = cursor_cli_command_available(context)
-        return HarnessDetection(
+        detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or cli_available,
             command_available=cli_available,
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
+        )
+        return extend_detection_with_workspace_aibom(
+            detection,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
 
     def resolved_executable(self, context: HarnessContext) -> str | None:
