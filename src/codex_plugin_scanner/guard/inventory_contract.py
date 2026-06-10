@@ -102,6 +102,14 @@ _MCP_PERMISSION_RE = re.compile(
 )
 _IGNORED_TREE_DIR_NAMES = {".git", ".hg", ".svn", "__pycache__", ".mypy_cache", ".ruff_cache", ".venv", "node_modules"}
 _MAX_FINGERPRINT_FILE_BYTES = 1024 * 1024
+_AIBOM_METADATA_KEYS = (
+    "instructionRole",
+    "registryIdentity",
+    "sourceLinks",
+    "sourceOfTruth",
+    "trustResolution",
+    "versionInfo",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +224,20 @@ def serialize_inventory_snapshot(snapshot: GuardAgentInventorySnapshot) -> dict[
     return payload
 
 
+def extract_aibom_metadata_extensions(metadata: dict[str, object]) -> dict[str, object]:
+    """Return redacted AIBOM metadata extensions for CLI and inventory JSON output."""
+
+    extensions = {
+        key: _safe_json(metadata[key])
+        for key in _AIBOM_METADATA_KEYS
+        if key in metadata
+    }
+    source_of_truth = extensions.get("sourceOfTruth")
+    if "sourceLinks" not in extensions and isinstance(source_of_truth, dict):
+        extensions["sourceLinks"] = [_safe_json(source_of_truth)]
+    return extensions
+
+
 def inventory_snapshot_from_detection(
     detection: object,
     *,
@@ -224,6 +246,8 @@ def inventory_snapshot_from_detection(
     workspace_dir: Path | None = None,
     runtime_version: str | None = None,
     cisco_runs: tuple[object, ...] = (),
+    include_symlinks: bool = True,
+    follow_unsafe_symlinks: bool = False,
 ) -> GuardAgentInventorySnapshot:
     from .aibom_detection import discover_shared_workspace_aibom_artifacts
 
@@ -248,6 +272,8 @@ def inventory_snapshot_from_detection(
             generated_at=generated_at,
             home_dir=home_dir,
             workspace_dir=workspace_dir,
+            include_symlinks=include_symlinks,
+            follow_unsafe_symlinks=follow_unsafe_symlinks,
         )
         items.append(item)
         items.extend(_mcp_tool_items_from_artifact(harness, artifact, item))
@@ -269,7 +295,9 @@ def inventory_snapshot_from_detection(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
     )
-    symlink_findings = _symlink_findings_from_items(harness, item_tuple)
+    symlink_findings = (
+        _symlink_findings_from_items(harness, item_tuple) if include_symlinks else ()
+    )
     sources = (*config_sources, *_cisco_inventory_sources(cisco_runs))
     snapshot_hash = fingerprint_mapping(
         {
@@ -398,6 +426,8 @@ def _item_from_artifact(
     generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None,
+    include_symlinks: bool = True,
+    follow_unsafe_symlinks: bool = False,
 ) -> GuardAgentInventoryItem:
     artifact_id = str(getattr(artifact, "artifact_id", "artifact"))
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
@@ -411,14 +441,16 @@ def _item_from_artifact(
         metadata=safe_metadata,
         workspace_dir=workspace_dir,
     )
-    safe_metadata = _apply_source_of_truth_metadata(
-        artifact,
-        harness=harness,
-        item_kind=item_kind,
-        metadata=safe_metadata,
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-    )
+    if include_symlinks:
+        safe_metadata = _apply_source_of_truth_metadata(
+            artifact,
+            harness=harness,
+            item_kind=item_kind,
+            metadata=safe_metadata,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            follow_unsafe_symlinks=follow_unsafe_symlinks,
+        )
     semantic_text = fingerprint_mapping(
         {
             "artifact_id": artifact_id,
@@ -817,6 +849,7 @@ def _apply_source_of_truth_metadata(
     metadata: dict[str, object],
     home_dir: Path,
     workspace_dir: Path | None,
+    follow_unsafe_symlinks: bool = False,
 ) -> dict[str, object]:
     from .aibom_symlink import inspect_aibom_source_path, source_of_truth_metadata_from_inspection
 
@@ -831,6 +864,7 @@ def _apply_source_of_truth_metadata(
         safe_roots=_safe_roots_for_inspection(home_dir=home_dir, workspace_dir=workspace_dir),
         home_dir=home_dir,
         workspace_dir=workspace_dir,
+        follow_unsafe_symlinks=follow_unsafe_symlinks,
     )
     source_link_id = f"{harness}:{item_kind}:{inspection.source_fingerprint[:24]}"
     enriched = dict(metadata)

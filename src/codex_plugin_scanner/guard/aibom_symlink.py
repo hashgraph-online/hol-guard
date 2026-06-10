@@ -35,6 +35,7 @@ def inspect_aibom_source_path(
     safe_roots: tuple[Path, ...],
     home_dir: Path,
     workspace_dir: Path | None = None,
+    follow_unsafe_symlinks: bool = False,
 ) -> AibomSourceInspection:
     """Classify a path or symlink without emitting raw local paths."""
 
@@ -63,11 +64,12 @@ def inspect_aibom_source_path(
             safe_roots=safe_roots,
             home_dir=home_dir,
             workspace_dir=workspace_dir,
+            follow_unsafe_symlinks=follow_unsafe_symlinks,
         )
         if validation_state == "valid" and resolved is not None:
             target_content_hash = _content_hash_for_target(resolved, home_dir=home_dir)
     else:
-        if not _is_within_safe_roots(path, safe_roots):
+        if not follow_unsafe_symlinks and not _is_within_safe_roots(path, safe_roots):
             validation_state = "escape_blocked"
         else:
             validation_state = "valid"
@@ -181,6 +183,7 @@ def _resolve_symlink_chain(
     safe_roots: tuple[Path, ...],
     home_dir: Path,
     workspace_dir: Path | None,
+    follow_unsafe_symlinks: bool = False,
 ) -> tuple[Path | None, AibomValidationState, list[str]]:
     visited: set[str] = set()
     hop_fingerprints: list[str] = []
@@ -196,7 +199,7 @@ def _resolve_symlink_chain(
         if not current.is_symlink():
             if not current.exists():
                 return None, "broken", hop_fingerprints
-            if not _is_within_safe_roots(current, safe_roots):
+            if not follow_unsafe_symlinks and not _is_within_safe_roots(current, safe_roots):
                 return None, "escape_blocked", hop_fingerprints
             return current, "valid", hop_fingerprints
 

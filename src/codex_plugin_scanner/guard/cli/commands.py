@@ -30,6 +30,13 @@ from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..aibom_cli import (
+    AibomCliOptions,
+    build_aibom_export_payload,
+    build_aibom_status_payload,
+    build_inventory_json_payload,
+    sync_aibom_snapshots,
+)
 from ..approval_gate import (
     ApprovalGateError,
     ApprovalGateInput,
@@ -274,7 +281,8 @@ _GUARD_HELP_GROUPS = (
     "  scan         Run a consumer-mode artifact scan\n"
     "  diff         Compare current artifacts to stored snapshots\n"
     "  inventory    Inspect tracked artifacts\n"
-    "  abom         Export the local AI-BOM\n"
+    "  abom         Export the local artifact bill of materials\n"
+    "  aibom        Export the local AIBOM with trust and source metadata\n"
     "  explain      Show evidence for one artifact\n"
     "  policies     Inspect local Guard policy state\n"
     "  settings     Settings: show or update local Guard rules\n"
@@ -402,7 +410,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         parser_class=FriendlyArgumentParser,
         metavar=(
             "{start,status,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
-            "receipts,inventory,abom,approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,"
+            "receipts,inventory,abom,aibom,approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,"
             "remote-pair,disconnect,"
             "login,sync,device,bridge}"
         ),
@@ -587,11 +595,35 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     inventory_parser = guard_subparsers.add_parser("inventory", help="List the local Guard artifact inventory")
     _add_guard_common_args(inventory_parser)
     inventory_parser.add_argument("--json", action="store_true")
+    _add_aibom_cli_args(inventory_parser)
 
     abom_parser = guard_subparsers.add_parser("abom", help="Export a local Guard artifact bill of materials")
     _add_guard_common_args(abom_parser)
     abom_parser.add_argument("--json", action="store_true")
     abom_parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
+
+    aibom_parser = guard_subparsers.add_parser(
+        "aibom",
+        help="Inspect or export the local AIBOM with trust and source metadata",
+    )
+    _add_guard_common_args(aibom_parser)
+    aibom_sub = aibom_parser.add_subparsers(dest="aibom_command", metavar="COMMAND")
+    aibom_status_parser = aibom_sub.add_parser("status", help="Show local AIBOM status and trust coverage")
+    _add_guard_common_args(aibom_status_parser)
+    _add_aibom_cli_args(aibom_status_parser)
+    aibom_status_parser.add_argument("--json", action="store_true")
+    aibom_sync_parser = aibom_sub.add_parser("sync", help="Sync local AIBOM snapshots to Guard Cloud")
+    _add_guard_common_args(aibom_sync_parser)
+    _add_aibom_cli_args(aibom_sync_parser)
+    aibom_sync_parser.add_argument("--json", action="store_true")
+    aibom_export_parser = aibom_sub.add_parser("export", help="Export the local AIBOM")
+    _add_guard_common_args(aibom_export_parser)
+    _add_aibom_cli_args(aibom_export_parser)
+    aibom_export_parser.add_argument("--json", action="store_true")
+    aibom_export_parser.add_argument("--format", choices=("markdown", "json"), default="json")
+    _add_aibom_cli_args(aibom_parser)
+    aibom_parser.add_argument("--json", action="store_true")
+    aibom_parser.add_argument("--format", choices=("markdown", "json"), default="json")
 
     add_approval_parser(guard_subparsers, _add_guard_common_args)
 
@@ -1181,6 +1213,28 @@ def _add_guard_common_args(
     parser.add_argument("--home", default=default)
     parser.add_argument("--guard-home", default=default)
     parser.add_argument("--workspace", default=default)
+
+
+def _add_aibom_cli_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--include-symlinks",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include symlink source-of-truth metadata in AIBOM output (default: enabled).",
+    )
+    parser.add_argument(
+        "--follow-unsafe-symlinks",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Follow symlink targets outside safe roots (default: disabled).",
+    )
+
+
+def _aibom_cli_options_from_args(args: argparse.Namespace) -> AibomCliOptions:
+    return AibomCliOptions(
+        include_symlinks=bool(getattr(args, "include_symlinks", True)),
+        follow_unsafe_symlinks=bool(getattr(args, "follow_unsafe_symlinks", False)),
+    )
 
 
 def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
@@ -2260,7 +2314,68 @@ def run_guard_command(
         return 1
 
     if args.guard_command == "inventory":
-        _emit("inventory", {"generated_at": _now(), "items": store.list_inventory()}, getattr(args, "json", False))
+        generated_at = _now()
+        if getattr(args, "json", False):
+            payload = build_inventory_json_payload(
+                store,
+                context,
+                generated_at=generated_at,
+                options=_aibom_cli_options_from_args(args),
+            )
+        else:
+            payload = {"generated_at": generated_at, "items": store.list_inventory()}
+        _emit("inventory", payload, getattr(args, "json", False))
+        return 0
+
+    if args.guard_command == "aibom":
+        generated_at = _now()
+        aibom_options = _aibom_cli_options_from_args(args)
+        aibom_command = getattr(args, "aibom_command", None)
+        if aibom_command == "status":
+            payload = build_aibom_status_payload(
+                store,
+                context,
+                generated_at=generated_at,
+                options=aibom_options,
+            )
+            _emit("aibom.status", payload, getattr(args, "json", False))
+            return 0
+        if aibom_command == "sync":
+            try:
+                payload = sync_aibom_snapshots(
+                    store,
+                    context,
+                    generated_at=generated_at,
+                    options=aibom_options,
+                )
+            except GuardSyncNotConfiguredError as error:
+                message = _guard_sync_failure_message(error)
+                if getattr(args, "json", False):
+                    _emit("aibom.sync", {"synced": False, "error": message}, True)
+                else:
+                    print(message, file=sys.stderr)
+                return 1
+            except RuntimeError as error:
+                if getattr(args, "json", False):
+                    _emit("aibom.sync", {"synced": False, "error": str(error)}, True)
+                else:
+                    print(str(error), file=sys.stderr)
+                return 1
+            _emit("aibom.sync", payload, getattr(args, "json", False))
+            return 0
+        export_format = getattr(args, "format", "json")
+        resolved_format = export_format if export_format in {"json", "markdown"} else "json"
+        payload = build_aibom_export_payload(
+            store,
+            context,
+            generated_at=generated_at,
+            options=aibom_options,
+            export_format=resolved_format,
+        )
+        if resolved_format == "markdown" and not getattr(args, "json", False):
+            print(str(payload.get("markdown", "")))
+            return 0
+        _emit("aibom", payload, True)
         return 0
 
     if args.guard_command == "abom":
