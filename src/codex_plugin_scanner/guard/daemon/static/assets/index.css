@@ -3515,6 +3515,10 @@
     padding-left: calc(var(--spacing) * 4);
   }
 
+  .pl-6 {
+    padding-left: calc(var(--spacing) * 6);
+  }
+
   .pl-7 {
     padding-left: calc(var(--spacing) * 7);
   }
@@ -5142,6 +5146,10 @@
       width: auto;
     }
 
+    .sm\:flex-1 {
+      flex: 1;
+    }
+
     .sm\:grid-cols-2 {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -5217,6 +5225,10 @@
 
     .sm\:px-4 {
       padding-inline: calc(var(--spacing) * 4);
+    }
+
+    .sm\:px-5 {
+      padding-inline: calc(var(--spacing) * 5);
     }
 
     .sm\:px-6 {
@@ -5514,6 +5526,14 @@
     .xl\:items-start {
       align-items: flex-start;
     }
+  }
+
+  .\[\&_button\]\:h-11 button {
+    height: calc(var(--spacing) * 11);
+  }
+
+  .\[\&_button\]\:min-h-11 button {
+    min-height: calc(var(--spacing) * 11);
   }
 
   .\[\&\:\:-webkit-details-marker\]\:hidden::-webkit-details-marker {

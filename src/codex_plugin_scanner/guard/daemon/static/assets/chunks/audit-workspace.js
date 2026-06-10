@@ -1,5 +1,38 @@
-import { r as reactExports, aI as runAuditRemediation, am as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ab as HiMiniMagnifyingGlass, p as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, b as HiMiniExclamationTriangle, n as harnessDisplayName, f as formatRelativeTime, C as HiMiniChevronRight, A as ActionButton, aJ as HiMiniDocumentText, aK as guardAwareHref, aF as IconActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck } from "../guard-dashboard.js";
+import { r as reactExports, aJ as runAuditRemediation, am as GuardHarnessActionError, j as jsxRuntimeExports, B as Badge, S as SectionLabel, ab as HiMiniMagnifyingGlass, p as EmptyState, g as HiMiniCheckCircle, h as HiMiniXCircle, b as HiMiniExclamationTriangle, n as harnessDisplayName, f as formatRelativeTime, C as HiMiniChevronRight, A as ActionButton, aK as HiMiniDocumentText, aL as guardAwareHref, aG as IconActionButton, ao as HiMiniArrowPath, H as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { u as useResolvedApprovalGate, A as ApprovalProofModal } from "./use-resolved-approval-gate.js";
+function isSupplyChainAuditEvidence(value) {
+  return typeof value === "object" && value !== null && value.operation === "audit";
+}
+function auditSeverityForDecision(decision, blockedCount) {
+  if (decision === "block" || blockedCount > 0) {
+    return "high";
+  }
+  if (decision === "ask") {
+    return "medium";
+  }
+  if (decision === "warn") {
+    return "medium";
+  }
+  return "info";
+}
+function workspaceAuditTitle(decision) {
+  if (decision === "block") {
+    return "Workspace audit found blocked packages";
+  }
+  if (decision === "ask") {
+    return "Workspace audit needs review";
+  }
+  return "Workspace audit completed";
+}
+function workspaceAuditRemediation(decision, blockedCount) {
+  if (blockedCount > 0) {
+    return "Review blocked packages in Evidence and update lockfiles before retrying installs.";
+  }
+  if (decision === "ask") {
+    return "Review flagged packages and repair lockfiles before continuing.";
+  }
+  return "Re-run workspace audit after dependency changes.";
+}
 function deriveFrontendAuditResults(receipts, snapshot) {
   const results = [];
   const protection = snapshot.supply_chain?.package_manager_protection;
@@ -44,6 +77,38 @@ function deriveFrontendAuditResults(receipts, snapshot) {
       remediationAction: null,
       resolved: true,
       evidenceHref: `/evidence?${evidenceParams.toString()}`
+    });
+  }
+  for (const receipt of receipts) {
+    if (receipt.harness !== "package-firewall") {
+      continue;
+    }
+    const evidence = receipt.scanner_evidence?.find(isSupplyChainAuditEvidence);
+    if (evidence === void 0) {
+      continue;
+    }
+    const decision = typeof evidence.audit_decision === "string" ? evidence.audit_decision : "monitor";
+    const blockedCount = typeof evidence.blocked_package_count === "number" ? evidence.blocked_package_count : 0;
+    const totalPackages = typeof evidence.total_packages === "number" ? evidence.total_packages : blockedCount;
+    const manifestPaths = Array.isArray(evidence.manifest_paths) ? evidence.manifest_paths.filter((entry) => typeof entry === "string") : [];
+    const lockfilePaths = Array.isArray(evidence.lockfile_paths) ? evidence.lockfile_paths.filter((entry) => typeof entry === "string") : [];
+    const inventorySummary = [
+      manifestPaths.length > 0 ? `${manifestPaths.length} manifest(s)` : null,
+      lockfilePaths.length > 0 ? `${lockfilePaths.length} lockfile(s)` : null,
+      `${totalPackages} package(s)`
+    ].filter((entry) => entry !== null).join(", ");
+    results.push({
+      id: `workspace-audit-${receipt.receipt_id}`,
+      severity: auditSeverityForDecision(decision, blockedCount),
+      title: workspaceAuditTitle(decision),
+      detail: receipt.capabilities_summary || `Guard scanned ${inventorySummary} and returned a ${decision} decision.`,
+      harness: "package-firewall",
+      workspace: receipt.source_scope,
+      timestamp: receipt.timestamp,
+      remediation: workspaceAuditRemediation(decision, blockedCount),
+      remediationAction: null,
+      resolved: decision === "monitor" && blockedCount === 0,
+      evidenceHref: `/evidence?harness=package-firewall&search=${encodeURIComponent(receipt.receipt_id)}`
     });
   }
   if (snapshot.runtime_state === null) {
