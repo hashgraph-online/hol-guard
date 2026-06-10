@@ -187,9 +187,7 @@ def _resolve_symlink_chain(
     current = path
 
     for _ in range(_MAX_SYMLINK_HOPS):
-        hop_fingerprints.append(
-            fingerprint_redacted_path(current, home_dir=home_dir, workspace_dir=workspace_dir)
-        )
+        hop_fingerprints.append(fingerprint_redacted_path(current, home_dir=home_dir, workspace_dir=workspace_dir))
         hop_key = hop_fingerprints[-1]
         if hop_key in visited:
             return None, "loop", hop_fingerprints
@@ -209,7 +207,7 @@ def _resolve_symlink_chain(
 
         next_path = Path(link_target)
         if not next_path.is_absolute():
-            next_path = (current.parent / next_path)
+            next_path = current.parent / next_path
         try:
             current = next_path.resolve()
         except OSError:
@@ -245,7 +243,7 @@ def _content_hash_for_target(path: Path, *, home_dir: Path) -> str | None:
         if path.is_dir():
             return fingerprint_path_tree(path, home_dir=home_dir)
         if path.is_file():
-            payload = path.read_bytes()[:1024 * 1024]
+            payload = path.read_bytes()[: 1024 * 1024]
             return fingerprint_text(payload.decode("utf-8", errors="replace"))
     except OSError:
         return None
