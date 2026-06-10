@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from ..marketplace_support import extract_marketplace_source, load_marketplace_context
-from ..path_support import iter_safe_matching_files, resolves_within_root
+from ..path_support import is_safe_relative_path, iter_safe_matching_files, resolves_within_root
 from .inventory_contract import fingerprint_mapping, fingerprint_path_tree, fingerprint_text
 from .models import GuardArtifact, HarnessDetection
 
@@ -40,7 +40,8 @@ _CODEX_SKILL_ROOTS = (".agents/skills",)
 
 def file_content_hash(path: Path, *, max_bytes: int = _MAX_FILE_BYTES) -> str | None:
     try:
-        payload = path.read_bytes()[:max_bytes]
+        with path.open("rb") as handle:
+            payload = handle.read(max_bytes)
     except OSError:
         return None
     return fingerprint_text(payload.decode("utf-8", errors="replace"))
@@ -88,8 +89,11 @@ def instruction_role_for_path(path: Path) -> InstructionRole | None:
         return "claude_md"
     if name == "mcp.json":
         return "mcp_json"
-    if path.suffix.lower() in {".md", ".mdc"} and "rules" in path.parts:
-        return "cursor_rules"
+    if path.suffix.lower() in {".md", ".mdc"}:
+        parts = path.parts
+        for index, part in enumerate(parts):
+            if part == ".cursor" and index + 1 < len(parts) and parts[index + 1] == "rules":
+                return "cursor_rules"
     return None
 
 
@@ -102,7 +106,7 @@ def discover_shared_workspace_aibom_artifacts(
     if not workspace_dir.is_dir():
         return ()
     try:
-        workspace_dir.resolve()
+        workspace_dir = workspace_dir.resolve()
     except OSError:
         return ()
     artifacts: list[GuardArtifact] = []
@@ -197,7 +201,6 @@ def _discover_codex_marketplace_plugins(harness: str, *, workspace_dir: Path) ->
                 config_path=str(context.file_path),
                 metadata={
                     "marketplace_root": True,
-                    "legacy_marketplace": context.legacy,
                     "content_hash": manifest_hash,
                     **version_info_metadata(content_hash=manifest_hash, version_label="marketplace.json"),
                 },
@@ -217,13 +220,23 @@ def _discover_codex_marketplace_plugins(harness: str, *, workspace_dir: Path) ->
         }
         plugin_manifest: Path | None = None
         if source_path and source_path.startswith("./"):
-            candidate = workspace_dir / source_path[2:]
-            if candidate.is_dir():
-                for manifest_name in ("plugin.json", ".codex-plugin/plugin.json"):
-                    manifest_candidate = candidate / manifest_name
-                    if manifest_candidate.is_file():
-                        plugin_manifest = manifest_candidate
-                        break
+            relative = source_path[2:]
+            if is_safe_relative_path(workspace_dir, relative, require_exists=False):
+                candidate = workspace_dir / relative
+                if candidate.is_dir() and resolves_within_root(
+                    workspace_dir,
+                    candidate,
+                    require_exists=True,
+                ):
+                    for manifest_name in ("plugin.json", ".codex-plugin/plugin.json"):
+                        manifest_candidate = candidate / manifest_name
+                        if manifest_candidate.is_file() and resolves_within_root(
+                            workspace_dir,
+                            manifest_candidate,
+                            require_exists=True,
+                        ):
+                            plugin_manifest = manifest_candidate
+                            break
         if plugin_manifest is not None and plugin_manifest.is_file():
             manifest_digest = file_content_hash(plugin_manifest)
             if manifest_digest is not None:
@@ -298,7 +311,7 @@ def extend_detection_with_workspace_aibom(
             found_paths.append(config_path)
     return HarnessDetection(
         harness=detection.harness,
-        installed=detection.installed or bool(extra),
+        installed=detection.installed,
         command_available=detection.command_available,
         config_paths=tuple(dict.fromkeys(found_paths)),
         artifacts=tuple(merged),

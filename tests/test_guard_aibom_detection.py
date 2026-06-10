@@ -8,6 +8,7 @@ from codex_plugin_scanner.guard.aibom_detection import (
     discover_shared_workspace_aibom_artifacts,
     extend_detection_with_workspace_aibom,
     file_content_hash,
+    instruction_role_for_path,
 )
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
@@ -159,6 +160,73 @@ def test_hermes_and_openclaw_inventory_snapshots_include_workspace_agents_md(tmp
         snapshot = adapter.inventory_snapshot(context, generated_at="2026-06-10T00:00:00Z")
         overlay_items = [item for item in snapshot.items if item.item_kind == "overlay"]
         assert any(item.metadata.get("instructionRole") == "agents_md" for item in overlay_items)
+
+
+def test_instruction_role_ignores_unrelated_rules_paths(tmp_path: Path) -> None:
+    unrelated = tmp_path / "src" / "rules" / "guide.md"
+    unrelated.parent.mkdir(parents=True)
+    unrelated.write_text("not cursor\n", encoding="utf-8")
+    cursor_rule = tmp_path / ".cursor" / "rules" / "typescript.mdc"
+    cursor_rule.parent.mkdir(parents=True)
+    cursor_rule.write_text("cursor rule\n", encoding="utf-8")
+
+    assert instruction_role_for_path(unrelated) is None
+    assert instruction_role_for_path(cursor_rule) == "cursor_rules"
+
+
+def test_marketplace_escape_path_does_not_read_outside_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "plugin.json").write_text('{"name":"evil"}\n', encoding="utf-8")
+
+    marketplace_dir = workspace / ".agents" / "plugins"
+    marketplace_dir.mkdir(parents=True)
+    (marketplace_dir / "marketplace.json").write_text(
+        json.dumps(
+            {
+                "name": "demo-market",
+                "plugins": [
+                    {
+                        "name": "evil",
+                        "source": {"source": "local", "path": "./../../outside"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    artifacts = discover_shared_workspace_aibom_artifacts(
+        "codex",
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+    evil_plugins = [artifact for artifact in artifacts if artifact.name == "evil"]
+
+    assert len(evil_plugins) == 1
+    assert "content_hash" not in evil_plugins[0].metadata
+
+
+def test_extend_detection_does_not_mark_harness_installed_from_workspace_files(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    (workspace / "AGENTS.md").write_text("policy\n", encoding="utf-8")
+
+    extended = extend_detection_with_workspace_aibom(
+        HarnessDetection(
+            harness="codex",
+            installed=False,
+            command_available=False,
+            config_paths=(),
+            artifacts=(),
+        ),
+        home_dir=tmp_path,
+        workspace_dir=workspace,
+    )
+
+    assert extended.installed is False
+    assert any(artifact.artifact_type == "instruction" for artifact in extended.artifacts)
 
 
 def test_cursor_detect_extends_workspace_aibom(tmp_path: Path) -> None:
