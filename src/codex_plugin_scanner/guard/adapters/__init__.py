@@ -10,6 +10,7 @@ from .copilot import CopilotHarnessAdapter
 from .cursor import CursorHarnessAdapter
 from .gemini import GeminiHarnessAdapter
 from .hermes import HermesHarnessAdapter
+from .kimi import KimiHarnessAdapter
 from .openclaw import OpenClawHarnessAdapter
 from .opencode import OpenCodeHarnessAdapter
 
@@ -21,6 +22,7 @@ ADAPTERS: tuple[HarnessAdapter, ...] = (
     AntigravityHarnessAdapter(),
     GeminiHarnessAdapter(),
     HermesHarnessAdapter(),
+    KimiHarnessAdapter(),
     OpenClawHarnessAdapter(),
     OpenCodeHarnessAdapter(),
 )
