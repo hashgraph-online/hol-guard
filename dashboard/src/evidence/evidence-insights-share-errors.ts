@@ -2,8 +2,14 @@ export function insightsSharePublishErrorMessage(raw: string): string {
   const message = raw.trim();
   const lower = message.toLowerCase();
 
-  if (lower.includes("insights") && lower.includes("not enabled")) {
+  if (
+    (lower.includes("insights") && lower.includes("not enabled")) ||
+    (lower.includes("insights") && lower.includes("not live"))
+  ) {
     return "Guard insights sharing is not live on Guard Cloud yet. If you just updated, wait a few minutes and try again.";
+  }
+  if (lower.includes("guard cloud is unavailable")) {
+    return "Guard Cloud could not publish this share link right now. Local Guard keeps protecting this machine. Try again in a few minutes or reconnect with hol-guard connect.";
   }
 
   if (
