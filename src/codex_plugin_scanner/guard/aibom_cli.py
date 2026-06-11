@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -153,14 +155,21 @@ def _aibom_sync_is_due(
     if not isinstance(synced_at, str) or not synced_at.strip():
         return True
     try:
-        from datetime import datetime
-
         last_sync = datetime.fromisoformat(synced_at.replace("Z", "+00:00"))
         now = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
         elapsed = (now - last_sync).total_seconds()
-    except ValueError:
+    except (ValueError, OverflowError, TypeError):
         return True
     return elapsed >= min_interval_seconds
+
+
+def _resolve_operator_home_dir(home_dir: Path | None = None) -> Path:
+    if home_dir is not None:
+        return home_dir.expanduser().resolve()
+    home_env = os.environ.get("HOME")
+    if home_env:
+        return Path(home_env).expanduser().resolve()
+    return Path.home().resolve()
 
 
 def sync_aibom_snapshots_if_due(
@@ -169,6 +178,8 @@ def sync_aibom_snapshots_if_due(
     generated_at: str,
     min_interval_seconds: int = _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
     options: AibomCliOptions | None = None,
+    auth_context: dict[str, object] | None = None,
+    home_dir: Path | None = None,
 ) -> dict[str, object]:
     from .runtime.runner import GuardSyncNotConfiguredError
 
@@ -187,7 +198,7 @@ def sync_aibom_snapshots_if_due(
             "last_sync_at": prior.get("synced_at") if isinstance(prior, dict) else None,
         }
     context = HarnessContext(
-        home_dir=Path.home().resolve(),
+        home_dir=_resolve_operator_home_dir(home_dir),
         workspace_dir=None,
         guard_home=store.guard_home,
     )
@@ -197,9 +208,12 @@ def sync_aibom_snapshots_if_due(
             context,
             generated_at=generated_at,
             options=options,
+            auth_context=auth_context,
         )
     except GuardSyncNotConfiguredError:
         return {"synced": False, "skipped": True, "reason": "not_configured"}
+    except ValueError as error:
+        return {"synced": False, "error": str(error)}
     except (OSError, RuntimeError) as error:
         return {"synced": False, "error": str(error)}
 
@@ -210,6 +224,7 @@ def sync_aibom_snapshots(
     *,
     generated_at: str,
     options: AibomCliOptions | None = None,
+    auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     from .runtime.runner import (
         GuardSyncNotConfiguredError,
@@ -236,7 +251,7 @@ def sync_aibom_snapshots(
         store.set_sync_payload("aibom_sync_summary", summary, synced_at)
         return summary
 
-    resolved_auth_context = _resolve_guard_sync_auth_context(store)
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     sync_url = _guard_events_sync_url(str(resolved_auth_context["sync_url"]))
     events = [
         _inventory_snapshot_event(

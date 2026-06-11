@@ -187,6 +187,7 @@ def _add_artifact_entities(
                 "fingerprint": fingerprint,
                 "metadata": {
                     "agentId": agent_id,
+                    # agentType and harness both carry the harness slug for portal topology resolution.
                     "agentType": harness,
                     "artifactType": artifact_type,
                     "harness": harness,
