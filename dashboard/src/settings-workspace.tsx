@@ -144,21 +144,43 @@ export function hasApprovalGateSettingsChanged(
   );
 }
 
-export function resolveApprovalPasswordHelperCopy(input: {
-  changingPassword: boolean;
+export function shouldShowApprovalPasswordChangeForm(
+  wasConfigured: boolean,
+  passwordChangeOpen: boolean,
+  newPassword: string,
+  confirmPassword: string,
+  gateSettingsChanged: boolean,
+  savedGateEnabled: boolean,
+  draftGateEnabled: boolean,
+): boolean {
+  if (!wasConfigured) {
+    return true;
+  }
+  if (gateSettingsChanged && !savedGateEnabled && draftGateEnabled) {
+    return true;
+  }
+  return (
+    passwordChangeOpen
+    || newPassword.trim().length > 0
+    || confirmPassword.trim().length > 0
+  );
+}
+
+export function resolveApprovalPasswordVerifyCopy(input: {
   gateSettingsChanged: boolean;
   gateEnabled: boolean;
 }): string {
-  if (input.changingPassword) {
-    return "Enter your current password below, then save settings to apply the new one.";
-  }
   if (input.gateSettingsChanged) {
-    return "Enter your current password below, then save settings to apply these gate changes.";
+    return "Enter your current password before saving settings to apply these gate changes. Authenticator setup uses its own prompt below.";
   }
   if (input.gateEnabled) {
-    return "Enter your current password before saving settings elsewhere in Guard. Authenticator setup uses its own prompt below.";
+    return "Enter your current password before saving settings. Authenticator setup uses its own prompt below.";
   }
-  return "Leave the fields below empty to keep your current password.";
+  return "";
+}
+
+export function resolveApprovalPasswordChangeCopy(): string {
+  return "Enter a new password below, then save settings to apply it.";
 }
 
 export function resolveTotpSetupModalTitle(isConfirmStep: boolean): string {
@@ -1925,6 +1947,15 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
     props.cooldownSeconds,
     props.strictAllDecisions,
   );
+  const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
+  const [passwordChangeOpen, setPasswordChangeOpen] = useState(changingPassword);
+  useEffect(() => {
+    if (changingPassword) {
+      setPasswordChangeOpen(true);
+      return;
+    }
+    setPasswordChangeOpen(false);
+  }, [changingPassword]);
   const showCurrentPassword = shouldShowApprovalPasswordCurrentField(
     wasConfigured,
     props.newPassword,
@@ -1932,12 +1963,25 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
     gateSettingsChanged,
     savedGateEnabled,
   );
-  const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
-  const approvalPasswordHelperCopy = resolveApprovalPasswordHelperCopy({
-    changingPassword,
+  const showChangeForm = shouldShowApprovalPasswordChangeForm(
+    wasConfigured,
+    passwordChangeOpen,
+    props.newPassword,
+    props.confirmPassword,
+    gateSettingsChanged,
+    savedGateEnabled,
+    props.enabled,
+  );
+  const approvalPasswordVerifyCopy = resolveApprovalPasswordVerifyCopy({
     gateSettingsChanged,
     gateEnabled: savedGateEnabled,
   });
+  const handleOpenPasswordChange = useCallback(() => {
+    setPasswordChangeOpen(true);
+  }, []);
+  const handleClosePasswordChange = useCallback(() => {
+    setPasswordChangeOpen(false);
+  }, []);
   const showGateDetails = props.enabled || gateSettingsChanged;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
@@ -1983,46 +2027,93 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                 : "Choose a password. Guard will ask for it before allow or trust changes stick."}
             </p>
             {wasConfigured ? (
-              <p className="mt-2 text-xs text-slate-500">{approvalPasswordHelperCopy}</p>
-            ) : null}
-            <div className="mt-3 space-y-3">
-              {showCurrentPassword ? (
+              <div className="mt-3 space-y-3">
+                {showCurrentPassword ? (
+                  <>
+                    {approvalPasswordVerifyCopy.length > 0 ? (
+                      <p className="text-xs text-slate-500">{approvalPasswordVerifyCopy}</p>
+                    ) : null}
+                    <label className="block">
+                      <span className="text-xs font-medium text-slate-500">Current password</span>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={props.currentPassword}
+                        onChange={props.onCurrentPasswordChange}
+                        className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      />
+                    </label>
+                  </>
+                ) : null}
+                {!showChangeForm ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenPasswordChange}
+                    className="text-xs font-medium text-brand-blue transition-colors hover:text-brand-blue/80"
+                  >
+                    Change password
+                  </button>
+                ) : (
+                  <div className="space-y-3 rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-xs text-slate-500">{resolveApprovalPasswordChangeCopy()}</p>
+                      {!changingPassword ? (
+                        <button
+                          type="button"
+                          onClick={handleClosePasswordChange}
+                          className="shrink-0 text-xs font-medium text-slate-500 transition-colors hover:text-brand-dark"
+                        >
+                          Cancel
+                        </button>
+                      ) : null}
+                    </div>
+                    <label className="block">
+                      <span className="text-xs font-medium text-slate-500">New password</span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={props.newPassword}
+                        onChange={props.onNewPasswordChange}
+                        className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-slate-500">Confirm new password</span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={props.confirmPassword}
+                        onChange={props.onConfirmPasswordChange}
+                        className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-slate-500">Current password</span>
+                  <span className="text-xs font-medium text-slate-500">Password</span>
                   <input
                     type="password"
-                    autoComplete="current-password"
-                    value={props.currentPassword}
-                    onChange={props.onCurrentPasswordChange}
+                    autoComplete="new-password"
+                    value={props.newPassword}
+                    onChange={props.onNewPasswordChange}
                     className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   />
                 </label>
-              ) : null}
-              <label className="block">
-                <span className="text-xs font-medium text-slate-500">
-                  {wasConfigured ? "New password" : "Password"}
-                </span>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={props.newPassword}
-                  onChange={props.onNewPasswordChange}
-                  className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-slate-500">
-                  {wasConfigured ? "Confirm new password" : "Confirm password"}
-                </span>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={props.confirmPassword}
-                  onChange={props.onConfirmPasswordChange}
-                  className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                />
-              </label>
-            </div>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-500">Confirm password</span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={props.confirmPassword}
+                    onChange={props.onConfirmPasswordChange}
+                    className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  />
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Gate rules */}
