@@ -283,34 +283,6 @@ def test_attach_primary_approval_link_prefers_artifact_over_operation_ids() -> N
     assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
 
 
-def test_attach_primary_approval_link_adds_browser_url_when_auth_token_available() -> None:
-    payload: dict[str, object] = {
-        "artifact_id": "cursor:project:shell-b",
-        "approval_request_ids": ["bound-req"],
-        "approval_requests": [
-            {
-                "request_id": "bound-req",
-                "harness": "cursor",
-                "artifact_id": "cursor:project:shell-b",
-                "approval_url": "http://127.0.0.1:5474/requests/bound-req",
-            },
-        ],
-    }
-
-    attach_primary_approval_link(
-        payload,
-        harness="cursor",
-        approval_center_url="http://127.0.0.1:5474",
-        auth_token="secret-token",
-    )
-
-    assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
-    browser_url = str(payload["primary_approval_browser_url"])
-    assert browser_url.startswith("http://127.0.0.1:5474/requests/bound-req#")
-    assert "guard-token=" in browser_url
-    assert "secret-token" not in browser_url
-
-
 def test_attach_primary_approval_link_uses_operation_request_id() -> None:
     payload: dict[str, object] = {
         "artifact_id": "cursor:project:shell-b",

@@ -9,6 +9,7 @@ import queue
 import select
 import subprocess
 import threading
+import webbrowser
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,7 @@ from ..consumer import artifact_hash
 from ..daemon.manager import load_guard_daemon_auth_token
 from ..models import HarnessDetection
 from ..receipts import build_receipt
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
 from ..store import GuardStore
 
@@ -218,6 +220,23 @@ class StdioGuardProxy:
         if isinstance(configured, (int, float)) and configured > 0:
             return min(float(configured), _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS)
         return _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS
+
+    def _maybe_open_approval_center(self, *, review_url: str, open_key: str) -> None:
+        if self.guard_store is None or self.approval_center_url is None:
+            return
+        browser_url = build_approval_browser_url(
+            review_url,
+            auth_token=load_guard_daemon_auth_token(self.guard_store.guard_home),
+        )
+        approval_surface_policy = getattr(self.guard_config, "approval_surface_policy", "auto-open-once")
+        GuardSurfaceRuntime(self.guard_store).ensure_surface(
+            surface="approval-center",
+            approval_center_url=self.approval_center_url,
+            browser_url=browser_url,
+            approval_surface_policy=str(approval_surface_policy),
+            open_key=open_key,
+            opener=webbrowser.open,
+        )
 
     def run_session(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         responses, events, return_code = self._run_messages(messages)
@@ -423,12 +442,17 @@ class StdioGuardProxy:
                         event["approval_center_url"] = self.approval_center_url
                         event["approval_delivery"] = approval_delivery_payload(approval_flow)
                         review_url = first_approval_url(event["approval_requests"]) or self.approval_center_url
-                        browser_review_url = build_approval_browser_url(
-                            review_url,
-                            auth_token=load_guard_daemon_auth_token(self.guard_store.guard_home),
+                        request_id = next(
+                            (
+                                str(item["request_id"])
+                                for item in event["approval_requests"]
+                                if isinstance(item, dict) and isinstance(item.get("request_id"), str)
+                            ),
+                            "blocked-request",
                         )
+                        self._maybe_open_approval_center(review_url=review_url, open_key=request_id)
                         event["review_hint"] = (
-                            f"{approval_flow['summary']} Open {browser_review_url} to review the blocked request."
+                            f"{approval_flow['summary']} Open {review_url} to review the blocked request."
                         )
                         blocked_message = f"{blocked_message} {event['review_hint']}"
                         response_data = {
@@ -436,7 +460,7 @@ class StdioGuardProxy:
                             "approvalRequests": event["approval_requests"],
                             "approvalDelivery": event["approval_delivery"],
                             "reviewHint": event["review_hint"],
-                            "reviewUrl": browser_review_url,
+                            "reviewUrl": review_url,
                         }
                     response = _blocked_tool_response(
                         message.get("id"),

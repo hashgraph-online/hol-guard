@@ -3296,7 +3296,6 @@ def run_guard_command(
                 response_payload,
                 harness=_optional_string(args.harness) or args.harness,
                 approval_center_url=approval_center_url,
-                guard_home=guard_home,
             )
             response_payload["approval_center_url"] = approval_center_url
             response_payload["review_hint"] = approval_center_hint(
@@ -3886,7 +3885,6 @@ def run_guard_command(
                         response_payload,
                         harness=_optional_string(args.harness) or args.harness,
                         approval_center_url=approval_center_url,
-                        guard_home=guard_home,
                     )
                     if (
                         _canonical_harness_name(args.harness) == "cursor"
@@ -4337,7 +4335,7 @@ def _codex_browser_approval_decision(
     if wait_timeout_seconds <= 0:
         return None
     if event_name == "PreToolUse":
-        _open_codex_live_approval(response_payload)
+        _open_codex_live_approval(response_payload, guard_home=store.guard_home)
     wait_result = wait_for_approval_requests(
         store=store,
         request_ids=request_ids,
@@ -4450,19 +4448,11 @@ def _attach_primary_approval_link(
     *,
     harness: str,
     approval_center_url: str | None,
-    guard_home: Path,
 ) -> None:
-    auth_token = load_guard_daemon_auth_token(guard_home)
-    if isinstance(approval_center_url, str) and approval_center_url.strip():
-        response_payload["approval_center_browser_url"] = build_approval_browser_url(
-            approval_center_url.strip(),
-            auth_token=auth_token,
-        )
     attach_primary_approval_link(
         response_payload,
         harness=harness,
         approval_center_url=approval_center_url,
-        auth_token=auth_token,
     )
 
 
@@ -4478,19 +4468,17 @@ def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harn
 def _preferred_approval_review_url(response_payload: Mapping[str, object], *, harness: str) -> str | None:
     queued = response_payload.get("approval_requests")
     return (
-        _optional_string(response_payload.get("primary_approval_browser_url"))
-        or _optional_string(response_payload.get("primary_approval_url"))
+        _optional_string(response_payload.get("primary_approval_url"))
         or (
             first_approval_url(queued, **_primary_approval_lookup_kwargs(dict(response_payload), harness=harness))
             if isinstance(queued, list)
             else None
         )
-        or _optional_string(response_payload.get("approval_center_browser_url"))
         or _optional_string(response_payload.get("approval_center_url"))
     )
 
 
-def _open_codex_live_approval(response_payload: Mapping[str, object]) -> None:
+def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_home: Path) -> None:
     harness = _optional_string(response_payload.get("harness")) or "codex"
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
     if not review_url:
@@ -4500,8 +4488,9 @@ def _open_codex_live_approval(response_payload: Mapping[str, object]) -> None:
         file=sys.stderr,
         flush=True,
     )
+    browser_url = build_approval_browser_url(review_url, auth_token=load_guard_daemon_auth_token(guard_home)) or review_url
     with suppress(Exception):
-        webbrowser.open(review_url)
+        webbrowser.open(browser_url)
 
 
 def _update_codex_browser_operation_status(
@@ -6951,7 +6940,6 @@ def _headless_approval_resolver(
                 payload,
                 harness=args.harness,
                 approval_center_url=approval_center_url,
-                guard_home=context.guard_home,
             )
             payload["approval_center_url"] = approval_center_url
             payload["review_hint"] = approval_center_hint(
@@ -7024,7 +7012,6 @@ def _headless_approval_resolver(
             payload,
             harness=args.harness,
             approval_center_url=approval_center_url,
-            guard_home=context.guard_home,
         )
         payload["approval_center_url"] = approval_center_url
         payload["review_hint"] = approval_center_hint(

@@ -55,10 +55,10 @@ def build_approval_request_url(approval_center_url: str, request_id: str) -> str
     return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
 
 
-def build_approval_browser_url(approval_url: str, *, auth_token: str | None) -> str:
+def build_approval_browser_url(approval_url: str | None, *, auth_token: str | None) -> str | None:
     """Build a browser-openable approval URL with a scoped Guard session token."""
 
-    if auth_token is None:
+    if not approval_url or auth_token is None:
         return approval_url
     parsed = urlparse(approval_url)
     fragment_pairs = [
@@ -157,27 +157,6 @@ def primary_approval_url(
         if center:
             return build_approval_request_url(center, request_id.strip())
     return None
-
-
-def primary_approval_browser_url(
-    queued: Sequence[object],
-    *,
-    auth_token: str | None,
-    harness: str | None = None,
-    approval_center_url: str | None = None,
-    request_id: str | None = None,
-    artifact_id: str | None = None,
-) -> str | None:
-    review_url = primary_approval_url(
-        queued,
-        harness=harness,
-        approval_center_url=approval_center_url,
-        request_id=request_id,
-        artifact_id=artifact_id,
-    )
-    if review_url is None:
-        return None
-    return build_approval_browser_url(review_url, auth_token=auth_token)
 
 
 def queue_blocked_approvals(
@@ -579,7 +558,6 @@ def attach_primary_approval_link(
     approval_center_url: str | None = None,
     request_id: str | None = None,
     artifact_id: str | None = None,
-    auth_token: str | None = None,
 ) -> None:
     """Bind primary approval fields to the request created by this block."""
 
@@ -629,7 +607,6 @@ def attach_primary_approval_link(
     )
     if review_url is not None:
         payload["primary_approval_url"] = review_url
-        payload["primary_approval_browser_url"] = build_approval_browser_url(review_url, auth_token=auth_token)
 
 
 def build_runtime_snapshot(

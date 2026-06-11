@@ -4817,7 +4817,6 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         reason = output["hookSpecificOutput"]["permissionDecisionReason"]
         assert "Open HOL Guard to approve or keep this blocked" in reason
         assert "http://127.0.0.1:" in reason
-        assert "guard-token=" in reason
         assert "Approve it in HOL Guard, then retry." not in reason
 
     def test_guard_codex_hook_emits_json_denial_in_actual_codex_runtime(self, tmp_path, monkeypatch, capsys):
@@ -4854,7 +4853,6 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert "destructive shell command" in reason
         assert "Open HOL Guard to approve or keep this blocked" in reason
         assert "http://127.0.0.1:" in reason
-        assert "guard-token=" in reason
         assert "Approve it in HOL Guard, then retry." not in reason
 
     def test_guard_codex_pretooluse_returns_without_browser_wait_for_secret_exfil(self, tmp_path, monkeypatch, capsys):
@@ -4894,7 +4892,6 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         reason = output["hookSpecificOutput"]["permissionDecisionReason"]
         assert "Open HOL Guard to approve or keep this blocked" in reason
         assert "http://127.0.0.1:" in reason
-        assert "guard-token=" in reason
         assert "Approve it in HOL Guard, then retry." not in reason
 
     def test_guard_codex_hook_blocks_curl_upload_file_path(self, tmp_path, capsys):

@@ -104,8 +104,10 @@ def test_runtime_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypa
     store = GuardStore(context.guard_home)
     config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
     marker_path = tmp_path / "dangerous-call.json"
+    opened_urls: list[str] = []
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(runtime_mcp_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
+    monkeypatch.setattr(runtime_mcp_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
     proxy = RuntimeMcpGuardProxy(
         harness="hermes",
         server_name="danger_lab",
@@ -134,6 +136,7 @@ def test_runtime_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypa
 
     assert error["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
     assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/requests/")
-    assert error["data"]["reviewUrl"].startswith("http://127.0.0.1:4455/requests/")
-    assert "guard-token=" in error["data"]["reviewUrl"]
+    assert error["data"]["reviewUrl"] == approval_requests[0]["approval_url"]
     assert error["data"]["reviewUrl"] in error["message"]
+    assert opened_urls[0].startswith(f"{error['data']['reviewUrl']}#")
+    assert "guard-token=" in opened_urls[0]

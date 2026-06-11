@@ -284,21 +284,6 @@ def test_cursor_hook_response_from_guard_maps_read_ask_to_deny() -> None:
     assert response["user_message"] == "Approve in Guard"
 
 
-def test_cursor_hook_response_prefers_browser_approval_url() -> None:
-    browser_url = "http://127.0.0.1:5474/requests/req-cursor#guard-token=session-token"
-    response = cursor_hook_response_from_guard(
-        policy_action="require-reapproval",
-        guard_payload={
-            "review_hint": f"Open HOL Guard to approve or keep this blocked: {browser_url}",
-            "primary_approval_url": "http://127.0.0.1:5474/requests/req-cursor",
-            "primary_approval_browser_url": browser_url,
-        },
-        hook_event_name="beforeShellExecution",
-    )
-
-    assert response["user_message"] == f"Open HOL Guard to approve or keep this blocked: {browser_url}"
-
-
 def test_cursor_hook_response_from_guard_allows_shell() -> None:
     response = cursor_hook_response_from_guard(
         policy_action="allow",

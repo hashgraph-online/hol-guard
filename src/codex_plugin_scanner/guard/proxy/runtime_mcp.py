@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import webbrowser
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, TextIO
@@ -30,6 +31,7 @@ from ..policy.engine import build_decision_v2
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.signals import RiskSignalV2
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from ..store import GuardStore
 from .stdio import (
@@ -119,6 +121,20 @@ class RuntimeMcpGuardProxy:
         if isinstance(configured, (int, float)) and configured > 0:
             return float(configured)
         return 120.0
+
+    def _maybe_open_approval_center(self, *, approval_center_url: str, review_url: str, open_key: str) -> None:
+        browser_url = build_approval_browser_url(
+            review_url,
+            auth_token=load_guard_daemon_auth_token(self.context.guard_home),
+        )
+        GuardSurfaceRuntime(self.store).ensure_surface(
+            surface="approval-center",
+            approval_center_url=approval_center_url,
+            browser_url=browser_url,
+            approval_surface_policy=self.config.approval_surface_policy,
+            open_key=open_key,
+            opener=webbrowser.open,
+        )
 
     def run_session(
         self,
@@ -628,25 +644,26 @@ class RuntimeMcpGuardProxy:
             )
         request_id = str(queued[0]["request_id"]) if queued else "stored-block"
         review_url = first_approval_url(queued) or approval_center_url
-        browser_review_url = build_approval_browser_url(
-            review_url,
-            auth_token=load_guard_daemon_auth_token(self.context.guard_home),
+        self._maybe_open_approval_center(
+            approval_center_url=approval_center_url,
+            review_url=review_url,
+            open_key=request_id,
         )
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
-            "reviewUrl": browser_review_url,
+            "reviewUrl": review_url,
             "supplyChainEvaluation": package_evaluation.to_dict(),
         }
         blocked_message = (
             f"HOL Guard stopped package install request {tool_name} from {self.server_name}. "
-            f"Approve request {request_id} at {browser_review_url}, then retry the same action."
+            f"Approve request {request_id} at {review_url}, then retry the same action."
         )
         event_decision = "queue-package-approval"
         if not should_queue_approval_center:
             blocked_message = (
                 f"HOL Guard blocked package install request {tool_name} from {self.server_name}. "
-                f"This same request is already blocked by stored policy. Review policy settings at {browser_review_url} "
+                f"This same request is already blocked by stored policy. Review policy settings at {review_url} "
                 f"before retrying."
             )
             event_decision = "package-block-stored"
@@ -994,21 +1011,22 @@ class RuntimeMcpGuardProxy:
         )
         request_id = str(queued[0]["request_id"]) if queued else "unknown"
         review_url = first_approval_url(queued) or approval_center_url
-        browser_review_url = build_approval_browser_url(
-            review_url,
-            auth_token=load_guard_daemon_auth_token(self.context.guard_home),
+        self._maybe_open_approval_center(
+            approval_center_url=approval_center_url,
+            review_url=review_url,
+            open_key=request_id,
         )
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
-            "reviewUrl": browser_review_url,
+            "reviewUrl": review_url,
         }
         return _blocked_tool_response(
             message_id,
             tool_name,
             (
                 f"HOL Guard stopped tool call {tool_name} from {self.server_name}. "
-                f"Approve request {request_id} at {browser_review_url}, then retry the same action."
+                f"Approve request {request_id} at {review_url}, then retry the same action."
             ),
             response_data,
         ), {
