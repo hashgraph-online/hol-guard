@@ -7274,7 +7274,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "runtime_sessions_visible": 1,
             }
 
-        def fake_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+        def fake_sync_receipts(current_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             assert current_store is not None
             return {
                 "synced_at": now,
@@ -7335,7 +7335,7 @@ url = http://127.0.0.1:8787/guard-canary
                 "runtime_sessions_visible": 1,
             }
 
-        def fake_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+        def fake_sync_receipts(current_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             assert current_store is not None
             return {
                 "synced_at": now,
@@ -8740,7 +8740,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_sync_surfaces_auth_expired_reauth_message(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
 
-        def _fail_sync(_store: GuardStore) -> dict[str, object]:
+        def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             raise guard_commands_module.GuardSyncAuthorizationExpiredError(
                 "Guard authorization expired. Run `hol-guard connect` to sign in again."
             )
@@ -8765,7 +8765,7 @@ url = http://127.0.0.1:8787/guard-canary
             "2026-04-09T00:00:00Z",
         )
 
-        def _fail_sync(_store: GuardStore) -> dict[str, object]:
+        def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             raise guard_commands_module.GuardSyncAuthorizationExpiredError(
                 "Guard authorization expired. Run `hol-guard connect` to sign in again."
             )
@@ -8788,7 +8788,7 @@ url = http://127.0.0.1:8787/guard-canary
             "2026-04-09T00:00:00Z",
         )
 
-        def _bundle_rejected(current_store: GuardStore) -> dict[str, object]:
+        def _bundle_rejected(current_store: GuardStore, **_kwargs: object) -> dict[str, object]:
             current_store.set_sync_payload(
                 "policy_bundle_last_error",
                 {"reason": "bundle_version_downgrade"},
@@ -8821,7 +8821,11 @@ url = http://127.0.0.1:8787/guard-canary
             "2026-04-09T00:00:00Z",
         )
 
-        monkeypatch.setattr(guard_commands_module, "sync_receipts", lambda _store: {"synced": True})
+        monkeypatch.setattr(
+            guard_commands_module,
+            "sync_receipts",
+            lambda _store, **_kwargs: {"synced": True},
+        )
         monkeypatch.setattr(guard_commands_module, "sync_supply_chain_bundle", lambda _store: None)
 
         guard_commands_module._refresh_cloud_policy_bundle(store)

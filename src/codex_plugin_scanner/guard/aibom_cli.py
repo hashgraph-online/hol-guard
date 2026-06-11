@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
+import urllib.error
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -137,12 +140,113 @@ def build_aibom_export_payload(
     return payload
 
 
+_AIBOM_AUTO_SYNC_INTERVAL_SECONDS = 60 * 60
+
+
+def _aware_utc_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _aibom_sync_is_due(
+    store: GuardStore,
+    *,
+    generated_at: str,
+    min_interval_seconds: int,
+) -> bool:
+    prior = store.get_sync_payload("aibom_sync_summary")
+    if not isinstance(prior, dict):
+        return True
+    if prior.get("synced") is not True:
+        return True
+    if prior.get("snapshots") == 0:
+        return True
+    synced_at = prior.get("synced_at")
+    if not isinstance(synced_at, str) or not synced_at.strip():
+        return True
+    try:
+        last_sync = _aware_utc_timestamp(synced_at)
+        now = _aware_utc_timestamp(generated_at)
+        elapsed = (now - last_sync).total_seconds()
+    except (ValueError, OverflowError, TypeError):
+        return True
+    return elapsed >= min_interval_seconds
+
+
+def _resolve_operator_home_dir(home_dir: Path | None = None) -> Path:
+    if home_dir is not None:
+        return home_dir.expanduser().resolve()
+    home_env = os.environ.get("HOME")
+    if home_env:
+        return Path(home_env).expanduser().resolve()
+    return Path.home().resolve()
+
+
+def sync_aibom_snapshots_if_due(
+    store: GuardStore,
+    *,
+    generated_at: str,
+    min_interval_seconds: int = _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
+    options: AibomCliOptions | None = None,
+    auth_context: dict[str, object] | None = None,
+    home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
+    from .runtime.runner import (
+        GuardSyncNotConfiguredError,
+        _guard_events_endpoint_unavailable_recently,
+    )
+
+    if store.get_cloud_workspace_id() is None:
+        return {"synced": False, "skipped": True, "reason": "not_configured"}
+    if _guard_events_endpoint_unavailable_recently(store):
+        return {
+            "synced": False,
+            "skipped": True,
+            "reason": "guard_events_endpoint_unavailable",
+        }
+    if not _aibom_sync_is_due(
+        store,
+        generated_at=generated_at,
+        min_interval_seconds=min_interval_seconds,
+    ):
+        prior = store.get_sync_payload("aibom_sync_summary")
+        return {
+            "synced": False,
+            "skipped": True,
+            "reason": "recently_synced",
+            "last_sync_at": prior.get("synced_at") if isinstance(prior, dict) else None,
+        }
+    context = HarnessContext(
+        home_dir=_resolve_operator_home_dir(home_dir),
+        workspace_dir=workspace_dir,
+        guard_home=store.guard_home,
+    )
+    try:
+        return sync_aibom_snapshots(
+            store,
+            context,
+            generated_at=generated_at,
+            options=options,
+            auth_context=auth_context,
+        )
+    except GuardSyncNotConfiguredError:
+        return {"synced": False, "skipped": True, "reason": "not_configured"}
+    except ValueError as error:
+        return {"synced": False, "error": str(error)}
+    except (OSError, RuntimeError) as error:
+        return {"synced": False, "error": str(error)}
+
+
 def sync_aibom_snapshots(
     store: GuardStore,
     context: HarnessContext,
     *,
     generated_at: str,
     options: AibomCliOptions | None = None,
+    auth_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
     from .runtime.runner import (
         GuardSyncNotConfiguredError,
@@ -169,7 +273,7 @@ def sync_aibom_snapshots(
         store.set_sync_payload("aibom_sync_summary", summary, synced_at)
         return summary
 
-    resolved_auth_context = _resolve_guard_sync_auth_context(store)
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
     sync_url = _guard_events_sync_url(str(resolved_auth_context["sync_url"]))
     events = [
         _inventory_snapshot_event(
@@ -193,6 +297,29 @@ def sync_aibom_snapshots(
             timeout_seconds=30,
             retry_timeout_seconds=60,
         )
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            synced_at = generated_at
+            store.set_sync_payload(
+                "guard_events_v1_summary",
+                {
+                    "synced_at": synced_at,
+                    "events": 0,
+                    "accepted": 0,
+                    "skipped": 0,
+                    "sync_skipped": True,
+                    "sync_reason": "guard_events_endpoint_unavailable",
+                },
+                synced_at,
+            )
+            summary = {
+                "synced": False,
+                "skipped": True,
+                "reason": "guard_events_endpoint_unavailable",
+            }
+            store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+            return summary
+        raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
     except OSError as error:
         raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
     accepted = payload.get("accepted")
@@ -390,7 +517,7 @@ def _aibom_connection_status(store: GuardStore) -> str:
     if store.get_cloud_workspace_id() is None:
         return "workspace_required"
     sync_summary = _sync_summary(store)
-    if sync_summary.get("synced_at"):
+    if sync_summary.get("synced") is True and sync_summary.get("synced_at"):
         return "synced"
     return "sync_required"
 

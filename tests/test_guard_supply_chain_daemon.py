@@ -61,7 +61,7 @@ def test_daemon_bundle_refresh_stays_quiet_when_not_configured(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
-    def _fail_sync(_store: GuardStore) -> dict[str, object]:
+    def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         raise GuardSyncNotConfiguredError("Guard is not logged in.")
 
     monkeypatch.setattr(guard_daemon_module, "sync_supply_chain_bundle", _fail_sync)
@@ -92,7 +92,7 @@ def test_daemon_bundle_refresh_reports_auth_expired(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
-    def _fail_sync(_store: GuardStore) -> dict[str, object]:
+    def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         raise GuardSyncAuthorizationExpiredError(
             "Guard authorization expired. Run `hol-guard connect` to sign in again."
         )
@@ -124,7 +124,7 @@ def test_daemon_bundle_refresh_reports_retryable_error(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
-    def _fail_sync(_store: GuardStore) -> dict[str, object]:
+    def _fail_sync(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         raise RuntimeError("Guard OAuth token refresh failed: oauth upstream down")
 
     monkeypatch.setattr(guard_daemon_module, "sync_supply_chain_bundle", _fail_sync)

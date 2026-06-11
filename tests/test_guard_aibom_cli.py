@@ -209,6 +209,24 @@ def test_aibom_symlink_flags_control_source_metadata(tmp_path: Path) -> None:
     assert follow_metadata.get("validationState") == "valid"
 
 
+def test_sync_aibom_snapshots_if_due_skips_recent_sync(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    now = "2026-06-10T13:00:00+00:00"
+    store.set_sync_payload(
+        "aibom_sync_summary",
+        {"synced": True, "synced_at": "2026-06-10T12:30:00+00:00"},
+        "2026-06-10T12:30:00+00:00",
+    )
+
+    summary = sync_aibom_snapshots_if_due(store, generated_at=now)
+
+    assert summary.get("skipped") is True
+    assert summary.get("reason") == "recently_synced"
+
+
 def test_aibom_export_json_includes_redaction_report(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

@@ -1120,6 +1120,8 @@ def sync_receipts(
     persist_sync_summary: bool = True,
     persist_connect_state: bool = True,
     auth_context: dict[str, object] | None = None,
+    home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     """Push local receipts to the configured sync endpoint."""
 
@@ -1360,6 +1362,15 @@ def sync_receipts(
     if remote_policy_sync_blocked:
         summary["remote_policy_sync_blocked"] = True
     summary["guard_events_v1"] = sync_guard_events(store, auth_context=resolved_auth_context)
+    from ..aibom_cli import sync_aibom_snapshots_if_due
+
+    summary["aibom_inventory"] = sync_aibom_snapshots_if_due(
+        store,
+        generated_at=now,
+        auth_context=resolved_auth_context,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
     if persist_sync_summary:
         store.set_sync_payload("sync_summary", summary, now)
     if persist_connect_state:
