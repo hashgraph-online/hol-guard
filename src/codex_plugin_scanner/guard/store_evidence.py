@@ -86,6 +86,41 @@ def evidence_index_statements() -> list[str]:
     ]
 
 
+_EVIDENCE_SCHEMA_READY: set[str] = set()
+
+
+def _evidence_schema_cache_key(connection: sqlite3.Connection) -> str:
+    row = connection.execute("pragma database_list").fetchone()
+    if row is None:
+        return ":memory:"
+    file_path = row[2]
+    return str(file_path) if file_path else ":memory:"
+
+
+def ensure_evidence_schema(connection: sqlite3.Connection) -> None:
+    """Create or repair the evidence table, columns, and indexes."""
+    cache_key = _evidence_schema_cache_key(connection)
+    if cache_key in _EVIDENCE_SCHEMA_READY:
+        row = connection.execute(
+            "select 1 from sqlite_master where type='table' and name='guard_evidence' limit 1"
+        ).fetchone()
+        if row is not None:
+            return
+        _EVIDENCE_SCHEMA_READY.discard(cache_key)
+    connection.execute(evidence_schema_statement())
+    rows = connection.execute("pragma table_info(guard_evidence)").fetchall()
+    existing = {str(row[1]) for row in rows}
+    if "action_identity" not in existing:
+        try:
+            connection.execute("alter table guard_evidence add column action_identity text")
+        except sqlite3.OperationalError as error:
+            if "duplicate column name" not in str(error).lower():
+                raise
+    for statement in evidence_index_statements():
+        connection.execute(statement)
+    _EVIDENCE_SCHEMA_READY.add(cache_key)
+
+
 def _row_to_record(row: sqlite3.Row) -> EvidenceRecord:
     try:
         details: dict[str, object] = json.loads(row["details_json"])
@@ -110,6 +145,7 @@ def _row_to_record(row: sqlite3.Row) -> EvidenceRecord:
 
 
 def store_evidence(conn: sqlite3.Connection, record: EvidenceRecord) -> EvidenceRecord:
+    ensure_evidence_schema(conn)
     conn.execute(
         """
         insert or replace into guard_evidence
