@@ -15,7 +15,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
 from codex_plugin_scanner.guard.store import GuardStore
 
 _UNSAFE_PATH_MARKER = "/".join(["", "Users", "agent", "secret.txt"])
-_SECRET_MARKER = "guard_live_should_not_sync"
+_SECRET_MARKER = "sk-testsecretvalueserializer"
 
 
 def _snapshot_with_metadata(metadata: dict[str, object]) -> GuardAgentInventorySnapshot:

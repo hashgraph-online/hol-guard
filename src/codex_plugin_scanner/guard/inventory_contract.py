@@ -89,6 +89,15 @@ _SERIALIZER_SECRET_ASSIGNMENT_RE = re.compile(
     r"(?i)\b(?:api[_-]?key|authorization|password|secret|token|access[_-]?token|refresh[_-]?token)\b\s*[:=]\s*(?!redacted\b)\S+",
 )
 _SERIALIZER_REDACTED_VALUE = "[REDACTED]"
+_SAFE_SERIALIZED_MARKERS = frozenset(
+    {
+        _SERIALIZER_REDACTED_VALUE,
+        "present_redacted",
+        "present",
+        "redacted",
+        "malformed_url_redacted",
+    }
+)
 _WHITESPACE_RE = re.compile(r"\s+")
 _MCP_READ_RE = re.compile(
     r"(?<![a-z0-9])(read|reads|reading|search|searches|list|lists)(?![a-z0-9])",
@@ -1077,6 +1086,8 @@ def _sanitize_serializer_string(
     parent_key: str = "",
     parent_sensitive: bool = False,
 ) -> str:
+    if value in _SAFE_SERIALIZED_MARKERS:
+        return value
     if parent_sensitive or (parent_key and _SENSITIVE_KEY_RE.search(parent_key)):
         return _SERIALIZER_REDACTED_VALUE
     if _SERIALIZER_UNSAFE_PATH_RE.search(value):
