@@ -1071,8 +1071,13 @@ def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None
     return redacted
 
 
-def _sanitize_serializer_string(value: str, *, parent_key: str = "") -> str:
-    if parent_key and _SENSITIVE_KEY_RE.search(parent_key):
+def _sanitize_serializer_string(
+    value: str,
+    *,
+    parent_key: str = "",
+    parent_sensitive: bool = False,
+) -> str:
+    if parent_sensitive or (parent_key and _SENSITIVE_KEY_RE.search(parent_key)):
         return _SERIALIZER_REDACTED_VALUE
     if _SERIALIZER_UNSAFE_PATH_RE.search(value):
         return _SERIALIZER_REDACTED_VALUE
@@ -1093,17 +1098,35 @@ def _assert_serialized_inventory_payload_safe(payload: object) -> None:
         raise ValueError("Inventory snapshot serialization produced unsafe payload.")
 
 
-def _safe_json(value: object, *, parent_key: str = "") -> object:
+def _safe_json(
+    value: object,
+    *,
+    parent_key: str = "",
+    parent_sensitive: bool = False,
+) -> object:
+    key_sensitive = parent_sensitive or bool(parent_key and _SENSITIVE_KEY_RE.search(parent_key))
     if isinstance(value, dict):
         return {
-            _sanitize_serializer_string(str(key)): _safe_json(item, parent_key=str(key)) for key, item in value.items()
+            _sanitize_serializer_string(str(key), parent_sensitive=parent_sensitive): _safe_json(
+                item,
+                parent_key=str(key),
+                parent_sensitive=key_sensitive,
+            )
+            for key, item in value.items()
         }
     if isinstance(value, (list, tuple)):
-        return [_safe_json(item, parent_key=parent_key) for item in value]
+        return [
+            _safe_json(item, parent_key=parent_key, parent_sensitive=parent_sensitive)
+            for item in value
+        ]
     if isinstance(value, Path):
         return value.name
     if isinstance(value, str):
-        return _sanitize_serializer_string(value, parent_key=parent_key)
+        return _sanitize_serializer_string(
+            value,
+            parent_key=parent_key,
+            parent_sensitive=parent_sensitive,
+        )
     return value
 
 
