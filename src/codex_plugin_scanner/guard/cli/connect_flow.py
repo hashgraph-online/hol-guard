@@ -1162,6 +1162,12 @@ def build_connect_status_payload(
         milestone = "first_sync_failed"
         reason = "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
         recovery_command = CONNECT_COMMAND
+    elif not bool(oauth_storage_health.get("configured")) and status == "connected":
+        status = "retry_required"
+        milestone = "first_sync_failed"
+        if not isinstance(reason, str) or not reason.strip():
+            reason = "Guard Cloud authorization on this machine is incomplete. Run hol-guard connect again."
+        recovery_command = CONNECT_COMMAND
     payload: dict[str, object] = {
         "status": status,
         "milestone": milestone,
