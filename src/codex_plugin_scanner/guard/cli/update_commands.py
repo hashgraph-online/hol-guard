@@ -133,13 +133,16 @@ def run_guard_update(
         resulting_version,
     )
     payload["status"] = _success_status(payload)
-    payload["changed"] = payload["status"] == "updated"
+    payload["changed"] = _version_changed(current_version, resulting_version) or payload["status"] == "updated"
+    stale_retry_command = _stale_retry_command(payload)
+    if stale_retry_command:
+        payload["retry_command"] = stale_retry_command
     payload["message"] = _success_message(
         status=str(payload["status"]),
         current_version=current_version,
         resulting_version=resulting_version,
         version_check=payload.get("version_check"),
-        retry_command=_stale_retry_command(payload),
+        retry_command=stale_retry_command,
     )
     notes = _success_notes(payload)
     if notes:
@@ -157,8 +160,8 @@ def run_guard_update(
         payload["managed_installs"] = repaired_installs
         if len(repaired_installs) == 1:
             payload["managed_install"] = repaired_installs[0]
-    # Sync dashboard static assets after package update so the daemon serves fresh UI.
-    if not dry_run and payload.get("status") in {"updated", "current"}:
+    # Sync dashboard assets when the package changed, even if the install still trails PyPI.
+    if not dry_run and (payload.get("status") in {"updated", "current"} or payload.get("changed") is True):
         dashboard_sync = _sync_dashboard_assets()
         if dashboard_sync:
             payload["dashboard_sync"] = dashboard_sync
@@ -248,10 +251,18 @@ def _success_status(payload: dict[str, object]) -> str:
 
 
 def _is_stale_install(payload: dict[str, object]) -> bool:
-    if payload.get("vcs_install") is None and payload.get("upgrade_source") != "pypi":
-        return False
     version_check = payload.get("version_check")
     return isinstance(version_check, dict) and version_check.get("update_available") is True
+
+
+def _version_changed(current_version: str, resulting_version: str) -> bool:
+    return (
+        bool(current_version)
+        and bool(resulting_version)
+        and current_version != "unknown"
+        and resulting_version != "unknown"
+        and current_version != resulting_version
+    )
 
 
 def _merge_version_checks(
@@ -285,7 +296,8 @@ def _merge_version_checks(
 
 
 def _stale_retry_command(payload: dict[str, object]) -> str:
-    if payload.get("vcs_install") is not None or payload.get("upgrade_source") == "pypi":
+    version_check = payload.get("version_check")
+    if isinstance(version_check, dict) and version_check.get("update_available") is True:
         installer = str(payload.get("installer") or "pip")
         return _shell_command(_update_command(installer, use_pypi=True))
     retry_command = payload.get("retry_command")
@@ -313,10 +325,7 @@ def _success_message(
                 latest_version = latest.strip()
         installed_version = resulting_version or current_version
         if latest_version and installed_version not in {"", "unknown"}:
-            message = (
-                f"HOL Guard {installed_version} is behind PyPI {latest_version}. "
-                "The installed package source is not tracking PyPI releases."
-            )
+            message = f"HOL Guard {installed_version} is behind PyPI {latest_version} after the update attempt."
         else:
             message = "HOL Guard is behind the latest PyPI release."
         if retry_command:
