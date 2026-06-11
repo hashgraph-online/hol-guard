@@ -130,27 +130,6 @@ def _dashboard_token_for(store: GuardStore) -> str:
     return _dashboard_token(auth_token)
 
 
-def _seed_connected_oauth_without_entitlement(store: GuardStore) -> None:
-    store.set_oauth_local_credentials(
-        issuer="https://hol.org",
-        client_id="guard-local-daemon",
-        refresh_token="refresh-token-1",
-        dpop_private_key_pem="private-key",
-        dpop_public_jwk={"kty": "EC", "crv": "P-256", "x": "x-value", "y": "y-value"},
-        dpop_public_jwk_thumbprint="thumbprint-1",
-        grant_id="grant-1",
-        machine_id="machine-1",
-        workspace_id="workspace-1",
-        now="2026-06-05T01:39:51+00:00",
-    )
-    store.record_guard_connect_pairing_completed(
-        sync_url="https://hol.org/api/guard/receipts/sync",
-        allowed_origin="https://hol.org",
-        now="2026-06-05T01:39:51+00:00",
-        request_id="connect-1",
-    )
-
-
 def _install_local_package_shim(store: GuardStore, home_dir: Path, manager: str) -> None:
     install_package_shims(
         HarnessContext(
@@ -500,9 +479,10 @@ def test_supply_chain_package_firewall_install_requires_reconnect_when_cloud_aut
 def test_supply_chain_package_firewall_status_self_heals_connected_cloud_auth_without_cached_entitlement(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    seed_connected_oauth_without_entitlement,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_connected_oauth_without_entitlement(store)
+    seed_connected_oauth_without_entitlement(store)
     calls: list[str] = []
 
     def fake_sync_local_guard_cloud_proof(current_store: GuardStore) -> dict[str, object]:

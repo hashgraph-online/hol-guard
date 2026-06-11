@@ -115,3 +115,17 @@ def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_
     assert result["cleared_stale_sign_in"] is False
     assert result["existing_sign_in_valid"] is True
     assert store.get_oauth_local_credentials(allow_primary=True) is not None
+
+
+def test_invalid_dpop_curve_refresh_uses_reconnect_message(tmp_path, monkeypatch) -> None:
+    store = _store_with_oauth_credentials(tmp_path)
+
+    def _raise_invalid_curve(**_kwargs):
+        raise RuntimeError("Guard DPoP key must be a P-256 EC private key.")
+
+    monkeypatch.setattr(guard_runner_module, "_sign_guard_dpop_proof", _raise_invalid_curve)
+
+    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError) as error:
+        guard_runner_module._resolve_guard_sync_auth_context(store)
+
+    assert "hol-guard connect" in str(error.value)

@@ -1164,7 +1164,6 @@ def build_connect_status_payload(
         recovery_command = CONNECT_COMMAND
     payload: dict[str, object] = {
         "status": status,
-        "state": status,
         "milestone": milestone,
         "reason": reason,
         "latest_connect_state": latest_state,

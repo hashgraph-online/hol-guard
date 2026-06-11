@@ -122,17 +122,6 @@ def test_connect_repair_copy_points_to_device_code(tmp_path: Path) -> None:
     assert "guardPairSecret" not in rendered
 
 
-def test_connect_status_payload_includes_legacy_state_alias(tmp_path: Path) -> None:
-    payload = build_connect_status_payload(
-        store=GuardStore(tmp_path / "guard-home"),
-        sync_url="https://hol.org/api/guard/receipts/sync",
-        connect_url="https://hol.org/guard/connect",
-    )
-
-    assert payload["status"] == "not_paired"
-    assert payload["state"] == "not_paired"
-
-
 def test_browser_connect_caches_paid_package_firewall_entitlement(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
 

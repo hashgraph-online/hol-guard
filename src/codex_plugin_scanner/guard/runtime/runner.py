@@ -2348,7 +2348,7 @@ def _refresh_guard_oauth_access_token(
                 dpop_key_material=dpop_key_material,
                 nonce=dpop_nonce,
             )
-        except (TypeError, ValueError) as error:
+        except (RuntimeError, TypeError, ValueError) as error:
             raise GuardSyncAuthorizationExpiredError(
                 f"{_guard_oauth_reauthorization_message()} {error}"
             ) from error
