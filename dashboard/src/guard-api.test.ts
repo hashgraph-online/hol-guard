@@ -9,9 +9,10 @@ import {
 	  formatHarnessCommand,
 	  normalizeRuntimeSnapshot,
 	  normalizeApprovalRequest,
-	  parseActionEnvelope,
-	  parseDecisionV2,
-	  runPackageFirewallAction,
+  parseActionEnvelope,
+  parseDecisionV2,
+  readGuardToken,
+  runPackageFirewallAction,
 	  startPackageFirewallConnect,
 	  runAuditRemediation,
 	  resolveRequestWithQueueResult,
@@ -568,9 +569,11 @@ type StorageShape = {
   readonly length: number;
 };
 
-function installGuardWindow(search: string): void {
-  const storage = new Map<string, string>();
-  const sessionStorage: StorageShape = {
+function createStorage(storage: Map<string, string> | StorageShape): StorageShape {
+  if (!(storage instanceof Map)) {
+    return storage;
+  }
+  return {
     getItem(key: string): string | null {
       return storage.get(key) ?? null;
     },
@@ -590,6 +593,17 @@ function installGuardWindow(search: string): void {
       return storage.size;
     }
   };
+}
+
+function installGuardWindow(
+  search: string,
+  options?: {
+    sessionStorage?: Map<string, string> | StorageShape;
+    localStorage?: Map<string, string> | StorageShape;
+  }
+): void {
+  const sessionStorage = createStorage(options?.sessionStorage ?? new Map<string, string>());
+  const localStorage = createStorage(options?.localStorage ?? new Map<string, string>());
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
@@ -599,7 +613,17 @@ function installGuardWindow(search: string): void {
         search,
         hash: ""
       },
-      sessionStorage
+      sessionStorage,
+      localStorage
+    }
+  });
+}
+
+function installThrowingLocalStorageGetter(message: string): void {
+  Object.defineProperty(globalThis.window, "localStorage", {
+    configurable: true,
+    get(): never {
+      throw new Error(message);
     }
   });
 }
@@ -669,6 +693,54 @@ assert(approvalPage.items[0].decision_v2_json?.user_title === "Wants to read a c
 assert(approvalPage.next_cursor === "cursor-two", "L078: fetchApprovalPage returns next cursor");
 assert(approvalPage.total_pending_count === 3, "L078: fetchApprovalPage returns pending total");
 assert(approvalPage.total_count === 7, "L078: fetchApprovalPage returns filtered total");
+
+const sharedLocalStorage = new Map<string, string>();
+installGuardWindow("?guard-token=token-shared-tabs&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", {
+  localStorage: sharedLocalStorage,
+});
+assert(readGuardToken() === "token-shared-tabs", "L078aa: readGuardToken stores the URL token");
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", {
+  localStorage: sharedLocalStorage,
+});
+const sharedTabCalls = installFetchStub({
+  "/v1/requests": {
+    items: [pageItem],
+    next_cursor: null,
+    total_pending_count: 1,
+    total_count: 1,
+    status: "pending"
+  }
+});
+await fetchApprovalPage();
+assert(
+  headerValue(sharedTabCalls[0].init, "X-Guard-Dashboard-Session") === "token-shared-tabs",
+  "L078ab: fetchApprovalPage reuses dashboard session from localStorage in a new tab"
+);
+
+const sharedSessionStorage = new Map<string, string>();
+installGuardWindow("?guard-token=token-session-only&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", {
+  sessionStorage: sharedSessionStorage,
+});
+installThrowingLocalStorageGetter("localStorage unavailable");
+assert(readGuardToken() === "token-session-only", "L078ac: readGuardToken tolerates disabled localStorage");
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", {
+  sessionStorage: sharedSessionStorage,
+});
+installThrowingLocalStorageGetter("localStorage unavailable");
+const sessionOnlyCalls = installFetchStub({
+  "/v1/requests": {
+    items: [pageItem],
+    next_cursor: null,
+    total_pending_count: 1,
+    total_count: 1,
+    status: "pending"
+  }
+});
+await fetchApprovalPage();
+assert(
+  headerValue(sessionOnlyCalls[0].init, "X-Guard-Dashboard-Session") === "token-session-only",
+  "L078ad: fetchApprovalPage falls back to sessionStorage when localStorage is unavailable"
+);
 
 installGuardWindow("?guard-token=token-pending-pages&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const codexPageItem: GuardApprovalRequest = {

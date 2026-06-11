@@ -14001,6 +14001,26 @@ function guardParams() {
 function guardParam(name) {
   return guardParams().get(name);
 }
+function readBrowserStorage(getStorage, name) {
+  try {
+    return getStorage().getItem(name);
+  } catch {
+    return null;
+  }
+}
+function readGuardStorage(name) {
+  return readBrowserStorage(() => window.sessionStorage, name) ?? readBrowserStorage(() => window.localStorage, name);
+}
+function saveBrowserStorage(getStorage, name, value) {
+  try {
+    getStorage().setItem(name, value);
+  } catch {
+  }
+}
+function saveGuardStorage(name, value) {
+  saveBrowserStorage(() => window.sessionStorage, name, value);
+  saveBrowserStorage(() => window.localStorage, name, value);
+}
 function readGuardToken() {
   const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (guardTokenLocationKey !== locationKey) {
@@ -14012,17 +14032,17 @@ function readGuardToken() {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
     return guardToken;
   }
-  return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+  return readGuardStorage(GUARD_TOKEN_PARAM);
 }
 function saveGuardToken(guardToken) {
   guardTokenOverride = guardToken;
-  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+  saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
 }
 function saveGuardDaemonOrigin(daemonOrigin) {
-  window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+  saveGuardStorage(GUARD_DAEMON_PARAM, daemonOrigin);
 }
 function preferredGuardDaemonPort() {
   const fromOrigin = readGuardDaemonOrigin();
@@ -14172,11 +14192,11 @@ function readGuardDaemonOrigin() {
   if (rawDaemonUrl) {
     const daemonOrigin = localGuardDaemonOrigin(rawDaemonUrl);
     if (daemonOrigin) {
-      window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+      saveGuardStorage(GUARD_DAEMON_PARAM, daemonOrigin);
       return daemonOrigin;
     }
   }
-  const storedDaemonUrl = window.sessionStorage.getItem(GUARD_DAEMON_PARAM);
+  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
   return storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
 }
 function localGuardDaemonOrigin(rawUrl) {
