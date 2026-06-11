@@ -2283,18 +2283,17 @@ def _oauth_authorization_error_requires_fresh_sign_in(error: Exception) -> bool:
 
 def clear_revoked_guard_oauth_sign_in(store: GuardStore) -> bool:
     """Return True when refresh proves the local OAuth grant was revoked and cleared."""
-    if store.get_oauth_local_credentials(allow_primary=True) is None:
-        return False
     try:
-        credentials = store.get_oauth_local_credentials(allow_primary=True)
-        if credentials is None:
-            return False
-        _resolve_guard_sync_auth_context_from_oauth_credentials(store, credentials)
+        with _guard_sync_auth_lock(store):
+            credentials = store.get_oauth_local_credentials(allow_primary=True)
+            if credentials is None:
+                return False
+            _resolve_guard_sync_auth_context_from_oauth_credentials(store, credentials)
     except GuardSyncAuthorizationExpiredError as error:
         if _oauth_authorization_error_requires_fresh_sign_in(error):
             return store.get_oauth_local_credentials(allow_primary=True) is None
         return False
-    except (RuntimeError, OSError):
+    except (RuntimeError, OSError, TimeoutError):
         return False
     return False
 
