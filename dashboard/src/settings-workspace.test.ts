@@ -8,11 +8,8 @@ import {
   resolveFineTuningSectionDescription,
   isFineTuningEditable,
   resolveTotpSetupStep,
-  shouldShowApprovalPasswordCurrentField,
-  shouldShowApprovalPasswordChangeForm,
   hasApprovalGateSettingsChanged,
-  resolveApprovalPasswordVerifyCopy,
-  resolveApprovalPasswordChangeCopy,
+  resolveApprovalPasswordSectionCopy,
   resolveTotpSetupModalTitle,
 } from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
@@ -96,26 +93,6 @@ assert(
 );
 
 assert(
-  shouldShowApprovalPasswordCurrentField(true, "", "", false, false) === false,
-  "approval-password: hide current field when gate is off and unchanged",
-);
-assert(
-  shouldShowApprovalPasswordCurrentField(true, "next-password", "", false, false) === true,
-  "approval-password: show current field when new password is entered",
-);
-assert(
-  shouldShowApprovalPasswordCurrentField(true, "", "", true, false) === true,
-  "approval-password: show current field when gate settings changed",
-);
-assert(
-  shouldShowApprovalPasswordCurrentField(true, "", "", false, true) === true,
-  "approval-password: show current field when gate is enabled for guarded saves",
-);
-assert(
-  shouldShowApprovalPasswordCurrentField(false, "first-password", "first-password", false, false) === false,
-  "approval-password: first-time setup does not ask for a current password",
-);
-assert(
   hasApprovalGateSettingsChanged(
     { enabled: true, configured: true, cooldown_seconds: 0, strict_all_decisions: false, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: false, totp_enabled: false, totp_pending: false },
     true,
@@ -126,57 +103,12 @@ assert(
 );
 
 assert(
-  shouldShowApprovalPasswordChangeForm(false, false, "", "", false, false, true) === true,
-  "approval-password: first-time setup always shows password fields",
+  resolveApprovalPasswordSectionCopy(true).includes("Save settings"),
+  "approval-password: configured copy points to save flow",
 );
 assert(
-  shouldShowApprovalPasswordChangeForm(true, false, "", "", false, true, true) === false,
-  "approval-password: configured gate hides change form until expanded",
-);
-assert(
-  shouldShowApprovalPasswordChangeForm(true, true, "", "", false, true, true) === true,
-  "approval-password: configured gate shows change form when expanded",
-);
-assert(
-  shouldShowApprovalPasswordChangeForm(true, false, "next-password", "", false, true, true) === true,
-  "approval-password: configured gate auto-opens change form when new password is entered",
-);
-assert(
-  shouldShowApprovalPasswordChangeForm(true, false, "", "next-password", false, true, true) === true,
-  "approval-password: configured gate auto-opens change form when confirm password is entered",
-);
-assert(
-  shouldShowApprovalPasswordChangeForm(true, false, "", "", true, false, true) === true,
-  "approval-password: re-enabling a configured gate shows password fields",
-);
-assert(
-  shouldShowApprovalPasswordChangeForm(true, false, "", "", true, true, false) === false,
-  "approval-password: disabling gate does not require new password fields",
-);
-assert(
-  resolveApprovalPasswordVerifyCopy({
-    gateSettingsChanged: false,
-    gateEnabled: true,
-  }).includes("Authenticator setup"),
-  "approval-password: verify copy points users to authenticator flow",
-);
-assert(
-  resolveApprovalPasswordVerifyCopy({
-    gateSettingsChanged: true,
-    gateEnabled: true,
-  }).includes("gate changes"),
-  "approval-password: verify copy mentions gate changes when settings changed",
-);
-assert(
-  !resolveApprovalPasswordVerifyCopy({
-    gateSettingsChanged: false,
-    gateEnabled: true,
-  }).includes("new password"),
-  "approval-password: verify copy does not mention changing password",
-);
-assert(
-  resolveApprovalPasswordChangeCopy().includes("new password"),
-  "approval-password: change copy guides password updates",
+  resolveApprovalPasswordSectionCopy(false).includes("save settings"),
+  "approval-password: first-time copy points to save flow",
 );
 assert(
   resolveTotpSetupModalTitle(true) === "Confirm your approval password",
