@@ -1120,6 +1120,7 @@ def sync_receipts(
     persist_sync_summary: bool = True,
     persist_connect_state: bool = True,
     auth_context: dict[str, object] | None = None,
+    home_dir: Path | None = None,
 ) -> dict[str, object]:
     """Push local receipts to the configured sync endpoint."""
 
@@ -1366,6 +1367,7 @@ def sync_receipts(
         store,
         generated_at=now,
         auth_context=resolved_auth_context,
+        home_dir=home_dir,
     )
     if persist_sync_summary:
         store.set_sync_payload("sync_summary", summary, now)
