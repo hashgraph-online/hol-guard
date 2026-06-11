@@ -2108,14 +2108,17 @@ function buildClearReviewQueuePayload(input) {
 function resolveTotpSetupStep(enrollment) {
   return enrollment !== null ? "scan" : "confirm";
 }
-function shouldShowApprovalPasswordCurrentField(wasConfigured, newPassword, confirmPassword, gateSettingsChanged) {
+function shouldShowApprovalPasswordCurrentField(wasConfigured, newPassword, confirmPassword, gateSettingsChanged, gateEnabled) {
   if (!wasConfigured) {
     return false;
   }
   if (newPassword.trim().length > 0 || confirmPassword.trim().length > 0) {
     return true;
   }
-  return gateSettingsChanged;
+  if (gateSettingsChanged || gateEnabled) {
+    return true;
+  }
+  return false;
 }
 function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, strictAllDecisions) {
   if (gateConfig === null) {
@@ -2582,9 +2585,11 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const handleCloseTotpSetup = reactExports.useCallback(() => {
     setTotpSetupOpen(false);
     setTotpSetupStep("confirm");
-    setTotpActionPassword("");
+    if (totpEnrollment === null) {
+      setTotpActionPassword("");
+    }
     setTotpActionError(null);
-  }, []);
+  }, [totpEnrollment]);
   const handleApprovalGateCooldownChange = reactExports.useCallback((event) => {
     const next = Number(event.target.value);
     setApprovalGateCooldown(next);
@@ -3596,7 +3601,8 @@ function ApprovalGateCard(props) {
     wasConfigured,
     props.newPassword,
     props.confirmPassword,
-    gateSettingsChanged
+    gateSettingsChanged,
+    props.enabled
   );
   const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
@@ -3623,7 +3629,7 @@ function ApprovalGateCard(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval password" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: wasConfigured ? "Guard asks for this password before allow or trust changes stick." : "Choose a password. Guard will ask for it before allow or trust changes stick." }),
-        wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: changingPassword ? "Enter your current password below, then save settings to apply the new one." : gateSettingsChanged ? "Enter your current password below, then save settings to apply these gate changes." : "Leave the fields below empty to keep your current password." }) : null,
+        wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: changingPassword ? "Enter your current password below, then save settings to apply the new one." : gateSettingsChanged ? "Enter your current password below, then save settings to apply these gate changes." : props.enabled ? "Enter your current password before saving settings elsewhere in Guard. Authenticator setup uses its own prompt below." : "Leave the fields below empty to keep your current password." }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [
           showCurrentPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Current password" }),

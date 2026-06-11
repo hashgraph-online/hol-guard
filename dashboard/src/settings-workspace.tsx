@@ -114,6 +114,7 @@ export function shouldShowApprovalPasswordCurrentField(
   newPassword: string,
   confirmPassword: string,
   gateSettingsChanged: boolean,
+  gateEnabled: boolean,
 ): boolean {
   if (!wasConfigured) {
     return false;
@@ -121,7 +122,10 @@ export function shouldShowApprovalPasswordCurrentField(
   if (newPassword.trim().length > 0 || confirmPassword.trim().length > 0) {
     return true;
   }
-  return gateSettingsChanged;
+  if (gateSettingsChanged || gateEnabled) {
+    return true;
+  }
+  return false;
 }
 
 export function hasApprovalGateSettingsChanged(
@@ -650,9 +654,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const handleCloseTotpSetup = useCallback(() => {
     setTotpSetupOpen(false);
     setTotpSetupStep("confirm");
-    setTotpActionPassword("");
+    if (totpEnrollment === null) {
+      setTotpActionPassword("");
+    }
     setTotpActionError(null);
-  }, []);
+  }, [totpEnrollment]);
 
   const handleApprovalGateCooldownChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     const next = Number(event.target.value);
@@ -1897,6 +1903,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
     props.newPassword,
     props.confirmPassword,
     gateSettingsChanged,
+    props.enabled,
   );
   const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
@@ -1948,7 +1955,9 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                   ? "Enter your current password below, then save settings to apply the new one."
                   : gateSettingsChanged
                     ? "Enter your current password below, then save settings to apply these gate changes."
-                    : "Leave the fields below empty to keep your current password."}
+                    : props.enabled
+                      ? "Enter your current password before saving settings elsewhere in Guard. Authenticator setup uses its own prompt below."
+                      : "Leave the fields below empty to keep your current password."}
               </p>
             ) : null}
             <div className="mt-3 space-y-3">

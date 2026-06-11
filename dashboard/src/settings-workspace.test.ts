@@ -92,19 +92,23 @@ assert(
 );
 
 assert(
-  shouldShowApprovalPasswordCurrentField(true, "", "", false) === false,
-  "approval-password: hide current field until user starts a password change",
+  shouldShowApprovalPasswordCurrentField(true, "", "", false, false) === false,
+  "approval-password: hide current field when gate is off and unchanged",
 );
 assert(
-  shouldShowApprovalPasswordCurrentField(true, "next-password", "", false) === true,
+  shouldShowApprovalPasswordCurrentField(true, "next-password", "", false, false) === true,
   "approval-password: show current field when new password is entered",
 );
 assert(
-  shouldShowApprovalPasswordCurrentField(true, "", "", true) === true,
+  shouldShowApprovalPasswordCurrentField(true, "", "", true, false) === true,
   "approval-password: show current field when gate settings changed",
 );
 assert(
-  shouldShowApprovalPasswordCurrentField(false, "first-password", "first-password", false) === false,
+  shouldShowApprovalPasswordCurrentField(true, "", "", false, true) === true,
+  "approval-password: show current field when gate is enabled for guarded saves",
+);
+assert(
+  shouldShowApprovalPasswordCurrentField(false, "first-password", "first-password", false, false) === false,
   "approval-password: first-time setup does not ask for a current password",
 );
 assert(
