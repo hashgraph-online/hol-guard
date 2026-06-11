@@ -4478,7 +4478,7 @@ def _preferred_approval_review_url(response_payload: Mapping[str, object], *, ha
     )
 
 
-def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_home: Path) -> None:
+def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_home: Path | None = None) -> None:
     harness = _optional_string(response_payload.get("harness")) or "codex"
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
     if not review_url:
@@ -4488,13 +4488,15 @@ def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_h
         file=sys.stderr,
         flush=True,
     )
-    browser_url = (
-        build_approval_browser_url(
-            review_url,
-            auth_token=load_guard_daemon_auth_token(guard_home),
+    browser_url = review_url
+    if guard_home is not None:
+        browser_url = (
+            build_approval_browser_url(
+                review_url,
+                auth_token=load_guard_daemon_auth_token(guard_home),
+            )
+            or review_url
         )
-        or review_url
-    )
     with suppress(Exception):
         webbrowser.open(browser_url)
 
