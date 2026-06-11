@@ -913,14 +913,14 @@ def _cloud_fail_closed_evaluation(
 def _with_cloud_auth_reconnect_copy(evaluation: PackageRequestEvaluation) -> PackageRequestEvaluation:
     reconnect_command = "hol-guard connect"
     reconnect_summary = "Guard Cloud needs a fresh sign-in before shared review can resume."
-    summary = evaluation.user_copy.summary
+    summary = evaluation.user_copy.summary or ""
     if reconnect_summary.lower() not in summary.lower():
         summary = f"{summary} {reconnect_summary}".strip()
     reconnect_message = (
         "Guard kept this request local-only because Guard Cloud authorization expired. "
         f"Run `{reconnect_command}` to restore shared review and sync."
     )
-    harness_message = evaluation.user_copy.harness_message
+    harness_message = evaluation.user_copy.harness_message or ""
     if reconnect_message.lower() not in harness_message.lower():
         harness_message = f"{harness_message} {reconnect_message}".strip()
     return replace(

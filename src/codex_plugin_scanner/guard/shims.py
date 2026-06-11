@@ -714,7 +714,6 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
         str(context.guard_home),
         *_home_override_args(context),
         *workspace_args,
-        command,
     ]
     return "\n".join(
         (
@@ -729,9 +728,9 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             f"shim_dir = {str(shim_dir.resolve())!r}",
             "guard_env = dict(os.environ)",
             "guard_env.pop('PYTHONPATH', None)",
-            "guard_command = list(base_command)",
+            "guard_command = [*base_command, command_name]",
             f"if os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}:",
-            "    guard_command.insert(len(guard_command) - 1, '--json')",
+            "    guard_command = [*base_command, '--json', command_name]",
             "guard_process = subprocess.run(",
             "    [*guard_command, *sys.argv[1:]], capture_output=True, text=True, env=guard_env",
             ")",
