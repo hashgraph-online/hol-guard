@@ -37,7 +37,7 @@ def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> Non
     assert 'PYTHONSAFEPATH: "1"' in action_text
     assert 'ACTION_RUNTIME_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"' in action_text
     assert 'ACTION_RUNTIME_DIR="$(mktemp -d "$ACTION_RUNTIME_ROOT/hol-guard-action-XXXXXX")"' in action_text
-    assert 'trap \'cd "$ACTION_RUNTIME_ROOT" && rm -rf "$ACTION_RUNTIME_DIR"\' EXIT' in action_text
+    assert 'trap \'cd "$ACTION_RUNTIME_ROOT" 2>/dev/null || cd /; rm -rf "$ACTION_RUNTIME_DIR"\' EXIT' in action_text
     assert 'cd "$ACTION_RUNTIME_DIR"' in action_text
     assert 'if [ "$INSTALL_CISCO" = "true" ]; then' in action_text
     assert 'if [ "$INSTALL_SOURCE" = "local" ]; then' in action_text
@@ -103,12 +103,17 @@ def test_python_safe_path_blocks_workspace_module_shadowing(tmp_path: Path) -> N
         "raise SystemExit('workspace-shadowed')\n",
         encoding="utf-8",
     )
-    env = {**os.environ, "PYTHONPATH": str(trusted_root)}
+    hijacked_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"PYTHONSAFEPATH", "PYTHONNOUSERSITE"}
+    }
+    hijacked_env["PYTHONPATH"] = str(trusted_root)
 
     hijacked = subprocess.run(
         [sys.executable, "-m", module_name],
         cwd=workspace,
-        env=env,
+        env=hijacked_env,
         capture_output=True,
         text=True,
         check=False,
@@ -119,13 +124,13 @@ def test_python_safe_path_blocks_workspace_module_shadowing(tmp_path: Path) -> N
     protected = subprocess.run(
         [sys.executable, "-P", "-m", module_name],
         cwd=workspace,
-        env=env,
+        env=hijacked_env,
         capture_output=True,
         text=True,
         check=False,
     )
     assert protected.returncode == 0
-    assert "trusted-module" in f"{protected.stdout}{protected.stderr}"
+    assert "trusted-module" in protected.stdout
     assert "workspace-shadowed" not in f"{protected.stdout}{protected.stderr}"
 
 
