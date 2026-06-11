@@ -289,11 +289,7 @@ def _normalize_inventory_datetime(value: object) -> object:
         return value
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        parsed = (
-            parsed.replace(tzinfo=timezone.utc)
-            if parsed.tzinfo is None
-            else parsed.astimezone(timezone.utc)
-        )
+        parsed = parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
         return parsed.isoformat().replace("+00:00", "Z")
     except (ValueError, OverflowError, TypeError):
         return value
