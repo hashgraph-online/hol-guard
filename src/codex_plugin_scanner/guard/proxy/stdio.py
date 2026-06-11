@@ -27,8 +27,8 @@ from ..consumer import artifact_hash
 from ..daemon.manager import load_guard_daemon_auth_token
 from ..models import HarnessDetection
 from ..receipts import build_receipt
-from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 
 _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0

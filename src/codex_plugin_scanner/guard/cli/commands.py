@@ -4488,7 +4488,13 @@ def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_h
         file=sys.stderr,
         flush=True,
     )
-    browser_url = build_approval_browser_url(review_url, auth_token=load_guard_daemon_auth_token(guard_home)) or review_url
+    browser_url = (
+        build_approval_browser_url(
+            review_url,
+            auth_token=load_guard_daemon_auth_token(guard_home),
+        )
+        or review_url
+    )
     with suppress(Exception):
         webbrowser.open(browser_url)
 

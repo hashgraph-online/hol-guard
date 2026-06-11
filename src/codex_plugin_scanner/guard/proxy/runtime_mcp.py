@@ -31,8 +31,8 @@ from ..policy.engine import build_decision_v2
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.signals import RiskSignalV2
-from ..runtime.surface_server import GuardSurfaceRuntime
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .stdio import (
     ProxyIoTimeoutError,
