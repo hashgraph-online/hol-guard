@@ -2687,6 +2687,7 @@ def run_guard_command(
         if getattr(args, "perf", False):
             payload["detector_perf"] = _runtime_detector_perf_payload(config)
         payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
+        payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
         _emit("doctor", payload, getattr(args, "json", False))
         return 0
 
