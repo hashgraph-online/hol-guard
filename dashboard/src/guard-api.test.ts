@@ -595,29 +595,6 @@ function createStorage(storage: Map<string, string> | StorageShape): StorageShap
   };
 }
 
-function createFailingStorage(message: string): StorageShape {
-  return {
-    getItem(): string | null {
-      throw new Error(message);
-    },
-    setItem(): void {
-      throw new Error(message);
-    },
-    removeItem(): void {
-      throw new Error(message);
-    },
-    clear(): void {
-      throw new Error(message);
-    },
-    key(): string | null {
-      return null;
-    },
-    get length(): number {
-      return 0;
-    }
-  };
-}
-
 function installGuardWindow(
   search: string,
   options?: {
@@ -638,6 +615,15 @@ function installGuardWindow(
       },
       sessionStorage,
       localStorage
+    }
+  });
+}
+
+function installThrowingLocalStorageGetter(message: string): void {
+  Object.defineProperty(globalThis.window, "localStorage", {
+    configurable: true,
+    get(): never {
+      throw new Error(message);
     }
   });
 }
@@ -732,16 +718,15 @@ assert(
 );
 
 const sharedSessionStorage = new Map<string, string>();
-const disabledLocalStorage = createFailingStorage("localStorage unavailable");
 installGuardWindow("?guard-token=token-session-only&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", {
   sessionStorage: sharedSessionStorage,
-  localStorage: disabledLocalStorage,
 });
+installThrowingLocalStorageGetter("localStorage unavailable");
 assert(readGuardToken() === "token-session-only", "L078ac: readGuardToken tolerates disabled localStorage");
 installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", {
   sessionStorage: sharedSessionStorage,
-  localStorage: disabledLocalStorage,
 });
+installThrowingLocalStorageGetter("localStorage unavailable");
 const sessionOnlyCalls = installFetchStub({
   "/v1/requests": {
     items: [pageItem],

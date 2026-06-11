@@ -36,7 +36,13 @@ _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
 _GUARD_PROXY_TIMEOUT_ERROR_CODE = -32800
 
 
-def _approval_surface_policy_for_browser(configured_policy: object) -> str:
+def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: dict[str, object]) -> str:
+    if approval_flow.get("tier") != "approval-center":
+        return "notify-only"
+    if approval_flow.get("auto_open_browser") is False:
+        return "never-auto-open"
+    if approval_flow.get("prompt_channel") == "native-fallback":
+        return "never-auto-open"
     policy = str(configured_policy or "auto-open-once")
     if policy == "native-only":
         return "never-auto-open"
@@ -231,8 +237,14 @@ class StdioGuardProxy:
     def _maybe_open_approval_center(self, *, review_url: str, open_key: str) -> None:
         if self.guard_store is None or self.approval_center_url is None:
             return
+        managed_install = self.guard_store.get_managed_install(self.harness)
+        approval_flow = approval_prompt_flow(
+            self.harness,
+            managed_install=managed_install,
+        )
         approval_surface_policy = _approval_surface_policy_for_browser(
-            getattr(self.guard_config, "approval_surface_policy", "auto-open-once")
+            getattr(self.guard_config, "approval_surface_policy", "auto-open-once"),
+            approval_flow,
         )
         if approval_surface_policy in {"notify-only", "never-auto-open"}:
             return

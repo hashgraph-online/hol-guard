@@ -1354,8 +1354,7 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     assert response["error"]["message"].startswith("HOL Guard stopped tool call dangerous-tool")
     assert response["error"]["data"]["reviewUrl"].startswith("http://127.0.0.1:5474/requests/")
     assert response["error"]["data"]["reviewUrl"] in response["error"]["message"]
-    assert opened_urls[0].startswith(f"{response['error']['data']['reviewUrl']}#")
-    assert "guard-token=" in opened_urls[0]
+    assert opened_urls == []
     assert len(store.list_approval_requests(limit=10)) == 1
     assert store.list_policy_decisions("codex") == []
 

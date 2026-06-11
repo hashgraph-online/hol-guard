@@ -12,7 +12,7 @@ from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
-from ..approvals import build_approval_browser_url, first_approval_url, queue_blocked_approvals
+from ..approvals import approval_prompt_flow, build_approval_browser_url, first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
 from ..consumer.service import artifact_hash as compute_artifact_hash
 from ..daemon import ensure_guard_daemon
@@ -53,7 +53,13 @@ _PACKAGE_POLICY_ACTION_RANK = {
 }
 
 
-def _approval_surface_policy_for_browser(configured_policy: object) -> str:
+def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: Mapping[str, object]) -> str:
+    if approval_flow.get("tier") != "approval-center":
+        return "notify-only"
+    if approval_flow.get("auto_open_browser") is False:
+        return "never-auto-open"
+    if approval_flow.get("prompt_channel") == "native-fallback":
+        return "never-auto-open"
     policy = str(configured_policy or "auto-open-once")
     if policy == "native-only":
         return "never-auto-open"
@@ -130,7 +136,12 @@ class RuntimeMcpGuardProxy:
         return 120.0
 
     def _maybe_open_approval_center(self, *, approval_center_url: str, review_url: str, open_key: str) -> None:
-        approval_surface_policy = _approval_surface_policy_for_browser(self.config.approval_surface_policy)
+        managed_install = self.store.get_managed_install(self.harness)
+        approval_flow = approval_prompt_flow(self.harness, managed_install=managed_install)
+        approval_surface_policy = _approval_surface_policy_for_browser(
+            self.config.approval_surface_policy,
+            approval_flow,
+        )
         if approval_surface_policy in {"notify-only", "never-auto-open"}:
             return
         browser_url = build_approval_browser_url(

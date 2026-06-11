@@ -15413,6 +15413,58 @@ def test_stdio_proxy_respects_native_only_approval_surface_policy(tmp_path, monk
     assert blocked["responses"][0]["error"]["data"]["reviewHint"]
 
 
+def test_stdio_proxy_respects_adapter_no_browser_flow(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
+    monkeypatch.setattr(
+        stdio_proxy_module,
+        "load_guard_daemon_auth_token",
+        lambda _guard_home: (_ for _ in ()).throw(AssertionError("should not read auth token")),
+    )
+    monkeypatch.setattr(
+        stdio_proxy_module.webbrowser,
+        "open",
+        lambda _url: (_ for _ in ()).throw(AssertionError("should not open browser")),
+    )
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                    "    sys.stdout.flush()",
+                ]
+            ),
+        ],
+        cwd=workspace_dir,
+        guard_store=store,
+        guard_config=config,
+        approval_center_url="http://127.0.0.1:4455",
+        harness="hermes",
+    )
+
+    blocked = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "read_file", "arguments": {"path": ".env"}},
+            }
+        ]
+    )
+
+    assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
+    assert blocked["responses"][0]["error"]["data"]["reviewHint"]
+
+
 def test_stdio_proxy_handles_unknown_harness_when_queueing_sensitive_read_blocks(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"

@@ -173,5 +173,4 @@ def test_copilot_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypa
     assert approval_requests[0]["approval_url"].startswith("http://127.0.0.1:4455/requests/")
     assert error["data"]["reviewUrl"] == approval_requests[0]["approval_url"]
     assert error["data"]["reviewUrl"] in error["message"]
-    assert opened_urls[0].startswith(f"{error['data']['reviewUrl']}#")
-    assert "guard-token=" in opened_urls[0]
+    assert opened_urls == []

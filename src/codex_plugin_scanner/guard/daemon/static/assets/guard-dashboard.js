@@ -14001,25 +14001,25 @@ function guardParams() {
 function guardParam(name) {
   return guardParams().get(name);
 }
-function readBrowserStorage(storage, name) {
+function readBrowserStorage(getStorage, name) {
   try {
-    return storage.getItem(name);
+    return getStorage().getItem(name);
   } catch {
     return null;
   }
 }
 function readGuardStorage(name) {
-  return readBrowserStorage(window.sessionStorage, name) ?? readBrowserStorage(window.localStorage, name);
+  return readBrowserStorage(() => window.sessionStorage, name) ?? readBrowserStorage(() => window.localStorage, name);
 }
-function saveBrowserStorage(storage, name, value) {
+function saveBrowserStorage(getStorage, name, value) {
   try {
-    storage.setItem(name, value);
+    getStorage().setItem(name, value);
   } catch {
   }
 }
 function saveGuardStorage(name, value) {
-  saveBrowserStorage(window.sessionStorage, name, value);
-  saveBrowserStorage(window.localStorage, name, value);
+  saveBrowserStorage(() => window.sessionStorage, name, value);
+  saveBrowserStorage(() => window.localStorage, name, value);
 }
 function readGuardToken() {
   const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;

@@ -172,29 +172,29 @@ function guardParam(name: string): string | null {
   return guardParams().get(name);
 }
 
-function readBrowserStorage(storage: Storage, name: string): string | null {
+function readBrowserStorage(getStorage: () => Storage, name: string): string | null {
   try {
-    return storage.getItem(name);
+    return getStorage().getItem(name);
   } catch {
     return null;
   }
 }
 
 function readGuardStorage(name: string): string | null {
-  return readBrowserStorage(window.sessionStorage, name) ?? readBrowserStorage(window.localStorage, name);
+  return readBrowserStorage(() => window.sessionStorage, name) ?? readBrowserStorage(() => window.localStorage, name);
 }
 
-function saveBrowserStorage(storage: Storage, name: string, value: string): void {
+function saveBrowserStorage(getStorage: () => Storage, name: string, value: string): void {
   try {
-    storage.setItem(name, value);
+    getStorage().setItem(name, value);
   } catch {
     // Fall back to whichever storage remains available.
   }
 }
 
 function saveGuardStorage(name: string, value: string): void {
-  saveBrowserStorage(window.sessionStorage, name, value);
-  saveBrowserStorage(window.localStorage, name, value);
+  saveBrowserStorage(() => window.sessionStorage, name, value);
+  saveBrowserStorage(() => window.localStorage, name, value);
 }
 
 export function readGuardToken(): string | null {
