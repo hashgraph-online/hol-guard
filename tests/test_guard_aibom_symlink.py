@@ -249,7 +249,7 @@ def test_max_symlink_hop_budget_is_sixteen() -> None:
     assert _MAX_SYMLINK_HOPS == 16
 
 
-def test_inspect_oversized_symlink_target_skips_content_hash(tmp_path: Path) -> None:
+def test_inspect_oversized_symlink_target_hashes_first_megabyte(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     workspace.mkdir()
     home = tmp_path / "home"
@@ -267,4 +267,4 @@ def test_inspect_oversized_symlink_target_skips_content_hash(tmp_path: Path) -> 
     )
 
     assert inspection.validation_state == "valid"
-    assert inspection.target_content_hash is None
+    assert inspection.target_content_hash
