@@ -87,6 +87,30 @@ def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) ->
     assert payload["items"][0]["metadata"]["headers"]["x-trace"] == "present"
 
 
+def test_inventory_snapshot_omits_null_optional_finding_summary() -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-hermes-2",
+        agent_id="agent-hermes",
+        agent_type="hermes",
+        generated_at="2026-05-10T00:00:00Z",
+        findings=(
+            GuardAgentInventoryFinding(
+                finding_id="finding-1",
+                source="hol-detector",
+                severity="high",
+                confidence="high",
+                title="Secret access",
+                artifact_id="skill-danger",
+                check_id="secret-access",
+            ),
+        ),
+    )
+
+    payload = serialize_inventory_snapshot(snapshot)
+
+    assert "summary" not in payload["findings"][0]
+
+
 def test_inventory_snapshot_serialization_preserves_free_form_metadata_keys() -> None:
     snapshot = GuardAgentInventorySnapshot(
         snapshot_id="snap-cursor-1",
