@@ -283,6 +283,8 @@ _INVENTORY_DATETIME_KEYS = frozenset(
 
 _FREE_FORM_RECORD_KEYS = frozenset({"metadata", "evidence"})
 
+_OPTIONAL_ONLY_CONTRACT_KEYS = frozenset({"summary"})
+
 
 def _normalize_inventory_datetime(value: object) -> object:
     if not isinstance(value, str) or not value.strip():
@@ -302,6 +304,8 @@ def _inventory_contract_json(value: object) -> object:
         normalized: dict[str, object] = {}
         for key, item in value.items():
             camel_key = _snake_to_camel_case_key(str(key))
+            if item is None and camel_key in _OPTIONAL_ONLY_CONTRACT_KEYS:
+                continue
             if camel_key in _FREE_FORM_RECORD_KEYS:
                 normalized[camel_key] = item
                 continue
