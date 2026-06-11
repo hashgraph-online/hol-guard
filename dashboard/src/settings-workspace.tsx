@@ -149,8 +149,14 @@ export function shouldShowApprovalPasswordChangeForm(
   passwordChangeOpen: boolean,
   newPassword: string,
   confirmPassword: string,
+  gateSettingsChanged: boolean,
+  savedGateEnabled: boolean,
+  draftGateEnabled: boolean,
 ): boolean {
   if (!wasConfigured) {
+    return true;
+  }
+  if (gateSettingsChanged && !savedGateEnabled && draftGateEnabled) {
     return true;
   }
   return (
@@ -1962,6 +1968,9 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
     passwordChangeOpen,
     props.newPassword,
     props.confirmPassword,
+    gateSettingsChanged,
+    savedGateEnabled,
+    props.enabled,
   );
   const approvalPasswordVerifyCopy = resolveApprovalPasswordVerifyCopy({
     gateSettingsChanged,

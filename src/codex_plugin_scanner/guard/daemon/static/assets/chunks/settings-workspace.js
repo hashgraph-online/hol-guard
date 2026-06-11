@@ -1523,8 +1523,11 @@ function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, st
   }
   return enabled !== gateConfig.enabled || cooldownSeconds !== gateConfig.cooldown_seconds || strictAllDecisions !== gateConfig.strict_all_decisions;
 }
-function shouldShowApprovalPasswordChangeForm(wasConfigured, passwordChangeOpen, newPassword, confirmPassword) {
+function shouldShowApprovalPasswordChangeForm(wasConfigured, passwordChangeOpen, newPassword, confirmPassword, gateSettingsChanged, savedGateEnabled, draftGateEnabled) {
   if (!wasConfigured) {
+    return true;
+  }
+  if (gateSettingsChanged && !savedGateEnabled && draftGateEnabled) {
     return true;
   }
   return passwordChangeOpen || newPassword.trim().length > 0 || confirmPassword.trim().length > 0;
@@ -3040,7 +3043,10 @@ function ApprovalGateCard(props) {
     wasConfigured,
     passwordChangeOpen,
     props.newPassword,
-    props.confirmPassword
+    props.confirmPassword,
+    gateSettingsChanged,
+    savedGateEnabled,
+    props.enabled
   );
   const approvalPasswordVerifyCopy = resolveApprovalPasswordVerifyCopy({
     gateSettingsChanged,

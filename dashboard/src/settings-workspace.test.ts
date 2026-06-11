@@ -126,24 +126,32 @@ assert(
 );
 
 assert(
-  shouldShowApprovalPasswordChangeForm(false, false, "", "") === true,
+  shouldShowApprovalPasswordChangeForm(false, false, "", "", false, false, true) === true,
   "approval-password: first-time setup always shows password fields",
 );
 assert(
-  shouldShowApprovalPasswordChangeForm(true, false, "", "") === false,
+  shouldShowApprovalPasswordChangeForm(true, false, "", "", false, true, true) === false,
   "approval-password: configured gate hides change form until expanded",
 );
 assert(
-  shouldShowApprovalPasswordChangeForm(true, true, "", "") === true,
+  shouldShowApprovalPasswordChangeForm(true, true, "", "", false, true, true) === true,
   "approval-password: configured gate shows change form when expanded",
 );
 assert(
-  shouldShowApprovalPasswordChangeForm(true, false, "next-password", "") === true,
+  shouldShowApprovalPasswordChangeForm(true, false, "next-password", "", false, true, true) === true,
   "approval-password: configured gate auto-opens change form when new password is entered",
 );
 assert(
-  shouldShowApprovalPasswordChangeForm(true, false, "", "next-password") === true,
+  shouldShowApprovalPasswordChangeForm(true, false, "", "next-password", false, true, true) === true,
   "approval-password: configured gate auto-opens change form when confirm password is entered",
+);
+assert(
+  shouldShowApprovalPasswordChangeForm(true, false, "", "", true, false, true) === true,
+  "approval-password: re-enabling a configured gate shows password fields",
+);
+assert(
+  shouldShowApprovalPasswordChangeForm(true, false, "", "", true, true, false) === false,
+  "approval-password: disabling gate does not require new password fields",
 );
 assert(
   resolveApprovalPasswordVerifyCopy({
