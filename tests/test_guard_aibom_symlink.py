@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.aibom_symlink import (
+    _MAX_SYMLINK_HOPS,
+    _resolve_symlink_chain,
     classify_path_class,
     fingerprint_redacted_path,
     inspect_aibom_source_path,
@@ -204,3 +209,62 @@ def test_inventory_snapshot_emits_findings_for_broken_symlink_sources(tmp_path: 
     )
 
     assert any(finding.check_id == "aibom.symlink.broken" for finding in snapshot.findings)
+
+
+def test_resolve_symlink_chain_returns_loop_when_hop_budget_is_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.aibom_symlink._MAX_SYMLINK_HOPS",
+        2,
+    )
+    calls = {"count": 0}
+
+    def fake_is_symlink(self: Path) -> bool:
+        return True
+
+    def fake_readlink(_path: str | Path) -> str:
+        calls["count"] += 1
+        return f"sibling-{calls['count']}"
+
+    monkeypatch.setattr(Path, "is_symlink", fake_is_symlink)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.aibom_symlink.os.readlink",
+        fake_readlink,
+    )
+    monkeypatch.setattr(Path, "resolve", lambda self: self)
+
+    resolved, state, _ = _resolve_symlink_chain(
+        Path("/workspace/entry"),
+        safe_roots=(Path("/workspace"),),
+        home_dir=Path("/home"),
+        workspace_dir=Path("/workspace"),
+    )
+
+    assert resolved is None
+    assert state == "loop"
+
+
+def test_max_symlink_hop_budget_is_sixteen() -> None:
+    assert _MAX_SYMLINK_HOPS == 16
+
+
+def test_inspect_oversized_symlink_target_skips_content_hash(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    oversized = workspace / "oversized-target.txt"
+    oversized.write_bytes(b"x" * (1024 * 1024 + 1))
+    link = workspace / "oversized-link"
+    link.symlink_to(oversized)
+
+    inspection = inspect_aibom_source_path(
+        link,
+        safe_roots=(workspace,),
+        home_dir=home,
+        workspace_dir=workspace,
+    )
+
+    assert inspection.validation_state == "valid"
+    assert inspection.target_content_hash is None
