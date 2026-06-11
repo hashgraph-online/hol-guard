@@ -7,6 +7,8 @@ import {
   resolveSecurityLevelDescription,
   resolveFineTuningSectionDescription,
   isFineTuningEditable,
+  resolveTotpSetupStep,
+  shouldShowApprovalPasswordCurrentField,
 } from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 
@@ -81,3 +83,22 @@ assert(isFineTuningEditable("custom") === true, "fine-tuning: custom level is ed
 assert(isFineTuningEditable("strict") === false, "fine-tuning: strict level is locked until custom");
 assert(isFineTuningEditable("balanced") === false, "fine-tuning: balanced level is locked until custom");
 assert(isFineTuningEditable("relaxed") === false, "fine-tuning: relaxed level is locked until custom");
+
+assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
+assert(
+  resolveTotpSetupStep({ provisioning_uri: "otpauth://totp/test", manual_key: "abcd", expires_at: "2026-01-01T00:00:00Z" }) === "scan",
+  "totp-setup: pending enrollment resumes at QR scan step",
+);
+
+assert(
+  shouldShowApprovalPasswordCurrentField(true, "", "") === false,
+  "approval-password: hide current field until user starts a password change",
+);
+assert(
+  shouldShowApprovalPasswordCurrentField(true, "next-password", "") === true,
+  "approval-password: show current field when new password is entered",
+);
+assert(
+  shouldShowApprovalPasswordCurrentField(false, "first-password", "first-password") === false,
+  "approval-password: first-time setup does not ask for a current password",
+);

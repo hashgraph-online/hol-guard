@@ -101,6 +101,25 @@ export function buildClearReviewQueuePayload(input: {
   };
 }
 
+export type TotpSetupStep = "confirm" | "scan";
+
+export function resolveTotpSetupStep(
+  enrollment: GuardApprovalGateTotpEnrollment | null,
+): TotpSetupStep {
+  return enrollment !== null ? "scan" : "confirm";
+}
+
+export function shouldShowApprovalPasswordCurrentField(
+  wasConfigured: boolean,
+  newPassword: string,
+  confirmPassword: string,
+): boolean {
+  if (!wasConfigured) {
+    return false;
+  }
+  return newPassword.trim().length > 0 || confirmPassword.trim().length > 0;
+}
+
 type SettingsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -401,6 +420,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [approvalGateCooldown, setApprovalGateCooldown] = useState(0);
   const [totpEnrollment, setTotpEnrollment] = useState<GuardApprovalGateTotpEnrollment | null>(null);
   const [totpSetupOpen, setTotpSetupOpen] = useState(false);
+  const [totpSetupStep, setTotpSetupStep] = useState<TotpSetupStep>("confirm");
+  const [totpActionPassword, setTotpActionPassword] = useState("");
   const [totpActionPending, setTotpActionPending] = useState<"enroll" | "verify" | "disable" | null>(null);
   const [totpActionError, setTotpActionError] = useState<string | null>(null);
   const [revokingCooldown, setRevokingCooldown] = useState(false);
@@ -592,11 +613,25 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setApprovalGateTotpDeviceLabel(event.target.value);
     setTotpActionError(null);
   }, []);
-  const handleOpenTotpSetup = useCallback(() => {
-    setTotpSetupOpen(true);
+  const handleTotpActionPasswordChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setTotpActionPassword(event.target.value);
+    setTotpActionError(null);
   }, []);
+  const handleBeginTotpSetup = useCallback(() => {
+    setTotpSetupStep(resolveTotpSetupStep(totpEnrollment));
+    setTotpActionError(null);
+    setTotpSetupOpen(true);
+  }, [totpEnrollment]);
+  const handleOpenTotpSetup = useCallback(() => {
+    setTotpSetupStep(resolveTotpSetupStep(totpEnrollment));
+    setTotpActionError(null);
+    setTotpSetupOpen(true);
+  }, [totpEnrollment]);
   const handleCloseTotpSetup = useCallback(() => {
     setTotpSetupOpen(false);
+    setTotpSetupStep("confirm");
+    setTotpActionPassword("");
+    setTotpActionError(null);
   }, []);
 
   const handleApprovalGateCooldownChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
@@ -685,15 +720,15 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, [revokePassword, approvalGateTotpCode, onApprovalGateChange]);
 
   const handleStartTotpEnrollment = useCallback(async () => {
-    if (!approvalGateCurrentPassword.trim()) {
-      setTotpActionError("Enter your current approval password to start enrollment.");
+    if (!totpActionPassword.trim()) {
+      setTotpActionError("Enter your approval password to continue.");
       return;
     }
     setTotpActionPending("enroll");
     setTotpActionError(null);
     try {
       const payload = await enrollApprovalGateTotp(
-        approvalGateCurrentPassword,
+        totpActionPassword,
         approvalGateTotpDeviceLabel.trim() || "local-device"
       );
       const normalizedPayload = normalizeSettingsPayload(payload);
@@ -708,29 +743,30 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         onApprovalGateChange?.(gate);
       }
       setTotpEnrollment(payload.enrollment ?? null);
+      setTotpSetupStep("scan");
       setTotpSetupOpen(payload.enrollment !== undefined && payload.enrollment !== null);
-      setActionMessage("TOTP enrollment started. Verify with your authenticator code.");
+      setActionMessage("Scan the QR code, then enter a live code from your app.");
       setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to start TOTP enrollment.");
     } finally {
       setTotpActionPending(null);
     }
-  }, [approvalGateCurrentPassword, approvalGateTotpDeviceLabel, onApprovalGateChange]);
+  }, [totpActionPassword, approvalGateTotpDeviceLabel, onApprovalGateChange]);
 
   const handleVerifyTotpEnrollment = useCallback(async () => {
-    if (!approvalGateCurrentPassword.trim()) {
-      setTotpActionError("Enter your current approval password before verifying TOTP.");
+    if (!totpActionPassword.trim()) {
+      setTotpActionError("Enter your approval password to continue.");
       return;
     }
     if (!approvalGateTotpCode.trim()) {
-      setTotpActionError("Enter the authenticator code to verify TOTP.");
+      setTotpActionError("Enter the six-digit code from your authenticator app.");
       return;
     }
     setTotpActionPending("verify");
     setTotpActionError(null);
     try {
-      const payload = await verifyApprovalGateTotp(approvalGateCurrentPassword, approvalGateTotpCode);
+      const payload = await verifyApprovalGateTotp(totpActionPassword, approvalGateTotpCode);
       const normalizedPayload = normalizeSettingsPayload(payload);
       const gate = normalizedPayload.settings.approval_gate;
       setState({ kind: "ready", payload: normalizedPayload });
@@ -743,30 +779,32 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         onApprovalGateChange?.(gate);
       }
       setApprovalGateTotpCode("");
+      setTotpActionPassword("");
       setTotpEnrollment(null);
       setTotpSetupOpen(false);
-      setActionMessage("TOTP verified and enabled.");
+      setTotpSetupStep("confirm");
+      setActionMessage("Authenticator app connected.");
       setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to verify TOTP.");
     } finally {
       setTotpActionPending(null);
     }
-  }, [approvalGateCurrentPassword, approvalGateTotpCode, onApprovalGateChange]);
+  }, [totpActionPassword, approvalGateTotpCode, onApprovalGateChange]);
 
   const handleDisableTotp = useCallback(async () => {
-    if (!approvalGateCurrentPassword.trim()) {
-      setTotpActionError("Enter your current approval password before disabling TOTP.");
+    if (!totpActionPassword.trim()) {
+      setTotpActionError("Enter your approval password to disable the authenticator app.");
       return;
     }
     if (!approvalGateTotpCode.trim()) {
-      setTotpActionError("Enter the authenticator code to disable TOTP.");
+      setTotpActionError("Enter the six-digit code from your authenticator app.");
       return;
     }
     setTotpActionPending("disable");
     setTotpActionError(null);
     try {
-      const payload = await disableApprovalGateTotp(approvalGateCurrentPassword, approvalGateTotpCode);
+      const payload = await disableApprovalGateTotp(totpActionPassword, approvalGateTotpCode);
       const normalizedPayload = normalizeSettingsPayload(payload);
       const gate = normalizedPayload.settings.approval_gate;
       setState({ kind: "ready", payload: normalizedPayload });
@@ -779,16 +817,18 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         onApprovalGateChange?.(gate);
       }
       setApprovalGateTotpCode("");
+      setTotpActionPassword("");
       setTotpEnrollment(null);
       setTotpSetupOpen(false);
-      setActionMessage("TOTP disabled.");
+      setTotpSetupStep("confirm");
+      setActionMessage("Authenticator app disconnected.");
       setActionMessageKind("success");
     } catch (error) {
       setTotpActionError(error instanceof Error ? error.message : "Unable to disable TOTP.");
     } finally {
       setTotpActionPending(null);
     }
-  }, [approvalGateCurrentPassword, approvalGateTotpCode, onApprovalGateChange]);
+  }, [totpActionPassword, approvalGateTotpCode, onApprovalGateChange]);
 
   const handleSave = useCallback(async () => {
     if (draft === null) return;
@@ -1249,6 +1289,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               cooldownSeconds={approvalGateCooldown}
               totpEnrollment={totpEnrollment}
               totpSetupOpen={totpSetupOpen}
+              totpSetupStep={totpSetupStep}
+              totpActionPassword={totpActionPassword}
               totpActionPending={totpActionPending}
               totpActionError={totpActionError}
               revokingCooldown={revokingCooldown}
@@ -1260,6 +1302,8 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               onCurrentPasswordChange={handleApprovalGateCurrentPassword}
               onTotpCodeChange={handleApprovalGateTotpCode}
               onTotpDeviceLabelChange={handleApprovalGateTotpDeviceLabel}
+              onTotpActionPasswordChange={handleTotpActionPasswordChange}
+              onBeginTotpSetup={handleBeginTotpSetup}
               onOpenTotpSetup={handleOpenTotpSetup}
               onCloseTotpSetup={handleCloseTotpSetup}
               onStrictAllDecisionsChange={handleApprovalGateStrictAllDecisions}
@@ -1794,6 +1838,8 @@ type ApprovalGateCardProps = {
   cooldownSeconds: number;
   totpEnrollment: GuardApprovalGateTotpEnrollment | null;
   totpSetupOpen: boolean;
+  totpSetupStep: TotpSetupStep;
+  totpActionPassword: string;
   totpActionPending: "enroll" | "verify" | "disable" | null;
   totpActionError: string | null;
   revokingCooldown: boolean;
@@ -1805,6 +1851,8 @@ type ApprovalGateCardProps = {
   onCurrentPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onTotpActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onBeginTotpSetup: () => void;
   onOpenTotpSetup: () => void;
   onCloseTotpSetup: () => void;
   onStrictAllDecisionsChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -1818,7 +1866,12 @@ type ApprovalGateCardProps = {
 
 function ApprovalGateCard(props: ApprovalGateCardProps) {
   const wasConfigured = props.gateConfig?.configured === true;
-  const showCurrentPassword = wasConfigured && props.gateConfig?.enabled === true;
+  const showCurrentPassword = shouldShowApprovalPasswordCurrentField(
+    wasConfigured,
+    props.newPassword,
+    props.confirmPassword,
+  );
+  const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
@@ -1856,14 +1909,21 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
         <div className="space-y-3">
           {/* Gate credentials */}
           <div className="rounded-xl border border-slate-100 bg-white p-4">
-            <SectionLabel>Sign-in details</SectionLabel>
+            <SectionLabel>Approval password</SectionLabel>
             <p className="mt-1 text-xs text-slate-500">
               {wasConfigured
-                ? "Enter current password to verify changes. Leave new password empty to keep the existing one."
-                : "Choose a password to protect approval decisions."}
+                ? "Guard asks for this password before allow or trust changes stick."
+                : "Choose a password. Guard will ask for it before allow or trust changes stick."}
             </p>
+            {wasConfigured ? (
+              <p className="mt-2 text-xs text-slate-500">
+                {changingPassword
+                  ? "Enter your current password below, then save settings to apply the new one."
+                  : "Leave the fields below empty to keep your current password."}
+              </p>
+            ) : null}
             <div className="mt-3 space-y-3">
-              {showCurrentPassword && (
+              {showCurrentPassword ? (
                 <label className="block">
                   <span className="text-xs font-medium text-slate-500">Current password</span>
                   <input
@@ -1871,28 +1931,32 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                     autoComplete="current-password"
                     value={props.currentPassword}
                     onChange={props.onCurrentPasswordChange}
-                    className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                    className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                   />
                 </label>
-              )}
+              ) : null}
               <label className="block">
-                <span className="text-xs font-medium text-slate-500">New password</span>
+                <span className="text-xs font-medium text-slate-500">
+                  {wasConfigured ? "New password" : "Password"}
+                </span>
                 <input
                   type="password"
                   autoComplete="new-password"
                   value={props.newPassword}
                   onChange={props.onNewPasswordChange}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-slate-500">Confirm new password</span>
+                <span className="text-xs font-medium text-slate-500">
+                  {wasConfigured ? "Confirm new password" : "Confirm password"}
+                </span>
                 <input
                   type="password"
                   autoComplete="new-password"
                   value={props.confirmPassword}
                   onChange={props.onConfirmPasswordChange}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                  className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                 />
               </label>
             </div>
@@ -1941,41 +2005,64 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
             <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
               {!totpEnabled && !totpPending && (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-brand-dark">Scan a QR code to connect an authenticator app.</p>
+                  <div className="max-w-xl space-y-1">
+                    <p className="text-sm font-medium text-brand-dark">Add a second factor for high-risk approvals.</p>
+                    <p className="text-xs text-slate-500">
+                      Setup walks you through password confirmation, then a QR scan. It does not use the password fields above.
+                    </p>
+                  </div>
                   <ActionButton
-                    onClick={props.onStartTotpEnrollment}
+                    onClick={props.onBeginTotpSetup}
                     disabled={props.totpActionPending !== null}
                     variant="outline"
                   >
-                    {props.totpActionPending === "enroll" ? "Opening setup..." : "Set up authenticator"}
+                    Set up authenticator
                   </ActionButton>
                 </div>
               )}
               {totpPending && (
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-brand-dark">
-                    Setup pending. Open the QR screen and enter the current code to finish.
-                  </p>
+                  <div className="max-w-xl space-y-1">
+                    <p className="text-sm font-medium text-brand-dark">Finish connecting your authenticator app.</p>
+                    <p className="text-xs text-slate-500">
+                      Open setup to scan the QR code and enter a live six-digit code.
+                    </p>
+                  </div>
                   <ActionButton
-                    onClick={props.totpEnrollment ? props.onOpenTotpSetup : props.onStartTotpEnrollment}
+                    onClick={props.onOpenTotpSetup}
                     disabled={props.totpActionPending !== null}
                     variant="outline"
                   >
-                    {props.totpEnrollment ? "Open setup" : "Restart setup"}
+                    Continue setup
                   </ActionButton>
                 </div>
               )}
               {totpEnabled && (
                 <div className="space-y-3">
+                  <p className="text-xs text-slate-500">
+                    Confirm your approval password and a current app code to disconnect the authenticator.
+                  </p>
                   <label className="block">
-                    <span className="text-xs font-medium text-slate-500">Authenticator code to disable</span>
+                    <span className="text-xs font-medium text-slate-500">Approval password</span>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={props.totpActionPassword}
+                      onChange={props.onTotpActionPasswordChange}
+                      className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-500">Authenticator code</span>
                     <input
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
+                      maxLength={6}
                       value={props.totpCode}
                       onChange={props.onTotpCodeChange}
-                      className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+                      placeholder="123456"
+                      className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm tracking-[0.28em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
                     />
                   </label>
                   <ActionButton
@@ -1983,23 +2070,29 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                     disabled={props.totpActionPending !== null}
                     variant="outline"
                   >
-                    {props.totpActionPending === "disable" ? "Disabling..." : "Disable authenticator"}
+                    {props.totpActionPending === "disable" ? "Disconnecting..." : "Disconnect authenticator"}
                   </ActionButton>
                 </div>
               )}
-              {props.totpActionError !== null && (
-                <p className="mt-2 text-xs text-brand-purple">{props.totpActionError}</p>
+              {props.totpActionError !== null && !props.totpSetupOpen && (
+                <p className="mt-2 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
+                  {props.totpActionError}
+                </p>
               )}
             </div>
-            {props.totpSetupOpen && props.totpEnrollment !== null && (
+            {props.totpSetupOpen && (
               <TotpSetupModal
+                step={props.totpSetupStep}
                 enrollment={props.totpEnrollment}
                 deviceLabel={props.totpDeviceLabel}
+                actionPassword={props.totpActionPassword}
                 totpCode={props.totpCode}
                 pending={props.totpActionPending}
                 error={props.totpActionError}
+                onActionPasswordChange={props.onTotpActionPasswordChange}
                 onDeviceLabelChange={props.onTotpDeviceLabelChange}
                 onTotpCodeChange={props.onTotpCodeChange}
+                onConfirmPassword={props.onStartTotpEnrollment}
                 onVerify={props.onVerifyTotpEnrollment}
                 onClose={props.onCloseTotpSetup}
               />
@@ -2051,18 +2144,23 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
 }
 
 function TotpSetupModal(props: {
-  enrollment: GuardApprovalGateTotpEnrollment;
+  step: TotpSetupStep;
+  enrollment: GuardApprovalGateTotpEnrollment | null;
   deviceLabel: string;
+  actionPassword: string;
   totpCode: string;
   pending: "enroll" | "verify" | "disable" | null;
   error: string | null;
+  onActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onConfirmPassword: () => void;
   onVerify: () => void;
   onClose: () => void;
 }) {
   const modalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(true, modalRef);
+  const isConfirmStep = props.step === "confirm" || props.enrollment === null;
 
   return (
     <div
@@ -2075,43 +2173,37 @@ function TotpSetupModal(props: {
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div>
             <SectionLabel>Authenticator setup</SectionLabel>
-            <h3 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">Scan this QR code</h3>
+            <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+              Step {isConfirmStep ? "1" : "2"} of 2
+            </p>
+            <h3 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">
+              {isConfirmStep ? "Confirm your approval password" : "Scan and verify"}
+            </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Open your authenticator app, add account, scan code, then enter current six-digit code to finish.
+              {isConfirmStep
+                ? "Guard needs your approval password before it can generate a QR code for your authenticator app."
+                : "Open your authenticator app, add an account, scan the code, then enter the live six-digit code."}
             </p>
           </div>
           <button
             type="button"
             onClick={props.onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-dark"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-dark"
             aria-label="Close authenticator setup"
           >
             <HiMiniXMark className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-        <div className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
-          <TotpEnrollmentQrPanel enrollment={props.enrollment} />
-          <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+        {isConfirmStep ? (
+          <div className="space-y-4 p-6">
             <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Device label</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
               <input
-                type="text"
-                value={props.deviceLabel}
-                onChange={props.onDeviceLabelChange}
-                className="mt-2 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Six-digit code</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={props.totpCode}
-                onChange={props.onTotpCodeChange}
-                placeholder="123456"
-                className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                type="password"
+                autoComplete="current-password"
+                value={props.actionPassword}
+                onChange={props.onActionPasswordChange}
+                className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               />
             </label>
             {props.error !== null && (
@@ -2119,11 +2211,47 @@ function TotpSetupModal(props: {
                 {props.error}
               </p>
             )}
-            <ActionButton onClick={props.onVerify} disabled={props.pending !== null}>
-              {props.pending === "verify" ? "Verifying..." : "Finish setup"}
+            <ActionButton onClick={props.onConfirmPassword} disabled={props.pending !== null}>
+              {props.pending === "enroll" ? "Continuing..." : "Continue"}
             </ActionButton>
           </div>
-        </div>
+        ) : props.enrollment !== null ? (
+          <div className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <TotpEnrollmentQrPanel enrollment={props.enrollment} />
+            <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Device label</span>
+                <input
+                  type="text"
+                  value={props.deviceLabel}
+                  onChange={props.onDeviceLabelChange}
+                  className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Six-digit code</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={props.totpCode}
+                  onChange={props.onTotpCodeChange}
+                  placeholder="123456"
+                  className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+              </label>
+              {props.error !== null && (
+                <p className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
+                  {props.error}
+                </p>
+              )}
+              <ActionButton onClick={props.onVerify} disabled={props.pending !== null}>
+                {props.pending === "verify" ? "Verifying..." : "Finish setup"}
+              </ActionButton>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
