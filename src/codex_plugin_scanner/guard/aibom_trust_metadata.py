@@ -41,12 +41,14 @@ def trust_resolution_from_domain(
     *,
     captured_at: str,
 ) -> dict[str, object]:
+    from .inventory_contract import _normalize_inventory_datetime
+
     return {
         "resolutionSource": "local",
         "status": "local",
         "trustScore": round(domain.score),
         "trustComponents": _trust_components_from_domain(domain),
-        "capturedAt": captured_at,
+        "capturedAt": _normalize_inventory_datetime(captured_at),
         "metadata": {
             "profileId": domain.profile_id,
             "profileVersion": domain.profile_version,
