@@ -1898,7 +1898,7 @@ def test_evaluate_package_request_artifact_fails_closed_when_stale_bundle_needs_
     )
     store.cache_supply_chain_bundle(WORKSPACE_ID, stale_response, "2026-05-18T01:00:00Z")
 
-    def raise_auth_expired(_store: GuardStore) -> dict[str, object]:
+    def raise_auth_expired(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         raise GuardSyncAuthorizationExpiredError(
             "Guard authorization expired. Run `hol-guard connect` to sign in again."
         )
@@ -1915,6 +1915,9 @@ def test_evaluate_package_request_artifact_fails_closed_when_stale_bundle_needs_
     assert result.policy_action == "require-reapproval"
     assert result.enforcement == "premium_cloud"
     assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
+    assert result.user_copy.next_step == "hol-guard connect"
+    assert "local-only" in result.user_copy.harness_message
+    assert "hol-guard connect" in result.user_copy.harness_message
 
 
 def test_evaluate_package_request_artifact_honors_cloud_advisory_block_when_auth_expired(
@@ -1960,7 +1963,7 @@ def test_evaluate_package_request_artifact_honors_cloud_advisory_block_when_auth
     )
     store.cache_supply_chain_bundle(WORKSPACE_ID, stale_response, "2026-05-18T01:00:00Z")
 
-    def raise_auth_expired(_store: GuardStore) -> dict[str, object]:
+    def raise_auth_expired(_store: GuardStore, **_kwargs: object) -> dict[str, object]:
         raise GuardSyncAuthorizationExpiredError(
             "Guard authorization expired. Run `hol-guard connect` to sign in again."
         )
@@ -1977,6 +1980,9 @@ def test_evaluate_package_request_artifact_honors_cloud_advisory_block_when_auth
     assert result.policy_action == "block"
     assert result.enforcement == "premium_cloud"
     assert any(reason["code"] == "cloud_auth_error" for reason in result.reasons)
+    assert result.user_copy.next_step == "hol-guard connect"
+    assert "local-only" in result.user_copy.harness_message
+    assert "hol-guard connect" in result.user_copy.harness_message
 
 
 def test_with_additional_reason_updates_all_packages() -> None:

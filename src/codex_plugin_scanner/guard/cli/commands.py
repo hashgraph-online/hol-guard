@@ -557,6 +557,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     protect_parser.add_argument("--dry-run", action="store_true")
     protect_parser.add_argument("--unsafe-raw-output", action="store_true")
     protect_parser.add_argument("--json", action="store_true")
+    protect_parser.add_argument("--package-shim-ui", action="store_true", help=argparse.SUPPRESS)
     protect_parser.add_argument("protect_command", nargs=argparse.REMAINDER)
 
     preflight_parser = guard_subparsers.add_parser(
@@ -1989,7 +1990,14 @@ def run_guard_command(
             config=config,
             unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
         )
-        _emit("protect", payload, getattr(args, "json", False))
+        _queue_local_protect_approvals(
+            payload,
+            store=store,
+            guard_home=guard_home,
+            workspace=workspace or Path.cwd(),
+        )
+        if not _suppress_package_shim_allow_output(args, payload):
+            _emit("protect", payload, getattr(args, "json", False))
         return exit_code
 
     if args.guard_command == "start":
@@ -4462,6 +4470,197 @@ def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harn
     }
 
 
+def _queue_local_protect_approvals(
+    response_payload: dict[str, object],
+    *,
+    store: GuardStore,
+    guard_home: Path,
+    workspace: Path,
+) -> None:
+    approval_item = _protect_approval_item(response_payload, workspace=workspace)
+    if approval_item is None:
+        return
+    try:
+        approval_center_url = ensure_guard_daemon(guard_home)
+    except RuntimeError:
+        return
+    artifact = _protect_request_artifact(response_payload, workspace=workspace)
+    if artifact is None:
+        return
+    detection = HarnessDetection(
+        harness=artifact.harness,
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+    queued = queue_blocked_approvals(
+        detection=detection,
+        evaluation={"artifacts": [approval_item]},
+        store=store,
+        approval_center_url=approval_center_url,
+    )
+    if not queued:
+        return
+    response_payload["approval_requests"] = queued
+    response_payload["artifact_id"] = artifact.artifact_id
+    response_payload["approval_request_ids"] = [
+        str(item["request_id"]) for item in queued if isinstance(item, dict) and "request_id" in item
+    ]
+    response_payload["approval_center_url"] = approval_center_url
+    harness = artifact.harness
+    _attach_primary_approval_link(
+        response_payload,
+        harness=harness,
+        approval_center_url=approval_center_url,
+    )
+    response_payload["review_hint"] = approval_center_hint(
+        context=HarnessContext(home_dir=guard_home, workspace_dir=workspace, guard_home=guard_home),
+        harness=harness,
+        approval_center_url=approval_center_url,
+        queued=queued,
+        request_id=_optional_string(response_payload.get("primary_approval_request_id")),
+        artifact_id=artifact.artifact_id,
+    )
+    response_payload["approval_delivery"] = _approval_delivery_payload(harness)
+    _localize_pending_approval_copy(response_payload, harness=harness)
+    _bind_protect_receipt_approval(response_payload, store=store)
+
+
+def _protect_request_artifact(response_payload: dict[str, object], *, workspace: Path) -> GuardArtifact | None:
+    receipt = response_payload.get("receipt")
+    request = response_payload.get("request")
+    if not isinstance(receipt, dict) or not isinstance(request, dict):
+        return None
+    artifact_id = _optional_string(receipt.get("artifact_id"))
+    if artifact_id is None:
+        return None
+    artifact_name = _optional_string(receipt.get("artifact_name")) or artifact_id
+    redacted_command = _optional_string(request.get("redacted_command"))
+    command_tokens = request.get("command")
+    if redacted_command is None and isinstance(command_tokens, list):
+        command_parts = [str(item) for item in command_tokens if isinstance(item, str)]
+        redacted_command = shlex.join(command_parts) if command_parts else None
+    source_scope = _optional_string(receipt.get("source_scope")) or "project"
+    package_manager = _optional_string(request.get("package_manager")) or _optional_string(request.get("executor")) or "package"
+    intent_kind = _optional_string(request.get("install_kind")) or "install"
+    config_path = str(workspace / "hol-guard.toml")
+    return GuardArtifact(
+        artifact_id=artifact_id,
+        name=artifact_name,
+        harness=_protect_payload_harness(response_payload),
+        artifact_type="package_request",
+        source_scope=source_scope,
+        config_path=config_path,
+        command=redacted_command,
+        metadata={
+            "package_manager": package_manager,
+            "intent_kind": intent_kind,
+            "targets": request.get("targets") if isinstance(request.get("targets"), list) else [],
+            "manifest_paths": request.get("manifest_paths") if isinstance(request.get("manifest_paths"), list) else [],
+            "lockfile_paths": request.get("lockfile_paths") if isinstance(request.get("lockfile_paths"), list) else [],
+            "redacted_command": redacted_command,
+        },
+    )
+
+
+def _protect_approval_item(response_payload: dict[str, object], *, workspace: Path) -> dict[str, object] | None:
+    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
+    receipt = response_payload.get("receipt")
+    verdict = response_payload.get("verdict")
+    artifact = _protect_request_artifact(response_payload, workspace=workspace)
+    if (
+        not isinstance(supply_chain_evaluation, dict)
+        or not isinstance(receipt, dict)
+        or not isinstance(verdict, dict)
+        or artifact is None
+    ):
+        return None
+    policy_action = _optional_string(supply_chain_evaluation.get("policy_action"))
+    if policy_action not in {"block", "require-reapproval"}:
+        return None
+    user_copy = supply_chain_evaluation.get("user_copy")
+    user_copy_map = user_copy if isinstance(user_copy, dict) else {}
+    return {
+        "artifact_id": artifact.artifact_id,
+        "artifact_name": artifact.name,
+        "artifact_hash": _optional_string(receipt.get("artifact_hash")) or artifact.artifact_id,
+        "artifact_type": artifact.artifact_type,
+        "source_scope": artifact.source_scope,
+        "config_path": artifact.config_path,
+        "policy_action": policy_action,
+        "changed_fields": _protect_target_labels(response_payload),
+        "risk_summary": _optional_string(supply_chain_evaluation.get("risk_summary"))
+        or _optional_string(user_copy_map.get("summary"))
+        or _optional_string(verdict.get("reason")),
+        "risk_signals": _string_list(verdict.get("risk_signals")),
+        "action_envelope_json": receipt.get("action_envelope_json") if isinstance(receipt.get("action_envelope_json"), dict) else None,
+        "decision_v2_json": {
+            "action": policy_action,
+            "user_title": _optional_string(user_copy_map.get("title")) or "Review required",
+            "summary": _optional_string(user_copy_map.get("summary")) or _optional_string(verdict.get("reason")) or "",
+            "harness_message": _optional_string(user_copy_map.get("harness_message")) or "",
+        },
+    }
+
+
+def _protect_target_labels(response_payload: dict[str, object]) -> list[str]:
+    request = response_payload.get("request")
+    if not isinstance(request, dict):
+        return []
+    targets = request.get("targets")
+    if not isinstance(targets, list):
+        return []
+    labels: list[str] = []
+    for item in targets:
+        if not isinstance(item, dict):
+            continue
+        candidate = _optional_string(item.get("package_name")) or _optional_string(item.get("raw_spec"))
+        if candidate is not None and candidate not in labels:
+            labels.append(candidate)
+    return labels
+
+
+def _protect_payload_harness(response_payload: dict[str, object]) -> str:
+    request = response_payload.get("request")
+    if isinstance(request, dict):
+        for key in ("package_manager", "harness", "executor"):
+            value = _optional_string(request.get(key))
+            if value is not None:
+                return value
+    receipt = response_payload.get("receipt")
+    if isinstance(receipt, dict):
+        value = _optional_string(receipt.get("harness"))
+        if value is not None:
+            return value
+    return "guard-cli"
+
+
+def _bind_protect_receipt_approval(response_payload: dict[str, object], *, store: GuardStore) -> None:
+    receipt = response_payload.get("receipt")
+    if not isinstance(receipt, dict):
+        return
+    receipt_id = _optional_string(receipt.get("receipt_id"))
+    approval_request_id = _optional_string(response_payload.get("primary_approval_request_id"))
+    if receipt_id is None or approval_request_id is None:
+        return
+    receipt["approval_source"] = "approval-center"
+    receipt["approval_request_id"] = approval_request_id
+    store.update_receipt_approval_context(
+        receipt_id,
+        approval_source="approval-center",
+        approval_request_id=approval_request_id,
+    )
+
+
+def _suppress_package_shim_allow_output(args: argparse.Namespace, response_payload: dict[str, object]) -> bool:
+    if not bool(getattr(args, "package_shim_ui", False)) or bool(getattr(args, "json", False)):
+        return False
+    verdict = response_payload.get("verdict")
+    action = _optional_string(verdict.get("action")) if isinstance(verdict, dict) else None
+    return action == "allow"
+
+
 def _open_codex_live_approval(response_payload: Mapping[str, object]) -> None:
     queued = response_payload.get("approval_requests")
     lookup: dict[str, object] = {
@@ -5943,12 +6142,35 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
         )
         or approval_center_url.strip()
     )
+    canonical_harness = _canonical_harness_name(harness)
     harness_label = {
         "claude-code": "Claude Code",
         "codex": "Codex",
         "copilot": "Copilot",
+        "guard-cli": "package install",
         "opencode": "OpenCode",
-    }.get(_canonical_harness_name(harness), "the harness")
+    }.get(canonical_harness, "the harness")
+    if canonical_harness in {
+        "npm",
+        "npx",
+        "pnpm",
+        "yarn",
+        "bun",
+        "pip",
+        "pip3",
+        "pipenv",
+        "pipx",
+        "poetry",
+        "uv",
+        "uvx",
+        "cargo",
+        "go",
+        "composer",
+        "bundle",
+        "mvn",
+        "gradle",
+    }:
+        harness_label = "package install"
     return (
         f"Open HOL Guard to approve or keep this blocked: {review_url}. "
         f"After you choose, retry the same {harness_label} action."

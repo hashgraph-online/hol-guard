@@ -2522,10 +2522,14 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
     }
 
 
-def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
+def _resolve_guard_sync_auth_context(
+    store: GuardStore,
+    *,
+    allow_primary_repair: bool = True,
+) -> dict[str, object]:
     with _guard_sync_auth_lock(store):
         oauth_health = store.get_oauth_local_credential_health()
-        oauth_credentials = store.get_oauth_local_credentials(allow_primary=True)
+        oauth_credentials = store.get_oauth_local_credentials(allow_primary=allow_primary_repair)
         if oauth_credentials is not None:
             return _resolve_guard_sync_auth_context_from_oauth_credentials(store, oauth_credentials)
         if bool(oauth_health.get("configured")):
@@ -2534,7 +2538,7 @@ def _resolve_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
                 return _resolve_guard_sync_auth_context_from_oauth_credentials(
                     store,
                     recoverable_credentials,
-                    persist_recovered_secret=True,
+                    persist_recovered_secret=allow_primary_repair,
                 )
             raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         credentials = store.get_sync_credentials()

@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
@@ -754,6 +755,8 @@ def test_guard_package_shims_block_before_manager_execution(
 
     assert result.returncode != 0
     assert marker_path.exists() is False
+    assert "\"verdict\"" not in result.stdout
+    assert "HOL Guard" in result.stdout
 
 
 def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: Path, capsys) -> None:
@@ -807,7 +810,65 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: 
     assert marker_payload["argv"][1:] == ["ci"]
     assert marker_payload["cwd"] == str(workspace_dir)
     assert marker_payload["shim_var"] == "shim-value"
-    assert "fake-manager-stdout" in result.stdout
+    assert result.stdout.strip() == "fake-manager-stdout"
+
+
+def test_guard_protect_json_queues_local_approval_link_on_cloud_auth_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="minimist",
+        evaluate_status=401,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "minimist@1.2.8",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    payload = json.loads(capsys.readouterr().out)
+    stored_receipt = GuardStore(home_dir).list_receipts(limit=1)[0]
+
+    assert rc == 2
+    assert payload["approval_center_url"] == "http://127.0.0.1:5474"
+    assert payload["primary_approval_request_id"]
+    assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
+    assert payload["approval_request_ids"] == [payload["primary_approval_request_id"]]
+    assert payload["receipt"]["approval_request_id"] == payload["primary_approval_request_id"]
+    assert stored_receipt["approval_request_id"] == payload["primary_approval_request_id"]
+    assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"] == payload["primary_approval_url"]
+    assert "Open HOL Guard to approve or keep this blocked:" in payload["supply_chain_evaluation"]["user_copy"][
+        "harness_message"
+    ]
 
 
 def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path) -> None:
