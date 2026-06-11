@@ -550,6 +550,8 @@ export function harnessDisplayName(harness: string): string {
       return "Hermes";
     case "openclaw":
       return "OpenClaw";
+    case "kimi":
+      return "Kimi";
     default:
       return capitalizeHarness(normalized);
   }

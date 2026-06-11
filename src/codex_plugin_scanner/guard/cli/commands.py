@@ -3025,11 +3025,15 @@ def run_guard_command(
             args.harness = runtime_harness.strip()
         else:
             args.harness = resolve_runtime_hook_harness(args.harness)
-        payload = _load_hook_payload(getattr(args, "event_file", None), input_text=input_text)
+        payload = _load_hook_payload(
+            getattr(args, "event_file", None),
+            input_text=input_text,
+            harness=args.harness,
+        )
         if _canonical_harness_name(args.harness) == "cursor":
             from ..adapters.cursor_hooks import prepare_cursor_hook_payload
 
-            payload = _normalize_hook_payload(prepare_cursor_hook_payload(payload))
+            payload = _normalize_hook_payload(prepare_cursor_hook_payload(payload), harness=args.harness)
         managed_install = _managed_install_for(store, args.harness)
         workspace_was_explicit = workspace is not None
         runtime_workspace = workspace
@@ -3988,7 +3992,16 @@ def run_guard_command(
                         raw_runtime_reason,
                         approval_context,
                     )
-                _emit_native_hook_block_stderr(native_block_reason)
+                if _canonical_harness_name(args.harness) == "kimi":
+                    _emit_native_hook_response(
+                        harness=args.harness,
+                        policy_action=policy_action,
+                        event_name=event_name,
+                        reason=native_block_reason,
+                        output_stream=output_stream,
+                    )
+                else:
+                    _emit_native_hook_block_stderr(native_block_reason)
                 _record_harness_usage_for_hook(
                     store=store,
                     action_envelope=action_envelope,
@@ -4176,13 +4189,21 @@ def run_guard_command(
         )
         approval_context = _native_approval_center_context(payload, harness=args.harness)
         if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
-            _emit_native_hook_block_stderr(
-                _native_hook_reason_for_harness(
-                    args.harness,
-                    incoming_reason,
-                    approval_context,
-                )
+            block_reason = _native_hook_reason_for_harness(
+                args.harness,
+                incoming_reason,
+                approval_context,
             )
+            if _canonical_harness_name(args.harness) == "kimi":
+                _emit_native_hook_response(
+                    harness=args.harness,
+                    policy_action=policy_action,
+                    event_name=hook_event_name,
+                    reason=block_reason,
+                    output_stream=output_stream,
+                )
+            else:
+                _emit_native_hook_block_stderr(block_reason)
             return 2
         if _canonical_harness_name(args.harness) == "codex" and (
             hook_event_name == "UserPromptSubmit" or approval_context is not None
@@ -4276,7 +4297,8 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
-    return _canonical_harness_name(args.harness) in {"claude-code", "codex"} and not getattr(args, "json", False)
+    canonical = _canonical_harness_name(args.harness)
+    return canonical in {"claude-code", "codex", "kimi"} and not getattr(args, "json", False)
 
 
 def _should_emit_claude_native_pretooluse_notice(
@@ -4302,6 +4324,8 @@ def _should_emit_native_hook_json_response(
     harness = _canonical_harness_name(args.harness)
     if harness == "codex" and getattr(args, "json", False) and event_name == "UserPromptSubmit":
         return True
+    if harness == "kimi" and getattr(args, "json", False) and output_stream is not None:
+        return event_name in {"PreToolUse", "UserPromptSubmit"}
     return (
         harness in {"claude-code", "codex"}
         and getattr(args, "json", False)
@@ -4314,9 +4338,11 @@ def _should_emit_native_hook_json_response(
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    del args, event_name, policy_action
     # Codex v0.133 logs non-zero PreToolUse hooks as failed but still executes
     # the tool. Blocking must be communicated through the JSON hook response.
+    canonical = _canonical_harness_name(args.harness)
+    if canonical == "kimi" and event_name in {"PreToolUse", "UserPromptSubmit"}:
+        return policy_action in {"block", "sandbox-required", "require-reapproval"}
     return False
 
 
@@ -6851,12 +6877,19 @@ def _emit_native_hook_response(
         if policy_action in {"block", "sandbox-required", "require-reapproval"} and not additional_context:
             payload["decision"] = "block"
             payload["reason"] = reason
-            if _canonical_harness_name(harness) == "codex":
+            canonical = _canonical_harness_name(harness)
+            if canonical == "codex":
                 payload["continue"] = False
                 payload["stopReason"] = reason
                 payload["hookSpecificOutput"] = {
                     "hookEventName": event_name,
                     "additionalContext": reason,
+                }
+            elif canonical == "kimi":
+                payload["hookSpecificOutput"] = {
+                    "hookEventName": event_name,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
                 }
         elif additional_context:
             payload["hookSpecificOutput"] = {
@@ -6944,7 +6977,7 @@ def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action == "require-reapproval":
-        if harness == "codex":
+        if harness in {"codex", "kimi"}:
             return "deny"
         return "ask"
     if harness == "codex":
@@ -7189,15 +7222,20 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
     return config_policy
 
 
-def _load_hook_payload(event_file: str | None, *, input_text: str | None = None) -> dict[str, object]:
+def _load_hook_payload(
+    event_file: str | None,
+    *,
+    input_text: str | None = None,
+    harness: str | None = None,
+) -> dict[str, object]:
     if event_file:
         payload = json.loads(Path(event_file).read_text(encoding="utf-8"))
-        return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+        return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
     raw = input_text.strip() if isinstance(input_text, str) else sys.stdin.read().strip()
     if not raw:
         return {}
     payload = json.loads(raw)
-    return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+    return _normalize_hook_payload(payload, harness=harness) if isinstance(payload, dict) else {}
 
 
 _ACTION_ENVELOPE_HARNESSES = frozenset(
@@ -7228,7 +7266,11 @@ def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, obj
     return envelope.to_dict() if envelope is not None else None
 
 
-def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+def _normalize_hook_payload(
+    payload: dict[str, object],
+    *,
+    harness: str | None = None,
+) -> dict[str, object]:
     normalized = dict(payload)
     for source_key, target_key in (
         ("artifactId", "artifact_id"),
@@ -7262,7 +7304,26 @@ def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     if arguments is not None:
         normalized["tool_input"] = arguments
         normalized["arguments"] = arguments
+    if harness is not None and _canonical_harness_name(harness) == "kimi":
+        normalized["prompt"] = _normalize_kimi_prompt(normalized.get("prompt"))
     return normalized
+
+
+def _normalize_kimi_prompt(value: object | None) -> str | None:
+    """Flatten Kimi Code's ContentPart[] prompt into a single string."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts) if parts else None
+    return None
 
 
 def _normalize_hook_arguments(*values: object | None) -> object | None:
