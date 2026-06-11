@@ -3630,6 +3630,7 @@ function ApprovalGateCard(props) {
     gateSettingsChanged,
     gateEnabled: savedGateEnabled
   });
+  const showGateDetails = props.enabled || gateSettingsChanged;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
@@ -3650,7 +3651,7 @@ function ApprovalGateCard(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Use a password before allow or trust changes stick. Turn on strict mode to require proof for block decisions too." })
     ] }) }),
     failClosed && props.enabled && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-brand-purple/20 bg-brand-purple/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-purple", children: "Guard needs your approval setup fixed before trust or policy changes can continue." }) }),
-    props.enabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+    showGateDetails ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval password" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: wasConfigured ? "Guard asks for this password before allow or trust changes stick." : "Choose a password. Guard will ask for it before allow or trust changes stick." }),
@@ -3862,7 +3863,7 @@ function ApprovalGateCard(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRevokeCooldown, disabled: props.revokingCooldown, variant: "outline", children: props.revokingCooldown ? "Revoking…" : "Revoke cooldown" })
         ] })
       ] })
-    ] })
+    ] }) : null
   ] });
 }
 function TotpSetupConfirmStep(props) {

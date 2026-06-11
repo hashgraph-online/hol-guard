@@ -1938,6 +1938,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
     gateSettingsChanged,
     gateEnabled: savedGateEnabled,
   });
+  const showGateDetails = props.enabled || gateSettingsChanged;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
@@ -1971,7 +1972,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
         </div>
       )}
 
-      {props.enabled && (
+      {showGateDetails ? (
         <div className="space-y-3">
           {/* Gate credentials */}
           <div className="rounded-xl border border-slate-100 bg-white p-4">
@@ -2200,7 +2201,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
             </div>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
