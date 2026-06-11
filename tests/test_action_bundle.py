@@ -17,6 +17,9 @@ def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> Non
     assert "install_source:" in action_text
     assert 'default: "pypi"' in action_text
     assert "INSTALL_SOURCE: ${{ inputs.install_source }}" in action_text
+    assert "install_cisco:" in action_text
+    assert "INSTALL_CISCO: ${{ inputs.install_cisco }}" in action_text
+    assert 'if [ "$INSTALL_CISCO" = "true" ]; then' in action_text
     assert 'if [ "$INSTALL_SOURCE" = "local" ]; then' in action_text
     assert "install_source=local requires the hol-guard source checkout" in action_text
     assert 'python3 -m pip install "$LOCAL_SOURCE[cisco]"' in action_text
@@ -29,9 +32,14 @@ def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> Non
     assert 'SCANNER_SHA256_FILE="$GITHUB_ACTION_PATH/scanner-sha256.txt"' in action_text
     assert 'echo "Downloaded scanner wheel SHA256 does not match scanner-sha256.txt."' in action_text
     assert "python3 -m pypi_attestations verify pypi \\" in action_text
-    assert 'python3 -m pip install "$DIST_DIR/$DIST_BASENAME"' in action_text
+    assert '"$WHEEL_PATH"' in action_text
+    assert 'python3 -m pip install "$WHEEL_PATH"' in action_text
     assert 'python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"' in action_text
     assert "scanner-version.txt" in action_text
+    scanner_version = (ROOT / "action" / "scanner-version.txt").read_text(encoding="utf-8").strip()
+    scanner_sha256 = (ROOT / "action" / "scanner-sha256.txt").read_text(encoding="utf-8").strip()
+    assert scanner_version not in {"", "0.0.0"}
+    assert scanner_sha256 != "0" * 64
     assert "cisco-version.txt" in action_text
     assert "pypi-attestations-version.txt" in action_text
     assert 'SCANNER_REPOSITORY="https://github.com/hashgraph-online/hol-guard"' in action_text

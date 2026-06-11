@@ -71,6 +71,10 @@ inputs:
     description: "Package install source: pypi for the reviewed release path, or local for source-repo dogfooding"
     required: false
     default: "pypi"
+  install_cisco:
+    description: "Install the opt-in Cisco skill-scanner dependency used by this repo"
+    required: false
+    default: "false"
   submission_enabled:
     description: "Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold"
     required: false
@@ -193,6 +197,7 @@ runs:
       shell: bash
       env:
         INSTALL_SOURCE: ${{ inputs.install_source }}
+        INSTALL_CISCO: ${{ inputs.install_cisco }}
       run: |
         LOCAL_SOURCE=""
         for candidate in "$GITHUB_ACTION_PATH" "$GITHUB_ACTION_PATH/.."; do
@@ -230,7 +235,16 @@ runs:
           python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"
 
           DIST_BASENAME="$(
-            DIST_DIR="$DIST_DIR" python3 -c "import os; from pathlib import Path; dist_dir = Path(os.environ['DIST_DIR']); candidates = sorted(dist_dir.glob('plugin_scanner-*.whl')); expected = len(candidates) == 1; print(candidates[0].name) if expected else (_ for _ in ()).throw(SystemExit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'))"
+            DIST_DIR="$DIST_DIR" python3 -c "
+import os
+import sys
+from pathlib import Path
+
+candidates = sorted(Path(os.environ['DIST_DIR']).glob('plugin_scanner-*.whl'))
+if len(candidates) != 1:
+    sys.exit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}')
+print(candidates[0].name)
+"
           )"
 
           ACTUAL_SHA256="$(
@@ -241,15 +255,18 @@ runs:
             exit 1
           fi
 
+          WHEEL_PATH="$DIST_DIR/$DIST_BASENAME"
           if ! python3 -m pypi_attestations verify pypi \
             --repository "$SCANNER_REPOSITORY" \
-            "pypi:${DIST_BASENAME}"; then
+            "$WHEEL_PATH"; then
             echo "Failed to verify PyPI provenance for plugin-scanner==${SCANNER_VERSION}." >&2
             exit 1
           fi
 
-          python3 -m pip install "$DIST_DIR/$DIST_BASENAME"
-          python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
+          python3 -m pip install "$WHEEL_PATH"
+          if [ "$INSTALL_CISCO" = "true" ]; then
+            python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
+          fi
         else
           echo "Unsupported install_source: $INSTALL_SOURCE" >&2
           exit 1
