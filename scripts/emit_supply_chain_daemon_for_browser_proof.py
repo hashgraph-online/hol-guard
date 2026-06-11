@@ -17,6 +17,13 @@ from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_tok
 from codex_plugin_scanner.guard.store import GuardStore  # noqa: E402
 
 
+def _restore_home(original_home: str | None) -> None:
+    if original_home is None:
+        os.environ.pop("HOME", None)
+    else:
+        os.environ["HOME"] = original_home
+
+
 def main() -> int:
     evidence_dir = Path(os.environ.get("GUARD_BROWSER_DAEMON_EVIDENCE_DIR", ".guard-browser-daemon")).resolve()
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -29,32 +36,27 @@ def main() -> int:
     guard_home = evidence_dir / "guard-home"
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    auth_token = load_guard_daemon_auth_token(store.guard_home)
-    if auth_token is None:
-        daemon.stop()
-        raise SystemExit("Guard daemon auth token was unavailable.")
-
-    sys.stdout.write(
-        json.dumps(
-            {
-                "authToken": auth_token,
-                "origin": f"http://127.0.0.1:{daemon.port}",
-                "port": daemon.port,
-            },
-        )
-        + "\n",
-    )
-    sys.stdout.flush()
-
     try:
+        daemon.start()
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        if auth_token is None:
+            raise SystemExit("Guard daemon auth token was unavailable.")
+
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "authToken": auth_token,
+                    "origin": f"http://127.0.0.1:{daemon.port}",
+                    "port": daemon.port,
+                },
+            )
+            + "\n",
+        )
+        sys.stdout.flush()
         sys.stdin.read()
     finally:
         daemon.stop()
-        if original_home is None:
-            os.environ.pop("HOME", None)
-        else:
-            os.environ["HOME"] = original_home
+        _restore_home(original_home)
     return 0
 
 

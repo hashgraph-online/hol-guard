@@ -79,21 +79,21 @@ def _run_proof(*, evidence_dir: Path) -> dict[str, object]:
     sync_result: dict[str, object] = {}
 
     def fake_sync(current_store: GuardStore) -> dict[str, object]:
-        assert current_store is store
+        if current_store is not store:
+            raise RuntimeError("Unexpected Guard store passed to runtime proof sync callback.")
         sync_finished.set()
         sync_result["synced_at"] = datetime.now(timezone.utc).isoformat()
         sync_result["receipts_stored"] = 1
         return sync_result
 
+    checks: list[dict[str, object]] = []
+    os.chdir(workspace_dir)
     had_sync_attr = hasattr(daemon_server, "sync_local_guard_cloud_proof")
     original_sync = getattr(daemon_server, "sync_local_guard_cloud_proof", None)
     daemon_server.sync_local_guard_cloud_proof = fake_sync  # type: ignore[attr-defined]
-
-    checks: list[dict[str, object]] = []
-    os.chdir(workspace_dir)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
     try:
+        daemon.start()
         token = _dashboard_token_for(store)
 
         install_status, install_payload = _read_json_response(
