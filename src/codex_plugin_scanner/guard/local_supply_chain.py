@@ -995,6 +995,7 @@ def recompute_package_protect_artifact_hash(
     *,
     store: GuardStore,
     workspace_dir: Path,
+    now: str | None = None,
 ) -> str | None:
     from .runtime.package_intent_parser import parse_package_intent
 
@@ -1008,11 +1009,12 @@ def recompute_package_protect_artifact_hash(
         config_path="hol-guard.toml",
         source_scope="project",
     )
+    evaluation_timestamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     evaluation = evaluate_package_request_artifact(
         artifact=artifact,
         store=store,
         workspace_dir=workspace_dir,
-        now=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        now=evaluation_timestamp,
     )
     return _package_request_artifact_hash(
         artifact,
@@ -1105,20 +1107,10 @@ def _package_request_artifact_hash(
     policy_gate = _package_policy_gate_context(store, artifact, evaluation)
     metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
     targets = metadata.get("targets")
-    if isinstance(targets, list) and any(isinstance(item, dict) for item in targets):
-        return stable_digest_hex(
-            json.dumps(
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "policy_gate": policy_gate,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        )
     manifest_paths = tuple(str(item) for item in metadata.get("manifest_paths", []) if isinstance(item, str))
     lockfile_paths = tuple(str(item) for item in metadata.get("lockfile_paths", []) if isinstance(item, str))
-    if not manifest_paths and not lockfile_paths:
+    has_targets = isinstance(targets, list) and any(isinstance(item, dict) for item in targets)
+    if has_targets or (not manifest_paths and not lockfile_paths):
         return stable_digest_hex(
             json.dumps(
                 {

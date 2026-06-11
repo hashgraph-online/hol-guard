@@ -143,6 +143,7 @@ def build_protect_payload(
             store=store,
             workspace_dir=workspace_dir,
             command=command,
+            now=now,
         ):
             return _merge_cached_advisory_into_package_payload(
                 package_payload,
@@ -235,6 +236,7 @@ def _package_saved_approval_covers_current_gate(
     store: GuardStore,
     workspace_dir: Path,
     command: list[str],
+    now: str,
 ) -> bool:
     if not _package_payload_uses_saved_approval(payload):
         return False
@@ -244,7 +246,12 @@ def _package_saved_approval_covers_current_gate(
     stored_hash = receipt.get("artifact_hash")
     if not isinstance(stored_hash, str) or not stored_hash:
         return False
-    current_hash = recompute_package_protect_artifact_hash(command, store=store, workspace_dir=workspace_dir)
+    current_hash = recompute_package_protect_artifact_hash(
+        command,
+        store=store,
+        workspace_dir=workspace_dir,
+        now=now,
+    )
     return current_hash == stored_hash
 
 
