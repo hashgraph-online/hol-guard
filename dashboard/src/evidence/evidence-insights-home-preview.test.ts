@@ -21,13 +21,15 @@ assert(homePreviewSource.includes("patterns from recorded actions"), "home stats
 assert(homePreviewSource.includes("GuardStatMetric"), "home stats card: uses shared metric cells");
 assert(homePreviewSource.includes("HomeInsightsMetrics"), "home stats card: renders distinct insight metrics");
 assert(homePreviewSource.includes("EvidenceActivityHeatmapMini"), "home stats card: includes mini activity heatmap");
-assert(homePreviewSource.includes("Recent Activity"), "home stats card: labels recent activity section");
+assert(homePreviewSource.includes("Last 5 days"), "home stats card: labels recent activity section");
 assert(homePreviewSource.includes("daily_activity"), "home stats card: uses daily activity series");
 assert(!homePreviewSource.includes("EvidenceInsightsHeadlineBento"), "home stats card: avoids duplicate lifetime metric row");
 assert(homeDashboardSource.includes('label: "Recorded"'), "home dashboard: uses recorded label instead of history");
 assert(!homeDashboardSource.includes("ProofStrip"), "home dashboard: removed standalone proof strip");
 assert(homeDashboardSource.includes("EvidenceInsightsHomePreview"), "home dashboard: uses unified stats card");
 assert(homePreviewSource.includes("EvidenceInsightsShareButton"), "home stats card: primary share button");
+assert(homePreviewSource.includes("onShare && insightsAvailable"), "home stats card: share button when insights exist");
+assert(!homePreviewSource.includes("cloudConnected && onShare"), "home stats card: share not gated on cloud pair state");
 assert(shareButtonSource.includes("Share publicly"), "share button: clear sharing label");
 assert(!shareButtonSource.includes('variant="outline"'), "share button: uses primary styling");
 assert(modalLayerSource.includes("createPortal"), "modal layer: portals to document body");

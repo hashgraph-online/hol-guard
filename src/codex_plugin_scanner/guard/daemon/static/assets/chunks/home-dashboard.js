@@ -20,11 +20,9 @@ function EvidenceInsightsHomePreview({
   overviewStats,
   analytics,
   analyticsLoading = false,
-  runtime,
   onOpenInsights,
   onShare
 }) {
-  const cloudConnected = runtime?.cloud_state === "paired_active";
   const insightsAvailable = analytics !== null && analytics.total > 0;
   const showInsightsSection = analyticsLoading || insightsAvailable;
   const showInsightsFooter = Boolean(onOpenInsights) && (analyticsLoading || insightsAvailable);
@@ -38,7 +36,7 @@ function EvidenceInsightsHomePreview({
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Your Guard stats" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "What needs you now, plus patterns from recorded actions on this machine." })
       ] }),
-      cloudConnected && onShare && insightsAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsShareButton, { onClick: onShare, className: "shrink-0" }) : null
+      onShare && insightsAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsShareButton, { onClick: onShare, className: "shrink-0" }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-3 gap-px bg-slate-100", children: overviewStats.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardStatMetric,

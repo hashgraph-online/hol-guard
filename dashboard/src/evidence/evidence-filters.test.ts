@@ -8,6 +8,7 @@ import {
   filterBySourceScope,
   filterEvidence,
 } from "./evidence-filters";
+import { receiptUtcDateKey } from "./evidence-format";
 import type { EvidenceFilterState } from "./evidence-types";
 import { DEFAULT_FILTER_STATE } from "./evidence-url-state";
 
@@ -178,12 +179,20 @@ assert(weekResult.length >= 1, "time: week");
 const allTime = filterByTime(todayReceipts, "all", "", NOW);
 assert(allTime.length === todayReceipts.length, "time: all");
 
-const dayDateStr = (() => {
-  const yd = localMidnight(NOW, -1);
-  return `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, "0")}-${String(yd.getDate()).padStart(2, "0")}`;
-})();
-const dayResult = filterByTime(todayReceipts, "all", dayDateStr, NOW);
-assert(dayResult.length === 1 && dayResult[0].receipt_id === "t3", "time: day filter");
+const utcDayReceipts = [
+  makeReceipt("u1", { timestamp: "2026-06-07T02:30:00.000Z" }),
+  makeReceipt("u2", { timestamp: "2026-06-08T01:00:00.000Z" }),
+];
+const utcDayResult = filterByTime(utcDayReceipts, "all", "2026-06-07", NOW);
+assert(utcDayResult.length === 1 && utcDayResult[0].receipt_id === "u1", "time: utc day filter matches analytics date_key");
+
+const explicitDayReceipts = [
+  makeReceipt("d1", { timestamp: "2024-06-14T15:00:00.000Z" }),
+  makeReceipt("d2", { timestamp: "2024-06-15T10:00:00.000Z" }),
+];
+assert(receiptUtcDateKey("2024-06-14T15:00:00.000Z") === "2024-06-14", "time: receiptUtcDateKey helper");
+const dayResult = filterByTime(explicitDayReceipts, "all", "2024-06-14", NOW);
+assert(dayResult.length === 1 && dayResult[0].receipt_id === "d1", "time: day filter");
 
 // filterBySourceScope
 const scopeWs = filterBySourceScope(ALL, "workspace");
