@@ -201,10 +201,10 @@ runs:
         PYTHONNOUSERSITE: "1"
         PYTHONSAFEPATH: "1"
       run: |
-        ACTION_RUNTIME_ROOT="${RUNNER_TEMP:-$GITHUB_ACTION_PATH/.tmp}"
+        ACTION_RUNTIME_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
         mkdir -p "$ACTION_RUNTIME_ROOT"
         ACTION_RUNTIME_DIR="$(mktemp -d "$ACTION_RUNTIME_ROOT/hol-guard-action-XXXXXX")"
-        trap 'rm -rf "$ACTION_RUNTIME_DIR"' EXIT
+        trap 'cd "$ACTION_RUNTIME_ROOT" && rm -rf "$ACTION_RUNTIME_DIR"' EXIT
         cd "$ACTION_RUNTIME_DIR"
 
         LOCAL_SOURCE=""

@@ -35,8 +35,9 @@ def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> Non
     assert "INSTALL_CISCO: ${{ inputs.install_cisco }}" in action_text
     assert 'PYTHONNOUSERSITE: "1"' in action_text
     assert 'PYTHONSAFEPATH: "1"' in action_text
-    assert 'ACTION_RUNTIME_ROOT="${RUNNER_TEMP:-$GITHUB_ACTION_PATH/.tmp}"' in action_text
+    assert 'ACTION_RUNTIME_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"' in action_text
     assert 'ACTION_RUNTIME_DIR="$(mktemp -d "$ACTION_RUNTIME_ROOT/hol-guard-action-XXXXXX")"' in action_text
+    assert 'trap \'cd "$ACTION_RUNTIME_ROOT" && rm -rf "$ACTION_RUNTIME_DIR"\' EXIT' in action_text
     assert 'cd "$ACTION_RUNTIME_DIR"' in action_text
     assert 'if [ "$INSTALL_CISCO" = "true" ]; then' in action_text
     assert 'if [ "$INSTALL_SOURCE" = "local" ]; then' in action_text
