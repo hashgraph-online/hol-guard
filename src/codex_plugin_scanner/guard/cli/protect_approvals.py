@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shlex
 from collections.abc import Callable
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, attach_primary_approval_link, queue_blocked_approvals
 from ..models import GuardArtifact, HarnessDetection
+from ..shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from ..store import GuardStore
 
 
@@ -23,6 +25,8 @@ def _queue_local_protect_approvals(
     approval_delivery_payload: Callable[[str], dict[str, object]],
     localize_pending_approval_copy: Callable[[dict[str, object], str], None],
 ) -> None:
+    if not _should_queue_local_protect_approval(response_payload):
+        return
     artifact = _protect_request_artifact(response_payload, workspace=workspace)
     if artifact is None:
         return
@@ -72,6 +76,12 @@ def _queue_local_protect_approvals(
     response_payload["approval_delivery"] = approval_delivery_payload(display_harness)
     localize_pending_approval_copy(response_payload, display_harness)
     _bind_protect_receipt_approval(response_payload, store=store)
+
+
+def _should_queue_local_protect_approval(response_payload: dict[str, object]) -> bool:
+    if os.environ.get(SHIM_PROBE_ENV_VAR) == SHIM_PROBE_ENV_VALUE:
+        return False
+    return not _protect_has_reason_code(response_payload, "saved_package_block")
 
 
 def _protect_request_artifact(response_payload: dict[str, object], *, workspace: Path) -> GuardArtifact | None:
@@ -209,6 +219,16 @@ def _protect_policy_action(response_payload: dict[str, object]) -> str | None:
     if not isinstance(supply_chain_evaluation, dict):
         return None
     return _optional_string(supply_chain_evaluation.get("policy_action"))
+
+
+def _protect_has_reason_code(response_payload: dict[str, object], reason_code: str) -> bool:
+    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
+    if not isinstance(supply_chain_evaluation, dict):
+        return False
+    reasons = supply_chain_evaluation.get("reasons")
+    if not isinstance(reasons, list):
+        return False
+    return any(_optional_string(item.get("code")) == reason_code for item in reasons if isinstance(item, dict))
 
 
 def _bind_protect_receipt_approval(response_payload: dict[str, object], *, store: GuardStore) -> None:
