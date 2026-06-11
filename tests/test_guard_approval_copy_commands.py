@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import (
     approval_center_hint,
     attach_primary_approval_link,
+    build_approval_browser_url,
     build_approval_request_url,
     first_approval_url,
     primary_approval_request,
@@ -146,6 +148,23 @@ def test_primary_approval_request_prefers_matching_harness() -> None:
     )
 
 
+def test_build_approval_browser_url_adds_scoped_guard_token_fragment() -> None:
+    browser_url = build_approval_browser_url(
+        "http://127.0.0.1:5474/requests/cursor-req#section=inbox",
+        auth_token="secret-token",
+    )
+
+    parsed = urllib.parse.urlparse(browser_url)
+    fragment = urllib.parse.parse_qs(parsed.fragment)
+
+    assert parsed.scheme == "http"
+    assert parsed.netloc == "127.0.0.1:5474"
+    assert parsed.path == "/requests/cursor-req"
+    assert fragment["section"] == ["inbox"]
+    assert fragment["guard-token"][0].startswith("gld1.")
+    assert "secret-token" not in browser_url
+
+
 def test_primary_approval_request_prefers_request_id() -> None:
     queued = [
         {
@@ -262,6 +281,34 @@ def test_attach_primary_approval_link_prefers_artifact_over_operation_ids() -> N
 
     assert payload["primary_approval_request_id"] == "bound-req"
     assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
+
+
+def test_attach_primary_approval_link_adds_browser_url_when_auth_token_available() -> None:
+    payload: dict[str, object] = {
+        "artifact_id": "cursor:project:shell-b",
+        "approval_request_ids": ["bound-req"],
+        "approval_requests": [
+            {
+                "request_id": "bound-req",
+                "harness": "cursor",
+                "artifact_id": "cursor:project:shell-b",
+                "approval_url": "http://127.0.0.1:5474/requests/bound-req",
+            },
+        ],
+    }
+
+    attach_primary_approval_link(
+        payload,
+        harness="cursor",
+        approval_center_url="http://127.0.0.1:5474",
+        auth_token="secret-token",
+    )
+
+    assert payload["primary_approval_url"] == "http://127.0.0.1:5474/requests/bound-req"
+    browser_url = str(payload["primary_approval_browser_url"])
+    assert browser_url.startswith("http://127.0.0.1:5474/requests/bound-req#")
+    assert "guard-token=" in browser_url
+    assert "secret-token" not in browser_url
 
 
 def test_attach_primary_approval_link_uses_operation_request_id() -> None:

@@ -11,10 +11,11 @@ from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
-from ..approvals import first_approval_url, queue_blocked_approvals
+from ..approvals import build_approval_browser_url, first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
 from ..consumer.service import artifact_hash as compute_artifact_hash
 from ..daemon import ensure_guard_daemon
+from ..daemon.manager import load_guard_daemon_auth_token
 from ..mcp_tool_calls import (
     allow_tool_call,
     block_tool_call,
@@ -627,21 +628,25 @@ class RuntimeMcpGuardProxy:
             )
         request_id = str(queued[0]["request_id"]) if queued else "stored-block"
         review_url = first_approval_url(queued) or approval_center_url
+        browser_review_url = build_approval_browser_url(
+            review_url,
+            auth_token=load_guard_daemon_auth_token(self.context.guard_home),
+        )
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
-            "reviewUrl": review_url,
+            "reviewUrl": browser_review_url,
             "supplyChainEvaluation": package_evaluation.to_dict(),
         }
         blocked_message = (
             f"HOL Guard stopped package install request {tool_name} from {self.server_name}. "
-            f"Approve request {request_id} at {review_url}, then retry the same action."
+            f"Approve request {request_id} at {browser_review_url}, then retry the same action."
         )
         event_decision = "queue-package-approval"
         if not should_queue_approval_center:
             blocked_message = (
                 f"HOL Guard blocked package install request {tool_name} from {self.server_name}. "
-                f"This same request is already blocked by stored policy. Review policy settings at {review_url} "
+                f"This same request is already blocked by stored policy. Review policy settings at {browser_review_url} "
                 f"before retrying."
             )
             event_decision = "package-block-stored"
@@ -989,17 +994,21 @@ class RuntimeMcpGuardProxy:
         )
         request_id = str(queued[0]["request_id"]) if queued else "unknown"
         review_url = first_approval_url(queued) or approval_center_url
+        browser_review_url = build_approval_browser_url(
+            review_url,
+            auth_token=load_guard_daemon_auth_token(self.context.guard_home),
+        )
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
-            "reviewUrl": review_url,
+            "reviewUrl": browser_review_url,
         }
         return _blocked_tool_response(
             message_id,
             tool_name,
             (
                 f"HOL Guard stopped tool call {tool_name} from {self.server_name}. "
-                f"Approve request {request_id} at {review_url}, then retry the same action."
+                f"Approve request {request_id} at {browser_review_url}, then retry the same action."
             ),
             response_data,
         ), {

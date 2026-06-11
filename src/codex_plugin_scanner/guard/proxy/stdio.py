@@ -15,8 +15,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from ..approvals import approval_delivery_payload, approval_prompt_flow, first_approval_url, queue_blocked_approvals
+from ..approvals import (
+    approval_delivery_payload,
+    approval_prompt_flow,
+    build_approval_browser_url,
+    first_approval_url,
+    queue_blocked_approvals,
+)
 from ..consumer import artifact_hash
+from ..daemon.manager import load_guard_daemon_auth_token
 from ..models import HarnessDetection
 from ..receipts import build_receipt
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
@@ -416,8 +423,12 @@ class StdioGuardProxy:
                         event["approval_center_url"] = self.approval_center_url
                         event["approval_delivery"] = approval_delivery_payload(approval_flow)
                         review_url = first_approval_url(event["approval_requests"]) or self.approval_center_url
+                        browser_review_url = build_approval_browser_url(
+                            review_url,
+                            auth_token=load_guard_daemon_auth_token(self.guard_store.guard_home),
+                        )
                         event["review_hint"] = (
-                            f"{approval_flow['summary']} Open {review_url} to review the blocked request."
+                            f"{approval_flow['summary']} Open {browser_review_url} to review the blocked request."
                         )
                         blocked_message = f"{blocked_message} {event['review_hint']}"
                         response_data = {
@@ -425,7 +436,7 @@ class StdioGuardProxy:
                             "approvalRequests": event["approval_requests"],
                             "approvalDelivery": event["approval_delivery"],
                             "reviewHint": event["review_hint"],
-                            "reviewUrl": review_url,
+                            "reviewUrl": browser_review_url,
                         }
                     response = _blocked_tool_response(
                         message.get("id"),

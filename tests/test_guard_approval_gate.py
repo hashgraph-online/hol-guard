@@ -1331,6 +1331,7 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
         config_path="/repo/.mcp.json",
     )
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:5474")
+    monkeypatch.setattr(runtime_mcp_module, "load_guard_daemon_auth_token", lambda _guard_home: "secret-token")
 
     response, event = proxy._allow_and_forward(
         message={"id": 1},
@@ -1349,6 +1350,9 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
 
     assert event["decision"] == "queue-approval"
     assert response["error"]["message"].startswith("HOL Guard stopped tool call dangerous-tool")
+    assert response["error"]["data"]["reviewUrl"].startswith("http://127.0.0.1:5474/requests/")
+    assert "guard-token=" in response["error"]["data"]["reviewUrl"]
+    assert response["error"]["data"]["reviewUrl"] in response["error"]["message"]
     assert len(store.list_approval_requests(limit=10)) == 1
     assert store.list_policy_decisions("codex") == []
 
