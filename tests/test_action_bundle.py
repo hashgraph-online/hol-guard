@@ -54,7 +54,8 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
 
     assert "Publish GitHub Action Repository" in workflow_text
     assert "ACTION_REPO_TOKEN" in workflow_text
-    assert "hashgraph-online/ai-plugin-scanner-action" in workflow_text
+    assert "ACTION_REPOSITORY: hashgraph-online/ai-plugin-scanner-action" in workflow_text
+    assert "retrying in 30s" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert "Resolve published scanner version" in workflow_text
     assert "Compute scanner wheel SHA256" in workflow_text
