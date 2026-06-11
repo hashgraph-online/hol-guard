@@ -140,3 +140,53 @@ def test_runtime_guard_proxy_queue_block_includes_request_url(tmp_path, monkeypa
     assert error["data"]["reviewUrl"] in error["message"]
     assert opened_urls[0].startswith(f"{error['data']['reviewUrl']}#")
     assert "guard-token=" in opened_urls[0]
+
+
+def test_runtime_guard_proxy_respects_native_only_approval_surface_policy(tmp_path, monkeypatch):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(
+        guard_home=context.guard_home,
+        workspace=context.workspace_dir,
+        approval_surface_policy="native-only",
+    )
+    marker_path = tmp_path / "dangerous-call.json"
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "load_guard_daemon_auth_token",
+        lambda _guard_home: (_ for _ in ()).throw(AssertionError("should not read auth token")),
+    )
+    monkeypatch.setattr(
+        runtime_mcp_module.webbrowser,
+        "open",
+        lambda _url: (_ for _ in ()).throw(AssertionError("should not open browser")),
+    )
+    proxy = RuntimeMcpGuardProxy(
+        harness="hermes",
+        server_name="danger_lab",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / "hermes.json"),
+        transport="local",
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env.guard-proof"}},
+            },
+        ]
+    )
+
+    error = result["responses"][1]["error"]
+
+    assert error["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
+    assert error["data"]["reviewUrl"].startswith("http://127.0.0.1:4455/requests/")

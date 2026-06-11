@@ -53,6 +53,13 @@ _PACKAGE_POLICY_ACTION_RANK = {
 }
 
 
+def _approval_surface_policy_for_browser(configured_policy: object) -> str:
+    policy = str(configured_policy or "auto-open-once")
+    if policy == "native-only":
+        return "never-auto-open"
+    return policy
+
+
 def _most_restrictive_package_policy_action(stored_action: str | None, current_action: str) -> str:
     if stored_action is None:
         return current_action
@@ -123,6 +130,9 @@ class RuntimeMcpGuardProxy:
         return 120.0
 
     def _maybe_open_approval_center(self, *, approval_center_url: str, review_url: str, open_key: str) -> None:
+        approval_surface_policy = _approval_surface_policy_for_browser(self.config.approval_surface_policy)
+        if approval_surface_policy in {"notify-only", "never-auto-open"}:
+            return
         browser_url = build_approval_browser_url(
             review_url,
             auth_token=load_guard_daemon_auth_token(self.context.guard_home),
@@ -131,7 +141,7 @@ class RuntimeMcpGuardProxy:
             surface="approval-center",
             approval_center_url=approval_center_url,
             browser_url=browser_url,
-            approval_surface_policy=self.config.approval_surface_policy,
+            approval_surface_policy=approval_surface_policy,
             open_key=open_key,
             opener=webbrowser.open,
         )

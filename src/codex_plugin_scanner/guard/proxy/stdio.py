@@ -36,6 +36,13 @@ _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
 _GUARD_PROXY_TIMEOUT_ERROR_CODE = -32800
 
 
+def _approval_surface_policy_for_browser(configured_policy: object) -> str:
+    policy = str(configured_policy or "auto-open-once")
+    if policy == "native-only":
+        return "never-auto-open"
+    return policy
+
+
 class ProxyIoTimeoutError(TimeoutError):
     def __init__(self, *, source: str, timeout_seconds: float) -> None:
         super().__init__(f"timeout waiting for {source}")
@@ -224,16 +231,20 @@ class StdioGuardProxy:
     def _maybe_open_approval_center(self, *, review_url: str, open_key: str) -> None:
         if self.guard_store is None or self.approval_center_url is None:
             return
+        approval_surface_policy = _approval_surface_policy_for_browser(
+            getattr(self.guard_config, "approval_surface_policy", "auto-open-once")
+        )
+        if approval_surface_policy in {"notify-only", "never-auto-open"}:
+            return
         browser_url = build_approval_browser_url(
             review_url,
             auth_token=load_guard_daemon_auth_token(self.guard_store.guard_home),
         )
-        approval_surface_policy = getattr(self.guard_config, "approval_surface_policy", "auto-open-once")
         GuardSurfaceRuntime(self.guard_store).ensure_surface(
             surface="approval-center",
             approval_center_url=self.approval_center_url,
             browser_url=browser_url,
-            approval_surface_policy=str(approval_surface_policy),
+            approval_surface_policy=approval_surface_policy,
             open_key=open_key,
             opener=webbrowser.open,
         )

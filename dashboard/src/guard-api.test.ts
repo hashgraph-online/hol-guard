@@ -569,7 +569,10 @@ type StorageShape = {
   readonly length: number;
 };
 
-function createStorage(storage: Map<string, string>): StorageShape {
+function createStorage(storage: Map<string, string> | StorageShape): StorageShape {
+  if (!(storage instanceof Map)) {
+    return storage;
+  }
   return {
     getItem(key: string): string | null {
       return storage.get(key) ?? null;
@@ -592,11 +595,34 @@ function createStorage(storage: Map<string, string>): StorageShape {
   };
 }
 
+function createFailingStorage(message: string): StorageShape {
+  return {
+    getItem(): string | null {
+      throw new Error(message);
+    },
+    setItem(): void {
+      throw new Error(message);
+    },
+    removeItem(): void {
+      throw new Error(message);
+    },
+    clear(): void {
+      throw new Error(message);
+    },
+    key(): string | null {
+      return null;
+    },
+    get length(): number {
+      return 0;
+    }
+  };
+}
+
 function installGuardWindow(
   search: string,
   options?: {
-    sessionStorage?: Map<string, string>;
-    localStorage?: Map<string, string>;
+    sessionStorage?: Map<string, string> | StorageShape;
+    localStorage?: Map<string, string> | StorageShape;
   }
 ): void {
   const sessionStorage = createStorage(options?.sessionStorage ?? new Map<string, string>());
@@ -703,6 +729,32 @@ await fetchApprovalPage();
 assert(
   headerValue(sharedTabCalls[0].init, "X-Guard-Dashboard-Session") === "token-shared-tabs",
   "L078ab: fetchApprovalPage reuses dashboard session from localStorage in a new tab"
+);
+
+const sharedSessionStorage = new Map<string, string>();
+const disabledLocalStorage = createFailingStorage("localStorage unavailable");
+installGuardWindow("?guard-token=token-session-only&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", {
+  sessionStorage: sharedSessionStorage,
+  localStorage: disabledLocalStorage,
+});
+assert(readGuardToken() === "token-session-only", "L078ac: readGuardToken tolerates disabled localStorage");
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781", {
+  sessionStorage: sharedSessionStorage,
+  localStorage: disabledLocalStorage,
+});
+const sessionOnlyCalls = installFetchStub({
+  "/v1/requests": {
+    items: [pageItem],
+    next_cursor: null,
+    total_pending_count: 1,
+    total_count: 1,
+    status: "pending"
+  }
+});
+await fetchApprovalPage();
+assert(
+  headerValue(sessionOnlyCalls[0].init, "X-Guard-Dashboard-Session") === "token-session-only",
+  "L078ad: fetchApprovalPage falls back to sessionStorage when localStorage is unavailable"
 );
 
 installGuardWindow("?guard-token=token-pending-pages&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
