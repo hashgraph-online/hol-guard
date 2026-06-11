@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
@@ -869,6 +870,134 @@ def test_guard_protect_json_queues_local_approval_link_on_cloud_auth_error(
     assert "Open HOL Guard to approve or keep this blocked:" in payload["supply_chain_evaluation"]["user_copy"][
         "harness_message"
     ]
+
+
+def test_guard_protect_retry_runs_after_local_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-approved-marker.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="minimist",
+        evaluate_status=401,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "minimist@1.2.8",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 2
+
+        store = GuardStore(home_dir)
+        apply_approval_resolution(
+            store=store,
+            request_id=str(payload["primary_approval_request_id"]),
+            action="allow",
+            scope="artifact",
+            workspace=None,
+            reason="reviewed",
+        )
+
+        original_path = os.environ.get("PATH", "")
+        monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+        retry_payload, retry_exit_code = build_protect_payload(
+            command=["npm", "install", "minimist@1.2.8"],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=False,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    assert retry_exit_code == 0
+    assert retry_payload["executed"] is True
+    assert retry_payload["verdict"]["action"] == "allow"
+    assert marker_path.exists()
+
+
+def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides_bundle_allow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    store = GuardStore(home_dir)
+    _seed_bundle_cache_only(
+        home_dir=home_dir,
+        ecosystem="npm",
+        package_name="badpkg",
+        package_version="1.0.0",
+        action="allow",
+    )
+    store.cache_advisories(
+        [
+            {
+                "id": "adv-cached-block",
+                "ecosystem": "npm",
+                "package": "badpkg",
+                "severity": "high",
+                "action": "block",
+                "headline": "Locally cached malicious package block.",
+            }
+        ],
+        "2026-05-19T00:00:00Z",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    rc = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            "npm",
+            "install",
+            "badpkg@1.0.0",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    assert payload["verdict"]["action"] == "block"
+    assert payload["primary_approval_request_id"]
+    assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
 
 
 def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path) -> None:

@@ -337,6 +337,8 @@ def evaluate_package_request_artifact(
         )
         if cloud_fallback_reason is not None:
             fallback = _with_additional_reason(fallback, cloud_fallback_reason)
+            if _cloud_fallback_requires_reconnect_copy(cloud_fallback_reason):
+                fallback = _with_cloud_auth_reconnect_copy(fallback)
         if bundle_meta is not None and bundle_evaluation.decision != "monitor" and isinstance(bundle_payload, dict):
             cache_workspace_id = workspace_id
             if cache_workspace_id is None:
@@ -412,6 +414,8 @@ def evaluate_package_request_artifact(
     )
     if cloud_fallback_reason is not None:
         result = _with_additional_reason(result, cloud_fallback_reason)
+        if _cloud_fallback_requires_reconnect_copy(cloud_fallback_reason):
+            result = _with_cloud_auth_reconnect_copy(result)
     _persist_evidence(store=store, artifact=artifact, evaluation=result, now=now_value)
     return result
 
@@ -936,6 +940,10 @@ def _with_cloud_auth_reconnect_copy(evaluation: PackageRequestEvaluation) -> Pac
             policy_action=evaluation.policy_action,
         ),
     )
+
+
+def _cloud_fallback_requires_reconnect_copy(reason: dict[str, object]) -> bool:
+    return _optional_string(reason.get("code")) == "cloud_auth_error"
 
 
 def _external_tarball_scan_failure_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:

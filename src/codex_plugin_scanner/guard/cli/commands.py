@@ -4509,6 +4509,7 @@ def _queue_local_protect_approvals(
     ]
     response_payload["approval_center_url"] = approval_center_url
     harness = artifact.harness
+    display_harness = _protect_display_harness(response_payload)
     _attach_primary_approval_link(
         response_payload,
         harness=harness,
@@ -4516,14 +4517,14 @@ def _queue_local_protect_approvals(
     )
     response_payload["review_hint"] = approval_center_hint(
         context=HarnessContext(home_dir=guard_home, workspace_dir=workspace, guard_home=guard_home),
-        harness=harness,
+        harness=display_harness,
         approval_center_url=approval_center_url,
         queued=queued,
         request_id=_optional_string(response_payload.get("primary_approval_request_id")),
         artifact_id=artifact.artifact_id,
     )
-    response_payload["approval_delivery"] = _approval_delivery_payload(harness)
-    _localize_pending_approval_copy(response_payload, harness=harness)
+    response_payload["approval_delivery"] = _approval_delivery_payload(display_harness)
+    _localize_pending_approval_copy(response_payload, harness=display_harness)
     _bind_protect_receipt_approval(response_payload, store=store)
 
 
@@ -4576,7 +4577,7 @@ def _protect_approval_item(response_payload: dict[str, object], *, workspace: Pa
         or artifact is None
     ):
         return None
-    policy_action = _optional_string(supply_chain_evaluation.get("policy_action"))
+    policy_action = _protect_policy_action(response_payload)
     if policy_action not in {"block", "require-reapproval"}:
         return None
     user_copy = supply_chain_evaluation.get("user_copy")
@@ -4624,7 +4625,7 @@ def _protect_target_labels(response_payload: dict[str, object]) -> list[str]:
 def _protect_payload_harness(response_payload: dict[str, object]) -> str:
     request = response_payload.get("request")
     if isinstance(request, dict):
-        for key in ("package_manager", "harness", "executor"):
+        for key in ("harness", "package_manager", "executor"):
             value = _optional_string(request.get(key))
             if value is not None:
                 return value
@@ -4634,6 +4635,30 @@ def _protect_payload_harness(response_payload: dict[str, object]) -> str:
         if value is not None:
             return value
     return "guard-cli"
+
+
+def _protect_display_harness(response_payload: dict[str, object]) -> str:
+    request = response_payload.get("request")
+    if isinstance(request, dict):
+        for key in ("package_manager", "harness", "executor"):
+            value = _optional_string(request.get(key))
+            if value is not None:
+                return value
+    return _protect_payload_harness(response_payload)
+
+
+def _protect_policy_action(response_payload: dict[str, object]) -> str | None:
+    verdict = response_payload.get("verdict")
+    if isinstance(verdict, dict):
+        action = _optional_string(verdict.get("action"))
+        if action == "block":
+            return "block"
+        if action == "review":
+            return "require-reapproval"
+    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
+    if not isinstance(supply_chain_evaluation, dict):
+        return None
+    return _optional_string(supply_chain_evaluation.get("policy_action"))
 
 
 def _bind_protect_receipt_approval(response_payload: dict[str, object], *, store: GuardStore) -> None:
