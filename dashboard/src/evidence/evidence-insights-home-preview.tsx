@@ -52,11 +52,9 @@ export function EvidenceInsightsHomePreview({
   overviewStats,
   analytics,
   analyticsLoading = false,
-  runtime,
   onOpenInsights,
   onShare,
 }: EvidenceInsightsHomePreviewProps) {
-  const cloudConnected = runtime?.cloud_state === "paired_active";
   const insightsAvailable = analytics !== null && analytics.total > 0;
   const showInsightsSection = analyticsLoading || insightsAvailable;
   const showInsightsFooter = Boolean(onOpenInsights) && (analyticsLoading || insightsAvailable);
@@ -75,7 +73,7 @@ export function EvidenceInsightsHomePreview({
             What needs you now, plus patterns from recorded actions on this machine.
           </p>
         </div>
-        {cloudConnected && onShare && insightsAvailable ? (
+        {onShare && insightsAvailable ? (
           <EvidenceInsightsShareButton onClick={onShare} className="shrink-0" />
         ) : null}
       </div>

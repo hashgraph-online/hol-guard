@@ -20,7 +20,7 @@ const fullState = {
   harness: "codex",
   category: "secret",
   sourceScope: "workspace",
-  day: "2024-06-01",
+  day: "",
   sort: "oldest" as const,
   view: "insights" as const,
   selectedId: "receipt-123",
@@ -72,5 +72,18 @@ const withSelected = serializeEvidenceUrlState({ ...DEFAULT_FILTER_STATE, select
 assert(withSelected.get("selected") === "abc-123", "selectedId: serialized as 'selected'");
 const parsedSelected = parseEvidenceUrlState(withSelected);
 assert(parsedSelected.selectedId === "abc-123", "selectedId: parsed correctly");
+
+const dayDrillParams = new URLSearchParams({ day: "2026-06-07", view: "insights" });
+const dayDrillParsed = parseEvidenceUrlState(dayDrillParams);
+assert(dayDrillParsed.view === "actions", "day param: forces actions view");
+assert(dayDrillParsed.day === "2026-06-07", "day param: preserves day");
+
+const dayDrillSerialized = serializeEvidenceUrlState({
+  ...DEFAULT_FILTER_STATE,
+  day: "2026-06-07",
+  view: "actions",
+});
+assert(dayDrillSerialized.get("day") === "2026-06-07", "day serialize: includes day");
+assert(dayDrillSerialized.get("view") === "actions", "day serialize: includes actions view");
 
 console.log("evidence-url-state.test.ts: all tests passed");

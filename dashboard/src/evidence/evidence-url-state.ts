@@ -45,6 +45,8 @@ export function parseEvidenceUrlState(
   const decision = params.get("decision") as EvidenceDecision;
   const sort = params.get("sort") as EvidenceSortKey;
   const view = params.get("view") as EvidenceView;
+  const day = params.get("day") ?? DEFAULT_FILTER_STATE.day;
+  const resolvedView = VALID_VIEW.includes(view) ? view : DEFAULT_FILTER_STATE.view;
 
   return {
     search: params.get("search") ?? DEFAULT_FILTER_STATE.search,
@@ -55,9 +57,9 @@ export function parseEvidenceUrlState(
     harness: params.get("harness") ?? DEFAULT_FILTER_STATE.harness,
     category: params.get("category") ?? DEFAULT_FILTER_STATE.category,
     sourceScope: params.get("sourceScope") ?? DEFAULT_FILTER_STATE.sourceScope,
-    day: params.get("day") ?? DEFAULT_FILTER_STATE.day,
+    day,
     sort: VALID_SORT.includes(sort) ? sort : DEFAULT_FILTER_STATE.sort,
-    view: VALID_VIEW.includes(view) ? view : DEFAULT_FILTER_STATE.view,
+    view: day ? "actions" : resolvedView,
     selectedId: params.get("selected") ?? DEFAULT_FILTER_STATE.selectedId,
   };
 }
@@ -74,9 +76,13 @@ export function serializeEvidenceUrlState(
     params.set("harness", state.harness);
   if (state.category) params.set("category", state.category);
   if (state.sourceScope) params.set("sourceScope", state.sourceScope);
-  if (state.day) params.set("day", state.day);
+  if (state.day) {
+    params.set("day", state.day);
+    params.set("view", "actions");
+  } else if (state.view !== DEFAULT_FILTER_STATE.view) {
+    params.set("view", state.view);
+  }
   if (state.sort !== DEFAULT_FILTER_STATE.sort) params.set("sort", state.sort);
-  if (state.view !== DEFAULT_FILTER_STATE.view) params.set("view", state.view);
   if (state.selectedId) params.set("selected", state.selectedId);
   return params;
 }

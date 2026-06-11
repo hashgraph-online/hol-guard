@@ -101,7 +101,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
 
   useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.category, filters.sourceScope]);
+  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.category, filters.sourceScope, filters.day]);
 
   const effectiveFilters = useMemo(
     () => ({ ...filters, search: debouncedSearch }),
@@ -161,7 +161,11 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   }, []);
 
   const handleViewChange = useCallback((view: EvidenceView) => {
-    setFilters((prev) => ({ ...prev, view }));
+    setFilters((prev) => ({
+      ...prev,
+      view,
+      ...(view === "insights" ? { day: "" } : {}),
+    }));
   }, []);
 
   const handleOpenExport = useCallback(() => {
