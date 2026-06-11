@@ -9,22 +9,44 @@ import queue
 import select
 import subprocess
 import threading
+import webbrowser
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from ..approvals import approval_delivery_payload, approval_prompt_flow, first_approval_url, queue_blocked_approvals
+from ..approvals import (
+    approval_delivery_payload,
+    approval_prompt_flow,
+    build_approval_browser_url,
+    first_approval_url,
+    queue_blocked_approvals,
+)
 from ..consumer import artifact_hash
+from ..daemon.manager import load_guard_daemon_auth_token
 from ..models import HarnessDetection
 from ..receipts import build_receipt
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 
 _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0
 _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
 _GUARD_PROXY_TIMEOUT_ERROR_CODE = -32800
+
+
+def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: dict[str, object]) -> str:
+    if approval_flow.get("tier") != "approval-center":
+        return "notify-only"
+    if approval_flow.get("auto_open_browser") is False:
+        return "never-auto-open"
+    if approval_flow.get("prompt_channel") == "native-fallback":
+        return "never-auto-open"
+    policy = str(configured_policy or "auto-open-once")
+    if policy == "native-only":
+        return "never-auto-open"
+    return policy
 
 
 class ProxyIoTimeoutError(TimeoutError):
@@ -211,6 +233,33 @@ class StdioGuardProxy:
         if isinstance(configured, (int, float)) and configured > 0:
             return min(float(configured), _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS)
         return _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS
+
+    def _maybe_open_approval_center(self, *, review_url: str, open_key: str) -> None:
+        if self.guard_store is None or self.approval_center_url is None:
+            return
+        managed_install = self.guard_store.get_managed_install(self.harness)
+        approval_flow = approval_prompt_flow(
+            self.harness,
+            managed_install=managed_install,
+        )
+        approval_surface_policy = _approval_surface_policy_for_browser(
+            getattr(self.guard_config, "approval_surface_policy", "auto-open-once"),
+            approval_flow,
+        )
+        if approval_surface_policy in {"notify-only", "never-auto-open"}:
+            return
+        browser_url = build_approval_browser_url(
+            review_url,
+            auth_token=load_guard_daemon_auth_token(self.guard_store.guard_home),
+        )
+        GuardSurfaceRuntime(self.guard_store).ensure_surface(
+            surface="approval-center",
+            approval_center_url=self.approval_center_url,
+            browser_url=browser_url,
+            approval_surface_policy=approval_surface_policy,
+            open_key=open_key,
+            opener=webbrowser.open,
+        )
 
     def run_session(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         responses, events, return_code = self._run_messages(messages)
@@ -416,6 +465,15 @@ class StdioGuardProxy:
                         event["approval_center_url"] = self.approval_center_url
                         event["approval_delivery"] = approval_delivery_payload(approval_flow)
                         review_url = first_approval_url(event["approval_requests"]) or self.approval_center_url
+                        request_id = next(
+                            (
+                                str(item["request_id"])
+                                for item in event["approval_requests"]
+                                if isinstance(item, dict) and isinstance(item.get("request_id"), str)
+                            ),
+                            "blocked-request",
+                        )
+                        self._maybe_open_approval_center(review_url=review_url, open_key=request_id)
                         event["review_hint"] = (
                             f"{approval_flow['summary']} Open {review_url} to review the blocked request."
                         )

@@ -172,6 +172,31 @@ function guardParam(name: string): string | null {
   return guardParams().get(name);
 }
 
+function readBrowserStorage(getStorage: () => Storage, name: string): string | null {
+  try {
+    return getStorage().getItem(name);
+  } catch {
+    return null;
+  }
+}
+
+function readGuardStorage(name: string): string | null {
+  return readBrowserStorage(() => window.sessionStorage, name) ?? readBrowserStorage(() => window.localStorage, name);
+}
+
+function saveBrowserStorage(getStorage: () => Storage, name: string, value: string): void {
+  try {
+    getStorage().setItem(name, value);
+  } catch {
+    // Fall back to whichever storage remains available.
+  }
+}
+
+function saveGuardStorage(name: string, value: string): void {
+  saveBrowserStorage(() => window.sessionStorage, name, value);
+  saveBrowserStorage(() => window.localStorage, name, value);
+}
+
 export function readGuardToken(): string | null {
   const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (guardTokenLocationKey !== locationKey) {
@@ -183,19 +208,19 @@ export function readGuardToken(): string | null {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
     return guardToken;
   }
-  return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+  return readGuardStorage(GUARD_TOKEN_PARAM);
 }
 
 function saveGuardToken(guardToken: string): void {
   guardTokenOverride = guardToken;
-  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+  saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
 }
 
 function saveGuardDaemonOrigin(daemonOrigin: string): void {
-  window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+  saveGuardStorage(GUARD_DAEMON_PARAM, daemonOrigin);
 }
 
 function preferredGuardDaemonPort(): number {
@@ -406,11 +431,11 @@ function readGuardDaemonOrigin(): string | null {
   if (rawDaemonUrl) {
     const daemonOrigin = localGuardDaemonOrigin(rawDaemonUrl);
     if (daemonOrigin) {
-      window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+      saveGuardStorage(GUARD_DAEMON_PARAM, daemonOrigin);
       return daemonOrigin;
     }
   }
-  const storedDaemonUrl = window.sessionStorage.getItem(GUARD_DAEMON_PARAM);
+  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
   return storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
 }
 

@@ -56,6 +56,27 @@ def build_approval_request_url(approval_center_url: str, request_id: str) -> str
     return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
 
 
+def build_approval_browser_url(approval_url: str | None, *, auth_token: str | None) -> str | None:
+    """Build a browser-openable approval URL with a scoped Guard session token."""
+
+    if not approval_url or auth_token is None:
+        return approval_url
+    parsed = urlparse(approval_url)
+    fragment_pairs = [
+        (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
+    ]
+    fragment_pairs.append(
+        (
+            "guard-token",
+            build_local_dashboard_session_token(
+                auth_token=auth_token,
+                surface="approval-center",
+            ),
+        )
+    )
+    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
+
+
 def _normalize_harness_slug(harness: str | None) -> str | None:
     if not isinstance(harness, str):
         return None
@@ -449,12 +470,13 @@ def approval_center_hint(
     managed_install: dict[str, object] | None = None,
     request_id: str | None = None,
     artifact_id: str | None = None,
+    review_url: str | None = None,
 ) -> str:
     del context
     flow = approval_prompt_flow(harness, managed_install=managed_install)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
-    review_url = (
+    resolved_review_url = review_url or (
         primary_approval_url(
             queued,
             harness=harness,
@@ -467,7 +489,7 @@ def approval_center_hint(
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
         f"{flow['summary']} "
-        f"Review them in the Guard approval center at {review_url}. "
+        f"Review them in the Guard approval center at {resolved_review_url}. "
         f"{risk_summary} "
         f"{flow['fallback_hint']}"
     )

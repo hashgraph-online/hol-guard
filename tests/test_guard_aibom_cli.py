@@ -227,6 +227,123 @@ def test_sync_aibom_snapshots_if_due_skips_recent_sync(tmp_path: Path, monkeypat
     assert summary.get("reason") == "recently_synced"
 
 
+def test_sync_aibom_snapshots_if_due_skips_recent_empty_sync(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    now = "2026-06-10T12:03:00+00:00"
+    store.set_sync_payload(
+        "aibom_sync_summary",
+        {
+            "synced": True,
+            "synced_at": "2026-06-10T12:00:00+00:00",
+            "snapshots": 0,
+            "accepted": 0,
+        },
+        "2026-06-10T12:00:00+00:00",
+    )
+
+    summary = sync_aibom_snapshots_if_due(store, generated_at=now)
+
+    assert summary.get("skipped") is True
+    assert summary.get("reason") == "recently_synced"
+
+
+def test_sync_aibom_snapshots_if_due_retries_empty_sync_after_interval(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots_if_due
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    calls: list[str] = []
+
+    def _fake_sync(*_args, **_kwargs):
+        calls.append("sync")
+        return {"synced": True, "synced_at": "2026-06-10T12:06:00+00:00", "snapshots": 1, "accepted": 1}
+
+    monkeypatch.setattr(aibom_cli, "sync_aibom_snapshots", _fake_sync)
+    store.set_sync_payload(
+        "aibom_sync_summary",
+        {
+            "synced": True,
+            "synced_at": "2026-06-10T12:00:00+00:00",
+            "snapshots": 0,
+            "accepted": 0,
+        },
+        "2026-06-10T12:00:00+00:00",
+    )
+
+    summary = sync_aibom_snapshots_if_due(store, generated_at="2026-06-10T12:06:00+00:00")
+
+    assert calls == ["sync"]
+    assert summary.get("synced") is True
+
+
+def test_sync_aibom_snapshots_404_backoff_isolated_from_guard_events_summary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import urllib.error
+
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.aibom_cli import sync_aibom_snapshots
+    from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
+    from codex_plugin_scanner.guard.runtime import runner
+
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: "workspace-1")
+    store.set_sync_payload(
+        "guard_events_v1_summary",
+        {"synced_at": "2026-06-10T11:00:00+00:00", "events": 12, "accepted": 12},
+        "2026-06-10T11:00:00+00:00",
+    )
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="cursor-proof",
+        agent_id="cursor:local",
+        agent_type="cursor",
+        generated_at="2026-06-10T12:00:00+00:00",
+        runtime_version="test",
+    )
+    monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", lambda *_args, **_kwargs: (snapshot,))
+
+    def _raise_404(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            url="https://hol.test/api/v1/guard/events",
+            code=404,
+            msg="Not Found",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", _raise_404)
+    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner, "_guard_sync_request", lambda *_args, **_kwargs: object())
+
+    summary = sync_aibom_snapshots(
+        store,
+        HarnessContext(home_dir=tmp_path / "home", workspace_dir=tmp_path / "workspace", guard_home=store.guard_home),
+        generated_at="2026-06-10T12:00:00+00:00",
+        auth_context={
+            "sync_url": "https://hol.test/api/v1/guard/events",
+            "token": "test-token",
+        },
+    )
+
+    guard_events_summary = store.get_sync_payload("guard_events_v1_summary")
+    aibom_backoff = store.get_sync_payload("aibom_guard_events_backoff")
+
+    assert summary.get("reason") == "guard_events_endpoint_unavailable"
+    assert isinstance(guard_events_summary, dict)
+    assert guard_events_summary.get("events") == 12
+    assert isinstance(aibom_backoff, dict)
+    assert aibom_backoff.get("sync_reason") == "guard_events_endpoint_unavailable"
+
+
 def test_aibom_export_json_includes_redaction_report(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

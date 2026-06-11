@@ -151,6 +151,8 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
     "alert_preferences",
     "team_policy_pack",
     "guard_events_v1_summary",
+    "aibom_guard_events_backoff",
+    "aibom_sync_summary",
     "runtime_session_summary",
     "supply_chain_bundle_summary",
     "supply_chain_bundle_entitlement",

@@ -57,6 +57,7 @@ from ..approvals import (
     approval_delivery_payload,
     approval_prompt_flow,
     attach_primary_approval_link,
+    build_approval_browser_url,
     first_approval_url,
     queue_blocked_approvals,
     wait_for_approval_requests,
@@ -3320,6 +3321,7 @@ def run_guard_command(
                 managed_install=managed_install,
                 request_id=_optional_string(response_payload.get("primary_approval_request_id")),
                 artifact_id=_optional_string(response_payload.get("artifact_id")),
+                review_url=_preferred_approval_review_url(response_payload, harness=args.harness),
             )
             _localize_pending_approval_copy(response_payload, harness=args.harness)
             _record_harness_usage_for_hook(
@@ -3924,6 +3926,7 @@ def run_guard_command(
                         managed_install=managed_install,
                         request_id=_optional_string(response_payload.get("primary_approval_request_id")),
                         artifact_id=_optional_string(response_payload.get("artifact_id")),
+                        review_url=_preferred_approval_review_url(response_payload, harness=args.harness),
                     )
                     response_payload["approval_delivery"] = _approval_delivery_payload(
                         args.harness,
@@ -4347,7 +4350,7 @@ def _codex_browser_approval_decision(
     if wait_timeout_seconds <= 0:
         return None
     if event_name == "PreToolUse":
-        _open_codex_live_approval(response_payload)
+        _open_codex_live_approval(response_payload, guard_home=store.guard_home)
     wait_result = wait_for_approval_requests(
         store=store,
         request_ids=request_ids,
@@ -4477,25 +4480,22 @@ def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harn
     }
 
 
-def _open_codex_live_approval(response_payload: Mapping[str, object]) -> None:
+def _preferred_approval_review_url(response_payload: Mapping[str, object], *, harness: str) -> str | None:
     queued = response_payload.get("approval_requests")
-    lookup: dict[str, object] = {
-        "harness": _optional_string(response_payload.get("harness")),
-        "approval_center_url": _optional_string(response_payload.get("approval_center_url")),
-        "request_id": _optional_string(response_payload.get("primary_approval_request_id")),
-        "artifact_id": _optional_string(response_payload.get("artifact_id")),
-    }
-    review_url = (
+    return (
         _optional_string(response_payload.get("primary_approval_url"))
         or (
-            first_approval_url(queued, **lookup)
+            first_approval_url(queued, **_primary_approval_lookup_kwargs(dict(response_payload), harness=harness))
             if isinstance(queued, list)
             else None
         )
+        or _optional_string(response_payload.get("approval_center_url"))
     )
-    if not review_url:
-        approval_center_url = response_payload.get("approval_center_url")
-        review_url = approval_center_url.strip() if isinstance(approval_center_url, str) else None
+
+
+def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_home: Path | None = None) -> None:
+    harness = _optional_string(response_payload.get("harness")) or "codex"
+    review_url = _preferred_approval_review_url(response_payload, harness=harness)
     if not review_url:
         return
     print(
@@ -4503,8 +4503,17 @@ def _open_codex_live_approval(response_payload: Mapping[str, object]) -> None:
         file=sys.stderr,
         flush=True,
     )
+    browser_url = review_url
+    if guard_home is not None:
+        browser_url = (
+            build_approval_browser_url(
+                review_url,
+                auth_token=load_guard_daemon_auth_token(guard_home),
+            )
+            or review_url
+        )
     with suppress(Exception):
-        webbrowser.open(review_url)
+        webbrowser.open(browser_url)
 
 
 def _update_codex_browser_operation_status(
@@ -5945,19 +5954,7 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
     approval_center_url = response_payload.get("approval_center_url")
     if not isinstance(approval_center_url, str) or not approval_center_url.strip():
         return None
-    queued = response_payload.get("approval_requests")
-    review_url = (
-        _optional_string(response_payload.get("primary_approval_url"))
-        or (
-            first_approval_url(
-                queued,
-                **_primary_approval_lookup_kwargs(response_payload, harness=harness),
-            )
-            if isinstance(queued, list)
-            else None
-        )
-        or approval_center_url.strip()
-    )
+    review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
     canonical_harness = _canonical_harness_name(harness)
     harness_label = {
         "claude-code": "Claude Code",
@@ -5998,20 +5995,7 @@ def _localize_pending_approval_copy(response_payload: dict[str, object], *, harn
     if review_context is None:
         return
     queued = response_payload.get("approval_requests")
-    review_url = (
-        _optional_string(response_payload.get("primary_approval_url"))
-        or (
-            first_approval_url(
-                queued,
-                **_primary_approval_lookup_kwargs(response_payload, harness=harness),
-            )
-            if isinstance(queued, list)
-            else None
-        )
-    )
-    approval_center_url = response_payload.get("approval_center_url")
-    if review_url is None and isinstance(approval_center_url, str) and approval_center_url.strip():
-        review_url = approval_center_url.strip()
+    review_url = _preferred_approval_review_url(response_payload, harness=harness)
     if review_url is None:
         return
     decision_v2 = response_payload.get("decision_v2_json")
@@ -6998,12 +6982,18 @@ def _headless_approval_resolver(
                 now=_now(),
             )
             payload["approval_requests"] = queued
+            _attach_primary_approval_link(
+                payload,
+                harness=args.harness,
+                approval_center_url=approval_center_url,
+            )
             payload["approval_center_url"] = approval_center_url
             payload["review_hint"] = approval_center_hint(
                 context=context,
                 harness=args.harness,
                 approval_center_url=approval_center_url,
                 queued=queued,
+                review_url=_preferred_approval_review_url(payload, harness=args.harness),
             )
             payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
             _localize_pending_approval_copy(payload, harness=args.harness)
@@ -7064,6 +7054,11 @@ def _headless_approval_resolver(
         payload["session_id"] = str(session["session_id"])
         payload["operation_id"] = str(operation["operation_id"])
         payload["approval_requests"] = queued
+        _attach_primary_approval_link(
+            payload,
+            harness=args.harness,
+            approval_center_url=approval_center_url,
+        )
         payload["approval_center_url"] = approval_center_url
         payload["review_hint"] = approval_center_hint(
             context=context,
@@ -7071,6 +7066,7 @@ def _headless_approval_resolver(
             approval_center_url=approval_center_url,
             queued=queued,
             managed_install=managed_install,
+            review_url=_preferred_approval_review_url(payload, harness=args.harness),
         )
         payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
         _localize_pending_approval_copy(payload, harness=args.harness)

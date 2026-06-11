@@ -1,6 +1,7 @@
 import type { GuardReceipt } from "../guard-types";
 import type { EvidenceFilterState } from "./evidence-types";
 import { detectCategory } from "./categories";
+import { receiptUtcDateKey } from "./evidence-format";
 
 export function filterByTime(
   receipts: GuardReceipt[],
@@ -20,15 +21,7 @@ export function filterByTime(
   startOfLast30d.setDate(startOfLast30d.getDate() - 30);
 
   if (day) {
-    const parts = day.split("-").map(Number);
-    const dayStart = new Date(parts[0], parts[1] - 1, parts[2]);
-    const dayEnd = new Date(parts[0], parts[1] - 1, parts[2] + 1);
-    if (!isNaN(dayStart.getTime()) && !isNaN(dayEnd.getTime())) {
-      return receipts.filter((r) => {
-        const d = new Date(r.timestamp);
-        return d >= dayStart && d < dayEnd;
-      });
-    }
+    return receipts.filter((r) => receiptUtcDateKey(r.timestamp) === day);
   }
 
   if (time === "all") return receipts;

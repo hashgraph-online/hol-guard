@@ -14001,6 +14001,26 @@ function guardParams() {
 function guardParam(name) {
   return guardParams().get(name);
 }
+function readBrowserStorage(getStorage, name) {
+  try {
+    return getStorage().getItem(name);
+  } catch {
+    return null;
+  }
+}
+function readGuardStorage(name) {
+  return readBrowserStorage(() => window.sessionStorage, name) ?? readBrowserStorage(() => window.localStorage, name);
+}
+function saveBrowserStorage(getStorage, name, value) {
+  try {
+    getStorage().setItem(name, value);
+  } catch {
+  }
+}
+function saveGuardStorage(name, value) {
+  saveBrowserStorage(() => window.sessionStorage, name, value);
+  saveBrowserStorage(() => window.localStorage, name, value);
+}
 function readGuardToken() {
   const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (guardTokenLocationKey !== locationKey) {
@@ -14012,17 +14032,17 @@ function readGuardToken() {
   }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+    saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
     return guardToken;
   }
-  return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+  return readGuardStorage(GUARD_TOKEN_PARAM);
 }
 function saveGuardToken(guardToken) {
   guardTokenOverride = guardToken;
-  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+  saveGuardStorage(GUARD_TOKEN_PARAM, guardToken);
 }
 function saveGuardDaemonOrigin(daemonOrigin) {
-  window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+  saveGuardStorage(GUARD_DAEMON_PARAM, daemonOrigin);
 }
 function preferredGuardDaemonPort() {
   const fromOrigin = readGuardDaemonOrigin();
@@ -14172,11 +14192,11 @@ function readGuardDaemonOrigin() {
   if (rawDaemonUrl) {
     const daemonOrigin = localGuardDaemonOrigin(rawDaemonUrl);
     if (daemonOrigin) {
-      window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+      saveGuardStorage(GUARD_DAEMON_PARAM, daemonOrigin);
       return daemonOrigin;
     }
   }
-  const storedDaemonUrl = window.sessionStorage.getItem(GUARD_DAEMON_PARAM);
+  const storedDaemonUrl = readGuardStorage(GUARD_DAEMON_PARAM);
   return storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
 }
 function localGuardDaemonOrigin(rawUrl) {
@@ -16606,6 +16626,51 @@ function DecodedLayerCard(props) {
     }
   );
 }
+function formatBlockedShare(blocked, total) {
+  if (!(total > 0) || !(blocked > 0)) {
+    return null;
+  }
+  const percent = blocked / total * 100;
+  if (percent < 1) {
+    return "<1% of recorded actions";
+  }
+  if (percent < 10) {
+    return `${percent.toFixed(1).replace(/\.0$/, "")}% of recorded actions`;
+  }
+  return `${Math.round(percent)}% of recorded actions`;
+}
+function formatEvidenceCount(value) {
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 1e4) return `${Math.round(value / 1e3)}K`;
+  if (value >= 1e3) return value.toLocaleString();
+  return String(value);
+}
+function formatDurationSince(iso) {
+  if (!iso) return "No activity yet";
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return "Recently";
+  const days = Math.max(0, Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1e3)));
+  if (days === 0) return "Today";
+  if (days === 1) return "1 day ago";
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? "1 month ago" : `${months} months ago`;
+}
+function formatDayLabel(dateKey) {
+  return (/* @__PURE__ */ new Date(`${dateKey}T12:00:00`)).toLocaleDateString(void 0, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+function receiptUtcDateKey(iso) {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, "0")}-${String(parsed.getUTCDate()).padStart(2, "0")}`;
+}
 function filterByTime(receipts, time, day, now2) {
   const base = /* @__PURE__ */ new Date();
   const startOfToday = new Date(base.getFullYear(), base.getMonth(), base.getDate());
@@ -16618,15 +16683,7 @@ function filterByTime(receipts, time, day, now2) {
   const startOfLast30d = new Date(startOfToday);
   startOfLast30d.setDate(startOfLast30d.getDate() - 30);
   if (day) {
-    const parts = day.split("-").map(Number);
-    const dayStart = new Date(parts[0], parts[1] - 1, parts[2]);
-    const dayEnd = new Date(parts[0], parts[1] - 1, parts[2] + 1);
-    if (!isNaN(dayStart.getTime()) && !isNaN(dayEnd.getTime())) {
-      return receipts.filter((r) => {
-        const d = new Date(r.timestamp);
-        return d >= dayStart && d < dayEnd;
-      });
-    }
+    return receipts.filter((r) => receiptUtcDateKey(r.timestamp) === day);
   }
   if (time === "all") return receipts;
   return receipts.filter((r) => {
@@ -16766,6 +16823,8 @@ function parseEvidenceUrlState(params) {
   const decision = params.get("decision");
   const sort = params.get("sort");
   const view = params.get("view");
+  const day = params.get("day") ?? DEFAULT_FILTER_STATE.day;
+  const resolvedView = VALID_VIEW.includes(view) ? view : DEFAULT_FILTER_STATE.view;
   return {
     search: params.get("search") ?? DEFAULT_FILTER_STATE.search,
     time: VALID_TIME.includes(time) ? time : DEFAULT_FILTER_STATE.time,
@@ -16773,9 +16832,9 @@ function parseEvidenceUrlState(params) {
     harness: params.get("harness") ?? DEFAULT_FILTER_STATE.harness,
     category: params.get("category") ?? DEFAULT_FILTER_STATE.category,
     sourceScope: params.get("sourceScope") ?? DEFAULT_FILTER_STATE.sourceScope,
-    day: params.get("day") ?? DEFAULT_FILTER_STATE.day,
+    day,
     sort: VALID_SORT.includes(sort) ? sort : DEFAULT_FILTER_STATE.sort,
-    view: VALID_VIEW.includes(view) ? view : DEFAULT_FILTER_STATE.view,
+    view: day ? "actions" : resolvedView,
     selectedId: params.get("selected") ?? DEFAULT_FILTER_STATE.selectedId
   };
 }
@@ -16789,9 +16848,13 @@ function serializeEvidenceUrlState(state) {
     params.set("harness", state.harness);
   if (state.category) params.set("category", state.category);
   if (state.sourceScope) params.set("sourceScope", state.sourceScope);
-  if (state.day) params.set("day", state.day);
+  if (state.day) {
+    params.set("day", state.day);
+    params.set("view", "actions");
+  } else if (state.view !== DEFAULT_FILTER_STATE.view) {
+    params.set("view", state.view);
+  }
   if (state.sort !== DEFAULT_FILTER_STATE.sort) params.set("sort", state.sort);
-  if (state.view !== DEFAULT_FILTER_STATE.view) params.set("view", state.view);
   if (state.selectedId) params.set("selected", state.selectedId);
   return params;
 }
@@ -18028,44 +18091,6 @@ function EvidenceInsightStrip({ metrics }) {
   );
 }
 var reactDomExports = requireReactDom();
-function formatBlockedShare(blocked, total) {
-  if (!(total > 0) || !(blocked > 0)) {
-    return null;
-  }
-  const percent = blocked / total * 100;
-  if (percent < 1) {
-    return "<1% of recorded actions";
-  }
-  if (percent < 10) {
-    return `${percent.toFixed(1).replace(/\.0$/, "")}% of recorded actions`;
-  }
-  return `${Math.round(percent)}% of recorded actions`;
-}
-function formatEvidenceCount(value) {
-  if (value >= 1e6) return `${(value / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
-  if (value >= 1e4) return `${Math.round(value / 1e3)}K`;
-  if (value >= 1e3) return value.toLocaleString();
-  return String(value);
-}
-function formatDurationSince(iso) {
-  if (!iso) return "No activity yet";
-  const ts = new Date(iso).getTime();
-  if (Number.isNaN(ts)) return "Recently";
-  const days = Math.max(0, Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1e3)));
-  if (days === 0) return "Today";
-  if (days === 1) return "1 day ago";
-  if (days < 30) return `${days} days ago`;
-  const months = Math.floor(days / 30);
-  return months === 1 ? "1 month ago" : `${months} months ago`;
-}
-function formatDayLabel(dateKey) {
-  return (/* @__PURE__ */ new Date(`${dateKey}T12:00:00`)).toLocaleDateString(void 0, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  });
-}
 function intensityClass(total, peak) {
   if (total <= 0) return "evidence-heatmap-0";
   const ratio = peak > 0 ? total / peak : 0;
@@ -18766,6 +18791,9 @@ function insightsSharePublishErrorMessage(raw) {
   if (lower.includes("guard:insights.share") || lower.includes("insufficient scope") || lower.includes("missing scope")) {
     return "Reconnect Guard Cloud to grant insights sharing permission, then try again.";
   }
+  if (lower.includes("invalid_grant") || lower.includes("already consumed") || lower.includes("no longer valid")) {
+    return "Guard Cloud sign-in on this device expired. Run hol-guard disconnect, then hol-guard connect, and try again.";
+  }
   if (lower.includes("unauthorized") || lower.includes("401")) {
     return "Guard Cloud session expired. Reconnect from Settings, then try again.";
   }
@@ -19259,7 +19287,6 @@ function EvidenceInsightsSurface({
     () => analytics.top_artifacts.reduce((sum, item) => sum + item.total, 0),
     [analytics.top_artifacts]
   );
-  const cloudConnected = runtime?.cloud_state === "paired_active";
   if (analytics.total === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-16 text-center", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "No data yet" }),
@@ -19281,7 +19308,7 @@ function EvidenceInsightsSurface({
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Your Guard stats" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "All-time local store" })
         ] }),
-        cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsShareButton, { onClick: () => setShareOpen(true) }) : null
+        /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsShareButton, { onClick: () => setShareOpen(true) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightsHeadlineBento, { analytics, variant: "full" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-5 py-5", children: [
@@ -20299,7 +20326,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   }, [harnesses, filters.harness]);
   reactExports.useEffect(() => {
     setPage(0);
-  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.category, filters.sourceScope]);
+  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.category, filters.sourceScope, filters.day]);
   const effectiveFilters = reactExports.useMemo(
     () => ({ ...filters, search: debouncedSearch }),
     [filters, debouncedSearch]
@@ -20346,7 +20373,11 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     setPage((prev) => prev + 1);
   }, []);
   const handleViewChange = reactExports.useCallback((view) => {
-    setFilters((prev) => ({ ...prev, view }));
+    setFilters((prev) => ({
+      ...prev,
+      view,
+      ...view === "insights" ? { day: "" } : {}
+    }));
   }, []);
   const handleOpenExport = reactExports.useCallback(() => {
     setExportOpen(true);
