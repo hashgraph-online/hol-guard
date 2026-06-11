@@ -35,6 +35,7 @@ GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
 _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
     {
         "file_read_request",
+        "package_request",
         "prompt_request",
         "tool_action_request",
     }

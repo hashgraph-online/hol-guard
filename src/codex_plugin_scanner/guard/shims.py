@@ -49,11 +49,12 @@ _PACKAGE_SHIM_COMMANDS = {
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
 _TRUSTED_CLI_LAUNCHER = (
     "import os, runpy, sys; "
-    "trusted_root = sys.argv.pop(1); "
+    "trusted_root = os.path.realpath(sys.argv.pop(1)); "
     "module_name = sys.argv.pop(1); "
-    "cwd = os.getcwd(); "
-    "blocked_entries = ('', '.', os.curdir, cwd, trusted_root); "
-    "sys.path = [trusted_root, *[entry for entry in sys.path if entry not in blocked_entries]]; "
+    "cwd = os.path.realpath(os.getcwd()); "
+    "normalize = lambda entry: cwd if entry in ('', '.', os.curdir) else os.path.realpath(entry); "
+    "blocked_entries = {cwd, trusted_root}; "
+    "sys.path = [trusted_root, *[entry for entry in sys.path if normalize(entry) not in blocked_entries]]; "
     "runpy.run_module(module_name, run_name='__main__')"
 )
 
@@ -125,6 +126,7 @@ def remove_guard_shim(
 def _build_python_shim(harness: str, context: HarnessContext, workspace_args: list[str]) -> str:
     command_args = [
         sys.executable,
+        "-I",
         "-c",
         _TRUSTED_CLI_LAUNCHER,
         str(_trusted_import_root()),
@@ -725,6 +727,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "import sys",
             f"base_command = {command_args!r}",
             f"command_name = {command!r}",
+            f"guard_cwd = {str(_trusted_import_root())!r}",
             f"shim_dir = {str(shim_dir.resolve())!r}",
             "guard_env = dict(os.environ)",
             "guard_env.pop('PYTHONPATH', None)",
@@ -732,7 +735,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             f"if os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}:",
             "    guard_command = [*base_command, '--json', command_name]",
             "guard_process = subprocess.run(",
-            "    [*guard_command, *sys.argv[1:]], capture_output=True, text=True, env=guard_env",
+            "    [*guard_command, *sys.argv[1:]], capture_output=True, text=True, env=guard_env, cwd=guard_cwd",
             ")",
             "if guard_process.stdout:",
             "    sys.stdout.write(guard_process.stdout)",

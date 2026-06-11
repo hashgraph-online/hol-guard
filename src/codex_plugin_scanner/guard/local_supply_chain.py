@@ -760,6 +760,7 @@ def build_package_protect_payload(
     store: GuardStore,
     workspace_dir: Path,
     dry_run: bool,
+    allow_saved_approval_execution: bool = False,
     now: str,
     config: GuardConfig | None,
     unsafe_raw_output: bool,
@@ -847,7 +848,10 @@ def build_package_protect_payload(
     }
     if config is not None:
         payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=now)
-    if evaluation.decision in {"block", "ask"} or dry_run:
+    effective_dry_run = dry_run and not (
+        allow_saved_approval_execution and _evaluation_uses_saved_package_approval(evaluation)
+    )
+    if evaluation.decision in {"block", "ask"} or effective_dry_run:
         store.add_receipt(receipt)
         store.set_receipt_action_envelope(receipt.receipt_id, receipt_policy_metadata)
         store.add_event(
@@ -977,6 +981,10 @@ def _apply_stored_package_policy_override(
             reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
         )
     return evaluation
+
+
+def _evaluation_uses_saved_package_approval(evaluation: PackageRequestEvaluation) -> bool:
+    return any(reason.get("code") == "saved_package_approval" for reason in evaluation.reasons)
 
 
 def _package_policy_override_evaluation(

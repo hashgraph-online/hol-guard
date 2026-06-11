@@ -131,13 +131,14 @@ def build_protect_payload(
         store=store,
         workspace_dir=workspace_dir,
         dry_run=dry_run or cached_gate,
+        allow_saved_approval_execution=cached_gate and not dry_run,
         now=now,
         config=config,
         unsafe_raw_output=unsafe_raw_output,
         timeout_seconds=_protect_command_timeout_seconds(),
     )
     if package_payload is not None:
-        if cached_gate:
+        if cached_gate and not _package_payload_uses_saved_approval(package_payload[0]):
             return _merge_cached_advisory_into_package_payload(
                 package_payload,
                 cached_verdict=cached_verdict,
@@ -221,6 +222,19 @@ def build_protect_payload(
             now,
         )
     return (payload, int(execution.returncode))
+
+
+def _package_payload_uses_saved_approval(payload: dict[str, object]) -> bool:
+    evaluation = payload.get("supply_chain_evaluation")
+    verdict = payload.get("verdict")
+    if not isinstance(evaluation, dict) or not isinstance(verdict, dict):
+        return False
+    if verdict.get("action") != "allow":
+        return False
+    reasons = evaluation.get("reasons")
+    if not isinstance(reasons, list):
+        return False
+    return any(isinstance(reason, dict) and reason.get("code") == "saved_package_approval" for reason in reasons)
 
 
 def _merge_cached_advisory_into_package_payload(

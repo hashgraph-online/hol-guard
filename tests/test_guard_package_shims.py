@@ -756,7 +756,7 @@ def test_guard_package_shims_block_before_manager_execution(
 
     assert result.returncode != 0
     assert marker_path.exists() is False
-    assert "\"verdict\"" not in result.stdout
+    assert '"verdict"' not in result.stdout
     assert "HOL Guard" in result.stdout
 
 
@@ -867,9 +867,10 @@ def test_guard_protect_json_queues_local_approval_link_on_cloud_auth_error(
     assert payload["receipt"]["approval_request_id"] == payload["primary_approval_request_id"]
     assert stored_receipt["approval_request_id"] == payload["primary_approval_request_id"]
     assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"] == payload["primary_approval_url"]
-    assert "Open HOL Guard to approve or keep this blocked:" in payload["supply_chain_evaluation"]["user_copy"][
-        "harness_message"
-    ]
+    assert (
+        "Open HOL Guard to approve or keep this blocked:"
+        in payload["supply_chain_evaluation"]["user_copy"]["harness_message"]
+    )
 
 
 def test_guard_protect_retry_runs_after_local_package_approval(
@@ -1000,6 +1001,84 @@ def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides
     assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
 
 
+def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-cached-approval-marker.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    store = GuardStore(home_dir)
+    _seed_bundle_cache_only(
+        home_dir=home_dir,
+        ecosystem="npm",
+        package_name="badpkg",
+        package_version="1.0.0",
+        action="allow",
+    )
+    store.cache_advisories(
+        [
+            {
+                "id": "adv-cached-block",
+                "ecosystem": "npm",
+                "package": "badpkg",
+                "severity": "high",
+                "action": "block",
+                "headline": "Locally cached malicious package block.",
+            }
+        ],
+        "2026-05-19T00:00:00Z",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    rc = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            "npm",
+            "install",
+            "badpkg@1.0.0",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    apply_approval_resolution(
+        store=store,
+        request_id=str(payload["primary_approval_request_id"]),
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="reviewed",
+    )
+
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+    retry_payload, retry_exit_code = build_protect_payload(
+        command=["npm", "install", "badpkg@1.0.0"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=False,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert retry_exit_code == 0
+    assert retry_payload["executed"] is True
+    assert retry_payload["verdict"]["action"] == "allow"
+    assert marker_path.exists()
+
+
 def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -1031,15 +1110,10 @@ def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path
     assert exit_code == 2
     assert payload["executed"] is False
     assert payload["supply_chain_evaluation"]["decision"] == "block"
-    assert any(
-        package["name"] == "minimist"
-        for package in payload["supply_chain_evaluation"]["packages"]
-    )
+    assert any(package["name"] == "minimist" for package in payload["supply_chain_evaluation"]["packages"])
 
 
-def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile(
-    tmp_path: Path, capsys
-) -> None:
+def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
