@@ -22,6 +22,7 @@ from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots,
 
 from .adapters.base import HarnessContext
 from .config import GuardConfig, resolve_risk_action
+from .models import GuardArtifact
 from .package_firewall_entitlement import resolve_package_firewall_entitlement
 from .receipts import build_receipt
 from .redaction import redact_text
@@ -940,7 +941,7 @@ def _apply_stored_package_policy_override(
     evaluation: PackageRequestEvaluation,
     *,
     store: GuardStore,
-    artifact,
+    artifact: GuardArtifact,
     artifact_hash: str,
     workspace_dir: Path,
     now: str,
