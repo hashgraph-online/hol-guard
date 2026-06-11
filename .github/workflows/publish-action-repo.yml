@@ -31,7 +31,7 @@ jobs:
     permissions:
       contents: read
     env:
-      ACTION_REPOSITORY: ${{ vars.ACTION_REPOSITORY != '' && vars.ACTION_REPOSITORY || 'hashgraph-online/ai-plugin-scanner-action' }}
+      ACTION_REPOSITORY: hashgraph-online/ai-plugin-scanner-action
       SOURCE_REF: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_SERVER_URL: ${{ github.server_url }}
@@ -78,12 +78,22 @@ jobs:
           python3 -m pip install --disable-pip-version-check --no-input "pypi-attestations==$(tr -d '[:space:]' < action/pypi-attestations-version.txt)"
           DIST_DIR="${RUNNER_TEMP}/scanner-wheel"
           mkdir -p "$DIST_DIR"
-          python3 -m pip download --disable-pip-version-check --no-input --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"
-          WHEEL_PATH="$(find "$DIST_DIR" -maxdepth 1 -name 'plugin_scanner-*.whl' -print | sort | head -n1)"
-          if [ -z "$WHEEL_PATH" ]; then
-            echo "Could not download plugin-scanner wheel for version ${SCANNER_VERSION}." >&2
-            exit 1
-          fi
+          WHEEL_PATH=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            rm -f "$DIST_DIR"/plugin_scanner-*.whl
+            if python3 -m pip download --disable-pip-version-check --no-input --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"; then
+              WHEEL_PATH="$(find "$DIST_DIR" -maxdepth 1 -name 'plugin_scanner-*.whl' -print | sort | head -n1)"
+              if [ -n "$WHEEL_PATH" ]; then
+                break
+              fi
+            fi
+            if [ "$attempt" -eq 10 ]; then
+              echo "Could not download plugin-scanner wheel for version ${SCANNER_VERSION} after waiting for PyPI propagation." >&2
+              exit 1
+            fi
+            echo "plugin-scanner==${SCANNER_VERSION} not on PyPI yet; retrying in 30s (attempt ${attempt}/10)..."
+            sleep 30
+          done
           SHA256="$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$WHEEL_PATH")"
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
