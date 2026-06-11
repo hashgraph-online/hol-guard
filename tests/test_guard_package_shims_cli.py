@@ -139,6 +139,92 @@ def test_package_shims_status_reports_reconnect_required_when_cloud_auth_expired
     assert payload["actions"]["remove"] == "disabled"
 
 
+def test_package_shims_status_self_heals_connected_cloud_auth_without_cached_entitlement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    seed_connected_oauth_without_entitlement,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    seed_connected_oauth_without_entitlement(GuardStore(guard_home))
+    calls: list[str] = []
+
+    def _fake_sync_local_guard_cloud_proof(store: GuardStore) -> dict[str, object]:
+        calls.append("proof")
+        store.record_latest_guard_connect_sync_success(
+            sync_payload={"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1},
+            now="2026-06-05T01:41:00+00:00",
+        )
+        return {"synced_at": "2026-06-05T01:41:00+00:00", "receipts_stored": 1}
+
+    def _fake_sync_supply_chain_bundle(store: GuardStore) -> dict[str, object]:
+        calls.append("bundle")
+        store.set_sync_payload(
+            "supply_chain_bundle_entitlement",
+            {
+                "bundle_version": "bundle-version-test",
+                "key_id": "bundle-key-test",
+                "policy_hash": "policy-hash-test",
+                "tier": "pro",
+                "workspace_id": "workspace-1",
+            },
+            "2026-06-05T01:41:05+00:00",
+        )
+        return {"bundle_version": "bundle-version-test", "tier": "pro"}
+
+    monkeypatch.setattr(local_supply_chain_module, "sync_local_guard_cloud_proof", _fake_sync_local_guard_cloud_proof)
+    monkeypatch.setattr(local_supply_chain_module, "sync_supply_chain_bundle", _fake_sync_supply_chain_bundle)
+
+    rc = main(["guard", "package-shims", "status", "--home", str(guard_home), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert calls == ["proof", "bundle"]
+    assert payload["entitlement"] == {
+        "allowed": True,
+        "reason": "paid_entitlement_active",
+        "tier": "pro",
+        "upgrade_cta": None,
+    }
+    assert payload["actions"]["install"] == "available"
+
+
+def test_package_shims_status_preserves_reconnect_gate_when_connected_auth_refresh_expires(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    seed_connected_oauth_without_entitlement,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    seed_connected_oauth_without_entitlement(GuardStore(guard_home))
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_local_guard_cloud_proof",
+        lambda _store: (_ for _ in ()).throw(
+            local_supply_chain_module.GuardSyncAuthorizationExpiredError(
+                "Guard authorization expired. Run `hol-guard connect` again."
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_supply_chain_bundle",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+    )
+
+    rc = main(["guard", "package-shims", "status", "--home", str(guard_home), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["entitlement"] == {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "unknown",
+        "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+    }
+    assert payload["actions"]["install"] == "reconnect_required"
+
+
 def test_package_shims_install_requires_reconnect_when_cloud_auth_expired(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
