@@ -2267,6 +2267,19 @@ function TotpSetupModal(props: {
             <TotpEnrollmentQrPanel enrollment={props.enrollment} />
             <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
               <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={props.actionPassword}
+                  onChange={props.onActionPasswordChange}
+                  className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Update this if you changed your approval password after starting setup.
+                </p>
+              </label>
+              <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Device label</span>
                 <input
                   type="text"
