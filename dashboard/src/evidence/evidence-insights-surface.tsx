@@ -83,8 +83,6 @@ export function EvidenceInsightsSurface({
     () => analytics.top_artifacts.reduce((sum, item) => sum + item.total, 0),
     [analytics.top_artifacts],
   );
-  const cloudConnected = runtime?.cloud_state === "paired_active";
-
   if (analytics.total === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -109,9 +107,7 @@ export function EvidenceInsightsSurface({
             <SectionLabel>Your Guard stats</SectionLabel>
             <p className="mt-1 text-sm text-slate-500">All-time local store</p>
           </div>
-          {cloudConnected ? (
-            <EvidenceInsightsShareButton onClick={() => setShareOpen(true)} />
-          ) : null}
+          <EvidenceInsightsShareButton onClick={() => setShareOpen(true)} />
         </div>
         <EvidenceInsightsHeadlineBento analytics={analytics} variant="full" />
 
