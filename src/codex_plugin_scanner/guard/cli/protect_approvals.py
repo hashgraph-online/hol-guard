@@ -149,9 +149,9 @@ def _protect_approval_item(
         "config_path": artifact.config_path,
         "policy_action": policy_action,
         "changed_fields": _protect_target_labels(response_payload),
-        "risk_summary": _optional_string(supply_chain_evaluation.get("risk_summary"))
-        or _optional_string(user_copy_map.get("summary"))
-        or _optional_string(verdict.get("reason")),
+        "risk_summary": _optional_string(verdict.get("reason"))
+        or _optional_string(supply_chain_evaluation.get("risk_summary"))
+        or _optional_string(user_copy_map.get("summary")),
         "risk_signals": _string_list(verdict.get("risk_signals")),
         "action_envelope_json": (
             receipt.get("action_envelope_json") if isinstance(receipt.get("action_envelope_json"), dict) else None

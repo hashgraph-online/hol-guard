@@ -1138,11 +1138,97 @@ def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides
     )
 
     payload = json.loads(capsys.readouterr().out)
+    pending = store.list_approval_requests(limit=None)
 
     assert rc == 2
     assert payload["verdict"]["action"] == "block"
     assert payload["primary_approval_request_id"]
     assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
+    assert pending[0]["risk_summary"] == payload["verdict"]["reason"]
+    assert pending[0]["risk_summary"] != payload["supply_chain_evaluation"]["risk_summary"]
+
+
+def test_guard_protect_denied_retry_with_cloud_block_does_not_requeue_local_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    store = GuardStore(home_dir)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="block",
+        package_name="badpkg",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="badpkg",
+            package_version="1.0.0",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "badpkg@1.0.0",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        apply_approval_resolution(
+            store=store,
+            request_id=str(payload["primary_approval_request_id"]),
+            action="block",
+            scope="artifact",
+            workspace=None,
+            reason="keep blocked",
+        )
+
+        retry_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "badpkg@1.0.0",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    retry_payload = json.loads(capsys.readouterr().out)
+    pending = store.list_approval_requests(status="pending", limit=None)
+    resolved = store.list_approval_requests(status="resolved", limit=None)
+
+    assert retry_rc == 2
+    assert retry_payload["verdict"]["action"] == "block"
+    assert any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_block"
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
+    assert "primary_approval_request_id" not in retry_payload
+    assert pending == []
+    assert len(resolved) == 1
 
 
 def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
@@ -1220,6 +1306,10 @@ def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
     assert retry_exit_code == 0
     assert retry_payload["executed"] is True
     assert retry_payload["verdict"]["action"] == "allow"
+    assert any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
     assert marker_path.exists()
 
 
@@ -1255,6 +1345,88 @@ def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path
     assert payload["executed"] is False
     assert payload["supply_chain_evaluation"]["decision"] == "block"
     assert any(package["name"] == "minimist" for package in payload["supply_chain_evaluation"]["packages"])
+
+
+def test_guard_protect_npm_ci_requires_fresh_approval_after_lockfile_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_npm_ci_workspace(workspace_dir, package_name="badpkg", package_version="1.0.0")
+    store = GuardStore(home_dir)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="block",
+        package_name="badpkg",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="badpkg",
+            package_version="1.0.0",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+
+        first_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "ci",
+            ]
+        )
+        first_payload = json.loads(capsys.readouterr().out)
+
+        assert first_rc == 2
+        apply_approval_resolution(
+            store=store,
+            request_id=str(first_payload["primary_approval_request_id"]),
+            action="allow",
+            scope="artifact",
+            workspace=None,
+            reason="reviewed",
+        )
+
+        _write_npm_ci_workspace(workspace_dir, package_name="badpkg", package_version="2.0.0")
+
+        second_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "ci",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    second_payload = json.loads(capsys.readouterr().out)
+    pending = store.list_approval_requests(status="pending", limit=None)
+    resolved = store.list_approval_requests(status="resolved", limit=None)
+
+    assert second_rc == 2
+    assert second_payload["verdict"]["action"] == "block"
+    assert second_payload["primary_approval_request_id"] != first_payload["primary_approval_request_id"]
+    assert second_payload["receipt"]["artifact_hash"] != first_payload["receipt"]["artifact_hash"]
+    assert len(pending) == 1
+    assert len(resolved) == 1
 
 
 def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile(tmp_path: Path, capsys) -> None:

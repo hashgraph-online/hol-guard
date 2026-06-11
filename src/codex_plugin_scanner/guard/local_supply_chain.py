@@ -779,7 +779,7 @@ def build_package_protect_payload(
         config_path="hol-guard.toml",
         source_scope="project",
     )
-    artifact_hash = stable_digest_hex(artifact.artifact_id.encode("utf-8"))
+    artifact_hash = _package_request_artifact_hash(artifact, workspace_dir=workspace_dir)
     evaluation = evaluate_package_request_artifact(
         artifact=artifact,
         store=store,
@@ -957,7 +957,7 @@ def _apply_stored_package_policy_override(
     if not isinstance(decision, dict):
         return evaluation
     action = decision.get("action")
-    if action == "allow" and evaluation.decision != "allow":
+    if action == "allow":
         return _package_policy_override_evaluation(
             evaluation,
             decision="allow",
@@ -970,7 +970,7 @@ def _apply_stored_package_policy_override(
             reason_code="saved_package_approval",
             reason_message="HOL Guard reused your saved approval for this package request.",
         )
-    if action == "block" and evaluation.decision != "block":
+    if action == "block":
         return _package_policy_override_evaluation(
             evaluation,
             decision="block",
@@ -982,6 +982,30 @@ def _apply_stored_package_policy_override(
             reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
         )
     return evaluation
+
+
+def _package_request_artifact_hash(artifact: GuardArtifact, *, workspace_dir: Path) -> str:
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    targets = metadata.get("targets")
+    if isinstance(targets, list) and any(isinstance(item, dict) for item in targets):
+        return stable_digest_hex(artifact.artifact_id.encode("utf-8"))
+    manifest_paths = tuple(str(item) for item in metadata.get("manifest_paths", []) if isinstance(item, str))
+    lockfile_paths = tuple(str(item) for item in metadata.get("lockfile_paths", []) if isinstance(item, str))
+    if not manifest_paths and not lockfile_paths:
+        return stable_digest_hex(artifact.artifact_id.encode("utf-8"))
+    return stable_digest_hex(
+        json.dumps(
+            {
+                "artifact_id": artifact.artifact_id,
+                "manifest_paths": list(manifest_paths),
+                "lockfile_paths": list(lockfile_paths),
+                "manifest_hashes": _hash_existing_paths(workspace_dir, manifest_paths),
+                "lockfile_hashes": _hash_existing_paths(workspace_dir, lockfile_paths),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
 
 
 def _evaluation_uses_saved_package_approval(evaluation: PackageRequestEvaluation) -> bool:
