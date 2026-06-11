@@ -18,8 +18,12 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
+from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.protect import build_protect_payload
+from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.shim_execution_helpers import write_fake_manager_script
@@ -265,6 +269,14 @@ def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_v
         ),
         encoding="utf-8",
     )
+
+
+def test_trusted_python_flags_omit_dash_p_before_python_311(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard_shims_module.sys, "version_info", (3, 10, 20, "final", 0))
+    assert guard_shims_module._trusted_python_flags() == ["-I"]
+
+    monkeypatch.setattr(guard_shims_module.sys, "version_info", (3, 11, 0, "final", 0))
+    assert guard_shims_module._trusted_python_flags() == ["-I", "-P"]
 
 
 def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, capsys) -> None:
@@ -754,6 +766,8 @@ def test_guard_package_shims_block_before_manager_execution(
 
     assert result.returncode != 0
     assert marker_path.exists() is False
+    assert '"verdict"' not in result.stdout
+    assert "HOL Guard" in result.stdout
 
 
 def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: Path, capsys) -> None:
@@ -807,7 +821,496 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(tmp_path: 
     assert marker_payload["argv"][1:] == ["ci"]
     assert marker_payload["cwd"] == str(workspace_dir)
     assert marker_payload["shim_var"] == "shim-value"
-    assert "fake-manager-stdout" in result.stdout
+    assert result.stdout.strip() == "fake-manager-stdout"
+
+
+def test_guard_protect_json_queues_local_approval_link_on_cloud_auth_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="minimist",
+        evaluate_status=401,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "minimist@1.2.8",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    payload = json.loads(capsys.readouterr().out)
+    stored_receipt = GuardStore(home_dir).list_receipts(limit=1)[0]
+
+    assert rc == 2
+    assert payload["approval_center_url"] == "http://127.0.0.1:5474"
+    assert payload["primary_approval_request_id"]
+    assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
+    assert payload["approval_request_ids"] == [payload["primary_approval_request_id"]]
+    assert payload["receipt"]["approval_request_id"] == payload["primary_approval_request_id"]
+    assert stored_receipt["approval_request_id"] == payload["primary_approval_request_id"]
+    assert payload["supply_chain_evaluation"]["user_copy"]["dashboard_url"] == payload["primary_approval_url"]
+    assert (
+        "Open HOL Guard to approve or keep this blocked:"
+        in payload["supply_chain_evaluation"]["user_copy"]["harness_message"]
+    )
+
+
+def test_guard_protect_probe_skips_local_approval_queue_on_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="minimist",
+        evaluate_status=401,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    monkeypatch.setenv(SHIM_PROBE_ENV_VAR, SHIM_PROBE_ENV_VALUE)
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "minimist@1.2.8",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    payload = json.loads(capsys.readouterr().out)
+    store = GuardStore(home_dir)
+
+    assert rc == 2
+    assert payload["verdict"]["action"] == "review"
+    assert "primary_approval_request_id" not in payload
+    assert store.list_approval_requests(limit=None) == []
+
+
+def test_guard_protect_retry_runs_after_local_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-approved-marker.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="minimist",
+        evaluate_status=401,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "minimist@1.2.8",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 2
+
+        store = GuardStore(home_dir)
+        apply_approval_resolution(
+            store=store,
+            request_id=str(payload["primary_approval_request_id"]),
+            action="allow",
+            scope="artifact",
+            workspace=None,
+            reason="reviewed",
+        )
+
+        original_path = os.environ.get("PATH", "")
+        monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+        retry_payload, retry_exit_code = build_protect_payload(
+            command=["npm", "install", "minimist@1.2.8"],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=False,
+            now="2026-05-19T00:00:00Z",
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    assert retry_exit_code == 0
+    assert retry_payload["executed"] is True
+    assert retry_payload["verdict"]["action"] == "allow"
+    assert marker_path.exists()
+
+
+def test_guard_protect_denied_retry_does_not_requeue_local_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name="minimist",
+        evaluate_status=401,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="minimist",
+            package_version="1.2.8",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "minimist@1.2.8",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        store = GuardStore(home_dir)
+        assert rc == 2
+        apply_approval_resolution(
+            store=store,
+            request_id=str(payload["primary_approval_request_id"]),
+            action="block",
+            scope="artifact",
+            workspace=None,
+            reason="keep blocked",
+        )
+        retry_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "minimist@1.2.8",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    retry_payload = json.loads(capsys.readouterr().out)
+    store = GuardStore(home_dir)
+    pending = store.list_approval_requests(status="pending", limit=None)
+    resolved = store.list_approval_requests(status="resolved", limit=None)
+
+    assert retry_rc == 2
+    assert retry_payload["verdict"]["action"] == "block"
+    assert any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_block"
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
+    assert "primary_approval_request_id" not in retry_payload
+    assert pending == []
+    assert len(resolved) == 1
+
+
+def test_guard_protect_json_queues_local_approval_when_cached_advisory_overrides_bundle_allow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    store = GuardStore(home_dir)
+    _seed_bundle_cache_only(
+        home_dir=home_dir,
+        ecosystem="npm",
+        package_name="badpkg",
+        package_version="1.0.0",
+        action="allow",
+    )
+    store.cache_advisories(
+        [
+            {
+                "id": "adv-cached-block",
+                "ecosystem": "npm",
+                "package": "badpkg",
+                "severity": "high",
+                "action": "block",
+                "headline": "Locally cached malicious package block.",
+            }
+        ],
+        "2026-05-19T00:00:00Z",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    rc = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            "npm",
+            "install",
+            "badpkg@1.0.0",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    pending = store.list_approval_requests(limit=None)
+
+    assert rc == 2
+    assert payload["verdict"]["action"] == "block"
+    assert payload["primary_approval_request_id"]
+    assert payload["primary_approval_url"].startswith("http://127.0.0.1:5474/requests/")
+    assert pending[0]["risk_summary"] == payload["verdict"]["reason"]
+    assert pending[0]["risk_summary"] != payload["supply_chain_evaluation"]["risk_summary"]
+
+
+def test_guard_protect_denied_retry_with_cloud_block_does_not_requeue_local_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    store = GuardStore(home_dir)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="block",
+        package_name="badpkg",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="badpkg",
+            package_version="1.0.0",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "badpkg@1.0.0",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        apply_approval_resolution(
+            store=store,
+            request_id=str(payload["primary_approval_request_id"]),
+            action="block",
+            scope="artifact",
+            workspace=None,
+            reason="keep blocked",
+        )
+
+        retry_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "install",
+                "badpkg@1.0.0",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    retry_payload = json.loads(capsys.readouterr().out)
+    pending = store.list_approval_requests(status="pending", limit=None)
+    resolved = store.list_approval_requests(status="resolved", limit=None)
+
+    assert retry_rc == 2
+    assert retry_payload["verdict"]["action"] == "block"
+    assert any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_block"
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
+    assert "primary_approval_request_id" not in retry_payload
+    assert pending == []
+    assert len(resolved) == 1
+
+
+def test_guard_protect_retry_runs_after_cached_advisory_package_approval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-cached-approval-marker.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    store = GuardStore(home_dir)
+    _seed_bundle_cache_only(
+        home_dir=home_dir,
+        ecosystem="npm",
+        package_name="badpkg",
+        package_version="1.0.0",
+        action="allow",
+    )
+    store.cache_advisories(
+        [
+            {
+                "id": "adv-cached-block",
+                "ecosystem": "npm",
+                "package": "badpkg",
+                "severity": "high",
+                "action": "block",
+                "headline": "Locally cached malicious package block.",
+            }
+        ],
+        "2026-05-19T00:00:00Z",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+
+    rc = main(
+        [
+            "guard",
+            "protect",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+            "--dry-run",
+            "npm",
+            "install",
+            "badpkg@1.0.0",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    apply_approval_resolution(
+        store=store,
+        request_id=str(payload["primary_approval_request_id"]),
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="reviewed",
+    )
+
+    original_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+    retry_payload, retry_exit_code = build_protect_payload(
+        command=["npm", "install", "badpkg@1.0.0"],
+        store=store,
+        workspace_dir=workspace_dir,
+        dry_run=False,
+        now="2026-05-19T00:00:00Z",
+    )
+
+    assert retry_exit_code == 0
+    assert retry_payload["executed"] is True
+    assert retry_payload["verdict"]["action"] == "allow"
+    assert any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
+    assert marker_path.exists()
 
 
 def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path) -> None:
@@ -841,15 +1344,92 @@ def test_guard_protect_blocks_npm_ci_before_install_from_lockfile(tmp_path: Path
     assert exit_code == 2
     assert payload["executed"] is False
     assert payload["supply_chain_evaluation"]["decision"] == "block"
-    assert any(
-        package["name"] == "minimist"
-        for package in payload["supply_chain_evaluation"]["packages"]
-    )
+    assert any(package["name"] == "minimist" for package in payload["supply_chain_evaluation"]["packages"])
 
 
-def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile(
-    tmp_path: Path, capsys
+def test_guard_protect_npm_ci_requires_fresh_approval_after_lockfile_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
 ) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_npm_ci_workspace(workspace_dir, package_name="badpkg", package_version="1.0.0")
+    store = GuardStore(home_dir)
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="block",
+        package_name="badpkg",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        _seed_bundle(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name="badpkg",
+            package_version="1.0.0",
+            action="block",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+
+        first_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "ci",
+            ]
+        )
+        first_payload = json.loads(capsys.readouterr().out)
+
+        assert first_rc == 2
+        apply_approval_resolution(
+            store=store,
+            request_id=str(first_payload["primary_approval_request_id"]),
+            action="allow",
+            scope="artifact",
+            workspace=None,
+            reason="reviewed",
+        )
+
+        _write_npm_ci_workspace(workspace_dir, package_name="badpkg", package_version="2.0.0")
+
+        second_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "--dry-run",
+                "npm",
+                "ci",
+            ]
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    second_payload = json.loads(capsys.readouterr().out)
+    pending = store.list_approval_requests(status="pending", limit=None)
+    resolved = store.list_approval_requests(status="resolved", limit=None)
+
+    assert second_rc == 2
+    assert second_payload["verdict"]["action"] == "block"
+    assert second_payload["primary_approval_request_id"] != first_payload["primary_approval_request_id"]
+    assert second_payload["receipt"]["artifact_hash"] != first_payload["receipt"]["artifact_hash"]
+    assert len(pending) == 1
+    assert len(resolved) == 1
+
+
+def test_guard_package_shims_block_npm_ci_before_manager_execution_from_lockfile(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)

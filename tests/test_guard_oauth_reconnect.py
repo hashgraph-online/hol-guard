@@ -129,3 +129,26 @@ def test_invalid_dpop_curve_refresh_uses_reconnect_message(tmp_path, monkeypatch
         guard_runner_module._resolve_guard_sync_auth_context(store)
 
     assert "hol-guard connect" in str(error.value)
+
+
+def test_resolve_guard_sync_auth_context_skips_primary_repair_for_package_eval(tmp_path, monkeypatch) -> None:
+    store = _store_with_oauth_credentials(tmp_path)
+    allow_primary_calls: list[bool] = []
+
+    monkeypatch.setattr(
+        store,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": True, "state": "degraded"},
+    )
+
+    def _fake_get_oauth_local_credentials(*, allow_primary: bool = False):
+        allow_primary_calls.append(allow_primary)
+        return None
+
+    monkeypatch.setattr(store, "get_oauth_local_credentials", _fake_get_oauth_local_credentials)
+    monkeypatch.setattr(store, "get_recoverable_oauth_local_credentials", lambda: None)
+
+    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError):
+        guard_runner_module._resolve_guard_sync_auth_context(store, allow_primary_repair=False)
+
+    assert allow_primary_calls == [False]

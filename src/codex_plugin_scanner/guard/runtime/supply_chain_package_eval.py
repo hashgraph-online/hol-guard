@@ -337,6 +337,8 @@ def evaluate_package_request_artifact(
         )
         if cloud_fallback_reason is not None:
             fallback = _with_additional_reason(fallback, cloud_fallback_reason)
+            if _cloud_fallback_requires_reconnect_copy(cloud_fallback_reason):
+                fallback = _with_cloud_auth_reconnect_copy(fallback)
         if bundle_meta is not None and bundle_evaluation.decision != "monitor" and isinstance(bundle_payload, dict):
             cache_workspace_id = workspace_id
             if cache_workspace_id is None:
@@ -412,6 +414,8 @@ def evaluate_package_request_artifact(
     )
     if cloud_fallback_reason is not None:
         result = _with_additional_reason(result, cloud_fallback_reason)
+        if _cloud_fallback_requires_reconnect_copy(cloud_fallback_reason):
+            result = _with_cloud_auth_reconnect_copy(result)
     _persist_evidence(store=store, artifact=artifact, evaluation=result, now=now_value)
     return result
 
@@ -614,7 +618,7 @@ def _evaluate_with_cloud(
         return result
 
     try:
-        auth_context = _resolve_guard_sync_auth_context(store)
+        auth_context = _resolve_guard_sync_auth_context(store, allow_primary_repair=False)
     except GuardSyncAuthorizationExpiredError:
         if bundle_meta is not None and bundle_defer_eligible and resolve_fail_closed_decision() != "block":
             return None, _cloud_fallback_reason(
@@ -900,11 +904,46 @@ def _cloud_fail_closed_evaluation(
         bundle_version=bundle_meta.get("bundle_version") if bundle_meta is not None else None,
         policy_version=bundle_meta.get("policy_hash", "local:none") if bundle_meta is not None else "local:none",
     )
-    return _finalize_evaluation(
+    evaluation = _finalize_evaluation(
         draft,
         package_intent_hash=artifact.artifact_id.rsplit(":", 1)[-1],
         workspace_fingerprint=workspace_fingerprint,
     )
+    if code == "cloud_auth_error":
+        return _with_cloud_auth_reconnect_copy(evaluation)
+    return evaluation
+
+
+def _with_cloud_auth_reconnect_copy(evaluation: PackageRequestEvaluation) -> PackageRequestEvaluation:
+    reconnect_command = "hol-guard connect"
+    reconnect_summary = "Guard Cloud needs a fresh sign-in before shared review can resume."
+    summary = evaluation.user_copy.summary or ""
+    if reconnect_summary.lower() not in summary.lower():
+        summary = f"{summary} {reconnect_summary}".strip()
+    reconnect_message = (
+        "Guard kept this request local-only because Guard Cloud authorization expired. "
+        f"Run `{reconnect_command}` to restore shared review and sync."
+    )
+    harness_message = evaluation.user_copy.harness_message or ""
+    if reconnect_message.lower() not in harness_message.lower():
+        harness_message = f"{harness_message} {reconnect_message}".strip()
+    return replace(
+        evaluation,
+        user_copy=_normalize_package_user_copy(
+            SupplyChainUserCopy(
+                title=evaluation.user_copy.title,
+                summary=summary,
+                next_step=evaluation.user_copy.next_step or reconnect_command,
+                dashboard_url=evaluation.user_copy.dashboard_url,
+                harness_message=harness_message,
+            ),
+            policy_action=evaluation.policy_action,
+        ),
+    )
+
+
+def _cloud_fallback_requires_reconnect_copy(reason: dict[str, object]) -> bool:
+    return _optional_string(reason.get("code")) == "cloud_auth_error"
 
 
 def _external_tarball_scan_failure_decision(*, store: GuardStore, workspace_dir: Path | None) -> str:

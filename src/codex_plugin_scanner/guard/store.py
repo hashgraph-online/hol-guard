@@ -2161,6 +2161,19 @@ class GuardStore:
                 (policy_decision, receipt_id),
             )
 
+    def update_receipt_approval_context(
+        self,
+        receipt_id: str,
+        *,
+        approval_source: str | None,
+        approval_request_id: str | None,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "update runtime_receipts set approval_source = ?, approval_request_id = ? where receipt_id = ?",
+                (approval_source, approval_request_id, receipt_id),
+            )
+
     @staticmethod
     def _receipt_base_query(where_clause: str = "") -> str:
         base = """
