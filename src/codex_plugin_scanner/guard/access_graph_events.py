@@ -51,6 +51,8 @@ def queue_access_graph_snapshot(
         edges=edges,
         artifacts=artifacts,
         agent_fingerprint=agent_fingerprint,
+        harness=detection.harness,
+        agent_id=agent_id,
         now=now,
     )
     snapshot_seed = {
@@ -166,6 +168,8 @@ def _add_artifact_entities(
     edges: list[dict[str, object]],
     artifacts: list[dict[str, object]],
     agent_fingerprint: str,
+    harness: str,
+    agent_id: str,
     now: str,
 ) -> None:
     for artifact in artifacts:
@@ -182,7 +186,11 @@ def _add_artifact_entities(
                 "displayName": _non_empty_string(artifact.get("artifact_name")) or artifact_id,
                 "fingerprint": fingerprint,
                 "metadata": {
+                    "agentId": agent_id,
+                    # agentType and harness both carry the harness slug for portal topology resolution.
+                    "agentType": harness,
                     "artifactType": artifact_type,
+                    "harness": harness,
                     "sourceScope": _non_empty_string(artifact.get("source_scope")),
                     "policyAction": _non_empty_string(artifact.get("policy_action")),
                     "present": artifact.get("removed") is not True,
