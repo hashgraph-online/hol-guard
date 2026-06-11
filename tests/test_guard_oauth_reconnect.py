@@ -156,6 +156,27 @@ def test_prepare_guard_cloud_connect_authorization_refreshes_under_lock(tmp_path
     assert store.get_oauth_local_credentials(allow_primary=True) is not None
 
 
+def test_prepare_guard_cloud_connect_authorization_tolerates_refresh_lock_timeout(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    store = _store_with_oauth_credentials(tmp_path)
+
+    @contextmanager
+    def _fake_refresh_lock(*, timeout_seconds: float = 30.0):
+        del timeout_seconds
+        raise TimeoutError("refresh lock busy")
+        yield
+
+    monkeypatch.setattr(store, "hold_oauth_refresh_lock", _fake_refresh_lock)
+
+    result = guard_runner_module.prepare_guard_cloud_connect_authorization(store)
+
+    assert result["cleared_stale_sign_in"] is False
+    assert result["existing_sign_in_valid"] is True
+    assert store.get_oauth_local_credentials(allow_primary=True) is not None
+
+
 def test_invalid_dpop_curve_refresh_uses_reconnect_message(tmp_path, monkeypatch) -> None:
     store = _store_with_oauth_credentials(tmp_path)
 
