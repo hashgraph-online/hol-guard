@@ -303,7 +303,7 @@ def _inventory_contract_json(value: object) -> object:
         for key, item in value.items():
             camel_key = _snake_to_camel_case_key(str(key))
             if camel_key in _FREE_FORM_RECORD_KEYS:
-                normalized[camel_key] = _safe_json(item) if isinstance(item, dict) else item
+                normalized[camel_key] = item
                 continue
             if camel_key == "redactionReport":
                 normalized[camel_key] = _normalize_redaction_report(item)
