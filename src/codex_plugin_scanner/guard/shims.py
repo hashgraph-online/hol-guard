@@ -143,8 +143,7 @@ def remove_guard_shim(
 def _build_python_shim(harness: str, context: HarnessContext, workspace_args: list[str]) -> str:
     command_args = [
         sys.executable,
-        "-I",
-        "-P",
+        *_trusted_python_flags(),
         "-c",
         _TRUSTED_CLI_LAUNCHER,
         str(_trusted_import_root()),
@@ -722,8 +721,7 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
     shim_dir = context.guard_home / "package-shims" / "bin"
     command_args = [
         sys.executable,
-        "-I",
-        "-P",
+        *_trusted_python_flags(),
         "-c",
         _TRUSTED_CLI_LAUNCHER,
         str(_trusted_import_root()),
@@ -781,6 +779,13 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "",
         )
     )
+
+
+def _trusted_python_flags() -> list[str]:
+    flags = ["-I"]
+    if tuple(sys.version_info[:2]) >= (3, 11):
+        flags.append("-P")
+    return flags
 
 
 def _normalize_package_shim_managers(managers: tuple[str, ...] | None) -> tuple[str, ...]:

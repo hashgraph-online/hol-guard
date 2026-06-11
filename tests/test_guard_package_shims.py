@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
@@ -268,6 +269,14 @@ def _write_npm_ci_workspace(workspace_dir: Path, *, package_name: str, package_v
         ),
         encoding="utf-8",
     )
+
+
+def test_trusted_python_flags_omit_dash_p_before_python_311(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(guard_shims_module.sys, "version_info", (3, 10, 20, "final", 0))
+    assert guard_shims_module._trusted_python_flags() == ["-I"]
+
+    monkeypatch.setattr(guard_shims_module.sys, "version_info", (3, 11, 0, "final", 0))
+    assert guard_shims_module._trusted_python_flags() == ["-I", "-P"]
 
 
 def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, capsys) -> None:
