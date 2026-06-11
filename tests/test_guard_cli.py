@@ -3760,6 +3760,7 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(guard_update_commands_module.sys, "executable", "/opt/guard-venv/bin/python")
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.18")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.18")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -3782,6 +3783,7 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/mock-home/.local/pipx/venvs/hol-guard")
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.18")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.18")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -3850,6 +3852,7 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "unknown")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.36")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.36")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -3981,6 +3984,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -4018,6 +4022,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -4056,6 +4061,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -4093,6 +4099,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -4128,6 +4135,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -4171,6 +4179,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
 
         rc = main(["guard", "update", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -4213,6 +4222,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
         monkeypatch.setattr(
             guard_update_commands_module,
             "apply_managed_install",
@@ -4255,6 +4265,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
         original_get_managed_install = GuardStore.get_managed_install
         lookup_calls: list[str] = []
 
@@ -4311,6 +4322,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
         original_get_managed_install = GuardStore.get_managed_install
         lookup_calls: list[str] = []
 
@@ -4356,6 +4368,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
         monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
         monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_latest_version_from_pypi", lambda: "2.0.39")
         original_get_managed_install = GuardStore.get_managed_install
         lookup_calls: list[str] = []
 
