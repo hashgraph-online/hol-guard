@@ -1115,10 +1115,7 @@ def _safe_json(
             for key, item in value.items()
         }
     if isinstance(value, (list, tuple)):
-        return [
-            _safe_json(item, parent_key=parent_key, parent_sensitive=parent_sensitive)
-            for item in value
-        ]
+        return [_safe_json(item, parent_key=parent_key, parent_sensitive=parent_sensitive) for item in value]
     if isinstance(value, Path):
         return value.name
     if isinstance(value, str):
