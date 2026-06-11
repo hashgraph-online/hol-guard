@@ -198,7 +198,14 @@ runs:
       env:
         INSTALL_SOURCE: ${{ inputs.install_source }}
         INSTALL_CISCO: ${{ inputs.install_cisco }}
+        PYTHONNOUSERSITE: "1"
+        PYTHONSAFEPATH: "1"
       run: |
+        ACTION_RUNTIME_ROOT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
+        ACTION_RUNTIME_DIR="$(mktemp -d "$ACTION_RUNTIME_ROOT/hol-guard-action-XXXXXX")"
+        trap 'cd "$ACTION_RUNTIME_ROOT" 2>/dev/null || cd /; rm -rf "$ACTION_RUNTIME_DIR"' EXIT
+        cd "$ACTION_RUNTIME_DIR"
+
         LOCAL_SOURCE=""
         for candidate in "$GITHUB_ACTION_PATH" "$GITHUB_ACTION_PATH/.."; do
           if [ -f "$candidate/pyproject.toml" ] && [ -d "$candidate/src/codex_plugin_scanner" ]; then
@@ -212,7 +219,7 @@ runs:
             echo "install_source=local requires the hol-guard source checkout (for example: uses: ./action inside hol-guard)." >&2
             exit 1
           fi
-          python3 -m pip install "$LOCAL_SOURCE[cisco]"
+          python3 -P -m pip install "$LOCAL_SOURCE[cisco]"
         elif [ "$INSTALL_SOURCE" = "pypi" ]; then
           SCANNER_VERSION_FILE="$GITHUB_ACTION_PATH/scanner-version.txt"
           SCANNER_SHA256_FILE="$GITHUB_ACTION_PATH/scanner-sha256.txt"
@@ -228,18 +235,18 @@ runs:
           CISCO_VERSION="$(tr -d '[:space:]' < "$CISCO_VERSION_FILE")"
           PYPI_ATTESTATIONS_VERSION="$(tr -d '[:space:]' < "$PYPI_ATTESTATIONS_VERSION_FILE")"
           SCANNER_REPOSITORY="https://github.com/hashgraph-online/hol-guard"
-          DIST_DIR="${RUNNER_TEMP:-$GITHUB_WORKSPACE/.ai-plugin-scanner-dist}"
+          DIST_DIR="$ACTION_RUNTIME_DIR/ai-plugin-scanner-dist"
           mkdir -p "$DIST_DIR"
 
-          python3 -m pip install "pypi-attestations==${PYPI_ATTESTATIONS_VERSION}"
-          python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"
+          python3 -P -m pip install "pypi-attestations==${PYPI_ATTESTATIONS_VERSION}"
+          python3 -P -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"
 
           DIST_BASENAME="$(
-            DIST_DIR="$DIST_DIR" python3 -c "import os, sys; from pathlib import Path; candidates = sorted(Path(os.environ['DIST_DIR']).glob('plugin_scanner-*.whl')); (len(candidates) == 1) or sys.exit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'); print(candidates[0].name)"
+            DIST_DIR="$DIST_DIR" python3 -P -c "import os, sys; from pathlib import Path; candidates = sorted(Path(os.environ['DIST_DIR']).glob('plugin_scanner-*.whl')); (len(candidates) == 1) or sys.exit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'); print(candidates[0].name)"
           )"
 
           ACTUAL_SHA256="$(
-            DIST_DIR="$DIST_DIR" DIST_BASENAME="$DIST_BASENAME" python3 -c "import hashlib, os; from pathlib import Path; wheel = Path(os.environ['DIST_DIR']) / os.environ['DIST_BASENAME']; print(hashlib.sha256(wheel.read_bytes()).hexdigest())"
+            DIST_DIR="$DIST_DIR" DIST_BASENAME="$DIST_BASENAME" python3 -P -c "import hashlib, os; from pathlib import Path; wheel = Path(os.environ['DIST_DIR']) / os.environ['DIST_BASENAME']; print(hashlib.sha256(wheel.read_bytes()).hexdigest())"
           )"
           if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
             echo "Downloaded scanner wheel SHA256 does not match scanner-sha256.txt." >&2
@@ -247,16 +254,16 @@ runs:
           fi
 
           WHEEL_PATH="$DIST_DIR/$DIST_BASENAME"
-          if ! python3 -m pypi_attestations verify pypi \
+          if ! python3 -P -m pypi_attestations verify pypi \
             --repository "$SCANNER_REPOSITORY" \
             "$WHEEL_PATH"; then
             echo "Failed to verify PyPI provenance for plugin-scanner==${SCANNER_VERSION}." >&2
             exit 1
           fi
 
-          python3 -m pip install "$WHEEL_PATH"
+          python3 -P -m pip install "$WHEEL_PATH"
           if [ "$INSTALL_CISCO" = "true" ]; then
-            python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
+            python3 -P -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
           fi
         else
           echo "Unsupported install_source: $INSTALL_SOURCE" >&2
@@ -296,7 +303,9 @@ runs:
         PR_COMMENT_STYLE: ${{ inputs.pr_comment_style }}
         PR_COMMENT_MAX_FINDINGS: ${{ inputs.pr_comment_max_findings }}
         GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
-      run: python3 -m codex_plugin_scanner.action_runner
+        PYTHONNOUSERSITE: "1"
+        PYTHONSAFEPATH: "1"
+      run: python3 -P -m codex_plugin_scanner.action_runner
 
     - name: Upload SARIF
       if: ${{ inputs.upload_sarif == 'true' && inputs.mode == 'scan' && steps.scan.outputs.report_path != '' }}
