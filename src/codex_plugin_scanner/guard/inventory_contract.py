@@ -1063,13 +1063,13 @@ def _capabilities_for_artifact(
             capabilities.add("runs_shell")
     if artifact_type == "channel":
         capabilities.update({"reads_messages", "posts_messages", "network_ingress"})
-    if bool(metadata.get("has_env_secrets")) or bool(metadata.get("has_auth_headers")):
+    if bool(metadata.get("envConfigurationPresent")) or bool(metadata.get("has_auth_headers")):
         capabilities.add("reads_secrets")
     return tuple(sorted(capabilities)) if capabilities else ("unknown",)
 
 
 def _risk_level(metadata: dict[str, object]) -> InventorySeverity:
-    if metadata.get("has_auth_headers") or metadata.get("has_env_secrets"):
+    if metadata.get("has_auth_headers") or metadata.get("envConfigurationPresent"):
         return "high"
     if metadata.get("endpointHostClass") == "remote_public":
         return "medium"

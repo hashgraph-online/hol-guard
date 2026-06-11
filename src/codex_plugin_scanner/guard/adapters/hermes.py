@@ -478,7 +478,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                 "auth_header_keys": sorted(auth_header_keys),
                 "sampling_enabled": sampling_enabled,
                 "sampling_model": sampling_model,
-                "has_env_secrets": bool(env),
+                "envConfigurationPresent": bool(env),
                 "has_auth_headers": bool(auth_header_keys),
             }
 

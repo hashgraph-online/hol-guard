@@ -116,7 +116,7 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
 
     assert payload["agentType"] == "hermes"
     assert {item["itemKind"] for item in payload["items"]} >= {"skill", "mcp_server"}
-    assert all(item["metadata"]["has_env_secrets"] is False for item in mcp_items)
+    assert all(item["metadata"]["envConfigurationPresent"] is False for item in mcp_items)
     assert all(item["metadata"]["has_auth_headers"] is True for item in mcp_items)
     assert "ghp_secretvalue" not in encoded
     assert "Bearer ghp_secretvalue" not in encoded
