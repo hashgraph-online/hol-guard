@@ -74,6 +74,11 @@ def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) ->
     payload = serialize_inventory_snapshot(snapshot)
     encoded = json.dumps(payload, sort_keys=True)
 
+    assert payload["agentId"] == "agent-hermes"
+    assert payload["snapshotId"] == "snap-hermes-1"
+    assert payload["items"][0]["itemId"] == "skill-danger"
+    assert payload["redactionReport"]["rawSecretsIncluded"] is False
+
     assert "sk-testsecretvalue" not in encoded
     assert "Bearer secret" not in encoded
     assert "user:pass" not in encoded
@@ -463,9 +468,9 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
     assert payload["findings"][0]["source"] == "cisco-skill-scanner"
     assert payload["findings"][0]["severity"] == "high"
     assert payload["findings"][0]["confidence"] == "high"
-    assert payload["findings"][0]["artifact_id"] == "hermes:skill:ops:reviewer"
+    assert payload["findings"][0]["artifactId"] == "hermes:skill:ops:reviewer"
     assert payload["findings"][0]["evidence"]["durationMs"] == 42
     assert payload["findings"][0]["evidence"]["riskComponent"]["scoreDelta"] == -25
-    assert payload["sources"][-1]["source_type"] == "scanner"
+    assert payload["sources"][-1]["sourceType"] == "scanner"
     assert "fixture_secretvalue" not in encoded
     assert str(tmp_path) not in encoded
