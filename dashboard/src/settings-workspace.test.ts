@@ -10,6 +10,8 @@ import {
   resolveTotpSetupStep,
   shouldShowApprovalPasswordCurrentField,
   hasApprovalGateSettingsChanged,
+  resolveApprovalPasswordHelperCopy,
+  resolveTotpSetupModalTitle,
 } from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 
@@ -119,4 +121,17 @@ assert(
     false,
   ) === true,
   "approval-password: cooldown edits count as gate setting changes",
+);
+
+assert(
+  resolveApprovalPasswordHelperCopy({
+    changingPassword: false,
+    gateSettingsChanged: false,
+    gateEnabled: true,
+  }).includes("Authenticator setup"),
+  "approval-password: enabled gate copy points users to authenticator flow",
+);
+assert(
+  resolveTotpSetupModalTitle(true) === "Confirm your approval password",
+  "totp-modal: confirm step title",
 );

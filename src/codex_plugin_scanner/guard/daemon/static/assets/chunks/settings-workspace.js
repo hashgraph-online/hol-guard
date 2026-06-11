@@ -2126,6 +2126,30 @@ function hasApprovalGateSettingsChanged(gateConfig, enabled, cooldownSeconds, st
   }
   return enabled !== gateConfig.enabled || cooldownSeconds !== gateConfig.cooldown_seconds || strictAllDecisions !== gateConfig.strict_all_decisions;
 }
+function resolveApprovalPasswordHelperCopy(input) {
+  if (input.changingPassword) {
+    return "Enter your current password below, then save settings to apply the new one.";
+  }
+  if (input.gateSettingsChanged) {
+    return "Enter your current password below, then save settings to apply these gate changes.";
+  }
+  if (input.gateEnabled) {
+    return "Enter your current password before saving settings elsewhere in Guard. Authenticator setup uses its own prompt below.";
+  }
+  return "Leave the fields below empty to keep your current password.";
+}
+function resolveTotpSetupModalTitle(isConfirmStep) {
+  if (isConfirmStep) {
+    return "Confirm your approval password";
+  }
+  return "Scan and verify";
+}
+function resolveTotpSetupModalDescription(isConfirmStep) {
+  if (isConfirmStep) {
+    return "Guard needs your approval password before it can generate a QR code for your authenticator app.";
+  }
+  return "Open your authenticator app, add an account, scan the code, then enter the live six-digit code.";
+}
 const actionOptions = [
   { value: "allow", label: "Allow without asking" },
   { value: "warn", label: "Warn only" },
@@ -2572,11 +2596,6 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     setTotpActionPassword(event.target.value);
     setTotpActionError(null);
   }, []);
-  const handleBeginTotpSetup = reactExports.useCallback(() => {
-    setTotpSetupStep(resolveTotpSetupStep(totpEnrollment));
-    setTotpActionError(null);
-    setTotpSetupOpen(true);
-  }, [totpEnrollment]);
   const handleOpenTotpSetup = reactExports.useCallback(() => {
     setTotpSetupStep(resolveTotpSetupStep(totpEnrollment));
     setTotpActionError(null);
@@ -3205,7 +3224,6 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 onTotpCodeChange: handleApprovalGateTotpCode,
                 onTotpDeviceLabelChange: handleApprovalGateTotpDeviceLabel,
                 onTotpActionPasswordChange: handleTotpActionPasswordChange,
-                onBeginTotpSetup: handleBeginTotpSetup,
                 onOpenTotpSetup: handleOpenTotpSetup,
                 onCloseTotpSetup: handleCloseTotpSetup,
                 onStrictAllDecisionsChange: handleApprovalGateStrictAllDecisions,
@@ -3605,6 +3623,11 @@ function ApprovalGateCard(props) {
     props.enabled
   );
   const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
+  const approvalPasswordHelperCopy = resolveApprovalPasswordHelperCopy({
+    changingPassword,
+    gateSettingsChanged,
+    gateEnabled: props.enabled
+  });
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
@@ -3629,7 +3652,7 @@ function ApprovalGateCard(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval password" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: wasConfigured ? "Guard asks for this password before allow or trust changes stick." : "Choose a password. Guard will ask for it before allow or trust changes stick." }),
-        wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: changingPassword ? "Enter your current password below, then save settings to apply the new one." : gateSettingsChanged ? "Enter your current password below, then save settings to apply these gate changes." : props.enabled ? "Enter your current password before saving settings elsewhere in Guard. Authenticator setup uses its own prompt below." : "Leave the fields below empty to keep your current password." }) : null,
+        wasConfigured ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: approvalPasswordHelperCopy }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3", children: [
           showCurrentPassword ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Current password" }),
@@ -3715,7 +3738,7 @@ function ApprovalGateCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               ActionButton,
               {
-                onClick: props.onBeginTotpSetup,
+                onClick: props.onOpenTotpSetup,
                 disabled: props.totpActionPending !== null,
                 variant: "outline",
                 children: "Set up authenticator"
@@ -3840,10 +3863,91 @@ function ApprovalGateCard(props) {
     ] })
   ] });
 }
+function TotpSetupConfirmStep(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 p-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "password",
+          autoComplete: "current-password",
+          value: props.actionPassword,
+          onChange: props.onActionPasswordChange,
+          onKeyDown: (event) => {
+            if (event.key === "Enter" && props.actionPassword.trim().length > 0 && props.pending === null) {
+              props.onConfirmPassword();
+            }
+          },
+          className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      )
+    ] }),
+    props.error !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: props.error }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onConfirmPassword, disabled: props.pending !== null, children: props.pending === "enroll" ? "Continuing..." : "Continue" })
+  ] });
+}
+function TotpSetupScanStep(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_260px]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(TotpEnrollmentQrPanel, { enrollment: props.enrollment }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "password",
+            autoComplete: "current-password",
+            value: props.actionPassword,
+            onChange: props.onActionPasswordChange,
+            className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Update this if you changed your approval password after starting setup." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Device label" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            value: props.deviceLabel,
+            onChange: props.onDeviceLabelChange,
+            className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Six-digit code" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            inputMode: "numeric",
+            pattern: "[0-9]*",
+            maxLength: 6,
+            value: props.totpCode,
+            onChange: props.onTotpCodeChange,
+            onKeyDown: (event) => {
+              if (event.key === "Enter" && props.totpCode.trim().length > 0 && props.pending === null) {
+                props.onVerify();
+              }
+            },
+            placeholder: "123456",
+            className: "mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      props.error !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: props.error }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onVerify, disabled: props.pending !== null, children: props.pending === "verify" ? "Verifying..." : "Finish setup" })
+    ] })
+  ] });
+}
 function TotpSetupModal(props) {
   const modalRef = reactExports.useRef(null);
   useFocusTrap(true, modalRef);
   const isConfirmStep = props.step === "confirm" || props.enrollment === null;
+  const stepLabel = isConfirmStep ? "1" : "2";
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
@@ -3857,11 +3961,11 @@ function TotpSetupModal(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Authenticator setup" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500", children: [
               "Step ",
-              isConfirmStep ? "1" : "2",
+              stepLabel,
               " of 2"
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: isConfirmStep ? "Confirm your approval password" : "Scan and verify" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-600", children: isConfirmStep ? "Guard needs your approval password before it can generate a QR code for your authenticator app." : "Open your authenticator app, add an account, scan the code, then enter the live six-digit code." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: resolveTotpSetupModalTitle(isConfirmStep) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-600", children: resolveTotpSetupModalDescription(isConfirmStep) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
@@ -3874,80 +3978,31 @@ function TotpSetupModal(props) {
             }
           )
         ] }),
-        isConfirmStep ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 p-6", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "password",
-                autoComplete: "current-password",
-                value: props.actionPassword,
-                onChange: props.onActionPasswordChange,
-                onKeyDown: (event) => {
-                  if (event.key === "Enter" && props.actionPassword.trim().length > 0 && props.pending === null) {
-                    props.onConfirmPassword();
-                  }
-                },
-                className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              }
-            )
-          ] }),
-          props.error !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: props.error }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onConfirmPassword, disabled: props.pending !== null, children: props.pending === "enroll" ? "Continuing..." : "Continue" })
-        ] }) : props.enrollment !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_260px]", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(TotpEnrollmentQrPanel, { enrollment: props.enrollment }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Approval password" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "password",
-                  autoComplete: "current-password",
-                  value: props.actionPassword,
-                  onChange: props.onActionPasswordChange,
-                  className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Device label" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "text",
-                  value: props.deviceLabel,
-                  onChange: props.onDeviceLabelChange,
-                  className: "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500", children: "Six-digit code" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "text",
-                  inputMode: "numeric",
-                  pattern: "[0-9]*",
-                  maxLength: 6,
-                  value: props.totpCode,
-                  onChange: props.onTotpCodeChange,
-                  onKeyDown: (event) => {
-                    if (event.key === "Enter" && props.totpCode.trim().length > 0 && props.pending === null) {
-                      props.onVerify();
-                    }
-                  },
-                  placeholder: "123456",
-                  className: "mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                }
-              )
-            ] }),
-            props.error !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: props.error }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onVerify, disabled: props.pending !== null, children: props.pending === "verify" ? "Verifying..." : "Finish setup" })
-          ] })
-        ] }) : null
+        isConfirmStep ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          TotpSetupConfirmStep,
+          {
+            actionPassword: props.actionPassword,
+            pending: props.pending,
+            error: props.error,
+            onActionPasswordChange: props.onActionPasswordChange,
+            onConfirmPassword: props.onConfirmPassword
+          }
+        ) : null,
+        !isConfirmStep && props.enrollment !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          TotpSetupScanStep,
+          {
+            enrollment: props.enrollment,
+            deviceLabel: props.deviceLabel,
+            actionPassword: props.actionPassword,
+            totpCode: props.totpCode,
+            pending: props.pending,
+            error: props.error,
+            onActionPasswordChange: props.onActionPasswordChange,
+            onDeviceLabelChange: props.onDeviceLabelChange,
+            onTotpCodeChange: props.onTotpCodeChange,
+            onVerify: props.onVerify
+          }
+        ) : null
       ] })
     }
   );
@@ -3964,9 +4019,12 @@ export {
   hasApprovalGateSettingsChanged,
   hasUnsavedChanges,
   isFineTuningEditable,
+  resolveApprovalPasswordHelperCopy,
   resolveFineTuningSectionDescription,
   resolveSecurityLevelCardDescription,
   resolveSecurityLevelDescription,
+  resolveTotpSetupModalDescription,
+  resolveTotpSetupModalTitle,
   resolveTotpSetupStep,
   shouldShowApprovalPasswordCurrentField
 };

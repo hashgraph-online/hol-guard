@@ -144,6 +144,37 @@ export function hasApprovalGateSettingsChanged(
   );
 }
 
+export function resolveApprovalPasswordHelperCopy(input: {
+  changingPassword: boolean;
+  gateSettingsChanged: boolean;
+  gateEnabled: boolean;
+}): string {
+  if (input.changingPassword) {
+    return "Enter your current password below, then save settings to apply the new one.";
+  }
+  if (input.gateSettingsChanged) {
+    return "Enter your current password below, then save settings to apply these gate changes.";
+  }
+  if (input.gateEnabled) {
+    return "Enter your current password before saving settings elsewhere in Guard. Authenticator setup uses its own prompt below.";
+  }
+  return "Leave the fields below empty to keep your current password.";
+}
+
+export function resolveTotpSetupModalTitle(isConfirmStep: boolean): string {
+  if (isConfirmStep) {
+    return "Confirm your approval password";
+  }
+  return "Scan and verify";
+}
+
+export function resolveTotpSetupModalDescription(isConfirmStep: boolean): string {
+  if (isConfirmStep) {
+    return "Guard needs your approval password before it can generate a QR code for your authenticator app.";
+  }
+  return "Open your authenticator app, add an account, scan the code, then enter the live six-digit code.";
+}
+
 type SettingsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -641,11 +672,6 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setTotpActionPassword(event.target.value);
     setTotpActionError(null);
   }, []);
-  const handleBeginTotpSetup = useCallback(() => {
-    setTotpSetupStep(resolveTotpSetupStep(totpEnrollment));
-    setTotpActionError(null);
-    setTotpSetupOpen(true);
-  }, [totpEnrollment]);
   const handleOpenTotpSetup = useCallback(() => {
     setTotpSetupStep(resolveTotpSetupStep(totpEnrollment));
     setTotpActionError(null);
@@ -1329,7 +1355,6 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               onTotpCodeChange={handleApprovalGateTotpCode}
               onTotpDeviceLabelChange={handleApprovalGateTotpDeviceLabel}
               onTotpActionPasswordChange={handleTotpActionPasswordChange}
-              onBeginTotpSetup={handleBeginTotpSetup}
               onOpenTotpSetup={handleOpenTotpSetup}
               onCloseTotpSetup={handleCloseTotpSetup}
               onStrictAllDecisionsChange={handleApprovalGateStrictAllDecisions}
@@ -1878,7 +1903,6 @@ type ApprovalGateCardProps = {
   onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onTotpActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onBeginTotpSetup: () => void;
   onOpenTotpSetup: () => void;
   onCloseTotpSetup: () => void;
   onStrictAllDecisionsChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -1906,6 +1930,11 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
     props.enabled,
   );
   const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
+  const approvalPasswordHelperCopy = resolveApprovalPasswordHelperCopy({
+    changingPassword,
+    gateSettingsChanged,
+    gateEnabled: props.enabled,
+  });
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
@@ -1950,15 +1979,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                 : "Choose a password. Guard will ask for it before allow or trust changes stick."}
             </p>
             {wasConfigured ? (
-              <p className="mt-2 text-xs text-slate-500">
-                {changingPassword
-                  ? "Enter your current password below, then save settings to apply the new one."
-                  : gateSettingsChanged
-                    ? "Enter your current password below, then save settings to apply these gate changes."
-                    : props.enabled
-                      ? "Enter your current password before saving settings elsewhere in Guard. Authenticator setup uses its own prompt below."
-                      : "Leave the fields below empty to keep your current password."}
-              </p>
+              <p className="mt-2 text-xs text-slate-500">{approvalPasswordHelperCopy}</p>
             ) : null}
             <div className="mt-3 space-y-3">
               {showCurrentPassword ? (
@@ -2050,7 +2071,7 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                     </p>
                   </div>
                   <ActionButton
-                    onClick={props.onBeginTotpSetup}
+                    onClick={props.onOpenTotpSetup}
                     disabled={props.totpActionPending !== null}
                     variant="outline"
                   >
@@ -2181,6 +2202,119 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   );
 }
 
+function TotpSetupConfirmStep(props: {
+  actionPassword: string;
+  pending: "enroll" | "verify" | "disable" | null;
+  error: string | null;
+  onActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onConfirmPassword: () => void;
+}) {
+  return (
+    <div className="space-y-4 p-6">
+      <label className="block">
+        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+        <input
+          type="password"
+          autoComplete="current-password"
+          value={props.actionPassword}
+          onChange={props.onActionPasswordChange}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter"
+              && props.actionPassword.trim().length > 0
+              && props.pending === null
+            ) {
+              props.onConfirmPassword();
+            }
+          }}
+          className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        />
+      </label>
+      {props.error !== null && (
+        <p className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
+          {props.error}
+        </p>
+      )}
+      <ActionButton onClick={props.onConfirmPassword} disabled={props.pending !== null}>
+        {props.pending === "enroll" ? "Continuing..." : "Continue"}
+      </ActionButton>
+    </div>
+  );
+}
+
+function TotpSetupScanStep(props: {
+  enrollment: GuardApprovalGateTotpEnrollment;
+  deviceLabel: string;
+  actionPassword: string;
+  totpCode: string;
+  pending: "enroll" | "verify" | "disable" | null;
+  error: string | null;
+  onActionPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onDeviceLabelChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onVerify: () => void;
+}) {
+  return (
+    <div className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <TotpEnrollmentQrPanel enrollment={props.enrollment} />
+      <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+        <label className="block">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={props.actionPassword}
+            onChange={props.onActionPasswordChange}
+            className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Update this if you changed your approval password after starting setup.
+          </p>
+        </label>
+        <label className="block">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Device label</span>
+          <input
+            type="text"
+            value={props.deviceLabel}
+            onChange={props.onDeviceLabelChange}
+            className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Six-digit code</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            value={props.totpCode}
+            onChange={props.onTotpCodeChange}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter"
+                && props.totpCode.trim().length > 0
+                && props.pending === null
+              ) {
+                props.onVerify();
+              }
+            }}
+            placeholder="123456"
+            className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          />
+        </label>
+        {props.error !== null && (
+          <p className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
+            {props.error}
+          </p>
+        )}
+        <ActionButton onClick={props.onVerify} disabled={props.pending !== null}>
+          {props.pending === "verify" ? "Verifying..." : "Finish setup"}
+        </ActionButton>
+      </div>
+    </div>
+  );
+}
+
 function TotpSetupModal(props: {
   step: TotpSetupStep;
   enrollment: GuardApprovalGateTotpEnrollment | null;
@@ -2199,6 +2333,7 @@ function TotpSetupModal(props: {
   const modalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(true, modalRef);
   const isConfirmStep = props.step === "confirm" || props.enrollment === null;
+  const stepLabel = isConfirmStep ? "1" : "2";
 
   return (
     <div
@@ -2212,15 +2347,13 @@ function TotpSetupModal(props: {
           <div>
             <SectionLabel>Authenticator setup</SectionLabel>
             <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-              Step {isConfirmStep ? "1" : "2"} of 2
+              Step {stepLabel} of 2
             </p>
             <h3 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">
-              {isConfirmStep ? "Confirm your approval password" : "Scan and verify"}
+              {resolveTotpSetupModalTitle(isConfirmStep)}
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              {isConfirmStep
-                ? "Guard needs your approval password before it can generate a QR code for your authenticator app."
-                : "Open your authenticator app, add an account, scan the code, then enter the live six-digit code."}
+              {resolveTotpSetupModalDescription(isConfirmStep)}
             </p>
           </div>
           <button
@@ -2233,93 +2366,27 @@ function TotpSetupModal(props: {
           </button>
         </div>
         {isConfirmStep ? (
-          <div className="space-y-4 p-6">
-            <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={props.actionPassword}
-                onChange={props.onActionPasswordChange}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter"
-                    && props.actionPassword.trim().length > 0
-                    && props.pending === null
-                  ) {
-                    props.onConfirmPassword();
-                  }
-                }}
-                className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-              />
-            </label>
-            {props.error !== null && (
-              <p className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
-                {props.error}
-              </p>
-            )}
-            <ActionButton onClick={props.onConfirmPassword} disabled={props.pending !== null}>
-              {props.pending === "enroll" ? "Continuing..." : "Continue"}
-            </ActionButton>
-          </div>
-        ) : props.enrollment !== null ? (
-          <div className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
-            <TotpEnrollmentQrPanel enrollment={props.enrollment} />
-            <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approval password</span>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={props.actionPassword}
-                  onChange={props.onActionPasswordChange}
-                  className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                />
-                <p className="mt-1 text-xs text-slate-500">
-                  Update this if you changed your approval password after starting setup.
-                </p>
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Device label</span>
-                <input
-                  type="text"
-                  value={props.deviceLabel}
-                  onChange={props.onDeviceLabelChange}
-                  className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Six-digit code</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  value={props.totpCode}
-                  onChange={props.onTotpCodeChange}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter"
-                      && props.totpCode.trim().length > 0
-                      && props.pending === null
-                    ) {
-                      props.onVerify();
-                    }
-                  }}
-                  placeholder="123456"
-                  className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-                />
-              </label>
-              {props.error !== null && (
-                <p className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
-                  {props.error}
-                </p>
-              )}
-              <ActionButton onClick={props.onVerify} disabled={props.pending !== null}>
-                {props.pending === "verify" ? "Verifying..." : "Finish setup"}
-              </ActionButton>
-            </div>
-          </div>
+          <TotpSetupConfirmStep
+            actionPassword={props.actionPassword}
+            pending={props.pending}
+            error={props.error}
+            onActionPasswordChange={props.onActionPasswordChange}
+            onConfirmPassword={props.onConfirmPassword}
+          />
+        ) : null}
+        {!isConfirmStep && props.enrollment !== null ? (
+          <TotpSetupScanStep
+            enrollment={props.enrollment}
+            deviceLabel={props.deviceLabel}
+            actionPassword={props.actionPassword}
+            totpCode={props.totpCode}
+            pending={props.pending}
+            error={props.error}
+            onActionPasswordChange={props.onActionPasswordChange}
+            onDeviceLabelChange={props.onDeviceLabelChange}
+            onTotpCodeChange={props.onTotpCodeChange}
+            onVerify={props.onVerify}
+          />
         ) : null}
       </div>
     </div>
