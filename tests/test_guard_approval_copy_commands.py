@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import (
     approval_center_hint,
     attach_primary_approval_link,
+    build_approval_browser_url,
     build_approval_request_url,
     first_approval_url,
     primary_approval_request,
@@ -144,6 +146,23 @@ def test_primary_approval_request_prefers_matching_harness() -> None:
         primary_approval_url(queued, harness="cursor", approval_center_url="http://127.0.0.1:5474")
         == "http://127.0.0.1:5474/requests/cursor-req"
     )
+
+
+def test_build_approval_browser_url_adds_scoped_guard_token_fragment() -> None:
+    browser_url = build_approval_browser_url(
+        "http://127.0.0.1:5474/requests/cursor-req#section=inbox",
+        auth_token="secret-token",
+    )
+
+    parsed = urllib.parse.urlparse(browser_url)
+    fragment = urllib.parse.parse_qs(parsed.fragment)
+
+    assert parsed.scheme == "http"
+    assert parsed.netloc == "127.0.0.1:5474"
+    assert parsed.path == "/requests/cursor-req"
+    assert fragment["section"] == ["inbox"]
+    assert fragment["guard-token"][0].startswith("gld1.")
+    assert "secret-token" not in browser_url
 
 
 def test_primary_approval_request_prefers_request_id() -> None:

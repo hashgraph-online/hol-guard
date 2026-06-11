@@ -5,16 +5,18 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import webbrowser
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
-from ..approvals import first_approval_url, queue_blocked_approvals
+from ..approvals import approval_prompt_flow, build_approval_browser_url, first_approval_url, queue_blocked_approvals
 from ..config import GuardConfig
 from ..consumer.service import artifact_hash as compute_artifact_hash
 from ..daemon import ensure_guard_daemon
+from ..daemon.manager import load_guard_daemon_auth_token
 from ..mcp_tool_calls import (
     allow_tool_call,
     block_tool_call,
@@ -30,6 +32,7 @@ from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identit
 from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
 from ..runtime.signals import RiskSignalV2
 from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .stdio import (
     ProxyIoTimeoutError,
@@ -48,6 +51,19 @@ _PACKAGE_POLICY_ACTION_RANK = {
     "require-reapproval": 2,
     "block": 3,
 }
+
+
+def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: Mapping[str, object]) -> str:
+    if approval_flow.get("tier") != "approval-center":
+        return "notify-only"
+    if approval_flow.get("auto_open_browser") is False:
+        return "never-auto-open"
+    if approval_flow.get("prompt_channel") == "native-fallback":
+        return "never-auto-open"
+    policy = str(configured_policy or "auto-open-once")
+    if policy == "native-only":
+        return "never-auto-open"
+    return policy
 
 
 def _most_restrictive_package_policy_action(stored_action: str | None, current_action: str) -> str:
@@ -118,6 +134,28 @@ class RuntimeMcpGuardProxy:
         if isinstance(configured, (int, float)) and configured > 0:
             return float(configured)
         return 120.0
+
+    def _maybe_open_approval_center(self, *, approval_center_url: str, review_url: str, open_key: str) -> None:
+        managed_install = self.store.get_managed_install(self.harness)
+        approval_flow = approval_prompt_flow(self.harness, managed_install=managed_install)
+        approval_surface_policy = _approval_surface_policy_for_browser(
+            self.config.approval_surface_policy,
+            approval_flow,
+        )
+        if approval_surface_policy in {"notify-only", "never-auto-open"}:
+            return
+        browser_url = build_approval_browser_url(
+            review_url,
+            auth_token=load_guard_daemon_auth_token(self.context.guard_home),
+        )
+        GuardSurfaceRuntime(self.store).ensure_surface(
+            surface="approval-center",
+            approval_center_url=approval_center_url,
+            browser_url=browser_url,
+            approval_surface_policy=approval_surface_policy,
+            open_key=open_key,
+            opener=webbrowser.open,
+        )
 
     def run_session(
         self,
@@ -627,6 +665,11 @@ class RuntimeMcpGuardProxy:
             )
         request_id = str(queued[0]["request_id"]) if queued else "stored-block"
         review_url = first_approval_url(queued) or approval_center_url
+        self._maybe_open_approval_center(
+            approval_center_url=approval_center_url,
+            review_url=review_url,
+            open_key=request_id,
+        )
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
@@ -989,6 +1032,11 @@ class RuntimeMcpGuardProxy:
         )
         request_id = str(queued[0]["request_id"]) if queued else "unknown"
         review_url = first_approval_url(queued) or approval_center_url
+        self._maybe_open_approval_center(
+            approval_center_url=approval_center_url,
+            review_url=review_url,
+            open_key=request_id,
+        )
         response_data = {
             "approvalCenterUrl": approval_center_url,
             "approvalRequests": queued,
