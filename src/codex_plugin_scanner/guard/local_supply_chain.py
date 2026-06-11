@@ -315,7 +315,11 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
         return entitlement
     if store.get_cloud_sync_profile() is None:
         return entitlement
-    if str(entitlement.get("reason") or "") not in {"guard_cloud_reconnect_required", "paid_guard_cloud_required"}:
+    if str(entitlement.get("reason") or "") not in {
+        "guard_cloud_connect_required",
+        "guard_cloud_reconnect_required",
+        "paid_guard_cloud_required",
+    }:
         return entitlement
     now = time.time()
     with _PACKAGE_FIREWALL_REFRESH_LOCK:
