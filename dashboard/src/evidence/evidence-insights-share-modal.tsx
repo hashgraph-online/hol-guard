@@ -7,6 +7,7 @@ import { EvidenceInsightsShareSheet } from "./evidence-insights-share-sheet";
 import { GuardStatMetric } from "./guard-stat-metric";
 import { HomeInsightsMetrics } from "./evidence-insights-headline-bento";
 import { EvidenceActivityHeatmapMini, getHeatmapLevel } from "./evidence-activity-heatmap-mini";
+import { formatEvidenceCount } from "./evidence-format";
 import { insightsSharePublishErrorMessage, isInsightsShareScopeError } from "./evidence-insights-share-errors";
 
 interface EvidenceInsightsShareModalProps {
@@ -107,17 +108,17 @@ export function EvidenceInsightsShareModal({
                 <div className="grid grid-cols-3 gap-px bg-slate-100">
                   <GuardStatMetric
                     label="Pending"
-                    value={String(runtime?.pending_count ?? 0)}
+                    value={formatEvidenceCount(runtime?.pending_count ?? 0)}
                     compact
                   />
                   <GuardStatMetric
                     label="Apps"
-                    value={String(runtime?.managed_installs?.length ?? 0)}
+                    value={formatEvidenceCount(runtime?.managed_installs?.length ?? 0)}
                     compact
                   />
                   <GuardStatMetric
                     label="Recorded"
-                    value={String(runtime?.receipt_count ?? 0)}
+                    value={formatEvidenceCount(runtime?.receipt_count ?? 0)}
                     compact
                   />
                 </div>
