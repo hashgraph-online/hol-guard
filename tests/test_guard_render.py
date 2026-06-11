@@ -155,6 +155,47 @@ def test_guard_json_renderer_receives_payload_copy(monkeypatch, capsys) -> None:
     assert "mutated-secret" not in output
 
 
+def test_guard_protect_render_without_rich_uses_plain_text(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", False)
+
+    emit_guard_payload(
+        "protect",
+        {
+            "executed": False,
+            "request": {
+                "command": ["npm", "install", "minimist@1.2.8"],
+                "install_kind": "install",
+            },
+            "verdict": {
+                "action": "review",
+                "reason": "Guard cloud evaluation was not authorized, so this package request needs review.",
+            },
+            "supply_chain_evaluation": {
+                "decision": "ask",
+                "user_copy": {
+                    "next_step": "hol-guard connect repair",
+                    "dashboard_url": "http://127.0.0.1:5474/requests/req-package-1",
+                    "harness_message": (
+                        "Open HOL Guard to approve or keep this blocked: "
+                        "http://127.0.0.1:5474/requests/req-package-1. "
+                        "Then run `hol-guard connect repair` and retry the same install."
+                    ),
+                },
+            },
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+
+    assert '"verdict"' not in output
+    assert "HOL Guard paused this install for review before it ran." in output
+    assert "npm install minimist@1.2.8" in output
+    assert "Guard cloud evaluation was not authorized" in output
+    assert "http://127.0.0.1:5474/requests/req-package-1" in output
+    assert "hol-guard connect repair" in output
+
+
 def test_guard_protect_render_uses_supply_chain_user_copy(capsys) -> None:
     emit_guard_payload(
         "protect",

@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from ...version import __version__
+from ..launcher import merge_guard_launcher_env
 
 DEFAULT_GUARD_DAEMON_PORT = 4781
 GUARD_DAEMON_PORT_RANGE = 1000
@@ -58,14 +59,12 @@ class ApprovalCenterLocator:
 
 def _daemon_launcher_env() -> dict[str, str]:
     env = dict(os.environ)
-    pythonpath_entries: list[str] = []
-    for raw_value in (str(Path(__file__).resolve().parents[3]), env.get("PYTHONPATH", "")):
-        for entry in raw_value.split(os.pathsep):
-            normalized = entry.strip()
-            if normalized and normalized not in pythonpath_entries:
-                pythonpath_entries.append(normalized)
-    if pythonpath_entries:
-        env["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
+    pinned_launcher_env = merge_guard_launcher_env(pin_package=True)
+    pinned_pythonpath = pinned_launcher_env.get("PYTHONPATH")
+    if isinstance(pinned_pythonpath, str) and pinned_pythonpath.strip():
+        env["PYTHONPATH"] = pinned_pythonpath
+    else:
+        env.pop("PYTHONPATH", None)
     return env
 
 

@@ -48,14 +48,31 @@ _PACKAGE_SHIM_COMMANDS = {
 }
 _PACKAGE_SHIM_MANIFEST = "manifest.json"
 _TRUSTED_CLI_LAUNCHER = (
-    "import os, runpy, sys; "
+    "import importlib.util, os, sys; "
     "trusted_root = os.path.realpath(sys.argv.pop(1)); "
     "module_name = sys.argv.pop(1); "
+    "package_name = module_name.split('.', 1)[0]; "
+    "package_root = os.path.join(trusted_root, package_name); "
+    "module_path = os.path.join(package_root, *module_name.split('.')[1:]) + '.py'; "
     "cwd = os.path.realpath(os.getcwd()); "
     "normalize = lambda entry: cwd if entry in ('', '.', os.curdir) else os.path.realpath(entry); "
     "blocked_entries = {cwd, trusted_root}; "
     "sys.path = [trusted_root, *[entry for entry in sys.path if normalize(entry) not in blocked_entries]]; "
-    "runpy.run_module(module_name, run_name='__main__')"
+    "package_spec = importlib.util.spec_from_file_location("
+    "package_name, "
+    "os.path.join(package_root, '__init__.py'), "
+    "submodule_search_locations=[package_root],"
+    "); "
+    "package_module = importlib.util.module_from_spec(package_spec); "
+    "sys.modules[package_name] = package_module; "
+    "package_spec.loader.exec_module(package_module); "
+    "module_spec = importlib.util.spec_from_file_location(module_name, module_path); "
+    "module = importlib.util.module_from_spec(module_spec); "
+    "module.__package__ = package_name; "
+    "sys.modules[module_name] = module; "
+    "module_spec.loader.exec_module(module); "
+    "sys.argv[0] = module_path; "
+    "raise SystemExit(module.main(sys.argv[1:]))"
 )
 
 
@@ -127,6 +144,7 @@ def _build_python_shim(harness: str, context: HarnessContext, workspace_args: li
     command_args = [
         sys.executable,
         "-I",
+        "-P",
         "-c",
         _TRUSTED_CLI_LAUNCHER,
         str(_trusted_import_root()),
@@ -704,6 +722,8 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
     shim_dir = context.guard_home / "package-shims" / "bin"
     command_args = [
         sys.executable,
+        "-I",
+        "-P",
         "-c",
         _TRUSTED_CLI_LAUNCHER,
         str(_trusted_import_root()),
@@ -728,15 +748,17 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             f"base_command = {command_args!r}",
             f"command_name = {command!r}",
             f"guard_cwd = {str(_trusted_import_root())!r}",
+            f"guard_has_explicit_workspace = {context.workspace_dir is not None!r}",
             f"shim_dir = {str(shim_dir.resolve())!r}",
             "guard_env = dict(os.environ)",
             "guard_env.pop('PYTHONPATH', None)",
             "guard_command = [*base_command, command_name]",
             f"if os.environ.get({SHIM_PROBE_ENV_VAR!r}) == {SHIM_PROBE_ENV_VALUE!r}:",
             "    guard_command = [*base_command, '--json', command_name]",
-            "guard_process = subprocess.run(",
-            "    [*guard_command, *sys.argv[1:]], capture_output=True, text=True, env=guard_env, cwd=guard_cwd",
-            ")",
+            "guard_kwargs = {'capture_output': True, 'text': True, 'env': guard_env}",
+            "if guard_has_explicit_workspace:",
+            "    guard_kwargs['cwd'] = guard_cwd",
+            "guard_process = subprocess.run([*guard_command, *sys.argv[1:]], **guard_kwargs)",
             "if guard_process.stdout:",
             "    sys.stdout.write(guard_process.stdout)",
             "if guard_process.stderr:",
