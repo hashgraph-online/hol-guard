@@ -6,8 +6,10 @@ import builtins
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard.aibom_trust_metadata import trust_resolution_from_domain
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.trust_models import TrustDomainScore
 
 
 def _write_good_plugin(plugin_dir: Path) -> None:
@@ -30,6 +32,28 @@ def _write_good_plugin(plugin_dir: Path) -> None:
     (plugin_dir / "README.md").write_text("# Demo\n", encoding="utf-8")
     (plugin_dir / "SECURITY.md").write_text("Report issues privately.\n", encoding="utf-8")
     (plugin_dir / "LICENSE").write_text("MIT\n", encoding="utf-8")
+
+
+def test_trust_resolution_captured_at_uses_utc_z_suffix() -> None:
+    domain = TrustDomainScore(
+        domain="plugin",
+        label="Plugin",
+        spec_id="hol-guard-trust",
+        spec_version="1",
+        spec_path="trust/plugin.json",
+        derived_from=(),
+        profile_id="plugin-default",
+        profile_version="1",
+        score=42.0,
+        adapters=(),
+    )
+
+    trust = trust_resolution_from_domain(
+        domain,
+        captured_at="2026-06-11T18:09:11+05:30",
+    )
+
+    assert trust["capturedAt"] == "2026-06-11T12:39:11Z"
 
 
 def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Path) -> None:
@@ -63,6 +87,7 @@ def test_inventory_snapshot_attaches_local_plugin_trust_resolution(tmp_path: Pat
     assert isinstance(trust, dict)
     assert trust.get("resolutionSource") == "local"
     assert trust.get("status") == "local"
+    assert trust.get("capturedAt") == "2026-06-10T12:00:00Z"
     assert isinstance(trust.get("trustScore"), int)
     assert trust.get("trustScore", 0) > 0
     metadata = trust.get("metadata")
