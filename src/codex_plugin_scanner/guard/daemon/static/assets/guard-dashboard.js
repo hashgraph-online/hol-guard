@@ -16665,6 +16665,12 @@ function formatDayLabel(dateKey) {
   });
 }
 function receiptUtcDateKey(iso) {
+  if (!iso) {
+    return "";
+  }
+  if (iso.length >= 10 && iso[10] === "T" && iso.endsWith("Z")) {
+    return iso.slice(0, 10);
+  }
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) {
     return "";
@@ -18785,8 +18791,11 @@ function EvidenceActivityHeatmapMini({ cells }) {
 function insightsSharePublishErrorMessage(raw) {
   const message = raw.trim();
   const lower = message.toLowerCase();
-  if (lower.includes("insights") && lower.includes("not enabled")) {
+  if (lower.includes("insights") && lower.includes("not enabled") || lower.includes("insights") && lower.includes("not live")) {
     return "Guard insights sharing is not live on Guard Cloud yet. If you just updated, wait a few minutes and try again.";
+  }
+  if (lower.includes("guard cloud is unavailable")) {
+    return "Guard Cloud could not publish this share link right now. Local Guard keeps protecting this machine. Try again in a few minutes or reconnect with hol-guard connect.";
   }
   if (lower.includes("guard:insights.share") || lower.includes("insufficient scope") || lower.includes("missing scope")) {
     return "Reconnect Guard Cloud to grant insights sharing permission, then try again.";
@@ -18880,7 +18889,7 @@ function EvidenceInsightsShareModal({
               GuardStatMetric,
               {
                 label: "Pending",
-                value: String(runtime?.pending_count ?? 0),
+                value: formatEvidenceCount(runtime?.pending_count ?? 0),
                 compact: true
               }
             ),
@@ -18888,7 +18897,7 @@ function EvidenceInsightsShareModal({
               GuardStatMetric,
               {
                 label: "Apps",
-                value: String(runtime?.managed_installs?.length ?? 0),
+                value: formatEvidenceCount(runtime?.managed_installs?.length ?? 0),
                 compact: true
               }
             ),
@@ -18896,7 +18905,7 @@ function EvidenceInsightsShareModal({
               GuardStatMetric,
               {
                 label: "Recorded",
-                value: String(runtime?.receipt_count ?? 0),
+                value: formatEvidenceCount(runtime?.receipt_count ?? 0),
                 compact: true
               }
             )
@@ -20376,7 +20385,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     setFilters((prev) => ({
       ...prev,
       view,
-      ...view === "insights" ? { day: "" } : {}
+      ...view !== "actions" ? { day: "" } : {}
     }));
   }, []);
   const handleOpenExport = reactExports.useCallback(() => {
