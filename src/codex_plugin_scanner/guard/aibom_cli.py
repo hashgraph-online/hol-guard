@@ -188,12 +188,12 @@ def _aibom_guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool
     if summary.get("sync_reason") != "guard_events_endpoint_unavailable":
         return False
     synced_at = summary.get("synced_at")
-    if not isinstance(synced_at, str):
-        return True
+    if not isinstance(synced_at, str) or not synced_at.strip():
+        return False
     try:
         parsed = _aware_utc_timestamp(synced_at)
     except (ValueError, OverflowError, TypeError):
-        return True
+        return False
     return datetime.now(timezone.utc) - parsed < timedelta(hours=_AIBOM_GUARD_EVENTS_BACKOFF_HOURS)
 
 
