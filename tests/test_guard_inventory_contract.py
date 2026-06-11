@@ -74,12 +74,73 @@ def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) ->
     payload = serialize_inventory_snapshot(snapshot)
     encoded = json.dumps(payload, sort_keys=True)
 
+    assert payload["agentId"] == "agent-hermes"
+    assert payload["snapshotId"] == "snap-hermes-1"
+    assert payload["items"][0]["itemId"] == "skill-danger"
+    assert payload["redactionReport"]["rawSecretsIncluded"] is False
+
     assert "sk-testsecretvalue" not in encoded
     assert "Bearer secret" not in encoded
     assert "user:pass" not in encoded
     assert str(tmp_path / "home") not in encoded
     assert payload["items"][0]["metadata"]["headers"]["authorization"] == "present_redacted"
     assert payload["items"][0]["metadata"]["headers"]["x-trace"] == "present"
+
+
+def test_inventory_snapshot_omits_null_optional_finding_summary() -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-hermes-2",
+        agent_id="agent-hermes",
+        agent_type="hermes",
+        generated_at="2026-05-10T00:00:00Z",
+        findings=(
+            GuardAgentInventoryFinding(
+                finding_id="finding-1",
+                source="hol-detector",
+                severity="high",
+                confidence="high",
+                title="Secret access",
+                artifact_id="skill-danger",
+                check_id="secret-access",
+            ),
+        ),
+    )
+
+    payload = serialize_inventory_snapshot(snapshot)
+
+    assert "summary" not in payload["findings"][0]
+
+
+def test_inventory_snapshot_serialization_preserves_free_form_metadata_keys() -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-cursor-1",
+        agent_id="cursor:local",
+        agent_type="cursor",
+        generated_at="2026-05-10T00:00:00Z",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="cursor:mcp:local",
+                item_kind="mcp_server",
+                display_name="Local MCP",
+                source_fingerprint="sha256:source",
+                content_hash="sha256:content",
+                capability_categories=(),
+                metadata={
+                    "tool_schemas": [
+                        {
+                            "name": "read_file",
+                            "input_schema": {"properties": {"file_path": {"type": "string"}}},
+                        }
+                    ]
+                },
+            ),
+        ),
+    )
+
+    payload = serialize_inventory_snapshot(snapshot)
+    schema = payload["items"][0]["metadata"]["tool_schemas"][0]["input_schema"]
+
+    assert schema["properties"]["file_path"]["type"] == "string"
 
 
 def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) -> None:
@@ -463,9 +524,9 @@ def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(t
     assert payload["findings"][0]["source"] == "cisco-skill-scanner"
     assert payload["findings"][0]["severity"] == "high"
     assert payload["findings"][0]["confidence"] == "high"
-    assert payload["findings"][0]["artifact_id"] == "hermes:skill:ops:reviewer"
+    assert payload["findings"][0]["artifactId"] == "hermes:skill:ops:reviewer"
     assert payload["findings"][0]["evidence"]["durationMs"] == 42
     assert payload["findings"][0]["evidence"]["riskComponent"]["scoreDelta"] == -25
-    assert payload["sources"][-1]["source_type"] == "scanner"
+    assert payload["sources"][-1]["sourceType"] == "scanner"
     assert "fixture_secretvalue" not in encoded
     assert str(tmp_path) not in encoded

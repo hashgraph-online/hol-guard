@@ -149,8 +149,8 @@ def test_inventory_snapshot_redacts_openclaw_channels_mcp_and_skills(tmp_path: P
     payload = serialize_inventory_snapshot(snapshot)
     encoded = json.dumps(payload, sort_keys=True)
 
-    assert payload["agent_type"] == "openclaw"
-    assert {item["item_kind"] for item in payload["items"]} >= {"channel", "mcp_server", "skill"}
+    assert payload["agentType"] == "openclaw"
+    assert {item["itemKind"] for item in payload["items"]} >= {"channel", "mcp_server", "skill"}
     assert "ghp_secretvalue" not in encoded
     assert str(context.home_dir) not in encoded
     assert str(context.workspace_dir) not in encoded

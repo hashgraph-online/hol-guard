@@ -7,6 +7,7 @@ import ipaddress
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -245,12 +246,89 @@ class GuardAgentInventorySnapshot:
     redaction_report: dict[str, object] = field(default_factory=dict)
 
 
+def _snake_to_camel_case_key(key: str) -> str:
+    if "_" not in key:
+        return key
+    head, *tail = key.split("_")
+    return head + "".join(part[:1].upper() + part[1:] if part else "" for part in tail)
+
+
+def _normalize_redaction_report(report: object) -> dict[str, object]:
+    if not isinstance(report, dict):
+        return {"rawSecretsIncluded": False, "redactedFields": []}
+    raw_secrets = report.get("rawSecretsIncluded")
+    if raw_secrets is None:
+        raw_secrets = report.get("raw_secret_values")
+    if raw_secrets is None:
+        raw_secrets = report.get("raw_secrets_included", False)
+    redacted_fields = report.get("redactedFields")
+    if redacted_fields is None:
+        redacted_fields = report.get("redacted_fields", [])
+    return {
+        "rawSecretsIncluded": raw_secrets is True,
+        "redactedFields": list(redacted_fields) if isinstance(redacted_fields, (list, tuple)) else [],
+    }
+
+
+_INVENTORY_DATETIME_KEYS = frozenset(
+    {
+        "capturedAt",
+        "completedAt",
+        "firstSeenAt",
+        "generatedAt",
+        "lastSeenAt",
+        "startedAt",
+    }
+)
+
+_FREE_FORM_RECORD_KEYS = frozenset({"metadata", "evidence"})
+
+_OPTIONAL_ONLY_CONTRACT_KEYS = frozenset({"summary"})
+
+
+def _normalize_inventory_datetime(value: object) -> object:
+    if not isinstance(value, str) or not value.strip():
+        return value
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+        return parsed.isoformat().replace("+00:00", "Z")
+    except (ValueError, OverflowError, TypeError):
+        return value
+
+
+def _inventory_contract_json(value: object) -> object:
+    if isinstance(value, list):
+        return [_inventory_contract_json(item) for item in value]
+    if isinstance(value, dict):
+        normalized: dict[str, object] = {}
+        for key, item in value.items():
+            camel_key = _snake_to_camel_case_key(str(key))
+            if item is None and camel_key in _OPTIONAL_ONLY_CONTRACT_KEYS:
+                continue
+            if camel_key in _FREE_FORM_RECORD_KEYS:
+                normalized[camel_key] = item
+                continue
+            if camel_key == "redactionReport":
+                normalized[camel_key] = _normalize_redaction_report(item)
+                continue
+            if camel_key in _INVENTORY_DATETIME_KEYS:
+                normalized[camel_key] = _normalize_inventory_datetime(item)
+                continue
+            normalized[camel_key] = _inventory_contract_json(item)
+        return normalized
+    return value
+
+
 def serialize_inventory_snapshot(snapshot: GuardAgentInventorySnapshot) -> dict[str, object]:
     payload = _safe_json(asdict(snapshot))
     if not isinstance(payload, dict):
         raise TypeError("Inventory snapshot serialization produced invalid payload.")
-    _assert_serialized_inventory_payload_safe(payload)
-    return payload
+    contract = _inventory_contract_json(payload)
+    if not isinstance(contract, dict):
+        raise TypeError("Inventory snapshot serialization produced invalid payload.")
+    _assert_serialized_inventory_payload_safe(contract)
+    return contract
 
 
 def extract_aibom_metadata_extensions(metadata: dict[str, object]) -> dict[str, object]:
