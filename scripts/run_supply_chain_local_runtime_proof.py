@@ -65,6 +65,8 @@ def _write_workspace(workspace_dir: Path) -> None:
 
 def _run_proof(*, evidence_dir: Path) -> dict[str, object]:
     evidence_dir.mkdir(parents=True, exist_ok=True)
+    original_home = os.environ.get("HOME")
+    initial_working_directory = Path(os.path.abspath(os.path.curdir))
     home_dir = evidence_dir / "home"
     home_dir.mkdir(parents=True, exist_ok=True)
     os.environ["HOME"] = str(home_dir)
@@ -83,6 +85,7 @@ def _run_proof(*, evidence_dir: Path) -> dict[str, object]:
         sync_result["receipts_stored"] = 1
         return sync_result
 
+    had_sync_attr = hasattr(daemon_server, "sync_local_guard_cloud_proof")
     original_sync = getattr(daemon_server, "sync_local_guard_cloud_proof", None)
     daemon_server.sync_local_guard_cloud_proof = fake_sync  # type: ignore[attr-defined]
 
@@ -141,7 +144,6 @@ def _run_proof(*, evidence_dir: Path) -> dict[str, object]:
             }
         )
 
-        os.chdir(workspace_dir)
         audit_status, audit_payload = _read_json_response(
             _request(
                 daemon.port,
@@ -190,8 +192,15 @@ def _run_proof(*, evidence_dir: Path) -> dict[str, object]:
         )
     finally:
         daemon.stop()
-        if original_sync is not None:
+        if had_sync_attr:
             daemon_server.sync_local_guard_cloud_proof = original_sync  # type: ignore[attr-defined]
+        else:
+            delattr(daemon_server, "sync_local_guard_cloud_proof")
+        if original_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = original_home
+        os.chdir(initial_working_directory)
 
     report = {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
