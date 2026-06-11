@@ -5,6 +5,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def test_action_yaml_is_valid_mapping() -> None:
+    try:
+        import yaml
+    except ImportError:
+        import pytest
+
+        pytest.importorskip("yaml")
+
+    action_text = (ROOT / "action" / "action.yml").read_text(encoding="utf-8")
+    parsed = yaml.safe_load(action_text)
+    assert isinstance(parsed, dict)
+    assert parsed["runs"]["using"] == "composite"
+
+
 def test_action_metadata_includes_marketplace_branding_and_pypi_install() -> None:
     action_text = (ROOT / "action" / "action.yml").read_text(encoding="utf-8")
 

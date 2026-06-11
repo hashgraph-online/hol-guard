@@ -235,16 +235,7 @@ runs:
           python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"
 
           DIST_BASENAME="$(
-            DIST_DIR="$DIST_DIR" python3 -c "
-import os
-import sys
-from pathlib import Path
-
-candidates = sorted(Path(os.environ['DIST_DIR']).glob('plugin_scanner-*.whl'))
-if len(candidates) != 1:
-    sys.exit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}')
-print(candidates[0].name)
-"
+            DIST_DIR="$DIST_DIR" python3 -c "import os, sys; from pathlib import Path; candidates = sorted(Path(os.environ['DIST_DIR']).glob('plugin_scanner-*.whl')); (len(candidates) == 1) or sys.exit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'); print(candidates[0].name)"
           )"
 
           ACTUAL_SHA256="$(
