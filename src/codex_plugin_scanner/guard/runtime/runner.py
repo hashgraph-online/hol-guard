@@ -2626,22 +2626,22 @@ def _guard_sync_request_with_nonce(
 
 
 def _read_guard_cloud_error_message(payload: dict[str, object]) -> str | None:
-    for key in ("err", "message", "error"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
     guard_error = payload.get("guardError")
     if isinstance(guard_error, dict):
         for key in ("msg", "message"):
             nested = guard_error.get(key)
             if isinstance(nested, str) and nested.strip():
                 return nested.strip()
+    for key in ("err", "message", "error"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
     return None
 
 
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     try:
-        raw_body = error.read().decode("utf-8")
+        raw_body = error.read().decode("utf-8", errors="replace")
     except OSError:
         raw_body = ""
     try:

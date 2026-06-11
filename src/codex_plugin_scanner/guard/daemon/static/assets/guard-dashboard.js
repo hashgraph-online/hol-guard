@@ -20385,7 +20385,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     setFilters((prev) => ({
       ...prev,
       view,
-      ...view !== "actions" ? { day: "" } : {}
+      ...view === "insights" ? { day: "" } : {}
     }));
   }, []);
   const handleOpenExport = reactExports.useCallback(() => {
