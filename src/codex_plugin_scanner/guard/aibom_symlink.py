@@ -246,12 +246,25 @@ def source_of_truth_metadata_from_inspection(
     }
 
 
+def _read_bounded_file_bytes(path: Path, *, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = max_bytes
+    with path.open("rb") as handle:
+        while remaining > 0:
+            chunk = handle.read(min(65536, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+    return b"".join(chunks)
+
+
 def _content_hash_for_target(path: Path, *, home_dir: Path) -> str | None:
     try:
         if path.is_dir():
             return fingerprint_path_tree(path, home_dir=home_dir)
         if path.is_file():
-            payload = path.read_bytes()[:_MAX_SYMLINK_TARGET_BYTES]
+            payload = _read_bounded_file_bytes(path, max_bytes=_MAX_SYMLINK_TARGET_BYTES)
             return fingerprint_text(payload.decode("utf-8", errors="replace"))
     except OSError:
         return None

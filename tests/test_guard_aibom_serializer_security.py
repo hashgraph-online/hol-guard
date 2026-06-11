@@ -47,6 +47,17 @@ def test_serialize_inventory_snapshot_redacts_raw_absolute_paths() -> None:
     assert payload["items"][0]["metadata"]["localPath"] == "[REDACTED]"
 
 
+def test_serialize_inventory_snapshot_redacts_nested_sensitive_key_values() -> None:
+    snapshot = _snapshot_with_metadata({"token": {"value": "npm_secret_value"}})
+    payload = serialize_inventory_snapshot(snapshot)
+    encoded = json.dumps(payload, sort_keys=True)
+
+    assert "npm_secret_value" not in encoded
+    token_metadata = payload["items"][0]["metadata"]["token"]
+    assert isinstance(token_metadata, dict)
+    assert token_metadata["value"] == "[REDACTED]"
+
+
 def test_serialize_inventory_snapshot_redacts_secret_like_values() -> None:
     snapshot = _snapshot_with_metadata({"token": _SECRET_MARKER})
     payload = serialize_inventory_snapshot(snapshot)
