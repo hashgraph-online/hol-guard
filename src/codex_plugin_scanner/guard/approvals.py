@@ -228,6 +228,7 @@ def queue_blocked_approvals(
             scanner_evidence=_item_scanner_evidence(item),
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
+        created_new_request = persisted_request_id == request.request_id
         if persisted_request_id != request.request_id:
             request = replace(
                 request,
@@ -235,6 +236,8 @@ def queue_blocked_approvals(
                 review_command=f"{GUARD_COMMAND} approvals approve {persisted_request_id}",
                 approval_url=build_approval_request_url(approval_center_url, persisted_request_id),
             )
+        if created_new_request:
+            _record_created_event(store, request, timestamp)
         _notify_pending_approval(store=store, request=request)
         queued.append(request.to_dict())
     return queued
@@ -438,6 +441,25 @@ def _record_resolution_event(store: GuardStore, request_id: str, action: str, sc
         "approval.resolved",
         {"request_id": request_id, "action": action, "scope": scope},
         resolved_at,
+    )
+
+
+def _record_created_event(store: GuardStore, request: GuardApprovalRequest, created_at: str) -> None:
+    store.add_event(
+        "approval.created",
+        {
+            "request_id": request.request_id,
+            "harness": request.harness,
+            "artifact_id": request.artifact_id,
+            "artifact_name": request.artifact_name,
+            "artifact_type": request.artifact_type,
+            "policy_action": request.policy_action,
+            "recommended_scope": request.recommended_scope,
+            "source_scope": request.source_scope,
+            "workspace": request.workspace,
+            "publisher": request.publisher,
+        },
+        created_at,
     )
 
 

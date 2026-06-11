@@ -14,7 +14,7 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import bridge as guard_bridge_module
-from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
+from codex_plugin_scanner.guard.approvals import build_runtime_snapshot, apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.bridge import BridgeConfig, GuardBridge
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
@@ -147,6 +147,42 @@ class TestGuardApprovals:
         assert resolved["resolution_scope"] == "artifact"
         assert resolved["action_envelope_json"] == action_envelope_json
         assert resolved["decision_v2_json"] == decision_v2_json
+
+    def test_guard_store_runtime_snapshot_exposes_pending_request_payload_contract(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        request = GuardApprovalRequest(
+            request_id="req-snapshot-contract",
+            harness="codex",
+            artifact_id="codex:project:workspace_skill",
+            artifact_name="workspace_skill",
+            artifact_hash="hash-snapshot-contract",
+            policy_action="require-reapproval",
+            recommended_scope="workspace",
+            changed_fields=("args",),
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            workspace=str(tmp_path / "workspace"),
+            review_command="hol-guard approvals approve req-snapshot-contract",
+            approval_url="http://127.0.0.1:4455/approvals/req-snapshot-contract",
+        )
+        store.add_approval_request(request, "2026-04-11T00:00:00+00:00")
+
+        snapshot = build_runtime_snapshot(
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-04-11T00:01:00+00:00",
+        )
+        queue_summary = snapshot["queue_summary"]
+        items = snapshot["items"]
+
+        assert snapshot["pending_count"] == 1
+        assert isinstance(queue_summary, dict)
+        assert queue_summary["next_request_id"] == "req-snapshot-contract"
+        assert isinstance(items, list)
+        assert items[0]["request_id"] == "req-snapshot-contract"
+        assert items[0]["recommended_scope"] == "workspace"
+        assert items[0]["review_command"] == "hol-guard approvals approve req-snapshot-contract"
+        assert items[0]["approval_url"] == "http://127.0.0.1:4455/approvals/req-snapshot-contract"
 
     def test_guard_store_loads_old_approval_rows_without_action_envelope(self, tmp_path):
         guard_home = tmp_path / "guard-home"
@@ -521,7 +557,7 @@ class TestGuardApprovals:
             config_paths=(artifact.config_path,),
             artifacts=(artifact,),
         )
-        evaluation = {
+        evaluation: dict[str, object] = {
             "artifacts": [
                 {
                     "artifact_id": artifact.artifact_id,
@@ -640,6 +676,74 @@ class TestGuardApprovals:
 
         assert first[0]["request_id"] == second[0]["request_id"]
         assert notifications == [(first[0]["request_id"], False), (first[0]["request_id"], True)]
+
+    def test_guard_queue_blocked_approvals_emits_created_event_once_for_new_pending_request(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace = tmp_path / "workspace"
+        artifact = GuardArtifact(
+            artifact_id="codex:runtime:project:danger_lab:event_notice",
+            name="danger_lab:event_notice",
+            harness="codex",
+            artifact_type="tool_call",
+            source_scope="project",
+            config_path=str(workspace / ".codex" / "config.toml"),
+            command="event_notice",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+        evaluation = {
+            "artifacts": [
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "artifact_hash": "hash-runtime",
+                    "artifact_type": artifact.artifact_type,
+                    "source_scope": artifact.source_scope,
+                    "config_path": artifact.config_path,
+                    "changed_fields": ["runtime_tool_call"],
+                    "policy_action": "require-reapproval",
+                    "launch_target": "event_notice",
+                }
+            ]
+        }
+
+        first = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-04-17T00:00:00+00:00",
+        )
+        second = queue_blocked_approvals(
+            detection=detection,
+            evaluation=evaluation,
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-04-17T00:01:00+00:00",
+        )
+        events = store.list_events_after(0, limit=10, event_names=("approval.created",))
+        payload = events[0]["payload"]
+
+        assert first[0]["request_id"] == second[0]["request_id"]
+        assert len(events) == 1
+        assert isinstance(payload, dict)
+        assert payload == {
+            "request_id": first[0]["request_id"],
+            "harness": "codex",
+            "artifact_id": artifact.artifact_id,
+            "artifact_name": artifact.name,
+            "artifact_type": artifact.artifact_type,
+            "policy_action": "require-reapproval",
+            "recommended_scope": "artifact",
+            "source_scope": "project",
+            "workspace": str(workspace),
+            "publisher": None,
+        }
 
     def test_guard_queue_respects_disabled_desktop_notifications(self, tmp_path, monkeypatch):
         notifications: list[str] = []
@@ -1850,8 +1954,11 @@ class TestGuardApprovals:
 
         assert status == 200
         assert payload["resolved"] is True
+        assert payload["resolved_request"]["request_id"] == request_id
         assert payload["resolved_request"]["resolution_action"] == ("allow" if action == "approve" else "block")
         assert payload["resolved_request"]["resolution_scope"] == scope
+        assert payload["resolved_request"]["approval_url"] == "http://127.0.0.1/pending"
+        assert payload["resolved_request"]["review_command"] == f"hol-guard approvals {action} {request_id}"
         assert payload["remaining_pending_count"] == 1
         assert payload["next_selectable_request_id"] == f"{request_id}-other"
         assert store.get_approval_request(f"{request_id}-other")["status"] == "pending"
