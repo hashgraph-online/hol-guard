@@ -3988,7 +3988,16 @@ def run_guard_command(
                         raw_runtime_reason,
                         approval_context,
                     )
-                _emit_native_hook_block_stderr(native_block_reason)
+                if _canonical_harness_name(args.harness) == "kimi":
+                    _emit_native_hook_response(
+                        harness=args.harness,
+                        policy_action=policy_action,
+                        event_name=event_name,
+                        reason=native_block_reason,
+                        output_stream=output_stream,
+                    )
+                else:
+                    _emit_native_hook_block_stderr(native_block_reason)
                 _record_harness_usage_for_hook(
                     store=store,
                     action_envelope=action_envelope,
@@ -4176,13 +4185,21 @@ def run_guard_command(
         )
         approval_context = _native_approval_center_context(payload, harness=args.harness)
         if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
-            _emit_native_hook_block_stderr(
-                _native_hook_reason_for_harness(
-                    args.harness,
-                    incoming_reason,
-                    approval_context,
-                )
+            block_reason = _native_hook_reason_for_harness(
+                args.harness,
+                incoming_reason,
+                approval_context,
             )
+            if _canonical_harness_name(args.harness) == "kimi":
+                _emit_native_hook_response(
+                    harness=args.harness,
+                    policy_action=policy_action,
+                    event_name=hook_event_name,
+                    reason=block_reason,
+                    output_stream=output_stream,
+                )
+            else:
+                _emit_native_hook_block_stderr(block_reason)
             return 2
         if _canonical_harness_name(args.harness) == "codex" and (
             hook_event_name == "UserPromptSubmit" or approval_context is not None
@@ -4276,7 +4293,10 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
-    return _canonical_harness_name(args.harness) in {"claude-code", "codex"} and not getattr(args, "json", False)
+    canonical = _canonical_harness_name(args.harness)
+    if canonical in {"claude-code", "codex"} and not getattr(args, "json", False):
+        return True
+    return canonical == "kimi" and not getattr(args, "json", False)
 
 
 def _should_emit_claude_native_pretooluse_notice(
@@ -4302,6 +4322,8 @@ def _should_emit_native_hook_json_response(
     harness = _canonical_harness_name(args.harness)
     if harness == "codex" and getattr(args, "json", False) and event_name == "UserPromptSubmit":
         return True
+    if harness == "kimi" and getattr(args, "json", False) and output_stream is not None:
+        return event_name in {"PreToolUse", "UserPromptSubmit"}
     return (
         harness in {"claude-code", "codex"}
         and getattr(args, "json", False)
@@ -4314,9 +4336,11 @@ def _should_emit_native_hook_json_response(
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    del args, event_name, policy_action
     # Codex v0.133 logs non-zero PreToolUse hooks as failed but still executes
     # the tool. Blocking must be communicated through the JSON hook response.
+    canonical = _canonical_harness_name(args.harness)
+    if canonical == "kimi" and event_name in {"PreToolUse", "UserPromptSubmit"}:
+        return policy_action in {"block", "sandbox-required", "require-reapproval"}
     return False
 
 
@@ -6851,12 +6875,19 @@ def _emit_native_hook_response(
         if policy_action in {"block", "sandbox-required", "require-reapproval"} and not additional_context:
             payload["decision"] = "block"
             payload["reason"] = reason
-            if _canonical_harness_name(harness) == "codex":
+            canonical = _canonical_harness_name(harness)
+            if canonical == "codex":
                 payload["continue"] = False
                 payload["stopReason"] = reason
                 payload["hookSpecificOutput"] = {
                     "hookEventName": event_name,
                     "additionalContext": reason,
+                }
+            elif canonical == "kimi":
+                payload["hookSpecificOutput"] = {
+                    "hookEventName": event_name,
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
                 }
         elif additional_context:
             payload["hookSpecificOutput"] = {
@@ -6944,7 +6975,7 @@ def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action == "require-reapproval":
-        if harness == "codex":
+        if harness in {"codex", "kimi"}:
             return "deny"
         return "ask"
     if harness == "codex":
@@ -7262,7 +7293,25 @@ def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     if arguments is not None:
         normalized["tool_input"] = arguments
         normalized["arguments"] = arguments
+    normalized["prompt"] = _normalize_kimi_prompt(normalized.get("prompt"))
     return normalized
+
+
+def _normalize_kimi_prompt(value: object | None) -> str | None:
+    """Flatten Kimi Code's ContentPart[] prompt into a single string."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts) if parts else None
+    return None
 
 
 def _normalize_hook_arguments(*values: object | None) -> object | None:

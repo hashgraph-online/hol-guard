@@ -9,6 +9,7 @@ function assert(condition: boolean, message: string): void {
 
 assert(parseAppDetail("/apps/opencode") === "opencode", "valid app route parses harness slug");
 assert(parseAppDetail("/apps/claude-code") === "claude-code", "hyphenated app route parses harness slug");
+assert(parseAppDetail("/apps/kimi") === "kimi", "kimi app route parses harness slug");
 assert(parseAppDetail("/apps/OpenCode") === "opencode", "app route normalizes case");
 assert(parseAppDetail("/apps/*") === null, "wildcard app route is rejected");
 assert(parseAppDetail("/apps/%2A") === null, "encoded wildcard app route is rejected");

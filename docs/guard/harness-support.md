@@ -75,6 +75,14 @@ Current Guard support in this repo:
   - blocks newly introduced OpenCode MCP, plugin, and skill artifacts before launch when local Guard policy requires
     approval
   - native shell and managed MCP package-manager calls now share the same package-request evaluator, evidence fields, and approval-center copy
+- `kimi`
+  - detects `~/.kimi-code/config.toml`, legacy `~/.kimi/config.toml`, and workspace `.kimi-code/config.toml`
+  - detects `~/.kimi-code/mcp.json` and legacy `~/.kimi/mcp.json` MCP server registrations
+  - detects existing `[[hooks]]` entries in Kimi Code's TOML config
+  - installs Guard-owned `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, `SessionStart`, and `Stop` hooks in `~/.kimi-code/config.toml` by calling `hol-guard hook --harness kimi`
+  - blocks dangerous tool calls and prompts by returning exit code `2` and a JSON `permissionDecision: "deny"` response in `hookSpecificOutput`
+  - fails open if a hook crashes or times out, so Kimi Code keeps working when Guard is unreachable
+  - uses the same JSON stdin/stdout wire protocol as Codex and Claude Code
 
 Approval tiers:
 
@@ -133,3 +141,4 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `hermes` | `hermes` | ❌ | ✅ | ❌ | shell, mcp_tool, prompt |
 | `openclaw` | `openclaw` | ❌ | ✅ | ❌ | mcp_tool |
 | `antigravity` | `antigravity` | ❌ | ✅ | ❌ | mcp_tool, prompt |
+| `kimi` | `kimi`, `kimi-code`, `kimi-cli` | ❌ | ✅ | ❌ | shell, prompt |

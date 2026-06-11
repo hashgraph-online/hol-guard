@@ -137,6 +137,7 @@ _DISPLAY_NAMES = {
     "hermes": "Hermes",
     "openclaw": "OpenClaw",
     "antigravity": "Antigravity",
+    "kimi": "Kimi",
 }
 
 
@@ -279,6 +280,20 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "Guard intercepts extensions and MCP registrations via scan at launch time."
         ),
         smoke_command="hol-guard install antigravity --dry-run",
+    ),
+    HarnessProtectionContract(
+        harness="kimi",
+        install_aliases=("kimi", "kimi-code", "kimi-cli"),
+        config_paths=("~/.kimi-code/config.toml", "~/.kimi/config.toml"),
+        event_surfaces=("shell", "prompt"),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "Tool output post-processing and inline edits applied without a tool call are not visible to Guard. "
+            "Hooks run in parallel and fail open on crash or timeout."
+        ),
+        smoke_command="hol-guard install kimi --dry-run",
     ),
 )
 

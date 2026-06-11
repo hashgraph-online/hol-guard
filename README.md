@@ -134,6 +134,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
   Guard respects Cursor’s native tool approval and focuses on artifact trust before launch.
 - `opencode`
   Guard authors package-level policy while OpenCode keeps native once, always, or reject prompts for managed MCP tools.
+- `kimi`
+  Guard installs managed `PreToolUse` and `UserPromptSubmit` hooks in `~/.kimi-code/config.toml`, blocks with exit code `2` and a JSON `permissionDecision: "deny"` response, and fails open on hook crash or timeout.
 - `hermes`
   Guard installs a managed Hermes overlay bundle, routes MCP servers through Guard proxies, and prefers native-or-center delivery for blocked requests.
 - `gemini`
