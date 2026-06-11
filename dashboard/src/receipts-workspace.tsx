@@ -164,7 +164,7 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
     setFilters((prev) => ({
       ...prev,
       view,
-      ...(view === "insights" ? { day: "" } : {}),
+      ...(view !== "actions" ? { day: "" } : {}),
     }));
   }, []);
 

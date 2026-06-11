@@ -42,6 +42,12 @@ export function formatDayLabel(dateKey: string): string {
 
 /** UTC calendar date for a receipt timestamp (matches analytics `date_key` buckets). */
 export function receiptUtcDateKey(iso: string): string {
+  if (!iso) {
+    return "";
+  }
+  if (iso.length >= 10 && iso[10] === "T" && iso.endsWith("Z")) {
+    return iso.slice(0, 10);
+  }
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) {
     return "";
