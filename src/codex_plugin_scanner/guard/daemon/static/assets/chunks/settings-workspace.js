@@ -3025,7 +3025,9 @@ function ApprovalGateCard(props) {
   reactExports.useEffect(() => {
     if (changingPassword) {
       setPasswordChangeOpen(true);
+      return;
     }
+    setPasswordChangeOpen(false);
   }, [changingPassword]);
   const showCurrentPassword = shouldShowApprovalPasswordCurrentField(
     wasConfigured,
@@ -3046,6 +3048,9 @@ function ApprovalGateCard(props) {
   });
   const handleOpenPasswordChange = reactExports.useCallback(() => {
     setPasswordChangeOpen(true);
+  }, []);
+  const handleClosePasswordChange = reactExports.useCallback(() => {
+    setPasswordChangeOpen(false);
   }, []);
   const showGateDetails = props.enabled || gateSettingsChanged;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
@@ -3098,7 +3103,18 @@ function ApprovalGateCard(props) {
               children: "Change password"
             }
           ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 rounded-lg border border-slate-100 bg-slate-50/60 p-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: resolveApprovalPasswordChangeCopy() }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: resolveApprovalPasswordChangeCopy() }),
+              !changingPassword ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  onClick: handleClosePasswordChange,
+                  className: "shrink-0 text-xs font-medium text-slate-500 transition-colors hover:text-brand-dark",
+                  children: "Cancel"
+                }
+              ) : null
+            ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "New password" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(

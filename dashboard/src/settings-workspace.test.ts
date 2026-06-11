@@ -142,6 +142,10 @@ assert(
   "approval-password: configured gate auto-opens change form when new password is entered",
 );
 assert(
+  shouldShowApprovalPasswordChangeForm(true, false, "", "next-password") === true,
+  "approval-password: configured gate auto-opens change form when confirm password is entered",
+);
+assert(
   resolveApprovalPasswordVerifyCopy({
     gateSettingsChanged: false,
     gateEnabled: true,

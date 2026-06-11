@@ -1946,7 +1946,9 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   useEffect(() => {
     if (changingPassword) {
       setPasswordChangeOpen(true);
+      return;
     }
+    setPasswordChangeOpen(false);
   }, [changingPassword]);
   const showCurrentPassword = shouldShowApprovalPasswordCurrentField(
     wasConfigured,
@@ -1967,6 +1969,9 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
   });
   const handleOpenPasswordChange = useCallback(() => {
     setPasswordChangeOpen(true);
+  }, []);
+  const handleClosePasswordChange = useCallback(() => {
+    setPasswordChangeOpen(false);
   }, []);
   const showGateDetails = props.enabled || gateSettingsChanged;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
@@ -2041,7 +2046,18 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
                   </button>
                 ) : (
                   <div className="space-y-3 rounded-lg border border-slate-100 bg-slate-50/60 p-3">
-                    <p className="text-xs text-slate-500">{resolveApprovalPasswordChangeCopy()}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-xs text-slate-500">{resolveApprovalPasswordChangeCopy()}</p>
+                      {!changingPassword ? (
+                        <button
+                          type="button"
+                          onClick={handleClosePasswordChange}
+                          className="shrink-0 text-xs font-medium text-slate-500 transition-colors hover:text-brand-dark"
+                        >
+                          Cancel
+                        </button>
+                      ) : null}
+                    </div>
                     <label className="block">
                       <span className="text-xs font-medium text-slate-500">New password</span>
                       <input
