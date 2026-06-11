@@ -1655,6 +1655,8 @@ def _resolve_guard_workspace(
     guard_command = getattr(args, "guard_command", None)
     if guard_command in _INSTALL_WORKSPACE_COMMANDS:
         return _resolve_default_install_workspace(args, guard_home=guard_home)
+    if guard_command == "sync":
+        return Path.cwd().resolve()
     if guard_command != "apps":
         return None
     if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:

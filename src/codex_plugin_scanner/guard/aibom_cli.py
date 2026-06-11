@@ -159,6 +159,10 @@ def _aibom_sync_is_due(
     prior = store.get_sync_payload("aibom_sync_summary")
     if not isinstance(prior, dict):
         return True
+    if prior.get("synced") is not True:
+        return True
+    if prior.get("snapshots") == 0:
+        return True
     synced_at = prior.get("synced_at")
     if not isinstance(synced_at, str) or not synced_at.strip():
         return True
@@ -312,7 +316,6 @@ def sync_aibom_snapshots(
                 "synced": False,
                 "skipped": True,
                 "reason": "guard_events_endpoint_unavailable",
-                "synced_at": synced_at,
             }
             store.set_sync_payload("aibom_sync_summary", summary, synced_at)
             return summary
@@ -514,7 +517,7 @@ def _aibom_connection_status(store: GuardStore) -> str:
     if store.get_cloud_workspace_id() is None:
         return "workspace_required"
     sync_summary = _sync_summary(store)
-    if sync_summary.get("synced_at"):
+    if sync_summary.get("synced") is True and sync_summary.get("synced_at"):
         return "synced"
     return "sync_required"
 
