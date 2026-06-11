@@ -6,7 +6,7 @@ import json
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -142,6 +142,13 @@ def build_aibom_export_payload(
 _AIBOM_AUTO_SYNC_INTERVAL_SECONDS = 60 * 60
 
 
+def _aware_utc_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _aibom_sync_is_due(
     store: GuardStore,
     *,
@@ -155,8 +162,8 @@ def _aibom_sync_is_due(
     if not isinstance(synced_at, str) or not synced_at.strip():
         return True
     try:
-        last_sync = datetime.fromisoformat(synced_at.replace("Z", "+00:00"))
-        now = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+        last_sync = _aware_utc_timestamp(synced_at)
+        now = _aware_utc_timestamp(generated_at)
         elapsed = (now - last_sync).total_seconds()
     except (ValueError, OverflowError, TypeError):
         return True
@@ -180,11 +187,21 @@ def sync_aibom_snapshots_if_due(
     options: AibomCliOptions | None = None,
     auth_context: dict[str, object] | None = None,
     home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
 ) -> dict[str, object]:
-    from .runtime.runner import GuardSyncNotConfiguredError
+    from .runtime.runner import (
+        GuardSyncNotConfiguredError,
+        _guard_events_endpoint_unavailable_recently,
+    )
 
     if store.get_cloud_workspace_id() is None:
         return {"synced": False, "skipped": True, "reason": "not_configured"}
+    if _guard_events_endpoint_unavailable_recently(store):
+        return {
+            "synced": False,
+            "skipped": True,
+            "reason": "guard_events_endpoint_unavailable",
+        }
     if not _aibom_sync_is_due(
         store,
         generated_at=generated_at,
@@ -199,7 +216,7 @@ def sync_aibom_snapshots_if_due(
         }
     context = HarnessContext(
         home_dir=_resolve_operator_home_dir(home_dir),
-        workspace_dir=None,
+        workspace_dir=workspace_dir,
         guard_home=store.guard_home,
     )
     try:

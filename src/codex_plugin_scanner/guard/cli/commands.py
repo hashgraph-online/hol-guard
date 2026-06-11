@@ -2826,7 +2826,11 @@ def run_guard_command(
 
     if args.guard_command == "sync":
         try:
-            payload = sync_receipts(store, home_dir=context.home_dir)
+            payload = sync_receipts(
+                store,
+                home_dir=context.home_dir,
+                workspace_dir=context.workspace_dir,
+            )
         except GuardSyncNotConfiguredError as error:
             message = _guard_sync_failure_message(error)
             if getattr(args, "json", False):
