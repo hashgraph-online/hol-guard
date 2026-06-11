@@ -112,10 +112,10 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
     snapshot = HermesHarnessAdapter().inventory_snapshot(context, generated_at="2026-05-10T00:00:00Z")
     payload = serialize_inventory_snapshot(snapshot)
     encoded = json.dumps(payload, sort_keys=True)
-    mcp_items = [item for item in payload["items"] if item["item_kind"] == "mcp_server"]
+    mcp_items = [item for item in payload["items"] if item["itemKind"] == "mcp_server"]
 
-    assert payload["agent_type"] == "hermes"
-    assert {item["item_kind"] for item in payload["items"]} >= {"skill", "mcp_server"}
+    assert payload["agentType"] == "hermes"
+    assert {item["itemKind"] for item in payload["items"]} >= {"skill", "mcp_server"}
     assert all(item["metadata"]["has_env_secrets"] is False for item in mcp_items)
     assert all(item["metadata"]["has_auth_headers"] is True for item in mcp_items)
     assert "ghp_secretvalue" not in encoded
