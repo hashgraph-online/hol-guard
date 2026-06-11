@@ -1332,6 +1332,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
             <ApprovalGateCard
               enabled={approvalGateEnabled}
               gateConfig={draft.approval_gate ?? null}
+              savedGateConfig={savedSettingsRef.current?.approval_gate ?? null}
               newPassword={approvalGateNewPassword}
               confirmPassword={approvalGateConfirmPassword}
               currentPassword={approvalGateCurrentPassword}
@@ -1880,6 +1881,7 @@ const cooldownOptions = [
 type ApprovalGateCardProps = {
   enabled: boolean;
   gateConfig: GuardApprovalGatePublicConfig | null;
+  savedGateConfig: GuardApprovalGatePublicConfig | null;
   newPassword: string;
   confirmPassword: string;
   currentPassword: string;
@@ -1915,9 +1917,10 @@ type ApprovalGateCardProps = {
 };
 
 function ApprovalGateCard(props: ApprovalGateCardProps) {
-  const wasConfigured = props.gateConfig?.configured === true;
+  const wasConfigured = props.savedGateConfig?.configured === true;
+  const savedGateEnabled = props.savedGateConfig?.enabled === true;
   const gateSettingsChanged = hasApprovalGateSettingsChanged(
-    props.gateConfig,
+    props.savedGateConfig,
     props.enabled,
     props.cooldownSeconds,
     props.strictAllDecisions,
@@ -1927,13 +1930,13 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
     props.newPassword,
     props.confirmPassword,
     gateSettingsChanged,
-    props.enabled,
+    savedGateEnabled,
   );
   const changingPassword = props.newPassword.trim().length > 0 || props.confirmPassword.trim().length > 0;
   const approvalPasswordHelperCopy = resolveApprovalPasswordHelperCopy({
     changingPassword,
     gateSettingsChanged,
-    gateEnabled: props.enabled,
+    gateEnabled: savedGateEnabled,
   });
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
