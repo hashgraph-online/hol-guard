@@ -1,0 +1,195 @@
+name: Publish GitHub Action Repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      scanner_version:
+        description: "Optional plugin-scanner version to publish (defaults to latest hol-guard release)"
+        required: false
+        default: ""
+  workflow_run:
+    workflows: ["Publish to PyPI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-plugin-scanner-action-repo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-action-repo:
+    name: Sync action repo + publish release notes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      ACTION_REPOSITORY: ${{ vars.ACTION_REPOSITORY != '' && vars.ACTION_REPOSITORY || 'hashgraph-online/ai-plugin-scanner-action' }}
+      SOURCE_REF: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      SOURCE_REPOSITORY: ${{ github.repository }}
+      SOURCE_SERVER_URL: ${{ github.server_url }}
+    steps:
+      - name: Validate publication credentials
+        env:
+          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: |
+          if [ -z "$ACTION_REPO_TOKEN" ]; then
+            echo "ACTION_REPO_TOKEN must be configured to publish the GitHub Action repository." >&2
+            exit 1
+          fi
+
+      - name: Checkout source repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 0
+
+      - name: Resolve published scanner version
+        id: scanner_version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_VERSION: ${{ inputs.scanner_version }}
+        run: |
+          if [ -n "$REQUESTED_VERSION" ]; then
+            VERSION="$REQUESTED_VERSION"
+          else
+            VERSION="$(gh release list --repo "$SOURCE_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName | ltrimstr("v")')"
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "Could not resolve plugin-scanner version to publish." >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Compute scanner wheel SHA256
+        id: scanner_sha256
+        env:
+          SCANNER_VERSION: ${{ steps.scanner_version.outputs.version }}
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input "pypi-attestations==$(tr -d '[:space:]' < action/pypi-attestations-version.txt)"
+          DIST_DIR="${RUNNER_TEMP}/scanner-wheel"
+          mkdir -p "$DIST_DIR"
+          python3 -m pip download --disable-pip-version-check --no-input --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"
+          WHEEL_PATH="$(find "$DIST_DIR" -maxdepth 1 -name 'plugin_scanner-*.whl' -print | sort | head -n1)"
+          if [ -z "$WHEEL_PATH" ]; then
+            echo "Could not download plugin-scanner wheel for version ${SCANNER_VERSION}." >&2
+            exit 1
+          fi
+          SHA256="$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$WHEEL_PATH")"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next action release tag
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: |
+          LAST_TAG=$(gh release list --repo "$ACTION_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName // ""')
+
+          if [ -z "$LAST_TAG" ]; then
+            TAG="v1.0.0"
+          else
+            IFS=. read -r MAJOR MINOR PATCH <<< "${LAST_TAG#v}"
+            if [ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ]; then
+              echo "Unsupported release tag format: $LAST_TAG" >&2
+              exit 1
+            fi
+            TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Clone action repository
+        env:
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1
+
+      - name: Configure authenticated action repository remote
+        working-directory: action-repo
+        env:
+          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: |
+          git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${ACTION_REPOSITORY}.git"
+
+      - name: Sync root-ready action bundle
+        working-directory: action-repo
+        run: |
+          cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml
+          cp "${GITHUB_WORKSPACE}/action/README.md" README.md
+          cp "${GITHUB_WORKSPACE}/action/CONTRIBUTING.md" CONTRIBUTING.md
+          cp "${GITHUB_WORKSPACE}/action/SECURITY.md" SECURITY.md
+          printf '%s\n' "${{ steps.scanner_version.outputs.version }}" > scanner-version.txt
+          printf '%s\n' "${{ steps.scanner_sha256.outputs.sha256 }}" > scanner-sha256.txt
+          cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt
+          cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" pypi-attestations-version.txt
+          cp "${GITHUB_WORKSPACE}/LICENSE" LICENSE
+
+      - name: Detect sync changes
+        id: diff
+        working-directory: action-repo
+        run: |
+          if [ -n "$(git status --short -- action.yml README.md CONTRIBUTING.md SECURITY.md scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt LICENSE)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit synced bundle
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: action-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add action.yml README.md CONTRIBUTING.md SECURITY.md scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt LICENSE
+          git commit -m "chore: publish action bundle ${{ steps.version.outputs.tag }} (plugin-scanner ${{ steps.scanner_version.outputs.version }})"
+
+      - name: Push action repository branch and tags
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: action-repo
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git push origin HEAD:main
+          git tag "$TAG"
+          git push origin "refs/tags/${TAG}"
+          git tag -fa v1 -m "Update floating major tag to ${TAG}"
+          git push origin refs/tags/v1 --force
+
+      - name: Check action release state
+        id: release_state
+        working-directory: action-repo
+        env:
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+
+          if gh release view "${TAG}" --repo "$ACTION_REPOSITORY" >/dev/null 2>&1; then
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create action repository release
+        if: steps.release_state.outputs.release_exists == 'false' && (steps.diff.outputs.changed == 'true' || steps.release_state.outputs.tag_exists == 'true')
+        env:
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          gh release create "${TAG}" \
+            --repo "$ACTION_REPOSITORY" \
+            --title "$TAG" \
+            --generate-notes \
+            --notes "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF} with plugin-scanner ${{ steps.scanner_version.outputs.version }}."
