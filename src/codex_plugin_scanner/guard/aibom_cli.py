@@ -141,6 +141,9 @@ def build_aibom_export_payload(
 
 
 _AIBOM_AUTO_SYNC_INTERVAL_SECONDS = 60 * 60
+_AIBOM_EMPTY_SYNC_RETRY_SECONDS = 5 * 60
+_AIBOM_GUARD_EVENTS_BACKOFF_KEY = "aibom_guard_events_backoff"
+_AIBOM_GUARD_EVENTS_BACKOFF_HOURS = 24
 
 
 def _aware_utc_timestamp(value: str) -> datetime:
@@ -161,18 +164,37 @@ def _aibom_sync_is_due(
         return True
     if prior.get("synced") is not True:
         return True
-    if prior.get("snapshots") == 0:
-        return True
     synced_at = prior.get("synced_at")
     if not isinstance(synced_at, str) or not synced_at.strip():
         return True
+    retry_interval = min_interval_seconds
+    if prior.get("snapshots") == 0:
+        retry_interval = min(min_interval_seconds, _AIBOM_EMPTY_SYNC_RETRY_SECONDS)
     try:
         last_sync = _aware_utc_timestamp(synced_at)
         now = _aware_utc_timestamp(generated_at)
         elapsed = (now - last_sync).total_seconds()
     except (ValueError, OverflowError, TypeError):
         return True
-    return elapsed >= min_interval_seconds
+    return elapsed >= retry_interval
+
+
+def _aibom_guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
+    from datetime import timedelta
+
+    summary = store.get_sync_payload(_AIBOM_GUARD_EVENTS_BACKOFF_KEY)
+    if not isinstance(summary, dict):
+        return False
+    if summary.get("sync_reason") != "guard_events_endpoint_unavailable":
+        return False
+    synced_at = summary.get("synced_at")
+    if not isinstance(synced_at, str):
+        return True
+    try:
+        parsed = _aware_utc_timestamp(synced_at)
+    except (ValueError, OverflowError, TypeError):
+        return True
+    return datetime.now(timezone.utc) - parsed < timedelta(hours=_AIBOM_GUARD_EVENTS_BACKOFF_HOURS)
 
 
 def _resolve_operator_home_dir(home_dir: Path | None = None) -> Path:
@@ -194,14 +216,11 @@ def sync_aibom_snapshots_if_due(
     home_dir: Path | None = None,
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
-    from .runtime.runner import (
-        GuardSyncNotConfiguredError,
-        _guard_events_endpoint_unavailable_recently,
-    )
+    from .runtime.runner import GuardSyncNotConfiguredError
 
     if store.get_cloud_workspace_id() is None:
         return {"synced": False, "skipped": True, "reason": "not_configured"}
-    if _guard_events_endpoint_unavailable_recently(store):
+    if _aibom_guard_events_endpoint_unavailable_recently(store):
         return {
             "synced": False,
             "skipped": True,
@@ -301,7 +320,7 @@ def sync_aibom_snapshots(
         if error.code == 404:
             synced_at = generated_at
             store.set_sync_payload(
-                "guard_events_v1_summary",
+                _AIBOM_GUARD_EVENTS_BACKOFF_KEY,
                 {
                     "synced_at": synced_at,
                     "events": 0,
