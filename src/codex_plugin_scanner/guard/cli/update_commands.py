@@ -160,8 +160,8 @@ def run_guard_update(
         payload["managed_installs"] = repaired_installs
         if len(repaired_installs) == 1:
             payload["managed_install"] = repaired_installs[0]
-    # Sync dashboard static assets after package update so the daemon serves fresh UI.
-    if not dry_run and payload.get("status") in {"updated", "current"}:
+    # Sync dashboard assets when the package changed, even if the install still trails PyPI.
+    if not dry_run and (payload.get("status") in {"updated", "current"} or payload.get("changed") is True):
         dashboard_sync = _sync_dashboard_assets()
         if dashboard_sync:
             payload["dashboard_sync"] = dashboard_sync

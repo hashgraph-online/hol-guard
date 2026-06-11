@@ -304,6 +304,34 @@ def test_update_marks_partial_pypi_repair_as_stale(monkeypatch: pytest.MonkeyPat
     assert "behind PyPI 2.0.489" in str(payload["message"])
 
 
+def test_update_syncs_dashboard_assets_after_partial_stale_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.345")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda: "2.0.400")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.489")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
+    )
+    monkeypatch.setattr(update_commands, "_sync_dashboard_assets", lambda: {"notes": ["synced dashboard"]})
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert command == ["pipx", "upgrade", "hol-guard"]
+        return subprocess.CompletedProcess(command, 0, "installed hol-guard 2.0.400", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=False)
+
+    assert exit_code == 0
+    assert payload["status"] == "stale"
+    assert payload["changed"] is True
+    assert payload["dashboard_sync"] == {"notes": ["synced dashboard"]}
+    assert "synced dashboard" in payload["notes"]
+
+
 def test_update_marks_plain_pipx_upgrade_as_stale_when_version_does_not_change(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
