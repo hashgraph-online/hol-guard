@@ -258,7 +258,9 @@ def _normalize_redaction_report(report: object) -> dict[str, object]:
         return {"rawSecretsIncluded": False, "redactedFields": []}
     raw_secrets = report.get("rawSecretsIncluded")
     if raw_secrets is None:
-        raw_secrets = report.get("raw_secret_values", False)
+        raw_secrets = report.get("raw_secret_values")
+    if raw_secrets is None:
+        raw_secrets = report.get("raw_secrets_included", False)
     redacted_fields = report.get("redactedFields")
     if redacted_fields is None:
         redacted_fields = report.get("redacted_fields", [])
@@ -279,16 +281,19 @@ _INVENTORY_DATETIME_KEYS = frozenset(
     }
 )
 
+_FREE_FORM_RECORD_KEYS = frozenset({"metadata", "evidence"})
+
 
 def _normalize_inventory_datetime(value: object) -> object:
     if not isinstance(value, str) or not value.strip():
         return value
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        else:
-            parsed = parsed.astimezone(timezone.utc)
+        parsed = (
+            parsed.replace(tzinfo=timezone.utc)
+            if parsed.tzinfo is None
+            else parsed.astimezone(timezone.utc)
+        )
         return parsed.isoformat().replace("+00:00", "Z")
     except (ValueError, OverflowError, TypeError):
         return value
@@ -301,6 +306,9 @@ def _inventory_contract_json(value: object) -> object:
         normalized: dict[str, object] = {}
         for key, item in value.items():
             camel_key = _snake_to_camel_case_key(str(key))
+            if camel_key in _FREE_FORM_RECORD_KEYS:
+                normalized[camel_key] = _safe_json(item) if isinstance(item, dict) else item
+                continue
             if camel_key == "redactionReport":
                 normalized[camel_key] = _normalize_redaction_report(item)
                 continue

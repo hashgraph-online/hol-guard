@@ -87,6 +87,38 @@ def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) ->
     assert payload["items"][0]["metadata"]["headers"]["x-trace"] == "present"
 
 
+def test_inventory_snapshot_serialization_preserves_free_form_metadata_keys() -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-cursor-1",
+        agent_id="cursor:local",
+        agent_type="cursor",
+        generated_at="2026-05-10T00:00:00Z",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="cursor:mcp:local",
+                item_kind="mcp_server",
+                display_name="Local MCP",
+                source_fingerprint="sha256:source",
+                content_hash="sha256:content",
+                capability_categories=(),
+                metadata={
+                    "tool_schemas": [
+                        {
+                            "name": "read_file",
+                            "input_schema": {"properties": {"file_path": {"type": "string"}}},
+                        }
+                    ]
+                },
+            ),
+        ),
+    )
+
+    payload = serialize_inventory_snapshot(snapshot)
+    schema = payload["items"][0]["metadata"]["tool_schemas"][0]["input_schema"]
+
+    assert schema["properties"]["file_path"]["type"] == "string"
+
+
 def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) -> None:
     config_a = {"b": [2, 1], "a": {"nested": True}}
     config_b = {"a": {"nested": True}, "b": [2, 1]}
