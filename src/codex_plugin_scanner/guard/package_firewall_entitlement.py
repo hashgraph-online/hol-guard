@@ -141,9 +141,6 @@ def _oauth_entitlement(credentials: dict[str, object] | None, *, now: datetime) 
 
 
 def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str, object] | None:
-    oauth_health = store.get_oauth_local_credential_health()
-    if not isinstance(oauth_health, dict) or not bool(oauth_health.get("configured")):
-        return None
     oauth_payload = store.get_sync_payload("oauth_local_credentials")
     oauth_fields = _oauth_entitlement_fields_from_sync_payload(oauth_payload)
     if isinstance(oauth_fields, dict):
@@ -164,8 +161,6 @@ def _connect_state_entitlement(store: GuardStore, *, now: datetime) -> dict[str,
     tier = "unknown"
     if isinstance(oauth_fields, dict):
         tier = _optional_string(oauth_fields.get("supply_chain_plan_id")) or tier
-    elif isinstance(oauth_health.get("workspace_id"), str):
-        tier = "unknown"
     return {
         "allowed": False,
         "reason": "guard_cloud_reconnect_required",
