@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .config import GuardConfig
-from .local_supply_chain import build_package_protect_payload
+from .local_supply_chain import build_package_protect_payload, recompute_package_protect_artifact_hash
 from .models import GuardReceipt
 from .receipts import build_receipt
 from .redaction import redact_text
@@ -138,7 +138,13 @@ def build_protect_payload(
         timeout_seconds=_protect_command_timeout_seconds(),
     )
     if package_payload is not None:
-        if cached_gate and not _package_payload_uses_saved_approval(package_payload[0]):
+        if cached_gate and not _package_saved_approval_covers_current_gate(
+            package_payload[0],
+            store=store,
+            workspace_dir=workspace_dir,
+            command=command,
+            now=now,
+        ):
             return _merge_cached_advisory_into_package_payload(
                 package_payload,
                 cached_verdict=cached_verdict,
@@ -222,6 +228,31 @@ def build_protect_payload(
             now,
         )
     return (payload, int(execution.returncode))
+
+
+def _package_saved_approval_covers_current_gate(
+    payload: dict[str, object],
+    *,
+    store: GuardStore,
+    workspace_dir: Path,
+    command: list[str],
+    now: str,
+) -> bool:
+    if not _package_payload_uses_saved_approval(payload):
+        return False
+    receipt = payload.get("receipt")
+    if not isinstance(receipt, dict):
+        return False
+    stored_hash = receipt.get("artifact_hash")
+    if not isinstance(stored_hash, str) or not stored_hash:
+        return False
+    current_hash = recompute_package_protect_artifact_hash(
+        command,
+        store=store,
+        workspace_dir=workspace_dir,
+        now=now,
+    )
+    return current_hash == stored_hash
 
 
 def _package_payload_uses_saved_approval(payload: dict[str, object]) -> bool:
