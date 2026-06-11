@@ -135,10 +135,10 @@ export function isSettingsSaveProofSubmitDisabled(
   const totp = credentials.totpCode?.trim() ?? "";
 
   if (mode === "setup-gate") {
-    return next.length === 0 || confirm.length === 0;
+    return next.length === 0 || confirm.length === 0 || next !== confirm;
   }
   if (mode === "change-password") {
-    if (current.length === 0 || next.length === 0 || confirm.length === 0) {
+    if (current.length === 0 || next.length === 0 || confirm.length === 0 || next !== confirm) {
       return true;
     }
     return totpRequired && totp.length === 0;

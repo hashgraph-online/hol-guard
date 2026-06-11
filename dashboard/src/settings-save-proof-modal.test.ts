@@ -76,4 +76,17 @@ assert(
   "save-proof: verify requires totp when enabled",
 );
 
+assert(
+  isSettingsSaveProofSubmitDisabled("verify-save", { currentPassword: "secret" }, true) === true,
+  "save-proof: verify requires totp when enabled",
+);
+assert(
+  isSettingsSaveProofSubmitDisabled("setup-gate", { newPassword: "alpha", confirmPassword: "beta" }, false) === true,
+  "save-proof: setup rejects mismatched passwords",
+);
+assert(
+  isSettingsSaveProofSubmitDisabled("change-password", { currentPassword: "old", newPassword: "alpha", confirmPassword: "beta" }, false) === true,
+  "save-proof: change-password rejects mismatched passwords",
+);
+
 console.log("settings-save-proof-modal.test.ts: all assertions passed");
