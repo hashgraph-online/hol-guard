@@ -76,11 +76,13 @@ _UNSAFE_PATH_MARKERS = (
     "".join(("/", "root", "/")),
     "".join(("\\", "Users", "\\")),
     "".join(("/", "var", "/", "folders", "/")),
+    "".join(("/", "workspace", "/")),
+    "".join(("/", "tmp", "/")),
+    "".join(("/", "etc", "/")),
+    "".join(("/", "mnt", "/")),
 )
 _SERIALIZER_UNSAFE_PATH_PATTERN = (
-    r"(?:^|[\s\"'=:({])(?:"
-    + "|".join(re.escape(marker) for marker in _UNSAFE_PATH_MARKERS)
-    + ")"
+    r"(?:^|[\s\"'=:({])(?:" + "|".join(re.escape(marker) for marker in _UNSAFE_PATH_MARKERS) + ")"
 )
 _SERIALIZER_UNSAFE_PATH_RE = re.compile(_SERIALIZER_UNSAFE_PATH_PATTERN, re.IGNORECASE)
 _SERIALIZER_SECRET_ASSIGNMENT_RE = re.compile(
@@ -1069,7 +1071,9 @@ def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None
     return redacted
 
 
-def _sanitize_serializer_string(value: str) -> str:
+def _sanitize_serializer_string(value: str, *, parent_key: str = "") -> str:
+    if parent_key and _SENSITIVE_KEY_RE.search(parent_key):
+        return _SERIALIZER_REDACTED_VALUE
     if _SERIALIZER_UNSAFE_PATH_RE.search(value):
         return _SERIALIZER_REDACTED_VALUE
     if _SENSITIVE_VALUE_RE.search(value):
@@ -1081,19 +1085,25 @@ def _sanitize_serializer_string(value: str) -> str:
 
 def _assert_serialized_inventory_payload_safe(payload: object) -> None:
     encoded = json.dumps(payload, sort_keys=True)
-    if _SERIALIZER_UNSAFE_PATH_RE.search(encoded) or _SENSITIVE_VALUE_RE.search(encoded):
+    if (
+        _SERIALIZER_UNSAFE_PATH_RE.search(encoded)
+        or _SENSITIVE_VALUE_RE.search(encoded)
+        or _SERIALIZER_SECRET_ASSIGNMENT_RE.search(encoded)
+    ):
         raise ValueError("Inventory snapshot serialization produced unsafe payload.")
 
 
-def _safe_json(value: object) -> object:
+def _safe_json(value: object, *, parent_key: str = "") -> object:
     if isinstance(value, dict):
-        return {str(key): _safe_json(item) for key, item in value.items()}
+        return {
+            _sanitize_serializer_string(str(key)): _safe_json(item, parent_key=str(key)) for key, item in value.items()
+        }
     if isinstance(value, (list, tuple)):
-        return [_safe_json(item) for item in value]
+        return [_safe_json(item, parent_key=parent_key) for item in value]
     if isinstance(value, Path):
         return value.name
     if isinstance(value, str):
-        return _sanitize_serializer_string(value)
+        return _sanitize_serializer_string(value, parent_key=parent_key)
     return value
 
 
