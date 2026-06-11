@@ -7,6 +7,11 @@ import {
   resolveSecurityLevelDescription,
   resolveFineTuningSectionDescription,
   isFineTuningEditable,
+  resolveTotpSetupStep,
+  shouldShowApprovalPasswordCurrentField,
+  hasApprovalGateSettingsChanged,
+  resolveApprovalPasswordHelperCopy,
+  resolveTotpSetupModalTitle,
 } from "./settings-workspace";
 import { repairApprovalCenter, setupDesktopNotifications } from "./guard-api";
 
@@ -81,3 +86,52 @@ assert(isFineTuningEditable("custom") === true, "fine-tuning: custom level is ed
 assert(isFineTuningEditable("strict") === false, "fine-tuning: strict level is locked until custom");
 assert(isFineTuningEditable("balanced") === false, "fine-tuning: balanced level is locked until custom");
 assert(isFineTuningEditable("relaxed") === false, "fine-tuning: relaxed level is locked until custom");
+
+assert(resolveTotpSetupStep(null) === "confirm", "totp-setup: fresh setup starts at password confirmation");
+assert(
+  resolveTotpSetupStep({ provisioning_uri: "otpauth://totp/test", manual_key: "abcd", expires_at: "2026-01-01T00:00:00Z" }) === "scan",
+  "totp-setup: pending enrollment resumes at QR scan step",
+);
+
+assert(
+  shouldShowApprovalPasswordCurrentField(true, "", "", false, false) === false,
+  "approval-password: hide current field when gate is off and unchanged",
+);
+assert(
+  shouldShowApprovalPasswordCurrentField(true, "next-password", "", false, false) === true,
+  "approval-password: show current field when new password is entered",
+);
+assert(
+  shouldShowApprovalPasswordCurrentField(true, "", "", true, false) === true,
+  "approval-password: show current field when gate settings changed",
+);
+assert(
+  shouldShowApprovalPasswordCurrentField(true, "", "", false, true) === true,
+  "approval-password: show current field when gate is enabled for guarded saves",
+);
+assert(
+  shouldShowApprovalPasswordCurrentField(false, "first-password", "first-password", false, false) === false,
+  "approval-password: first-time setup does not ask for a current password",
+);
+assert(
+  hasApprovalGateSettingsChanged(
+    { enabled: true, configured: true, cooldown_seconds: 0, strict_all_decisions: false, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: false, totp_enabled: false, totp_pending: false },
+    true,
+    900,
+    false,
+  ) === true,
+  "approval-password: cooldown edits count as gate setting changes",
+);
+
+assert(
+  resolveApprovalPasswordHelperCopy({
+    changingPassword: false,
+    gateSettingsChanged: false,
+    gateEnabled: true,
+  }).includes("Authenticator setup"),
+  "approval-password: enabled gate copy points users to authenticator flow",
+);
+assert(
+  resolveTotpSetupModalTitle(true) === "Confirm your approval password",
+  "totp-modal: confirm step title",
+);
