@@ -314,7 +314,7 @@ def test_update_marks_plain_pipx_upgrade_as_stale_when_version_does_not_change(
     monkeypatch.setattr(
         update_commands.shutil,
         "which",
-        lambda name: "/Users/test/.local/bin/hol-guard" if name == "hol-guard" else None,
+        lambda name: "/mock-home/.local/bin/hol-guard" if name == "hol-guard" else None,
     )
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
