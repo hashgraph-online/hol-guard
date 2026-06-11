@@ -959,7 +959,10 @@ def _apply_stored_package_policy_override(
             policy_action="allow",
             title="Allowed by saved approval",
             summary="HOL Guard reused your saved approval for this package request.",
-            harness_message="HOL Guard reused your saved approval for this package request and let the install continue.",
+            harness_message=(
+                "HOL Guard reused your saved approval for this package request "
+                "and let the install continue."
+            ),
             reason_code="saved_package_approval",
             reason_message="HOL Guard reused your saved approval for this package request.",
         )

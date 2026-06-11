@@ -4543,7 +4543,9 @@ def _protect_request_artifact(response_payload: dict[str, object], *, workspace:
         command_parts = [str(item) for item in command_tokens if isinstance(item, str)]
         redacted_command = shlex.join(command_parts) if command_parts else None
     source_scope = _optional_string(receipt.get("source_scope")) or "project"
-    package_manager = _optional_string(request.get("package_manager")) or _optional_string(request.get("executor")) or "package"
+    package_manager = (
+        _optional_string(request.get("package_manager")) or _optional_string(request.get("executor")) or "package"
+    )
     intent_kind = _optional_string(request.get("install_kind")) or "install"
     config_path = str(workspace / "hol-guard.toml")
     return GuardArtifact(
@@ -4595,7 +4597,9 @@ def _protect_approval_item(response_payload: dict[str, object], *, workspace: Pa
         or _optional_string(user_copy_map.get("summary"))
         or _optional_string(verdict.get("reason")),
         "risk_signals": _string_list(verdict.get("risk_signals")),
-        "action_envelope_json": receipt.get("action_envelope_json") if isinstance(receipt.get("action_envelope_json"), dict) else None,
+        "action_envelope_json": (
+            receipt.get("action_envelope_json") if isinstance(receipt.get("action_envelope_json"), dict) else None
+        ),
         "decision_v2_json": {
             "action": policy_action,
             "user_title": _optional_string(user_copy_map.get("title")) or "Review required",
