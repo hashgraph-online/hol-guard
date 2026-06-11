@@ -2842,6 +2842,80 @@ class TestGuardApprovals:
         assert store.get_approval_request("req-primary")["status"] == "resolved"
         assert store.get_approval_request("req-sibling")["status"] == "pending"
 
+    def test_guard_workspace_package_resolution_stays_bound_to_same_request(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-package-a",
+                harness="guard-cli",
+                artifact_id="guard-cli:project:package-request:a",
+                artifact_name="npm install left-pad",
+                artifact_hash="hash-package-a",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("package_request",),
+                source_scope="project",
+                config_path=str(workspace_dir / "hol-guard.toml"),
+                review_command="hol-guard approvals approve req-package-a",
+                approval_url="http://127.0.0.1/pending",
+                workspace=str(workspace_dir),
+                artifact_type="package_request",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-package-b",
+                harness="guard-cli",
+                artifact_id="guard-cli:project:package-request:b",
+                artifact_name="npm install chalk",
+                artifact_hash="hash-package-b",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("package_request",),
+                source_scope="project",
+                config_path=str(workspace_dir / "hol-guard.toml"),
+                review_command="hol-guard approvals approve req-package-b",
+                approval_url="http://127.0.0.1/pending",
+                workspace=str(workspace_dir),
+                artifact_type="package_request",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+
+        resolved = apply_approval_resolution(
+            store=store,
+            request_id="req-package-a",
+            action="allow",
+            scope="workspace",
+            workspace=str(workspace_dir),
+            reason="trusted package request",
+            now="2026-04-11T00:02:00+00:00",
+        )
+
+        assert resolved["status"] == "resolved"
+        assert store.get_approval_request("req-package-a")["status"] == "resolved"
+        assert store.get_approval_request("req-package-b")["status"] == "pending"
+        assert (
+            store.resolve_policy_decision(
+                "guard-cli",
+                "guard-cli:project:package-request:a",
+                "hash-package-a",
+                str(workspace_dir),
+            )["action"]
+            == "allow"
+        )
+        assert (
+            store.resolve_policy_decision(
+                "guard-cli",
+                "guard-cli:project:package-request:b",
+                "hash-package-b",
+                str(workspace_dir),
+            )
+            is None
+        )
+
     def test_guard_queue_blocked_approvals_creates_requests_for_changed_artifacts(self, tmp_path):
         guard_home = tmp_path / "guard-home"
         store = GuardStore(guard_home)

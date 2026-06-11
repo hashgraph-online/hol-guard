@@ -22,6 +22,7 @@ from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots,
 
 from .adapters.base import HarnessContext
 from .config import GuardConfig, resolve_risk_action
+from .models import GuardArtifact
 from .package_firewall_entitlement import resolve_package_firewall_entitlement
 from .receipts import build_receipt
 from .redaction import redact_text
@@ -46,7 +47,11 @@ from .runtime.runner import (
     sync_local_guard_cloud_proof,
     sync_supply_chain_bundle,
 )
-from .runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from .runtime.supply_chain_package_eval import (
+    PackageRequestEvaluation,
+    SupplyChainUserCopy,
+    evaluate_package_request_artifact,
+)
 from .runtime.supply_chain_support import ecosystem_support_matrix
 from .shims import package_shim_status, package_shim_supported_managers
 from .stable_digest import stable_digest_hex
@@ -756,6 +761,7 @@ def build_package_protect_payload(
     store: GuardStore,
     workspace_dir: Path,
     dry_run: bool,
+    allow_saved_approval_execution: bool = False,
     now: str,
     config: GuardConfig | None,
     unsafe_raw_output: bool,
@@ -773,9 +779,18 @@ def build_package_protect_payload(
         config_path="hol-guard.toml",
         source_scope="project",
     )
+    artifact_hash = _package_request_artifact_hash(artifact, workspace_dir=workspace_dir)
     evaluation = evaluate_package_request_artifact(
         artifact=artifact,
         store=store,
+        workspace_dir=workspace_dir,
+        now=now,
+    )
+    evaluation = _apply_stored_package_policy_override(
+        evaluation,
+        store=store,
+        artifact=artifact,
+        artifact_hash=artifact_hash,
         workspace_dir=workspace_dir,
         now=now,
     )
@@ -793,7 +808,7 @@ def build_package_protect_payload(
     receipt = build_receipt(
         harness=_LOCAL_SUPPLY_CHAIN_HARNESS,
         artifact_id=artifact.artifact_id,
-        artifact_hash=stable_digest_hex(artifact.artifact_id.encode("utf-8")),
+        artifact_hash=artifact_hash,
         policy_decision=verdict_action,
         capabilities_summary=evaluation.user_copy.summary,
         changed_capabilities=[target.package_name or target.raw_spec for target in sanitized_intent.targets],
@@ -834,7 +849,10 @@ def build_package_protect_payload(
     }
     if config is not None:
         payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=now)
-    if evaluation.decision in {"block", "ask"} or dry_run:
+    effective_dry_run = dry_run and not (
+        allow_saved_approval_execution and _evaluation_uses_saved_package_approval(evaluation)
+    )
+    if evaluation.decision in {"block", "ask"} or effective_dry_run:
         store.add_receipt(receipt)
         store.set_receipt_action_envelope(receipt.receipt_id, receipt_policy_metadata)
         store.add_event(
@@ -917,6 +935,117 @@ def build_package_protect_payload(
             now,
         )
     return (payload, int(execution.returncode))
+
+
+def _apply_stored_package_policy_override(
+    evaluation: PackageRequestEvaluation,
+    *,
+    store: GuardStore,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    workspace_dir: Path,
+    now: str,
+) -> PackageRequestEvaluation:
+    decision = store.resolve_policy_decision(
+        artifact.harness,
+        artifact.artifact_id,
+        artifact_hash,
+        str(workspace_dir),
+        artifact.publisher,
+        now,
+    )
+    if not isinstance(decision, dict):
+        return evaluation
+    action = decision.get("action")
+    if action == "allow":
+        return _package_policy_override_evaluation(
+            evaluation,
+            decision="allow",
+            policy_action="allow",
+            title="Allowed by saved approval",
+            summary="HOL Guard reused your saved approval for this package request.",
+            harness_message=(
+                "HOL Guard reused your saved approval for this package request and let the install continue."
+            ),
+            reason_code="saved_package_approval",
+            reason_message="HOL Guard reused your saved approval for this package request.",
+        )
+    if action == "block":
+        return _package_policy_override_evaluation(
+            evaluation,
+            decision="block",
+            policy_action="block",
+            title="Blocked by saved policy",
+            summary="HOL Guard kept this package blocked because a saved package policy already exists.",
+            harness_message="HOL Guard kept this package blocked because a saved package policy already exists.",
+            reason_code="saved_package_block",
+            reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
+        )
+    return evaluation
+
+
+def _package_request_artifact_hash(artifact: GuardArtifact, *, workspace_dir: Path) -> str:
+    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+    targets = metadata.get("targets")
+    if isinstance(targets, list) and any(isinstance(item, dict) for item in targets):
+        return stable_digest_hex(artifact.artifact_id.encode("utf-8"))
+    manifest_paths = tuple(str(item) for item in metadata.get("manifest_paths", []) if isinstance(item, str))
+    lockfile_paths = tuple(str(item) for item in metadata.get("lockfile_paths", []) if isinstance(item, str))
+    if not manifest_paths and not lockfile_paths:
+        return stable_digest_hex(artifact.artifact_id.encode("utf-8"))
+    return stable_digest_hex(
+        json.dumps(
+            {
+                "artifact_id": artifact.artifact_id,
+                "manifest_paths": list(manifest_paths),
+                "lockfile_paths": list(lockfile_paths),
+                "manifest_hashes": _hash_existing_paths(workspace_dir, manifest_paths),
+                "lockfile_hashes": _hash_existing_paths(workspace_dir, lockfile_paths),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+
+
+def _evaluation_uses_saved_package_approval(evaluation: PackageRequestEvaluation) -> bool:
+    return any(reason.get("code") == "saved_package_approval" for reason in evaluation.reasons)
+
+
+def _package_policy_override_evaluation(
+    evaluation: PackageRequestEvaluation,
+    *,
+    decision: str,
+    policy_action: str,
+    title: str,
+    summary: str,
+    harness_message: str,
+    reason_code: str,
+    reason_message: str,
+) -> PackageRequestEvaluation:
+    reason = {
+        "code": reason_code,
+        "message": reason_message,
+        "severity": "low",
+        "source": "guard-local",
+    }
+    packages = tuple({**package, "decision": decision} for package in evaluation.packages)
+    return replace(
+        evaluation,
+        decision=decision,
+        policy_action=policy_action,
+        reasons=(reason, *tuple(item for item in evaluation.reasons if item != reason)),
+        packages=packages,
+        risk_summary=harness_message,
+        user_copy=SupplyChainUserCopy(
+            title=title,
+            summary=summary,
+            next_step=None,
+            dashboard_url=None,
+            harness_message=harness_message,
+        ),
+        record_monitor_evidence=False,
+    )
 
 
 def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:

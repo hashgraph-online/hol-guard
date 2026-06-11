@@ -108,13 +108,23 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
-    if as_json or not _RICH_AVAILABLE:
+    if as_json:
         redacted_output = redact_text(_safe_json_output_text(command, payload))
         sys.stdout.write(redacted_output.text)
         sys.stdout.write("\n")
         return
 
     redacted_payload = _redact_payload(payload)
+    if not _RICH_AVAILABLE:
+        plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
+        if plain_renderer is None:
+            redacted_output = redact_text(_safe_json_output_text(command, payload))
+            sys.stdout.write(redacted_output.text)
+        else:
+            sys.stdout.write(plain_renderer(redacted_payload))
+        sys.stdout.write("\n")
+        return
+
     console = Console(file=sys.stdout, soft_wrap=True)
     renderer = _RENDERERS.get(command, _render_fallback)
     renderer(console, redacted_payload)
@@ -153,6 +163,59 @@ def _safe_json_output_text(command: str, payload: dict[str, object]) -> str:
     json_payload = _json_payload_for_command(command, payload)
     sanitized_payload = _sanitize_payload_for_output(json_payload)
     return _render_redacted_json_payload(sanitized_payload)
+
+
+def _plain_text_protect(payload: dict[str, object]) -> str:
+    if str(payload.get("mode") or "") == "status":
+        lines = ["HOL Guard install protection is active."]
+        supply_chain = payload.get("supply_chain")
+        if isinstance(supply_chain, dict):
+            status = str(supply_chain.get("status") or "").strip()
+            detail = str(supply_chain.get("detail") or "").strip()
+            if status:
+                lines.append(f"Status: {status}")
+            if detail:
+                lines.append(detail)
+        return "\n".join(lines)
+
+    verdict = payload.get("verdict")
+    verdict_map = verdict if isinstance(verdict, dict) else {}
+    action = str(verdict_map.get("action") or "review").strip() or "review"
+    action_line = {
+        "allow": "HOL Guard allowed this install.",
+        "block": "HOL Guard blocked this install before it ran.",
+        "review": "HOL Guard paused this install for review before it ran.",
+        "require-reapproval": "HOL Guard paused this install for review before it ran.",
+        "warn": "HOL Guard warned about this install.",
+    }.get(action, f"HOL Guard decision: {action}.")
+    lines = [action_line]
+
+    request = payload.get("request")
+    if isinstance(request, dict):
+        command_text = _command_text(request.get("command")).strip()
+        if command_text and command_text != "none":
+            lines.append(f"Command: {command_text}")
+
+    reason = str(verdict_map.get("reason") or "").strip()
+    if reason:
+        lines.append(f"Reason: {reason}")
+
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
+    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
+    user_copy_map = user_copy if isinstance(user_copy, dict) else {}
+    harness_message = str(user_copy_map.get("harness_message") or "").strip()
+    if harness_message:
+        lines.append(harness_message)
+
+    next_step = str(user_copy_map.get("next_step") or "").strip()
+    if next_step and next_step not in harness_message:
+        lines.append(f"Next step: {next_step}")
+
+    dashboard_url = str(user_copy_map.get("dashboard_url") or "").strip()
+    if dashboard_url and dashboard_url not in harness_message:
+        lines.append(f"Review: {dashboard_url}")
+
+    return "\n".join(lines)
 
 
 def _sanitize_payload_for_output(value: object) -> object:
@@ -2325,6 +2388,11 @@ def _timestamp_parts(value: object) -> tuple[str, str]:
 
 def _clean_terminal_output(value: str) -> str:
     return re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]", "", value)
+
+
+_PLAIN_TEXT_RENDERERS: dict[str, Callable[[dict[str, object]], str]] = {
+    "protect": _plain_text_protect,
+}
 
 
 _RENDERERS: dict[str, Any] = {

@@ -229,6 +229,7 @@ from .install_commands import (
     uninstall_confirmation_token,
 )
 from .product import build_guard_start_payload, build_guard_status_payload
+from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 from .remote_pair_flow import dispatch_guard_remote_pair_command
 from .update_commands import run_guard_update
 
@@ -558,6 +559,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     protect_parser.add_argument("--dry-run", action="store_true")
     protect_parser.add_argument("--unsafe-raw-output", action="store_true")
     protect_parser.add_argument("--json", action="store_true")
+    protect_parser.add_argument("--package-shim-ui", action="store_true", help=argparse.SUPPRESS)
     protect_parser.add_argument("protect_command", nargs=argparse.REMAINDER)
 
     preflight_parser = guard_subparsers.add_parser(
@@ -1990,7 +1992,20 @@ def run_guard_command(
             config=config,
             unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
         )
-        _emit("protect", payload, getattr(args, "json", False))
+        _queue_local_protect_approvals(
+            payload,
+            store=store,
+            guard_home=guard_home,
+            workspace=workspace or Path.cwd(),
+            ensure_approval_daemon=ensure_guard_daemon,
+            approval_delivery_payload=_approval_delivery_payload,
+            localize_pending_approval_copy=lambda response_payload, harness: _localize_pending_approval_copy(
+                response_payload,
+                harness=harness,
+            ),
+        )
+        if not _suppress_package_shim_allow_output(args, payload):
+            _emit("protect", payload, getattr(args, "json", False))
         return exit_code
 
     if args.guard_command == "start":
@@ -5940,12 +5955,35 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
     if not isinstance(approval_center_url, str) or not approval_center_url.strip():
         return None
     review_url = _preferred_approval_review_url(response_payload, harness=harness) or approval_center_url.strip()
+    canonical_harness = _canonical_harness_name(harness)
     harness_label = {
         "claude-code": "Claude Code",
         "codex": "Codex",
         "copilot": "Copilot",
+        "guard-cli": "package install",
         "opencode": "OpenCode",
-    }.get(_canonical_harness_name(harness), "the harness")
+    }.get(canonical_harness, "the harness")
+    if canonical_harness in {
+        "npm",
+        "npx",
+        "pnpm",
+        "yarn",
+        "bun",
+        "pip",
+        "pip3",
+        "pipenv",
+        "pipx",
+        "poetry",
+        "uv",
+        "uvx",
+        "cargo",
+        "go",
+        "composer",
+        "bundle",
+        "mvn",
+        "gradle",
+    }:
+        harness_label = "package install"
     return (
         f"Open HOL Guard to approve or keep this blocked: {review_url}. "
         f"After you choose, retry the same {harness_label} action."
