@@ -137,6 +137,73 @@ def build_aibom_export_payload(
     return payload
 
 
+_AIBOM_AUTO_SYNC_INTERVAL_SECONDS = 60 * 60
+
+
+def _aibom_sync_is_due(
+    store: GuardStore,
+    *,
+    generated_at: str,
+    min_interval_seconds: int,
+) -> bool:
+    prior = store.get_sync_payload("aibom_sync_summary")
+    if not isinstance(prior, dict):
+        return True
+    synced_at = prior.get("synced_at")
+    if not isinstance(synced_at, str) or not synced_at.strip():
+        return True
+    try:
+        from datetime import datetime
+
+        last_sync = datetime.fromisoformat(synced_at.replace("Z", "+00:00"))
+        now = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+        elapsed = (now - last_sync).total_seconds()
+    except ValueError:
+        return True
+    return elapsed >= min_interval_seconds
+
+
+def sync_aibom_snapshots_if_due(
+    store: GuardStore,
+    *,
+    generated_at: str,
+    min_interval_seconds: int = _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
+    options: AibomCliOptions | None = None,
+) -> dict[str, object]:
+    from .runtime.runner import GuardSyncNotConfiguredError
+
+    if store.get_cloud_workspace_id() is None:
+        return {"synced": False, "skipped": True, "reason": "not_configured"}
+    if not _aibom_sync_is_due(
+        store,
+        generated_at=generated_at,
+        min_interval_seconds=min_interval_seconds,
+    ):
+        prior = store.get_sync_payload("aibom_sync_summary")
+        return {
+            "synced": False,
+            "skipped": True,
+            "reason": "recently_synced",
+            "last_sync_at": prior.get("synced_at") if isinstance(prior, dict) else None,
+        }
+    context = HarnessContext(
+        home_dir=Path.home().resolve(),
+        workspace_dir=None,
+        guard_home=store.guard_home,
+    )
+    try:
+        return sync_aibom_snapshots(
+            store,
+            context,
+            generated_at=generated_at,
+            options=options,
+        )
+    except GuardSyncNotConfiguredError:
+        return {"synced": False, "skipped": True, "reason": "not_configured"}
+    except (OSError, RuntimeError) as error:
+        return {"synced": False, "error": str(error)}
+
+
 def sync_aibom_snapshots(
     store: GuardStore,
     context: HarnessContext,
