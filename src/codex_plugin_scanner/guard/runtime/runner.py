@@ -2349,9 +2349,7 @@ def _refresh_guard_oauth_access_token(
                 nonce=dpop_nonce,
             )
         except (RuntimeError, TypeError, ValueError) as error:
-            raise GuardSyncAuthorizationExpiredError(
-                f"{_guard_oauth_reauthorization_message()} {error}"
-            ) from error
+            raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
         request = urllib.request.Request(
             token_endpoint,
             data=request_body,
