@@ -321,6 +321,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
         "paid_guard_cloud_required",
     }:
         return entitlement
+    now_iso = datetime.now(timezone.utc).isoformat()
     now = time.time()
     with _PACKAGE_FIREWALL_REFRESH_LOCK:
         state = _read_package_firewall_refresh_state(store.guard_home)
@@ -334,13 +335,16 @@ def resolve_package_firewall_entitlement_with_refresh(store: GuardStore) -> dict
     for refresh in (sync_local_guard_cloud_proof, sync_supply_chain_bundle):
         try:
             refresh(store)
-        except (
-            GuardSyncAuthorizationExpiredError,
-            GuardSyncNotAvailableError,
-            GuardSyncNotConfiguredError,
-            OSError,
-            RuntimeError,
-        ):
+        except GuardSyncAuthorizationExpiredError as error:
+            if str(entitlement.get("reason") or "") == "guard_cloud_connect_required":
+                store.record_latest_guard_connect_sync_result(
+                    status="retry_required",
+                    milestone="first_sync_failed",
+                    now=now_iso,
+                    reason=str(error),
+                )
+            break
+        except (GuardSyncNotAvailableError, GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
     return resolve_package_firewall_entitlement(store)
 

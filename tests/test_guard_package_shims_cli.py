@@ -189,6 +189,42 @@ def test_package_shims_status_self_heals_connected_cloud_auth_without_cached_ent
     assert payload["actions"]["install"] == "available"
 
 
+def test_package_shims_status_preserves_reconnect_gate_when_connected_auth_refresh_expires(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    seed_connected_oauth_without_entitlement,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    seed_connected_oauth_without_entitlement(GuardStore(guard_home))
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_local_guard_cloud_proof",
+        lambda _store: (_ for _ in ()).throw(
+            local_supply_chain_module.GuardSyncAuthorizationExpiredError(
+                "Guard authorization expired. Run `hol-guard connect` again."
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        local_supply_chain_module,
+        "sync_supply_chain_bundle",
+        lambda _store: (_ for _ in ()).throw(RuntimeError("bundle refresh blocked")),
+    )
+
+    rc = main(["guard", "package-shims", "status", "--home", str(guard_home), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["entitlement"] == {
+        "allowed": False,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "unknown",
+        "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+    }
+    assert payload["actions"]["install"] == "reconnect_required"
+
+
 def test_package_shims_install_requires_reconnect_when_cloud_auth_expired(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
