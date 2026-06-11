@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import urllib.error
 
@@ -109,6 +110,44 @@ def test_prepare_guard_cloud_connect_authorization_tolerates_network_errors(tmp_
         raise OSError("network unreachable")
 
     monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    result = guard_runner_module.prepare_guard_cloud_connect_authorization(store)
+
+    assert result["cleared_stale_sign_in"] is False
+    assert result["existing_sign_in_valid"] is True
+    assert store.get_oauth_local_credentials(allow_primary=True) is not None
+
+
+def test_prepare_guard_cloud_connect_authorization_refreshes_under_lock(tmp_path, monkeypatch) -> None:
+    store = _store_with_oauth_credentials(tmp_path)
+    lock_state = {"held": False}
+
+    @contextmanager
+    def _fake_refresh_lock(*, timeout_seconds: float = 30.0):
+        del timeout_seconds
+        assert lock_state["held"] is False
+        lock_state["held"] = True
+        try:
+            yield
+        finally:
+            lock_state["held"] = False
+
+    def _fake_resolve(_store, credentials, *, persist_recovered_secret: bool = False):
+        del _store, persist_recovered_secret
+        assert lock_state["held"] is True
+        assert credentials["refresh_token"] == "refresh-token-1"
+        return {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "access_token": "access-token-1",
+            "dpop_key_material": None,
+        }
+
+    monkeypatch.setattr(store, "hold_oauth_refresh_lock", _fake_refresh_lock)
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_resolve_guard_sync_auth_context_from_oauth_credentials",
+        _fake_resolve,
+    )
 
     result = guard_runner_module.prepare_guard_cloud_connect_authorization(store)
 
