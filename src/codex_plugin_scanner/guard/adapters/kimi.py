@@ -152,11 +152,7 @@ class KimiHarnessAdapter(HarnessAdapter):
             if isinstance(timeout, (int, float)):
                 metadata["timeout"] = timeout
             artifact_id = f"kimi:{scope}:hook:{event_name.lower() or 'unknown'}:{index}"
-            name = (
-                f"{event_name or 'hook'}:{matcher}"
-                if isinstance(matcher, str) and matcher
-                else event_name or "hook"
-            )
+            name = f"{event_name or 'hook'}:{matcher}" if isinstance(matcher, str) and matcher else event_name or "hook"
             artifacts.append(
                 GuardArtifact(
                     artifact_id=artifact_id,
@@ -289,19 +285,21 @@ class KimiHarnessAdapter(HarnessAdapter):
             "# The hooks below are managed by HOL Guard. Do not edit manually.",
         ]
         for event in ("PreToolUse", "UserPromptSubmit", "PostToolUse", "SessionStart", "Stop"):
-            lines.extend([
-                "[[hooks]]",
-                f'event = "{event}"',
-                f'command = "{escaped_command}"',
-                "timeout = 30",
-            ])
+            lines.extend(
+                [
+                    "[[hooks]]",
+                    f'event = "{event}"',
+                    f'command = "{escaped_command}"',
+                    "timeout = 30",
+                ]
+            )
         lines.append(_GUARD_MANAGED_END)
         return "\n".join(lines)
 
 
 def _toml_escape(value: str) -> str:
     """Escape backslashes and double quotes for a TOML double-quoted string."""
-    return value.replace("\\", "\\\\").replace('"', "\\\"")
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _remove_managed_block(text: str) -> str:
