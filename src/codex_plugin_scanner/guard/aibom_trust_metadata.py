@@ -36,28 +36,19 @@ InventoryItemKind = Literal[
 ]
 
 
-def _normalize_trust_resolution_captured_at(value: str) -> str:
-    from datetime import datetime, timezone
-
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        parsed = parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
-        return parsed.isoformat().replace("+00:00", "Z")
-    except (ValueError, OverflowError, TypeError):
-        return value
-
-
 def trust_resolution_from_domain(
     domain: TrustDomainScore,
     *,
     captured_at: str,
 ) -> dict[str, object]:
+    from .inventory_contract import _normalize_inventory_datetime
+
     return {
         "resolutionSource": "local",
         "status": "local",
         "trustScore": round(domain.score),
         "trustComponents": _trust_components_from_domain(domain),
-        "capturedAt": _normalize_trust_resolution_captured_at(captured_at),
+        "capturedAt": _normalize_inventory_datetime(captured_at),
         "metadata": {
             "profileId": domain.profile_id,
             "profileVersion": domain.profile_version,
